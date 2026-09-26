@@ -449,3 +449,60 @@ export const ALERT = {
   tawsCaution: 'alert.taws_caution', // TERRAIN / SINK RATE / GLIDESLOPE etc.
   annunTest: 'alert.annun_test', // lamp test active
 } as const;
+
+// ---------------------------------------------------------------------------
+// Appended by systems-power (append-only). Written by the blocks in
+// src/systems/{electrical,fuel,hydraulic,pneumatic,pressurization,ice,apu,
+// fire,oxygen,lighting,failures}; reference: docs/modules/systems-power.md.
+// Component ids (bus, pump, system, light names) come from each aircraft's
+// config, so most entries are name builders.
+// ---------------------------------------------------------------------------
+
+/** Failure state (FailureManager; blocks read these directly): 1 = failed. */
+export const FAIL = {
+  state: (id: string) => `fail.${id}`,
+  activeCount: 'fail.active_count',
+  armedCount: 'fail.armed_count',
+} as const;
+
+/** Circuit breakers (cockpit CircuitBreaker `var` / `trippedVar`): 1 = in; 0 = pulled or tripped. Missing = in. */
+export const CB = {
+  in: (name: string) => `cb.${name}`,
+  tripped: (name: string) => `cb.${name}_tripped`,
+} as const;
+
+/** Electrical network outputs (default prefix 'elec.'); `id` is a bus, source, load or link id. */
+export const ELEC = {
+  volts: (id: string) => `elec.${id}_v`,
+  powered: (id: string) => `elec.${id}_powered`, // bus >= its powered threshold / load receiving power
+  amps: (id: string) => `elec.${id}_amps`, // battery: + charging, - discharging (ammeter sign)
+  hz: (id: string) => `elec.${id}_hz`,
+  soc: (battery: string) => `elec.${battery}_soc`, // 0..1
+  online: (source: string) => `elec.${source}_online`,
+  loadPct: (source: string) => `elec.${source}_load_pct`,
+} as const;
+
+/** Hydraulic outputs (default prefix 'hyd.'). */
+export const HYD = {
+  psi: (system: string) => `hyd.${system}_psi`,
+  qty: (system: string) => `hyd.${system}_qty`, // 0..1 reservoir
+  lowPress: (systemOrPump: string) => `hyd.${systemOrPump}_lowpress`,
+} as const;
+
+/** Cabin pressurisation outputs (default prefix 'press.'). */
+export const PRESS = {
+  cabinAlt: 'press.cabin_alt_ft',
+  cabinRate: 'press.cabin_rate_fpm',
+  diff: 'press.diff_psi',
+  outflowPos: 'press.outflow_pos', // 0 closed .. 1 open
+  targetAlt: 'press.target_alt_ft',
+  landingElev: 'press.ldg_elev_ft',
+  cabinAltWarn: 'press.cabin_alt_warn', // >= 10,000 ft (configurable)
+  paxMasks: 'press.pax_masks', // passenger masks deployed (latched)
+} as const;
+
+/** Exterior light intensities 0..1 for the exterior renderer (LightingSystem). */
+export const LIGHT = {
+  level: (name: string) => `light.${name}`, // nav, beacon, strobe, landing_l, taxi, logo, wing, ...
+  extension: (name: string) => `light.${name}_ext`, // retractable lights 0..1
+} as const;

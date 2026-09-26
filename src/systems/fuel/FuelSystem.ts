@@ -244,6 +244,9 @@ export class FuelSystem implements Subsystem {
   private readonly balance: { l: number; r: number; alertKg: number } | null;
   private readonly ids = new IdRegistry('FuelSystem');
   private usedKg = 0;
+  private readonly vImbalanceKg: string;
+  private readonly vImbalance: string;
+  private readonly vUsedKg: string;
 
   constructor(
     private readonly vars: SimVars,
@@ -252,6 +255,9 @@ export class FuelSystem implements Subsystem {
   ) {
     this.name = opts.name ?? 'fuel';
     const P = (this.prefix = cfg.prefix ?? 'fuel.');
+    this.vImbalanceKg = `${P}imbalance_kg`;
+    this.vImbalance = `${P}imbalance`;
+    this.vUsedKg = `${P}used_kg`;
     this.hasTemp = cfg.temperature !== undefined;
     this.skinTemp = compileBinding(vars, cfg.temperature?.skin ?? FDM.tat, 15);
     this.tauFull = cfg.temperature?.tauFullS ?? 3 * 3600; // EST: bulk wing-tank fuel follows skin temperature over hours
@@ -484,10 +490,10 @@ export class FuelSystem implements Subsystem {
     }
     if (this.balance) {
       const d = this.tanks[this.balance.l].mass - this.tanks[this.balance.r].mass;
-      vars.set(`${this.prefix}imbalance_kg`, d);
-      vars.set(`${this.prefix}imbalance`, Math.abs(d) >= this.balance.alertKg ? 1 : 0);
+      vars.set(this.vImbalanceKg, d);
+      vars.set(this.vImbalance, Math.abs(d) >= this.balance.alertKg ? 1 : 0);
     }
-    vars.set(`${this.prefix}used_kg`, this.usedKg);
+    vars.set(this.vUsedKg, this.usedKg);
   }
 
   /** Effective group pressure after pump droop (max over feeding pumps). */

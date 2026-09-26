@@ -87,8 +87,8 @@ import type {
 
 // ------------------------------------------------------------------ constants
 
-/** Bisection iterations: 60 V / 2^32 ≈ 1.4e-8 V resolution. */
-const BISECT_ITERS = 32;
+/** Bisection iterations: 60 V / 2^26 ≈ 0.9 µV resolution (0.1 mA through a 10 mΩ battery). */
+const BISECT_ITERS = 26;
 /** Upper voltage bound for DC islands. */
 const V_MAX_DC = 60;
 /** Max diode re-solve passes per update. */
@@ -583,6 +583,8 @@ export class ElectricalNetwork implements Subsystem {
   private readonly acCap: Float64Array;
   private readonly acLoad: Float64Array;
   private readonly acHz: Float64Array;
+  /** Fraction of the demanded AC load actually delivered per island root (< 1 when overloaded). */
+  private readonly acFrac: Float64Array;
   private readonly starterEb: Float64Array;
 
   constructor(
@@ -617,6 +619,7 @@ export class ElectricalNetwork implements Subsystem {
     this.acCap = new Float64Array(nb);
     this.acLoad = new Float64Array(nb);
     this.acHz = new Float64Array(nb);
+    this.acFrac = new Float64Array(nb).fill(1);
 
     // ---- batteries
     for (const d of cfg.batteries ?? []) {
@@ -936,6 +939,7 @@ export class ElectricalNetwork implements Subsystem {
     cap.fill(0);
     load.fill(0);
     hz.fill(0);
+    this.acFrac.fill(1);
     // Sources (priority = declaration order for frequency).
     for (const g of this.acGens) {
       if (!g.online) continue;
@@ -958,6 +962,14 @@ export class ElectricalNetwork implements Subsystem {
     // Loads.
     for (const ld of this.loads) if (ld.ac && ld.active) load[find(parent, ld.bus)] += ld.demand;
     for (const t of this.trus) if (t.enabledNow) load[find(parent, t.acBus)] += t.acVa;
+    // Overloaded islands deliver at most AC_COLLAPSE_RATIO x their rating (voltage collapse):
+    // scale the delivered load so sources (and an inverter's DC draw) stay bounded.
+    for (let i = 0; i < nb; i++) {
+      if (!buses[i].ac || find(parent, i) !== i || cap[i] <= 0) continue;
+      const ratio = load[i] / cap[i];
+      if (ratio > AC_COLLAPSE_RATIO) load[i] = cap[i] * AC_COLLAPSE_RATIO;
+      this.acFrac[i] = ratio > AC_COLLAPSE_RATIO ? AC_COLLAPSE_RATIO / ratio : 1;
+    }
     // Voltage per island root.
     for (let i = 0; i < nb; i++) {
       const b = buses[i];
@@ -968,7 +980,7 @@ export class ElectricalNetwork implements Subsystem {
         b.hz = 0;
         continue;
       }
-      const ratio = load[r] / cap[r];
+      const ratio = load[r] / cap[r] / this.acFrac[r];
       const v = ratio <= AC_COLLAPSE_RATIO ? b.nominalV * (1 - AC_DROOP_AT_RATED * ratio) : (b.nominalV * (1 - AC_DROOP_AT_RATED * AC_COLLAPSE_RATIO) * AC_COLLAPSE_RATIO) / ratio;
       b.v = v;
       b.hz = hz[r];
@@ -1008,7 +1020,7 @@ export class ElectricalNetwork implements Subsystem {
       if (!ld.ac) continue;
       const bv = buses[ld.bus].v;
       ld.powered = ld.active && bv >= ld.minV;
-      ld.current = ld.powered ? ld.demand : 0;
+      ld.current = ld.powered ? ld.demand * this.acFrac[find(parent, ld.bus)] : 0;
       buses[ld.bus].load += ld.current;
     }
     for (const l of this.links) if (l.ac) l.amps = 0;

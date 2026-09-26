@@ -348,6 +348,21 @@ describe('ElectricalNetwork: diodes, AC, TRU and inverter', () => {
     expect(vars.get('elec.xfr1_powered')).toBe(1);
   });
 
+  it('an overloaded static inverter collapses its AC bus but its DC draw stays bounded', () => {
+    const vars = new SimVars();
+    const net = new ElectricalNetwork(vars, {
+      buses: [{ id: 'batt_bus' }, { id: 'ac_stby', type: 'ac' }],
+      batteries: [{ id: 'batt', bus: 'batt_bus', chemistry: 'nicd', capacityAh: 48, internalResistanceOhm: 0.012 }],
+      inverters: [{ id: 'inv', dcBus: 'batt_bus', acBus: 'ac_stby', ratedVa: 1000 }],
+      loads: [{ id: 'big', bus: 'ac_stby', va: 9500 }],
+    });
+    net.settle();
+    expect(vars.get('elec.ac_stby_v')).toBeLessThan(40);
+    expect(vars.get('elec.ac_stby_powered')).toBe(0);
+    expect(vars.get('elec.inv_va')).toBeLessThanOrEqual(2000);
+    expect(vars.get('elec.batt_bus_v')).toBeGreaterThan(22); // DC side not dragged down
+  });
+
   it('SourceSelector: manual latching with auto transfer (737 BUS TRANSFER style)', () => {
     const vars = new SimVars();
     const sel = new SourceSelector(vars, {
