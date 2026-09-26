@@ -466,7 +466,17 @@ export function createSystems(ctx: SimContext, opts: G6kSystemsOptions = {}): G6
       { id: 'park', bad: `${V.parkBrake} > 0.05`, text: 'PARK BRAKE ON', voice: 'No takeoff' },
     ],
   });
-  const cas = new CasManager(ctx, {
+  // IAC 1 / IAC 2 aural warning channels (GXAG: two integrated avionics computers each hold an aural warning generator).
+  // SCOPE: the AURAL MUTE switches silence one generator each; the CAS voices and chimes go quiet only with both muted
+  // (the other IAC still speaks). TAWS / TCAS / stall voices keep their own path.
+  const auralLive = () => v.get(V.auralMute(1)) === 0 || v.get(V.auralMute(2)) === 0;
+  const casAudio: SimContext['audio'] = {
+    play: (id, o) => (auralLive() ? ctx.audio.play(id, o) : undefined),
+    loop: (id) => ctx.audio.loop(id),
+    callout: (t, pr) => (auralLive() ? ctx.audio.callout(t, pr) : undefined),
+    tone: (id, on) => ctx.audio.tone(id, on && auralLive()),
+  };
+  const cas = new CasManager({ ...ctx, audio: casAudio }, {
     messages: G6K_CAS,
     power: 'elec.dc_ess_powered || elec.batt_bus_powered || elec.dc_emer_powered',
     // EST inhibits: from 80 kt until 400 ft / 30 s after lift-off; below 200 ft RA until 60 kt.
