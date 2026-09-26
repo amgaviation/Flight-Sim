@@ -91,7 +91,8 @@ export function createEngines(ctx: SimContext): G6kEngines {
       goAround: 'GA',
       // EST: GA with the slats out and the gear down in the air; CRZ once level above FL250 (FMS phase).
       goAroundWhen: `gear.air_ground == 0 && surf.slats > 0.5 && gear.down_locked`,
-      cruiseWhen: `fms.vnav_phase_code == 2 || (adc1.alt_ft > 25000 && abs(adc1.vs_fpm) < 300 && ap.vert_code == 3)`,
+      // ap.vert_code: VERTICAL_MODES index (3 ALT, 11 VALT: level at altitude in ALT hold or VNAV altitude hold).
+      cruiseWhen: `adc1.alt_ft > 25000 && abs(adc1.vs_fpm) < 300 && (ap.vert_code == 3 || ap.vert_code == 11)`,
     },
   });
   const fadec = new ThrustLeverFadec(

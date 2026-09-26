@@ -31,7 +31,12 @@ export class B738Logic implements Subsystem {
     ident: new EdgeDetector(),
     air: new EdgeDetector(),
     clockChr: [new EdgeDetector(), new EdgeDetector()],
+    isfdStd: new EdgeDetector(),
+    isfdRst: new EdgeDetector(),
   };
+  private cvrEraseT = 0;
+  /** ISFD ATT RST action (createSystems wires it to the ISFD attitude re-alignment). */
+  isfdReset: (() => void) | null = null;
   private batDisch = [0, 0, 0];
   private maxAltFt = 0;
   private offSched = false;
@@ -117,7 +122,7 @@ export class B738Logic implements Subsystem {
     }
     // ---- ATC / TCAS panel.
     const sel = v.get(B738.xpdrModeSel);
-    const xpdrOn = v.get('elec.xpdr_powered') !== 0;
+    const xpdrOn = v.get(v.get(B738.xpdrAtc) >= 1.5 ? 'elec.xpdr2_powered' : 'elec.xpdr_powered') !== 0;
     const mode = !xpdrOn ? 0 : sel <= XPDR_SEL.stby ? 1 : sel === XPDR_SEL.altOff ? 2 : sel === XPDR_SEL.xpndr ? 3 : sel === XPDR_SEL.taOnly ? 4 : 5;
     if (sel !== XPDR_SEL.test) v.set(NAV.xpdrMode, mode);
     if (this.e.ident.rising(v.get(B738.xpdrIdentBtn) !== 0)) v.set(NAV.xpdrIdent, 1);
@@ -170,6 +175,53 @@ export class B738Logic implements Subsystem {
       const w = v.get(B738.wiper(s));
       v.set(`ac.b738.wiper_rain_removal${s}`, w <= 0 ? 0 : w === 1 ? 0.4 : w === 2 ? 0.75 : 1);
     }
+    // ---- Alternate flaps drive running (electric motor load, electrical.ts).
+    const altSw = v.get(B738.altFlapsSw);
+    v.set('flaps.alt_moving', altSw !== 0 && v.get(B738.altFlapsArm) !== 0 && v.get('elec.alt_flaps_powered') !== 0 ? 1 : 0);
+    // ---- Outflow valve switch: effective only in MAN (FCOM 2.40); the pressurization block reads the result.
+    const outSw = v.get(B738.outflowSw);
+    v.set('ac.b738.outflow_cmd', v.get(B738.pressMode) === 2 ? outSw : 0);
+    // ---- CVR ERASE: on the ground with the parking brake set, held ~2 s (FCOM 5.10; SCOPE: no recording).
+    this.cvrEraseT = v.get(B738.cvrErase) !== 0 && !air && v.get(B738.parkBrake) !== 0 ? this.cvrEraseT + dt : 0;
+    if (this.cvrEraseT > 2) v.set('ac.b738.cvr_erased', 1);
+    else if (v.get(B738.cvrTest) !== 0) v.set('ac.b738.cvr_erased', 0);
+    // ---- ISFD: BARO push = STD toggle, HP/IN units, ATT RST realigns the attitude, APP selects the ILS deviation display.
+    if (this.e.isfdStd.rising(v.get(B738.isfdStd) !== 0)) v.set('adc3.baro_std', v.get('adc3.baro_std') !== 0 ? 0 : 1);
+    if (this.e.isfdRst.rising(v.get(B738.isfdRst) !== 0)) this.isfdReset?.();
+    const baro = v.get('adc3.baro_inhg', 29.92);
+    v.set('ac.b738.isfd_baro_disp', v.get('adc3.baro_std') !== 0 ? (v.get(B738.isfdHpa) !== 0 ? 1013 : 29.92) : v.get(B738.isfdHpa) !== 0 ? Math.round(baro * 33.8639) : Math.round(baro * 100) / 100);
+    const app = v.get(B738.isfdApp);
+    v.set('ac.b738.isfd_loc_dev', app >= 1 ? (app === 2 ? -1 : 1) * v.get('nav1.cdi') : 0);
+    v.set('ac.b738.isfd_gs_dev', app === 1 ? v.get('nav1.gs_dev') : 0);
+    // ---- Radio panels: RTP power switches, ADF TONE (BFO), NAV TEST (SCOPE: receiver self test shown as a state flag).
+    for (const r of SIDES) {
+      v.set(`com${r}.powered`, v.get(B738.rtpPower(r)) !== 0 && v.get(r === 1 ? 'elec.com1_powered' : 'elec.com2_powered') !== 0 ? 1 : 0);
+      v.set(`adf${r}.bfo`, v.get(B738.adfTone(r)) !== 0 ? 1 : 0);
+      v.set(`nav${r}.test`, v.get(B738.navTest(r)) !== 0 && v.get(`nav${r}.powered`) !== 0 ? 1 : 0);
+    }
+    // ---- Audio control panels. SCOPE: no audio routing; the selections are published as state.
+    for (const a of [1, 2, 3] as const) {
+      v.set(`ac.b738.acp${a}.tx`, v.get(B738.acpMic(a)));
+      v.set(`ac.b738.acp${a}.degraded`, v.get(B738.acpAltNorm(a)));
+      v.set(`ac.b738.acp${a}.filter`, v.get(B738.acpFilter(a)));
+    }
+    // Marker beacon audio volume: the louder of the two pilots' MKR receiver knobs (used by the marker tones).
+    v.set('nav.marker_volume', Math.max(v.get(B738.acpMkrVol(1)), v.get(B738.acpMkrVol(2)), v.get(B738.acpMkrVol(3))));
+    // ---- ATC panel: transponder 1 / 2 and altitude source 1 / 2 (the TCAS own altitude follows the selection).
+    const atc2 = v.get(B738.xpdrAtc) >= 1.5;
+    v.set('xpdr.unit', atc2 ? 2 : 1);
+    v.set('elec.xpdr_sel_powered', v.get(atc2 ? 'elec.xpdr2_powered' : 'elec.xpdr_powered'));
+    v.set('ac.b738.xpdr_press_alt_ft', v.get(v.get(B738.xpdrAltSrc) >= 1.5 ? 'adc2.press_alt_ft' : 'adc1.press_alt_ft'));
+    // ---- Weather radar control panel. SCOPE: no radar returns; the mode / gain / tilt are published for the ND overlay hook.
+    const wxOn = v.get(B738.wxrPower) !== 0 && v.get('elec.wxr_powered') !== 0;
+    v.set('wxr.active', wxOn ? 1 : 0);
+    v.set('wxr.mode', v.get(B738.wxrMode));
+    v.set('wxr.gain', v.get(B738.wxrGain));
+    v.set('wxr.tilt_deg', v.get(B738.wxrTilt));
+    // ---- Service interphone (SCOPE: no interphone audio), TAT probe test (SCOPE: aspirated TAT test flag).
+    v.set('ac.b738.svc_interphone_active', v.get(B738.svcInterphone) !== 0 ? 1 : 0);
+    v.set('ac.b738.tat_test_active', v.get(B738.tatTest) !== 0 && !air ? 1 : 0);
+
     // ---- Cabin signs (AUTO: NO SMOKING with the gear down, FASTEN BELTS with gear or flaps extended; FCOM 1.40).
     const gearDn = v.get('gear.down_locked') !== 0 || v.get(B738.gearLever) > 0.75;
     const ns = v.get(B738.noSmoking);
@@ -286,6 +338,24 @@ export class B738LogicLate implements Subsystem {
       v.set(l.light, powered && (test || l.cond()) ? 1 : 0);
     }
 
+    // ---- Panel test switches (FCOM): WINDOW HEAT TEST OVHT lights OVERHEAT (ON lights out), PWR TEST forces ON;
+    //      air conditioning OVHT TEST lights ZONE TEMP; cargo fire TEST lights both cargo FIRE lights;
+    //      electrical MAINT lights ELEC / TR UNIT (SCOPE: BITE lamp test only).
+    const wht = v.get(B738.windowHeatTest);
+    if (powered && wht <= -0.5) for (const w of WINDOW_HEATS) if (v.get(B738.windowHeat(w)) !== 0) v.set(B738.lt.windowOverheat(w), 1);
+    if (powered && v.get(B738.ovhtTest) !== 0) for (const z of [1, 2, 3] as const) v.set(B738.lt.zoneTemp(z), 1);
+    const cargoTest = powered && v.get(B738.cargoTest) !== 0;
+    if (cargoTest) for (const z of ['fwd', 'aft'] as const) v.set(B738.lt.cargoFire(z), 1);
+    if (powered && v.get(B738.elecMaint) !== 0) {
+      v.set(B738.lt.elec, 1);
+      v.set(B738.lt.trUnit, 1);
+    }
+    // LE DEVICES annunciator (aft overhead, 4 LE flaps + 8 slats): 0 off, 1 TRANSIT amber, 2 EXT green, 3 FULL EXT green.
+    const leTest = powered && v.get(B738.leDevTest) !== 0;
+    const sl = v.get('slats.pos');
+    const leState = leTest ? 3 : !powered ? 0 : v.get('slats.transit') !== 0 ? 1 : sl > 0.95 ? 3 : sl > 0.4 ? 2 : 0;
+    for (let k = 1; k <= 12; k++) v.set(`ac.b738.lt.le_dev${k}`, k <= 4 && leState === 3 ? 2 : leState);
+
     // ---- Master caution and six-pack (FCOM 15.20).
     let mcPush = false;
     let recallRelease = false;
@@ -323,7 +393,7 @@ export class B738LogicLate implements Subsystem {
     if (this.bellEdge.rising(cut)) this.bellSilenced = true;
     if (fire && !this.prevFire) this.bellSilenced = false;
     this.prevFire = fire;
-    const fireWarn = fire && !this.bellSilenced;
+    const fireWarn = (fire && !this.bellSilenced) || (cargoTest && !this.bellSilenced);
     v.set(B738.lt.fireWarn, (fireWarn || test) && powered ? 1 : 0);
     v.set('alert.master_warning', fireWarn ? 1 : 0);
     const bell = fireWarn && v.get('elec.fire_det_powered') !== 0;
@@ -451,6 +521,32 @@ export class B738LogicLate implements Subsystem {
     }
     for (const z of ['fwd', 'aft'] as const) v.set(L.cargoExtArmed(z), lit(v.get(B738.cargoArm(z)) !== 0));
     v.set(L.cargoDischarged, lit(v.get('fire.cargo_btl_discharged') !== 0));
+
+    // ---- IRS display unit (ISDU): selected data of the selected IRS (FCOM 11.20).
+    const ir = v.get(B738.isduSys) >= 0.5 ? 2 : 1;
+    const sel = Math.round(v.get(B738.isduSel));
+    const hasAlign = v.get(`irs${ir}.state`) === 1;
+    let l = 0;
+    let rr = 0;
+    if (sel === 1) {
+      l = v.get(`irs${ir}.trk_true_deg`);
+      rr = v.get(`irs${ir}.gs_kt`);
+    } else if (sel === 2) {
+      l = v.get(`irs${ir}.lat_deg`);
+      rr = v.get(`irs${ir}.lon_deg`);
+    } else if (sel === 3) {
+      l = v.get('fdm.wind_dir_deg');
+      rr = v.get('fdm.wind_kt');
+    } else if (sel === 4) {
+      l = v.get(`ahrs${ir}.hdg_true_deg`);
+      rr = hasAlign ? Math.ceil(v.get(`ahrs${ir}.align_s`) / 60) : 0; // STS: minutes to alignment
+    } else if (sel === 0) {
+      l = 88888;
+      rr = 88888; // TEST: all segments
+    }
+    const on = powered && v.get(`irs${ir}.state`) !== 0;
+    v.set(B738.lt.isduText('l'), on ? l : 0);
+    v.set(B738.lt.isduText('r'), on ? rr : 0);
 
     // ---- Misc.
     v.set(L.passOxyOn, lit(v.get('oxy.pax_deployed') !== 0));

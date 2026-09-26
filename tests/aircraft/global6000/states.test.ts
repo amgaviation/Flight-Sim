@@ -165,7 +165,8 @@ describe('Global 6000 control audit', () => {
 
 /** True when the var-name builder `f` produces `name` for one of the usual arguments. */
 function builds(f: (...a: unknown[]) => string, name: string): boolean {
-  const args: unknown[][] = [[1], [2], [3], [4], ['l'], ['r'], ['apu'], ['1b'], ['2b'], ['3a'], ['3b'], ['l', 1], ['l', 2], ['r', 1], ['r', 2], ['apu', 1], ['apu', 2]];
+  const one = [1, 2, 3, 4, 'l', 'c', 'r', 'cb', 'ovhd', 'apu', '1b', '2b', '3a', '3b', 'dc_bus1', 'dc_bus2', 'dc_ess', 'batt_bus', 'pax', 'emer', 'bag', 'aft_eqpt', 'svc_large', 'svc_small'];
+  const args: unknown[][] = [...one.map((a) => [a]), ...['l', 'r', 'apu'].flatMap((z) => [[z, 1], [z, 2]])];
   for (const a of args) {
     try {
       if (f(...a) === name) return true;

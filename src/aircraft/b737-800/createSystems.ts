@@ -93,6 +93,7 @@ export function createSystems(ctx: SimContext, opts: CreateSystemsOptions = {}):
   const lights = createLighting(ctx);
   const logicLate = new B738LogicLate(ctx);
   logicLate.cas = cas;
+  logic.isfdReset = () => av.isfdAhrs.reset(false);
 
   const list: Subsystem[] = [
     failures,

@@ -171,6 +171,18 @@ export const LON_VARS = {
   stbyPowered: `${P}elec.stby_powered`,
   highAltMode: `${P}press.high_alt_mode`,
   engFail: (i: number) => `${P}eng${i}_fail`, // FADEC engine-failure latch (ENGINE FAIL CAS)
+
+  // ---------------- Control wheels / tiller (3D cockpit; added by the cockpit agent). The input module
+  // rewrites input.pitch_trim_rate / input.ap_disc / input.tiller every frame from the keyboard and hardware,
+  // so the 3D yoke switches and tiller write their own vars; systems/cockpitInputs.ts merges them.
+  yokeTrimL: `${P}yoke.trim_l`, // pilot pitch trim split switch, momentary: +1 NOSE UP, 0, -1 NOSE DN
+  yokeTrimR: `${P}yoke.trim_r`, // copilot
+  yokeDiscL: `${P}yoke.disc_l`, // AP/TRIM DISC button held (1): disconnects the AP, interrupts trim and the pusher
+  yokeDiscR: `${P}yoke.disc_r`,
+  tiller3d: `${P}tiller`, // left-console tiller handle -1..1 (+ right)
+  yokeTrimCmd: `${P}yoke.trim_cmd`, // merged wheel trim command (pilot priority), read by the stabilizer trim
+  tillerCmd: `${P}tiller_cmd`, // merged tiller command (hardware axis or 3D handle), read by the NWS
+  discHeld: `${P}yoke.disc_held`, // either AP/TRIM DISC held
 } as const;
 
 /** Every cockpit control var (inputs), for the "every control is consumed" audit test. */
@@ -193,6 +205,7 @@ export const LON_CONTROL_VARS: string[] = [
   LON_VARS.ltEmer, LON_VARS.ltSeatBelt, LON_VARS.ltPfdL, LON_VARS.ltGtcL, LON_VARS.ltMfd, LON_VARS.ltGtcC, LON_VARS.ltPfdR, LON_VARS.ltGtcR,
   LON_VARS.ltMapL, LON_VARS.ltMapR,
   LON_VARS.oxyPax, LON_VARS.oxyMaskL, LON_VARS.oxyMaskR, LON_VARS.oxyMode,
+  LON_VARS.yokeTrimL, LON_VARS.yokeTrimR, LON_VARS.yokeDiscL, LON_VARS.yokeDiscR, LON_VARS.tiller3d,
 ];
 
 /** Events emitted by cockpit buttons (momentary commands). */

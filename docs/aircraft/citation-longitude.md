@@ -597,3 +597,84 @@ These vars are written by the G5000 synoptic controls:
 - **Liftoff speed.** The scripted 3°/s rotation lifts off at about VR+14 kt, a few knots late against typical VR+8..10 (EST expectation).
 - **FPG takeoff field lengths** are factored balanced-field values. The tests check the all-engine 35 ft distance × 1.15 and the accelerate-stop distance against them. One-engine-inoperative accelerate-go is not tested.
 - **Minor data conflict:** MZFW is 26,000 lb (FPG) vs 26,800 lb (OG).
+
+## 10. Main cockpit and exterior build
+
+Code: `src/aircraft/citation-longitude/cockpit/` (everything except `overhead/` and `side/`),
+`exterior.ts` and `index.ts`. Tests: `tests/aircraft/citation-longitude/cockpit-main/`.
+
+### 10.1 Files
+
+| File | Contents |
+|---|---|
+| `cockpit/layout.ts` | Every body-frame number of the flight deck: design eye, panel frames, GDU / GTC sizes, pedestal, yokes, pedals, seats, windshield and side-window stations, mount frames for the overhead and side consoles, tiller position. |
+| `cockpit/shell.ts` | Sidewalls, headliner, window frames lofted from the exterior sections, floor, aft bulkhead, glareshield hood, soffit, pedestal body, knee and foot-well closures, seats. |
+| `cockpit/mainPanel.ts` | L PFD / MFD / R PFD (GDU 1400W with 12 softkeys each), outboard PFD GTCs, standby display with its BARO knob, pilot and copilot lower sub-panels. |
+| `cockpit/glareshield.ts` | MASTER WARNING / CAUTION (both sides), GDU controllers, ENG FIRE switchlights, BOTTLE 1 / 2, GMC 710. |
+| `cockpit/pedestal.ts` | MFD GTCs, fuel, hydraulics, speedbrake, thrust levers with TO/GA, A/T disconnect and A/T arm buttons on the handles, flaps, trims, engine RUN/STOP and START, air conditioning, pressurization, APU, bleed air. |
+| `cockpit/flightControls.ts` | Two control wheels (AP/TRIM DISC, pitch trim), two sets of rudder pedals with toe brakes, the nosewheel tiller. |
+| `cockpit/garmin.ts` | G5000 hardware built from `g3000Controls(cfg)`: GDU bezels and softkeys, GTC 570 units and knobs, GMC 710, GDU controllers. |
+| `cockpit/controls.ts` | `GtcMapKnob`: GTC 570 map knob with joystick (turn, push, drag to pan). |
+| `cockpit/standby.ts` | Standby flight display (ADC 3 / AHRS 3, standby bus). |
+| `cockpit/context.ts` | Build context and the extension contract for the overhead / side builders. |
+| `cockpit/index.ts` | `buildLongitudeCockpit(ctx, sys, suite, { headless?, mainOnly? })`: lighting zones and lights, derived annunciator states, preset views. |
+| `exterior.ts` | `createLongitudeExterior(vars)` and the shared `LONGITUDE_FUSELAGE` sections. |
+| `systems/cockpitInputs.ts` | Merges the 3D wheel trim switches, AP/TRIM DISC and tiller into the systems (see 10.3). |
+
+### 10.2 Geometry (EST unless noted)
+
+- Floor z +0.62 m. Design eye (7.55, ∓0.50, −0.55) m, 1.17 m above the floor.
+- Display band: centre (8.34, 0, −0.165) m, tilted 10°. PFDs at y ±0.49 m, GTCs at ±0.755 m.
+- Standby display in the gap between the L PFD and the MFD.
+- Glareshield face: 1.80 × 0.09 m, tilted 25°. The hood top is at z −0.39 m at the brow and slopes to −0.33 m at the windshield base. That keeps the over-the-nose line about 11° below the eye.
+- Pedestal: 0.36 m wide. The forward face is tilted about 30° and carries the two MFD GTCs; the flat top runs from x 8.10 to 7.28 m.
+- The fuselage sections come from the FPG dimensions: length 22.30 m, span 21.0 m, height 5.92 m. `tests/.../exterior.test.ts` checks all three.
+
+### 10.3 Changes to the core agent's files
+
+- **`vars.ts`.** Added `yokeTrimL/R`, `yokeDiscL/R`, `tiller3d`, `yokeTrimCmd`, `tillerCmd` and `discHeld`. The new inputs are also listed in `LON_CONTROL_VARS`.
+- **`createSystems.ts`.** The new `LongitudeCockpitInputs` subsystem runs right after the logic block, and three bindings use it:
+  - stabilizer trim `switchVars` gets `yokeTrimCmd`, and trim `enable` is `!discHeld`;
+  - the stall-warning pusher `enabled` is `!discHeld`;
+  - nosewheel steering takes `tiller.input = tillerCmd`.
+- **Why the change was needed.** The app's input module rewrites `input.pitch_trim_rate`, `input.ap_disc` and `input.tiller` every frame, so 3D controls cannot write those vars directly.
+- **Trim priority and AP disconnect.** The pilot's wheel trim has priority over the copilot's (EST). Operating a wheel trim switch disconnects the AP (Garmin GFC behaviour).
+
+### 10.4 Shared-library change
+
+`src/cockpit/controls/Lever.ts` has a new read-only `handle` getter that returns the moving arm group. It is additive. The Longitude uses it to mount the TO/GA, A/T DISC and A/T ARM buttons on the thrust-lever handles.
+
+### 10.5 Lighting
+
+| Zone | Var | Drives |
+|---|---|---|
+| `panel` | `ac.light.panel` | Label backlighting (PANEL knob) |
+| `flood` | `ac.light.flood` | Two headliner flood lights |
+| `map_l`, `map_r` | `ac.light.map_l/_r` | Map lights |
+| `aux` | `ac.light.aux` | LED strip under the glareshield (EST) |
+
+- Annunciator lenses are powered from the emergency buses. They dim when the PANEL knob is out of DAY (EST).
+- The exterior uses real spot lights for the landing L / R (400,000 cd, EST) and taxi (60,000 cd, EST) lights, scaled by `world.render_units_per_lux`. Every other light is a lamp sprite driven by `light.*`.
+
+### 10.6 Verification
+
+- `coverage.test.ts` actuates every control through its pointer handlers. Each one must change a var that a system reads, or emit an event that has a listener. The indicator lamps must be driven by system vars. Result: 166 of 166 bound.
+- `functional.test.ts` checks the system reactions to the controls:
+  - batteries power the emergency buses;
+  - wheel trim moves the stabilizer, and AP/TRIM DISC interrupts it;
+  - the tiller steers;
+  - the gear handle is locked on the ground;
+  - thrust levers change the FADEC N1 command;
+  - ENG FIRE arms the bottles and BOTTLE discharges them.
+- `exterior.test.ts` checks the dimensions and the animation.
+- For screenshots, run `node scripts/lon-shots.mjs` (options in the file header). It writes to `tests/output/citation-longitude/`.
+
+### 10.7 Scope and open items (cockpit / exterior)
+
+- **Not built:**
+  - PTT and intercom switches on the wheels (no transmit model).
+  - The GTC dual-knob push-and-hold (COM swap). The swap is available on the GTC screen.
+- **No lamp-test writer.** Nothing writes `alert.annun_test` in this aircraft yet. The overhead builder is the natural owner if the Longitude has an annunciator test.
+- **Tiller.** It has no centring spring; it stays where it is left.
+- **Layout.** The GMC 710 key layout and the lower-panel positions are EST from photographs. The standby display position is EST.
+- **Exterior.** The flaps rotate about a hinge line; the Fowler translation is not modelled. The reversers are shown as two pivot doors per engine (EST).

@@ -151,8 +151,8 @@ export const B738_ANNUNCIATORS: Annunciator[] = [
   a('eec_altn2', 'EEC 2 ALTN', 'eng', `${B738.eec(2)} == 0`),
 
   // ================================================================ OVERHEAD
-  a('equip_cool_supply', 'EQUIP COOLING SUPPLY OFF', 'overhead', `fail.b738.equip_cool_supply && ${B738.equipCoolSupply} == 0`, B738.lt.equipCoolOff('supply')),
-  a('equip_cool_exhaust', 'EQUIP COOLING EXHAUST OFF', 'overhead', `fail.b738.equip_cool_exhaust && ${B738.equipCoolExhaust} == 0`, B738.lt.equipCoolOff('exhaust')),
+  a('equip_cool_supply', 'EQUIP COOLING SUPPLY OFF', 'overhead', `${B738.equipCoolSupply} == 0 && fail.b738.equip_cool_supply`, B738.lt.equipCoolOff('supply')),
+  a('equip_cool_exhaust', 'EQUIP COOLING EXHAUST OFF', 'overhead', `${B738.equipCoolExhaust} == 0 && fail.b738.equip_cool_exhaust`, B738.lt.equipCoolOff('exhaust')),
   a('emer_exit_not_armed', 'EMERGENCY EXIT LIGHTS NOT ARMED', 'overhead', `${B738.emerExitLt} != 1`, B738.lt.emerExitNotArmed),
   a('fdr_off', 'FLT REC OFF', 'overhead', `${B738.fdrSw} == 0 && !(eng1.running || eng2.running) && ${gnd}`, B738.lt.fdrOff),
   a('pseu', 'PSEU', 'overhead', `${gnd} && (gear.disagree || fail.gear.squat1 || fail.gear.squat2)`, B738.lt.pseu),

@@ -51,6 +51,27 @@ describe('(b) take-off performance', () => {
     expect(v.get('gear.up_locked')).toBe(1);
   });
 
+  it('TO/GA on the ground: A/T N1 sets the take-off N1, THR HLD at 84 kt', () => {
+    const r = makeB738({ state: 'takeoff' });
+    const v = r.vars;
+    r.run(2);
+    expect(v.get('ac.at_arm')).toBe(1);
+    // Thrust levers advanced to ~40 % N1 and stabilized, then TO/GA (FCOM NP.21 take-off procedure).
+    v.set(B738.tla(1), 0.25);
+    v.set(B738.tla(2), 0.25);
+    r.run(4);
+    v.set('input.toga', 1);
+    r.run(0.3);
+    v.set('input.toga', 0);
+    r.run(12);
+    expect(v.getString('ap.at_mode')).toBe('N1');
+    expect(Math.abs(v.get('eng1.n1_pct') - v.get('fadec.n1_to_pct'))).toBeLessThan(1.5);
+    expect(v.getString('ap.vert_active')).toBe('TO/GA');
+    r.run(20, () => v.get('adc1.ias_kt') > 90);
+    r.run(1);
+    expect(v.getString('ap.at_mode')).toBe('THR HLD');
+  });
+
   it('take-off configuration warning: flaps up / stab out of the green band', () => {
     const r = makeB738({ state: 'takeoff' });
     const v = r.vars;

@@ -110,8 +110,8 @@ export function setB738Switches(ctx: Pick<SimContext, 'vars'>, s: InitialState):
   // ------------------------------------------------ ANTI-ICE
   for (const w of WINDOW_HEATS) v.set(B738.windowHeat(w), powered ? 1 : 0); // NP: window heat ON at least 10 min before take-off
   v.set(B738.windowHeatTest, 0);
-  v.set(B738.probeHeat('a'), powered && s !== 'ready_to_taxi' ? 1 : 0);
-  v.set(B738.probeHeat('b'), powered && s !== 'ready_to_taxi' ? 1 : 0);
+  v.set(B738.probeHeat('a'), powered ? 1 : 0); // NP.21 before taxi: PROBE HEAT ON
+  v.set(B738.probeHeat('b'), powered ? 1 : 0);
   v.set(B738.tatTest, 0);
   v.set(B738.wingAi, 0);
   // ------------------------------------------------ AIR CONDITIONING / BLEED
@@ -221,7 +221,6 @@ export function setB738Switches(ctx: Pick<SimContext, 'vars'>, s: InitialState):
   // ------------------------------------------------ ground services
   v.set(B738.gpuConnected, 0);
   // ------------------------------------------------ MCP / EFIS: set by the avionics suite applyState; baro set below.
-  void inAir;
 }
 
 /** `AircraftInstance.applyState` of the 737-800. */
@@ -234,6 +233,11 @@ export function applyB738State(ctx: SimContext, sys: B738Systems, s: InitialStat
   // Surfaces and gear to their commanded positions.
   sys.flaps.setPosition(B738_FLAP_DETENTS[Math.round(v.get(B738.flapLever))].flapDeg);
   sys.gear.setDown(s !== 'cruise');
+  // The FDM publishes the weight-on-wheels vars only on its first step; seed them so the squat switches
+  // start in the right state instead of reporting a spurious touchdown a moment after the state load
+  // (which would, e.g., trip the A/T automatic disengagement 2 s later).
+  for (const i of [0, 1, 2]) v.set(`gear.wow${i}`, inAir ? 0 : 1);
+  sys.gear.reset();
   sys.stab.setPosition(inAir ? STAB.neutral : TAKEOFF_TRIM_UNITS);
   sys.aileronTrim.setPosition(0);
   sys.rudderTrim.setPosition(0);
@@ -327,6 +331,8 @@ export function applyB738State(ctx: SimContext, sys: B738Systems, s: InitialStat
   }
   for (const a of sys.adc) a.reset();
   sys.isfdAhrs.reset(true);
+  // Air/ground state before the suite reset: the A/T touchdown bookkeeping reads gear.air_ground on reset.
+  sys.gear.update(1 / 60);
   sys.suite.applyState(s);
   sys.press.settle();
   sys.pneu.snap(22);

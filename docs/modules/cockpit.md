@@ -518,7 +518,7 @@ over it**; direction-limited gates block only that motion (reverse latch: `direc
 stop at gates, a pause + notch passes. Hardware axis bound: lever follows the axis, mouse
 ignored, tooltip "(hardware axis)". Writes `var` = output (nearest reachable detent for discrete
 levers, physical position otherwise); follows external writes when not dragged (autothrottle).
-Public: `logic: LeverLogic`, `value`. Sounds `lever.detent`, `lever.gate`.
+Public: `logic: LeverLogic`, `value`, `handle` (the moving arm group, +z along the arm; mount handle buttons such as TO/GA here with a higher `userData.hitPriority`). Sounds `lever.detent`, `lever.gate`.
 
 ### 5.9 `GearHandle`
 

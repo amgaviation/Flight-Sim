@@ -505,3 +505,40 @@ export const SIX_PACK_GROUPS: readonly SixPackGroup[] = ['flt_cont', 'irs', 'fue
 
 /** Cockpit display ids owned by this aircraft (besides the suite's DUs, CDUs and MCP windows). */
 export const B738_DISPLAY_IDS = { isfd: 'b738_isfd', isdu: 'b738_isdu' } as const;
+
+/**
+ * Every cockpit control var of this module (inputs only; outputs under `lt` and the derived
+ * system vars are excluded). Used by the inventory audit test (every control must be read by a
+ * system) and by the dossier's control inventory.
+ */
+export function b738ControlVars(): string[] {
+  const out: string[] = [];
+  const sides: Side[] = [1, 2];
+  const skip = new Set(['lt', 'fadecTla', 'xfrSrc', 'stbyOnBatt', 'stbyPumpCmd', 'stbyRudder', 'ptuCmd', 'gearXferUnit', 'recallActive', 'wingAiValveCmd', 'engValveOpen']);
+  const args: Record<string, readonly unknown[]> = {
+    fltCtl: ['a', 'b'],
+    spoilerSw: ['a', 'b'],
+    probeHeat: ['a', 'b'],
+    fuelPump: FUEL_PUMPS,
+    hydPump: HYD_PUMP_SWITCHES,
+    windowHeat: WINDOW_HEATS,
+    tempSel: ['cont', 'fwd', 'aft'],
+    door: DOORS,
+    cargoDetSel: ['fwd', 'aft'],
+    cargoArm: ['fwd', 'aft'],
+    ailTrim: [1, 2],
+    acpMic: [1, 2, 3],
+    acpMkrVol: [1, 2, 3],
+    acpAltNorm: [1, 2, 3],
+    acpFilter: [1, 2, 3],
+  };
+  for (const [key, val] of Object.entries(B738)) {
+    if (skip.has(key)) continue;
+    if (typeof val === 'string') out.push(val);
+    else if (typeof val === 'function') {
+      const list = args[key] ?? sides;
+      for (const a of list) out.push((val as (x: unknown) => string)(a));
+    }
+  }
+  return out;
+}

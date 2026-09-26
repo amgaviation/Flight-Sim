@@ -143,7 +143,8 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): ElectricalNetwo
     dc('efis2', 'dc2', 0.5, {}, 3),
     dc('gps2', 'dc2', 1, {}, 3),
     dc('ra2', 'dc2', 1, {}, 3),
-    dc('xpdr', 'dc2', 1.5, {}, 5),
+    dc('xpdr', 'dc2', 1.5, {}, 5), // ATC 1
+    dc('xpdr2', 'dc1', 1.5, {}, 5), // ATC 2
     dc('eng2_start', 'dc2', `0.2 + (${B738.engStart(2)} == 0) * 1.5`, {}, 5),
     dc('bleed_ctl_r', 'dc2', 0.5, {}, 3),
     dc('eng_ai2', 'dc2', 0.3, {}, 3),
@@ -153,7 +154,10 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): ElectricalNetwo
     dc('spoiler_ctl', 'dc2', 0.5, {}, 3),
     dc('steering', 'dc2', 0.3, {}, 3),
     dc('apu_ecu', 'batt_bus', `0.5 + apu.running * 1`, {}, 5), // APU electronic control unit (battery bus)
-    dc('apu_start', 'batt_bus', 'apu.starter_amps', {}, 400), // APU starter-generator motoring from the battery bus (EST current profile, Apu block)
+    // APU starter-generator: through the start converter unit from AC XFR bus 1 when available, else from the
+    // battery (FCOM 7.10 "APU start": battery start or SCU start; EST current profile from the Apu block).
+    dc('apu_start', 'batt_bus', '!elec.xfr1_powered * apu.starter_amps', {}, 400),
+    ac('apu_scu', 'xfr1', 'elec.xfr1_powered * apu.starter_amps * 28 / 0.85', {}, 30),
     // ---------------------------------------------------------------- HOT / SWITCHED HOT BATTERY buses
     dc('irs_dc', 'sw_hot_batt', 'irs1.on_dc * 6 + irs2.on_dc * 6', {}, 10), // ADIRU DC backup
     dc('clock', 'hot_batt', 0.1, {}, 1),
@@ -399,7 +403,7 @@ export const POWER = {
   ra2: pw('ra2'),
   taws: pw('taws'),
   tcas: pw('tcas'),
-  xpdr: pw('xpdr'),
+  xpdr: 'elec.xpdr_sel_powered',
   stallWarn: `(${pw('smyd1')} || ${pw('smyd2')})`,
   machWarn: pw('mach_warn'),
   stabTrim: pw('stab_trim'),

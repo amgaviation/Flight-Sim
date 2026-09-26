@@ -115,7 +115,7 @@ export function createPressurization(ctx: Pick<SimContext, 'vars'>): Pressurizat
     inflowKgs: 'pneu.pack_flow_kgs',
     // AUTO controller on DC bus 1; an unpowered AUTO controller behaves as failed -> ALTN (EST wiring).
     mode: `${B738.pressMode} == 0 && !elec.press_auto_powered ? 1 : ${B738.pressMode}`,
-    manualCommand: B738.outflowSw,
+    manualCommand: 'ac.b738.outflow_cmd',
     groundPrepress: { active: `gear.air_ground && ${B738.pressMode} == 0 && (${B738.tla(1)} > 0.6 || ${B738.tla(2)} > 0.6)`, psi: 0.1 },
     masksManual: `${B738.passOxy} != 0`,
     onGround: 'gear.air_ground',
@@ -126,8 +126,8 @@ export function createPressurization(ctx: Pick<SimContext, 'vars'>): Pressurizat
 // ------------------------------------------------------------------------------------ APU
 
 /**
- * Honeywell 131-9B APU (FCOM 7.10 "APU"; LIM): START from the battery bus
- * (starter-generator motoring), up to 120 s start cycle, AVAIL (95 %) with a
+ * Honeywell 131-9B APU (FCOM 7.10 "APU"; LIM): START from the battery or,
+ * with AC available, through the start converter unit (starter-generator motoring), up to 120 s start cycle, AVAIL (95 %) with a
  * 90 kVA generator (to 41,000 ft) and bleed (to 17,000 ft); after APU BLEED
  * use a 60 s cooldown precedes shutdown. EGT values EST.
  */
@@ -136,7 +136,8 @@ export function createApu(ctx: Pick<SimContext, 'vars'>): Apu {
     master: `${B738.apuSw} >= 1 && elec.apu_ecu_powered`,
     // START is latched by the APU ECU and the start begins once the inlet door is fully open (FCOM 7.10).
     start: `ac.b738.apu_start_req && apu.door_open`,
-    starterVolts: 'elec.batt_bus_v',
+    // Start converter unit on AC XFR 1 (full-strength start) or the battery bus.
+    starterVolts: 'elec.xfr1_powered ? 27 : elec.batt_bus_v',
     starterNominalV: 24,
     starterPeakA: 350, // EST starter-generator inrush on the battery bus
     fuelAvailable: 'fuel.apu_on',

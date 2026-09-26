@@ -276,12 +276,12 @@ export const B738_FDM: FdmConfig = {
     Cl_trim: 0.012,
     // Static margin ~10 % MAC about 25 % MAC (EST): -0.0082 per deg.
     Cm_alpha: { x: [-30, -14, 0, 14, 16, 20, 30, 45, 90], y: [0.25, 0.115, 0, -0.115, -0.14, -0.2, -0.33, -0.45, -0.65] },
-    // Offset for the normalized stabilizer (0 at 8.5 units): cruise trim lands near 4-5 units at a mid CG (FCOM normal range).
+    // Offset for the normalized stabilizer (0 at STAB.neutral = 6.5 units, +1 = 17 units, -1 = 0 units): cruise trim lands near 4-5 units at a mid CG (FCOM normal range).
     Cm0: 0.25,
     Cm_q: -28,
     Cm_alphadot: -9,
     Cm_de: 0.7,
-    // Stabilizer: 17 units ~ 17 deg of stabilizer travel (EST), a_t V_h eta = 0.078 /deg -> 8.5 units = 0.66.
+    // Stabilizer: 17 units ~ 17 deg of stabilizer travel (EST), a_t V_h eta = 0.078 /deg -> ~8.5 units = 0.66 (normalized full scale).
     Cm_trim: 0.66,
     Cm_flap: { x: FLAPS, y: [0, -0.02, -0.025, -0.04, -0.055, -0.07, -0.085, -0.095, -0.11] },
     Cm_gear: 0.005,

@@ -1,0 +1,123 @@
+/**
+ * Citation M2 flight-deck shell: sidewalls, headliner, windshield frame
+ * (centre post, header, A-pillars), side-window frames, floor, aft
+ * bulkhead, glareshield hood, crew seats. Lofted from the exterior's
+ * fuselage profile (exterior.ts M2_FUSELAGE) inset by the skin/lining
+ * thickness, so the window openings coincide with the exterior glazing.
+ *
+ * Finish (S&D15 §14 / Figure III photograph): dark grey glareshield
+ * (crackle), charcoal panel, light greige sidewall and headliner linings,
+ * dark carpet, light leather crew seats.
+ */
+import * as THREE from 'three';
+import type { CockpitBuilder } from '../../../cockpit/CockpitBuilder';
+import { bl } from '../../../cockpit/frame';
+import { glareshieldGeometry, floorGeometry } from '../../../cockpit/geometry/structure';
+import { roundedBox, transform, merge } from '../../../cockpit/geometry/primitives';
+import {
+  M2_FUSELAGE,
+  loftSkin,
+  fixedRange,
+  windshieldHalfAngle,
+  WS_BASE_X,
+  WS_TOP_X,
+  SIDE_WIN_AFT_X,
+  SIDE_WIN_FWD_X,
+  SIDE_WIN_TOP_T,
+  SIDE_WIN_SILL_T,
+} from '../exterior';
+import { FLOOR_AFT_X, FLOOR_Z, GLARE, SEAT } from './layout';
+
+/** Lining inset from the outer skin (m): skin, frames and insulation (EST). */
+const INSET = 0.045;
+const TWO_PI = 2 * Math.PI;
+
+export function buildShell(b: CockpitBuilder): void {
+  const mats = b.env.materials;
+  const P = M2_FUSELAGE;
+  const wall = mats.custom('plastic', '#9d978c', 0.75); // EST: greige lining (photograph)
+  const head = mats.get('headliner');
+  const frame = mats.custom('plastic', '#2a2b2d', 0.6); // dark window frames / trim
+  const lower = mats.custom('plastic', '#3a3b3d', 0.7); // lower sidewall / kick panels
+  const inward = { inset: INSET, inward: true };
+  const add = (g: THREE.BufferGeometry, m: THREE.Material, name: string, occluder = true) => {
+    const me = b.structureMesh(g, m, undefined, undefined, occluder);
+    me.name = name;
+    return me;
+  };
+  const SILL = SIDE_WIN_SILL_T;
+  const TOP = SIDE_WIN_TOP_T;
+  // Lower walls and floor pan below the side-window sill, aft bulkhead station to the nose.
+  add(loftSkin(P, FLOOR_AFT_X, WS_BASE_X + 0.06, fixedRange(SILL, TWO_PI - SILL), 30, 30, inward), lower, 'lower_walls');
+  // Headliner.
+  add(loftSkin(P, FLOOR_AFT_X, WS_TOP_X, fixedRange(-TOP, TOP), 16, 12, inward), head, 'headliner');
+  for (const s of [1, -1]) {
+    const r = (a: number, c: number): [number, number] => (s > 0 ? [a, c] : [-c, -a]);
+    // Wall aft of the side window, and the window post between the side window and the windshield.
+    add(loftSkin(P, FLOOR_AFT_X, SIDE_WIN_AFT_X, fixedRange(...r(TOP, SILL)), 4, 8, inward), wall, 'aft_wall');
+    add(loftSkin(P, SIDE_WIN_FWD_X, WS_TOP_X + 0.005, fixedRange(...r(TOP - 0.02, SILL)), 3, 8, inward), frame, 'a_post');
+    // Side wall under the windshield (between its lower edge and the sill line).
+    add(
+      loftSkin(P, WS_TOP_X, WS_BASE_X + 0.06, (x) => {
+        const t = windshieldHalfAngle(x, INSET);
+        return s > 0 ? [Math.max(0.02, t - 0.03), SILL] : [-SILL, -Math.max(0.02, t - 0.03)];
+      }, 12, 10, inward),
+      lower,
+      'ws_side_wall',
+    );
+    // Window frames: A-pillar strip along the windshield's side edge, side-window sill and header.
+    add(
+      loftSkin(P, WS_TOP_X - 0.01, WS_BASE_X, (x) => {
+        const t = windshieldHalfAngle(x, INSET);
+        return s > 0 ? [Math.max(0, t - 0.06), t + 0.005] : [-t - 0.005, -Math.max(0, t - 0.06)];
+      }, 16, 2, { inset: INSET - 0.012, inward: true }),
+      frame,
+      'a_pillar',
+    );
+    add(loftSkin(P, SIDE_WIN_AFT_X - 0.04, SIDE_WIN_FWD_X + 0.04, fixedRange(...r(SILL - 0.03, SILL + 0.02)), 6, 2, { inset: INSET - 0.012, inward: true }), frame, 'side_sill');
+    add(loftSkin(P, SIDE_WIN_AFT_X - 0.04, SIDE_WIN_FWD_X + 0.04, fixedRange(...r(TOP - 0.03, TOP + 0.02)), 6, 2, { inset: INSET - 0.012, inward: true }), frame, 'side_header');
+    add(loftSkin(P, SIDE_WIN_AFT_X - 0.05, SIDE_WIN_AFT_X, fixedRange(...r(TOP - 0.03, SILL + 0.02)), 2, 6, { inset: INSET - 0.012, inward: true }), frame, 'side_aft_frame');
+  }
+  // Windshield header and centre post (two-piece windshield, S&D15 §9.7 "windshields").
+  add(loftSkin(P, WS_TOP_X - 0.04, WS_TOP_X + 0.03, fixedRange(-0.97, 0.97), 3, 20, { inset: INSET - 0.012, inward: true }), frame, 'ws_header');
+  add(loftSkin(P, WS_TOP_X, WS_BASE_X - 0.02, fixedRange(-0.022, 0.022), 12, 2, { inset: INSET - 0.014, inward: true }), frame, 'ws_centre_post');
+  // Faint cockpit glazing (seen as a slight reflection; pick() ignores transparent glass).
+  const glass = new THREE.MeshPhysicalMaterial({ color: 0x9fb4c8, roughness: 0.05, metalness: 0, transparent: true, opacity: 0.06, depthWrite: false, side: THREE.DoubleSide });
+  mats.track(glass);
+  const ws = add(
+    loftSkin(P, WS_TOP_X, WS_BASE_X, (x) => {
+      const t = windshieldHalfAngle(x, INSET * 0.3);
+      return [-t, t];
+    }, 10, 16, { inset: 0.01, inward: true }),
+    glass,
+    'windshield_glass',
+    false,
+  );
+  ws.castShadow = false;
+  ws.renderOrder = 2;
+
+  // Floor (carpet) and the aft bulkhead / cabin divider (EST: partial divider behind the crew seats).
+  const fl = add(floorGeometry(1.3, WS_BASE_X - FLOOR_AFT_X + 0.1), mats.get('carpet'), 'floor');
+  fl.position.copy(bl((FLOOR_AFT_X + WS_BASE_X) / 2, 0, FLOOR_Z));
+  {
+    const parts: THREE.BufferGeometry[] = [];
+    // Two cabinet walls behind the seats, open aisle in the middle (local frame: x right, y up, z aft).
+    for (const s of [1, -1]) {
+      const g = roundedBox(0.42, 1.35, 0.05, 0.01, 2);
+      transform(g, s * 0.5, 0.6, 0);
+      parts.push(g);
+    }
+    const g = merge(parts);
+    for (const p of parts) p.dispose();
+    const m = add(g, wall, 'aft_divider');
+    m.position.copy(bl(FLOOR_AFT_X + 0.02, 0, FLOOR_Z));
+  }
+
+  // Glareshield hood (black crackle, S&D photograph): brow over the glareshield panel, drooping toward the windshield.
+  const gs = add(glareshieldGeometry(GLARE.width, GLARE.depth, 0.02, 0.035, 0.09), mats.get('glareshield'), 'glareshield');
+  gs.position.copy(bl(GLARE.browX, 0, GLARE.browZ));
+  gs.rotation.x = (GLARE.pitchDeg * Math.PI) / 180;
+
+  // Crew seats (bizjet style, sunk so the cushion is 0.36 m above the floor; EST photograph: light leather / sheepskin).
+  for (const s of [-1, 1]) b.seat('bizjet', [SEAT.x, s * SEAT.y, SEAT.z]);
+}

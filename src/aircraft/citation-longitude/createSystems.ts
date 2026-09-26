@@ -43,6 +43,7 @@ import { createHydraulics, hydFrac } from './systems/hydraulic';
 import { createPneumatics, createPressurization, createIce, createApu, createFire, createOxygen } from './systems/environment';
 import { createEngines } from './systems/engines';
 import { LongitudeLogic, LongitudePostLogic, TLA } from './systems/logic';
+import { LongitudeCockpitInputs } from './systems/cockpitInputs';
 import { LONGITUDE_CAS } from './systems/cas';
 import { createLighting } from './systems/lighting';
 import { LONGITUDE_TOLD } from './performance';
@@ -104,6 +105,8 @@ export const STAB_TO_BAND: [number, number] = [-7.5, -0.5];
 export function createLongitudeSystems(ctx: SimContext, opts: LongitudeSystemsOptions = {}): LongitudeSystems {
   const failures = new FailureManager(ctx.vars, { events: ctx.events, seed: 700 });
   const logic = new LongitudeLogic(ctx.vars);
+  // 3D control-wheel switches and tiller (cockpit build): merged here before the trims and steering.
+  const cockpitInputs = new LongitudeCockpitInputs(ctx.vars, ctx.events);
   const elec = createElectrical(ctx);
   const apu = createApu(ctx);
   const fuel = createFuel(ctx);
@@ -201,7 +204,8 @@ export function createLongitudeSystems(ctx: SimContext, opts: LongitudeSystemsOp
     kind: 'aoa',
     alphaStall: CITATION_LONGITUDE_FDM.aero.alphaStall_deg,
     shakerNorm: 0.82,
-    pusher: { norm: 0.97, command: -0.35 },
+    // AP/TRIM DISC held interrupts the pusher (EST, Citation-family function; systems/cockpitInputs.ts).
+    pusher: { norm: 0.97, command: -0.35, enabled: `!${V.discHeld}` },
     power: 'elec.stall_warn_powered',
   });
 
@@ -221,7 +225,9 @@ export function createLongitudeSystems(ctx: SimContext, opts: LongitudeSystemsOp
     increasingPositive: false, // more negative stab incidence = nose up
     electric: {
       power: 'elec.emer_l_powered || elec.emer_r_powered',
-      switchVars: [V.pitchTrimYoke, V.stabSecSw],
+      // Keyboard/hardware trim, the 3D control-wheel trim switches (merged), the secondary stab trim switch.
+      switchVars: [V.pitchTrimYoke, V.yokeTrimCmd, V.stabSecSw],
+      enable: `!${V.discHeld}`, // AP/TRIM DISC held interrupts electric trim
       rate: { x: [0, 150, 300], y: [0.5, 0.3, 0.15] }, // EST deg/s
     },
     autopilot: { power: 'elec.afcs_powered', rate: { x: [0, 150, 300], y: [0.3, 0.2, 0.1] } },
@@ -269,7 +275,7 @@ export function createLongitudeSystems(ctx: SimContext, opts: LongitudeSystemsOp
     travelS: 1.5,
   });
   const steering = new NosewheelSteering(ctx, {
-    tiller: { maxDeg: 81 }, // OG 14-3 / BCA 80-81 deg
+    tiller: { maxDeg: 81, input: V.tillerCmd }, // OG 14-3 / BCA 80-81 deg; hardware axis or 3D handle (cockpitInputs)
     pedals: { maxDeg: 7.5 }, // BCA 7.5 deg
     power: `max(hyd.a_psi, hyd.b_psi) > 1000`,
     rateDegPerS: 30,
@@ -311,6 +317,7 @@ export function createLongitudeSystems(ctx: SimContext, opts: LongitudeSystemsOp
   const list: Subsystem[] = [
     failures,
     logic,
+    cockpitInputs,
     elec,
     apu,
     fuel,

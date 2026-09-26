@@ -91,13 +91,11 @@ describe('(f) coupled ILS approach and autoland', () => {
       if (v.getString(AP.verticalActive) === 'FLARE') flare = true;
       if (v.getString(AP.athrMode) === 'RETARD') retard = true;
       if (lat === 'ROLLOUT' || v.getString('ac.fma.roll') === 'ROLLOUT') rollout = true;
-      if (flare && t % 1 < 1 / 60 && ra < 60) console.log('F', t.toFixed(0), lat, v.get('ap.lat_code'), v.get('ap.vert_code'), vert, v.get(AP.engaged), ra.toFixed(0), v.get('gear.air_ground'));
       if (Number.isNaN(tdVs) && v.get('gear.air_ground') === 1) {
         tdVs = v.get(FDM.vs);
         const dN = (v.get(FDM.lat) - thr.lat) * 60 * 1852;
         const dE = (v.get(FDM.lon) - thr.lon) * 60 * 1852 * Math.cos((thr.lat * Math.PI) / 180);
         tdDist = Math.hypot(dN, dE);
-        console.log('TD', lat, vert, v.get(AP.engaged), v.get('ap.channels'), v.getString('ac.fma.roll'), v.getString('ap.autoland'), v.get('ra1.alt_ft'));
       }
       if (!Number.isNaN(tdVs)) {
         // After touchdown: reverse thrust to 80 kt, then idle reverse / stow (FCOM landing roll procedure).

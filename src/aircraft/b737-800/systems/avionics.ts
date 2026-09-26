@@ -82,7 +82,8 @@ export function createAvionics(ctx: SimContext, opts: AvionicsOptions = {}): Avi
   // ISFD inertial sensors: ~90 s attitude initialization (EST, Smiths/GE ISFD).
   const isfdAhrs = new Ahrs(ctx, { index: 3, power: POWER.isfd, alignS: 90, hdgAlignS: 0 });
   const ra = [new RadioAltimeter(ctx, { index: 1, power: POWER.ra1, maxFt: 2500 }), new RadioAltimeter(ctx, { index: 2, power: POWER.ra2, maxFt: 2500 })];
-  const tcas = new Tcas(ctx, { power: `${POWER.tcas} && ${POWER.xpdr}` });
+  // TCAS own altitude from the ATC panel ALT SOURCE selection (B738Logic).
+  const tcas = new Tcas(ctx, { power: `${POWER.tcas} && ${POWER.xpdr}`, ownAltVar: 'ac.b738.xpdr_press_alt_ft' });
 
   const suite = createB737Suite(
     { vars: ctx.vars, events: ctx.events, nav, world: ctx.world, audio: ctx.audio, noDisplays: opts.noDisplays },
@@ -130,7 +131,8 @@ export function createAvionics(ctx: SimContext, opts: AvionicsOptions = {}): Avi
         afcs: {
           lateralModes: [...(AFCS_B737_AFDS.lateralModes ?? []), 'ROLLOUT'],
           labels: { ...AFCS_B737_AFDS.labels, lateral: { ...AFCS_B737_AFDS.labels.lateral, ROLLOUT: 'ROLLOUT' } },
-          autoland: { ...AFCS_B737_AFDS.autoland, rollout: true },
+          // Flare law: firmer touchdown (EST ~2-3 ft/s, typical 737 autoland) than the generic preset.
+          autoland: { ...AFCS_B737_AFDS.autoland, rollout: true, flareTauS: 4, touchdownVsFpm: 200 },
         },
       },
       trafficSource: tcas,

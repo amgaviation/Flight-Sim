@@ -94,6 +94,16 @@ export class Lever extends ControlBase {
   private lastVar: number;
   private liftUntil = 0;
 
+  /**
+   * The moving arm group (panel frame of the arm: +z along the arm toward the
+   * knob at z = armLength). Aircraft attach handle-mounted controls here
+   * (TO/GA, A/T disconnect buttons); give their hit targets a higher
+   * `userData.hitPriority` than the lever's own hit boxes (0).
+   */
+  get handle(): THREE.Group {
+    return this.arm;
+  }
+
   constructor(env: CockpitEnv, o: LeverOptions) {
     super(env, o);
     this.o = o;
