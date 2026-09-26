@@ -95,6 +95,10 @@ export class CursorControl {
             const q = (typeof p === 'number' ? { steps: p } : (p ?? {})) as { steps?: number; inner?: boolean };
             this.data(side, Number(q.steps ?? 0), !!q.inner);
           }),
+          events.on(EPIC_EVENTS.ccdDataInc(side), (p) => this.data(side, Math.max(1, Number(p ?? 1)), false)),
+          events.on(EPIC_EVENTS.ccdDataDec(side), (p) => this.data(side, -Math.max(1, Number(p ?? 1)), false)),
+          events.on(EPIC_EVENTS.ccdDataInc(side, true), (p) => this.data(side, Math.max(1, Number(p ?? 1)), true)),
+          events.on(EPIC_EVENTS.ccdDataDec(side, true), (p) => this.data(side, -Math.max(1, Number(p ?? 1)), true)),
         );
       }
     }

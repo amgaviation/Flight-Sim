@@ -7,8 +7,9 @@
 import type { SimVars } from '../../../core/SimVars';
 import type { Checklist } from '../../../aircraft/types';
 import { KG_TO_LB } from '../../../core/units';
+import { AP } from '../../../core/vars';
 import type { LandingInput, LandingResult, PerformanceProvider, TakeoffInput, TakeoffResult, VSpeedDef, WeightsConfig } from '../config';
-import { G3K, MINS_MODE } from '../vars';
+import { G3K, MINS_MODE, vn } from '../vars';
 
 // ------------------------------------------------------------------ timer
 
@@ -87,23 +88,23 @@ export class VSpeedBank {
     this.restoreDefaults();
   }
   value(id: string): number {
-    return this.vars.get(G3K.vspeedKt(id), NaN);
+    return this.vars.get(vn(G3K.vspeedKt, id), NaN);
   }
   on(id: string): boolean {
-    return this.vars.get(G3K.vspeedOn(id)) !== 0;
+    return this.vars.get(vn(G3K.vspeedOn, id)) !== 0;
   }
   source(id: string): VSpeedSource {
-    const s = this.vars.get(G3K.vspeedSrc(id));
+    const s = this.vars.get(vn(G3K.vspeedSrc, id));
     return s === 1 ? 'pilot' : s === 2 ? 'told' : 'default';
   }
   set(id: string, kt: number, src: VSpeedSource = 'pilot'): void {
-    this.vars.set(G3K.vspeedKt(id), kt);
-    this.vars.set(G3K.vspeedSrc(id), src === 'pilot' ? 1 : src === 'told' ? 2 : 0);
+    this.vars.set(vn(G3K.vspeedKt, id), kt);
+    this.vars.set(vn(G3K.vspeedSrc, id), src === 'pilot' ? 1 : src === 'told' ? 2 : 0);
   }
   /** A bug can be enabled only when it has a value. */
   setOn(id: string, on: boolean): boolean {
     if (on && !Number.isFinite(this.value(id))) return false;
-    this.vars.set(G3K.vspeedOn(id), on ? 1 : 0);
+    this.vars.set(vn(G3K.vspeedOn, id), on ? 1 : 0);
     return true;
   }
   toggle(id: string): boolean {
@@ -149,6 +150,10 @@ export function tempCompCorrectionFt(minsFt: number, aerodromeElevFt: number, te
   return (h * dev) / (273.15 + tempC);
 }
 
+/** Standard AFCS minimums vars per side (AP.minimums / AP.minimumsIsRadio), precomputed. */
+const MINS_FT_VARS = [vn(AP.minimums, 1), vn(AP.minimums, 2)];
+const MINS_RA_VARS = [vn(AP.minimumsIsRadio, 1), vn(AP.minimumsIsRadio, 2)];
+
 /**
  * Minimums (PG §2.4 "MDA/DH Alerting"): Off / Baro / Temp Comp / Radio Alt,
  * 0..16,000 ft, synchronized on both PFDs, reset to Off at power cycle and
@@ -188,9 +193,9 @@ export class MinimumsModel {
   publish(): void {
     const ft = this.effectiveFt();
     const ra = this.mode === MINS_MODE.radio ? 1 : 0;
-    for (const s of [1, 2]) {
-      this.vars.set(`ap.mins${s}_ft`, Number.isFinite(ft) ? ft : NaN);
-      this.vars.set(`ap.mins${s}_is_ra`, ra);
+    for (let s = 0; s < 2; s++) {
+      this.vars.set(MINS_FT_VARS[s], Number.isFinite(ft) ? ft : NaN);
+      this.vars.set(MINS_RA_VARS[s], ra);
     }
   }
 }

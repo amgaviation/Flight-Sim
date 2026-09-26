@@ -209,6 +209,24 @@ export const G3K = {
   wfLandingLb: 'g3k.wf.landing_lb',
   /** Initialization accepted (GTC Initialization screen). */
   initAccepted: 'g3k.init.accepted',
+
+  // ---------------------------------------------------------------- hazard settings (GTC)
+  /**
+   * TAWS inhibit switches set on the GTC TAWS Settings screen: bind the
+   * aircraft's systems/warning Taws `inhibits` to these vars
+   * (`inhibits: { terrain: 'g3k.taws.inhibit_terr', gpws: 'g3k.taws.inhibit_gpws', flapOverride: 'g3k.taws.flap_ovrd' }`).
+   */
+  tawsInhibitTerrain: 'g3k.taws.inhibit_terr',
+  tawsInhibitGpws: 'g3k.taws.inhibit_gpws',
+  tawsFlapOverride: 'g3k.taws.flap_ovrd',
+  /** Traffic altitude range: 0 NORMAL, 1 ABOVE, 2 BELOW, 3 UNRESTRICTED (PG §6.9). */
+  trafficAltRange: 'g3k.traffic.alt_range',
+
+  // ---------------------------------------------------------------- GMC 710
+  /** Key annunciator light per GMC key (1 = lit): `g3k.gmc.lt_<key>`; XFR arrows `lt_xfr_l` / `lt_xfr_r`. */
+  gmcLight: (key: string) => `g3k.gmc.lt_${key.toLowerCase()}`,
+  /** 1 while the GMC 710 is powered. */
+  gmcPowered: 'g3k.gmc.powered',
 } as const;
 
 /** EventBus command names the suite listens to (hardware controls in the cockpit emit these). */
@@ -219,6 +237,8 @@ export const G3K_EVENTS = {
   gtcUpperOuter: (g: string) => `g3k.${g}.upper_outer`, // payload: +n / -n clicks (number or { delta })
   gtcUpperInner: (g: string) => `g3k.${g}.upper_inner`,
   gtcUpperPush: (g: string) => `g3k.${g}.upper_push`,
+  /** Push and hold of the dual concentric knob (COM active/standby swap in the COM tuning context). */
+  gtcUpperHold: (g: string) => `g3k.${g}.upper_hold`,
   gtcLower: (g: string) => `g3k.${g}.lower`, // GTC 580 lower knob / GTC 570 map knob rotation (range)
   gtcLowerPush: (g: string) => `g3k.${g}.lower_push`,
   gtcCenter: (g: string) => `g3k.${g}.center`, // GTC 570 center knob (volume / checklist item)
@@ -248,4 +268,36 @@ export const G3K_EVENTS = {
   noseWheel: 'g3k.gmc.nose', // NOSE UP/DN wheel clicks (+ = nose up)
   /** Master caution / warning acknowledge also acknowledges the suite's CAS model (optional). */
   casAck: 'g3k.cas.ack',
+  /** GMC 710 keys (payload ignored): `g3k.gmc.key_hdg`, `key_nav`, `key_apr`, ... (see gmc/Gmc710.ts GMC_KEYS). */
+  gmcKey: (key: string) => `g3k.gmc.key_${key.toLowerCase()}`,
 } as const;
+
+// ------------------------------------------------------------------ allocation-free var names
+
+const NUM_NAMES = new Map<unknown, string[]>();
+const STR_NAMES = new Map<unknown, Map<string, string>>();
+
+/**
+ * Memoized var-name builder: `vn(ADC.valid, 2)` returns the same string as
+ * `ADC.valid(2)` without allocating after the first call. Used on the 60 Hz
+ * system path and in the 30 Hz display code (CLAUDE.md: no steady-state
+ * allocation). `fn` must be a stable function (the builders in `core/vars.ts`
+ * and `G3K`).
+ */
+export function vn(fn: (i: number) => string, i: number): string;
+export function vn<K extends string>(fn: (k: K) => string, k: K): string;
+export function vn(fn: (k: never) => string, k: number | string): string {
+  const f = fn as unknown as (k: number | string) => string;
+  if (typeof k === 'number') {
+    let arr = NUM_NAMES.get(fn);
+    if (!arr) NUM_NAMES.set(fn, (arr = []));
+    const i = k | 0;
+    if (i >= 0 && i < 64 && i === k) return (arr[i] ??= f(k));
+    return f(k);
+  }
+  let m = STR_NAMES.get(fn);
+  if (!m) STR_NAMES.set(fn, (m = new Map()));
+  let s = m.get(k);
+  if (s === undefined) m.set(k, (s = f(k)));
+  return s;
+}

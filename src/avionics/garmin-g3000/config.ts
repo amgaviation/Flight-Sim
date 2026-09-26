@@ -22,8 +22,8 @@ import type { GaugeScale } from '../common/draw/EngineIndications';
 import type { SpeedRange } from '../common/draw/SpeedTape';
 import type { CasModel } from '../common/draw/CasWindow';
 import type { Checklist } from '../../aircraft/types';
-import type { Fms } from '../../nav/fms/Fms';
-import type { Radios } from '../../nav/Radios';
+import type { Fms, FmsOptions } from '../../nav/fms/Fms';
+import type { Radios, RadiosOptions } from '../../nav/Radios';
 import type { SynopticPageDef } from './gdu/synoptic';
 import type { GduId, GtcId, GtcModeName, PaneId, PaneContent } from './vars';
 import { PANE_CONTENT } from './vars';
@@ -357,6 +357,16 @@ export interface G3000Config {
   checklists?: Checklist[];
   /** Power bindings per unit (default: always powered). */
   power?: Partial<Record<GduId | GtcId, Binding>>;
+  /** GMC 710 AFCS controller power (default: always powered). */
+  gmcPower?: Binding;
+  /**
+   * Power of the integrated radios created by the suite (GIA 63W NAV / GPS,
+   * marker, ADF) when `radiosInstance` is absent: written each frame to
+   * `nav{r}.powered`, `gps.powered`, `nav.marker_powered`, `adf1.powered`.
+   * Default: follows the PFD1 power binding (EST: the GIAs share the
+   * avionics bus with the displays).
+   */
+  radioPower?: Partial<Record<'nav1' | 'nav2' | 'gps' | 'marker' | 'adf', Binding>>;
   /** Boot times (s): GDU self test until the display draws, GTC. EST. */
   bootS?: { gdu?: number; gtc?: number };
   /** Sensor counts. */
@@ -368,6 +378,9 @@ export interface G3000Config {
   radiosInstance?: Radios;
   /** Engine count for the FMS created by the suite when `fms` is absent. */
   engineCount?: number;
+  /** Options for the FMS / radios the suite creates when `fms` / `radiosInstance` are absent. */
+  fmsOptions?: FmsOptions;
+  radiosOptions?: RadiosOptions;
   /** TAWS class for annunciations ('A' Longitude, 'B' M2) and traffic system. */
   taws?: 'A' | 'B';
   traffic?: 'TAS' | 'TCAS2';
@@ -388,6 +401,12 @@ export interface G3000Config {
   raIndex?: number;
   /** Design pixel ratio of the GDU canvases (default 0.8: 1280 x 800 logical -> 1024 x 640 texture). */
   gduPixelRatio?: number;
+  /**
+   * Switch to reversionary mode automatically when a display fails (default
+   * false: PG §1.4 "The system does not automatically switch to reversionary
+   * mode"; the crew uses the DISPLAY REVERSION switches `g3k.rev_sw.<gdu>`).
+   */
+  autoReversion?: boolean;
 }
 
 /** Fully resolved config (every optional field filled). */
@@ -408,6 +427,8 @@ export interface G3000Resolved {
   synoptics: SynopticPageDef[];
   checklists: Checklist[];
   power: Partial<Record<GduId | GtcId, Binding>>;
+  gmcPower: Binding | undefined;
+  radioPower: Partial<Record<'nav1' | 'nav2' | 'gps' | 'marker' | 'adf', Binding>>;
   bootS: { gdu: number; gtc: number };
   sensors: { adc: number; ahrs: number; radioAltimeter: boolean };
   radios: { nav: number; com: number; adf: boolean; dme: boolean; xpdr: number };
@@ -421,6 +442,7 @@ export interface G3000Resolved {
   flapsVar: string;
   raIndex: number;
   gduPixelRatio: number;
+  autoReversion: boolean;
 }
 
 export interface ResolvedGtc {
@@ -520,6 +542,8 @@ export function resolveConfig(c: G3000Config): G3000Resolved {
     synoptics: c.synoptics ?? [],
     checklists: c.checklists ?? [],
     power: c.power ?? {},
+    gmcPower: c.gmcPower,
+    radioPower: c.radioPower ?? {},
     bootS: { gdu: c.bootS?.gdu ?? 12, gtc: c.bootS?.gtc ?? 8 },
     sensors: { adc: c.sensors?.adc ?? 2, ahrs: c.sensors?.ahrs ?? 2, radioAltimeter: c.sensors?.radioAltimeter ?? true },
     radios: {
@@ -544,5 +568,6 @@ export function resolveConfig(c: G3000Config): G3000Resolved {
     flapsVar: c.flapsVar ?? 'surf.flaps_deg',
     raIndex: c.raIndex ?? 1,
     gduPixelRatio: c.gduPixelRatio ?? 0.8,
+    autoReversion: c.autoReversion ?? false,
   };
 }

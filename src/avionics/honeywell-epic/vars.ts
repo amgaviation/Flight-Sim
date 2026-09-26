@@ -188,6 +188,8 @@ export const EPIC_VARS = {
   fpv: (s: number) => side(s, 'fpv'),
   /** SmartView synthetic vision on the PFD, 0/1. */
   svs: (s: number) => side(s, 'svs'),
+  /** Enhanced vision (EVS) picture on the PFD instead of SmartView, 0/1 (HUD page). */
+  evs: (s: number) => side(s, 'evs'),
   /** Air data / attitude source on this side (1..3, reversion via SENSOR page). */
   adcSel: (s: number) => side(s, 'adc_sel'),
   ahrsSel: (s: number) => side(s, 'ahrs_sel'),
@@ -258,12 +260,20 @@ export const EPIC_VARS = {
   // ------------------------------------------------------------ MCDU
   /** 1 while an FMS modification is pending (MOD flight plan). */
   mcduMod: 'epic.mcdu.mod',
+  /** MCDU n MSG annunciator: FMS messages present and the MCDU is not showing the MSG page. */
+  mcduMsgLight: (n: number) => `epic.mcdu${n}.msg_lt`,
 
   // ------------------------------------------------------------ Symmetry touch screens
   /** Page index shown on touch screen `id` (tsc1..4, ohpts1..3, sfd1..2). */
   touchPage: (id: string) => `epic.touch.${id}.page`,
 
   // ------------------------------------------------------------ misc
+  /** 1 = displays skip their power-up boot sequence (set by applyState for non-cold states). */
+  bootSkip: 'epic.boot_skip',
+  /** Output: 1 while any secondary engine parameter is in a caution / warning range (full MAP reversion). */
+  engExceed2: 'epic.eng.exceed2',
+  /** Output: 1 while the primary engine window shows the compacted format. */
+  engCompact: 'epic.eng.compact',
   /** Chronometer seconds per side (clock on the glareshield / TSC utility). */
   chronoS: (s: number) => side(s, 'chrono_s'),
   chronoRun: (s: number) => side(s, 'chrono_run'),
@@ -301,14 +311,23 @@ export const EPIC_EVENTS = {
   ccdDu: (s: number) => `epic.ccd${s}.du`,
   /** CCD data set knob: payload `{ steps, inner }` (+ = clockwise). */
   ccdData: (s: number) => `epic.ccd${s}.data`,
+  /** CCD data set knob as encoder events (payload = click count > 0): outer / inner, clockwise / counter-clockwise. */
+  ccdDataInc: (s: number, inner = false) => `epic.ccd${s}.data${inner ? '_in' : ''}_inc`,
+  ccdDataDec: (s: number, inner = false) => `epic.ccd${s}.data${inner ? '_in' : ''}_dec`,
   /** Display controller / SMC line select key: payload 1..10 (1-5 left top->bottom, 6-10 right). */
   dcLsk: (s: number) => `epic.dc${s}.lsk`,
   /** Display controller page key (function button): payload page id string (see DC_PAGES). */
   dcPage: (s: number) => `epic.dc${s}.page`,
   /** DC / SMC SET knob (range / value): payload steps. */
   dcSet: (s: number) => `epic.dc${s}.set`,
+  /** SET knob as encoder events (payload = click count > 0). */
+  dcSetInc: (s: number) => `epic.dc${s}.set_inc`,
+  dcSetDec: (s: number) => `epic.dc${s}.set_dec`,
   /** CAS scroll switch on the side console: payload +1 (up) / -1 (down). */
   casScroll: 'epic.cas.scroll',
+  /** Same without payload (spring-loaded toggle positions): scroll up / down one message. */
+  casScrollUp: 'epic.cas.scroll_up',
+  casScrollDown: 'epic.cas.scroll_dn',
   /** MCDU n key press: payload key id ('A', '1', 'LSK1L', 'FPL', 'CLR', ...). */
   mcduKey: (n: number) => `epic.mcdu${n}.key`,
   /** Guidance panel control: payload per control (see logic/guidance.ts GP_CONTROLS). */

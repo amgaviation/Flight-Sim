@@ -123,6 +123,7 @@ export interface GuidancePanelOptions {
   approachInfo?: () => { freqMhz: number; courseMag: number } | null;
 }
 
+const NAV_SRC_VARS = [EPIC_VARS.navSrc(1), EPIC_VARS.navSrc(2)] as const;
 const VS_CODE = VERTICAL_MODES.indexOf('VS');
 const FPA_CODE = VERTICAL_MODES.indexOf('FPA');
 const PIT_CODE = VERTICAL_MODES.indexOf('PIT');
@@ -376,7 +377,9 @@ export class GuidancePanelLogic {
 
   /** `ap.nav_source` follows the coupled side's NAV SRC (0 FMS, n NAVn). */
   private syncNavSource(): void {
-    this.vars.set(AFCS_VARS.navSource, this.vars.get(EPIC_VARS.navSrc(this.coupled())));
+    const v = this.vars;
+    const src = v.get(this.coupled() === 2 ? NAV_SRC_VARS[1] : NAV_SRC_VARS[0]);
+    if (v.get(AFCS_VARS.navSource) !== src) v.set(AFCS_VARS.navSource, src);
   }
 
   private pressApproach(): void {
@@ -411,6 +414,8 @@ export class GuidancePanelLogic {
       this.lastVert = vert;
     }
     v.set(EPIC_VARS.lowBank, v.get(AFCS_VARS.halfBank));
+    // The AFCS always follows the coupled side's NAV SRC (a NAV SRC change on the display controller re-points NAV / APR).
+    this.syncNavSource();
     // Approach preview / auto-tune: FMS source, approach with a NAV frequency within range.
     this.previewTimer -= dt;
     if (this.previewTimer <= 0) {

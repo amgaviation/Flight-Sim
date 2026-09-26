@@ -44,6 +44,7 @@ import {
   PANE_IDS,
   PFD_MAP,
   WIND_OPTION,
+  vn,
   type GduId,
   type GtcModeName,
   type PaneContent,
@@ -52,6 +53,15 @@ import {
 import { FplEditor, LOC_APPROACH_TYPES } from './FplEditor';
 import { ChecklistModel, GenericTimer, MessageList, MinimumsModel, ToldModel, VSpeedBank, WeightFuel } from './models';
 import { IDENT_S, stepAdf, stepCom, stepNav, VFR_CODE } from './radios';
+
+/** Subset of `TcasThreat` (systems/warning/Tcas) used by the maps. */
+export interface TrafficThreatLike {
+  relBrgDeg: number;
+  rangeNm: number;
+  relAltFt: number;
+  vsSign: number;
+  level: number;
+}
 
 /** Navigation map settings (PG §5.2 "Using Map Displays"). */
 export interface MapSettings {
@@ -88,6 +98,9 @@ export const G3K_MAP_RANGES: readonly number[] = [
 /** Comparator thresholds (EST, from the G1000 comparator table: ALT 200 ft, IAS 10 kt, HDG 6°, PIT 5°, ROL 6°). */
 const CMP = { alt: 200, ias: 10, hdg: 6, pit: 5, rol: 6 };
 
+/** PFD sides (shared constant: no per-frame array literals). */
+const SIDES: readonly (1 | 2)[] = [1, 2];
+
 interface Unit {
   id: string;
   power: Evaluator;
@@ -96,6 +109,9 @@ interface Unit {
   powered: boolean;
   up: boolean;
   failVar: string;
+  displayPowerVar: string;
+  poweredVar: string;
+  bootingVar: string;
 }
 
 export interface SystemEnv {
@@ -137,6 +153,18 @@ export class G3000System implements Subsystem {
   time = 0;
   /** Bumped whenever GTC-visible state changes that is not in a var (pages redraw). */
   revision = 0;
+  /** GTC-driven selections shown on MFD panes (nearest list kind, waypoint info airport, procedure preview). */
+  readonly ui = {
+    nearestKind: 'airport' as 'airport' | 'vor' | 'ndb' | 'int',
+    wptInfoIdent: '',
+    procPreview: null as null | { airport: string; kind: 'departure' | 'arrival' | 'approach'; ident: string; transition?: string },
+    /** Selected synoptic page index for the GTC systems screen. */
+    synoptic: 0,
+  };
+  /** CAS rows visible in the last drawn CAS window (GTC CAS scroll buttons use it). */
+  casRows = 8;
+  /** Traffic threats for the maps (systems/warning Tcas `threats`), null = no traffic system data. */
+  trafficSource: { threats: readonly TrafficThreatLike[] } | null = null;
 
   private readonly units: Unit[] = [];
   private readonly unitById = new Map<string, Unit>();
@@ -186,7 +214,7 @@ export class G3000System implements Subsystem {
 
     // Units: GDUs and GTCs with power bindings and boot timers.
     const addUnit = (id: string, bootS: number): void => {
-      const u: Unit = { id, power: compileBinding(env.vars, cfg.power[id as GduId], 1), bootS, left: 0, powered: false, up: false, failVar: `fail.g3k.${id}` };
+      const u: Unit = { id, power: compileBinding(env.vars, cfg.power[id as GduId], 1), bootS, left: 0, powered: false, up: false, failVar: `fail.g3k.${id}`, displayPowerVar: `display.${id}.power`, poweredVar: vn(G3K.unitPowered, id), bootingVar: vn(G3K.unitBooting, id) };
       this.units.push(u);
       this.unitById.set(id, u);
     };
@@ -220,35 +248,35 @@ export class G3000System implements Subsystem {
     init(G3K.speaker, 1);
     init(G3K.mfdSplashAck, 0);
     for (const p of PANE_IDS) {
-      init(G3K.paneContent(p), this.cfg.defaultPanes[p]);
-      init(G3K.paneSynoptic(p), 0);
-      init(G3K.paneRange(p), DEFAULT_PANE_RANGE);
+      init(vn(G3K.paneContent, p), this.cfg.defaultPanes[p]);
+      init(vn(G3K.paneSynoptic, p), 0);
+      init(vn(G3K.paneRange, p), DEFAULT_PANE_RANGE);
     }
     for (const s of [1, 2]) {
-      init(G3K.pfdSplit(s), 0);
-      init(G3K.navSource(s), NAV_SOURCE.fms);
-      init(G3K.brg1Source(s), BRG_SOURCE.off);
-      init(G3K.brg2Source(s), BRG_SOURCE.off);
-      init(G3K.pfdMap(s), PFD_MAP.off);
-      init(G3K.pfdMapRange(s), DEFAULT_INSET_RANGE);
-      init(G3K.pfdTrafficInset(s), 0);
-      init(G3K.windOption(s), WIND_OPTION.arrowSpeed);
-      init(G3K.aoaMode(s), AOA_MODE.auto);
-      init(G3K.baroHpa(s), 0);
-      init(G3K.metersOverlay(s), 0);
-      init(G3K.adcSel(s), Math.min(s, this.cfg.sensors.adc));
-      init(G3K.ahrsSel(s), Math.min(s, this.cfg.sensors.ahrs));
-      init(G3K.obs(s), 0);
-      init(G3K.obsCourse(s), 0);
-      init(G3K.dmeWindow(s), 0);
-      init(G3K.fdFormat(s), 0);
-      init(G3K.svt(s), 0);
-      init(G3K.baroPreselect(s), 29.92);
-      init(AP.selCourse(s), 0);
-      init(G3K.micSelect(s), s);
+      init(vn(G3K.pfdSplit, s), 0);
+      init(vn(G3K.navSource, s), NAV_SOURCE.fms);
+      init(vn(G3K.brg1Source, s), BRG_SOURCE.off);
+      init(vn(G3K.brg2Source, s), BRG_SOURCE.off);
+      init(vn(G3K.pfdMap, s), PFD_MAP.off);
+      init(vn(G3K.pfdMapRange, s), DEFAULT_INSET_RANGE);
+      init(vn(G3K.pfdTrafficInset, s), 0);
+      init(vn(G3K.windOption, s), WIND_OPTION.arrowSpeed);
+      init(vn(G3K.aoaMode, s), AOA_MODE.auto);
+      init(vn(G3K.baroHpa, s), 0);
+      init(vn(G3K.metersOverlay, s), 0);
+      init(vn(G3K.adcSel, s), Math.min(s, this.cfg.sensors.adc));
+      init(vn(G3K.ahrsSel, s), Math.min(s, this.cfg.sensors.ahrs));
+      init(vn(G3K.obs, s), 0);
+      init(vn(G3K.obsCourse, s), 0);
+      init(vn(G3K.dmeWindow, s), 0);
+      init(vn(G3K.fdFormat, s), 0);
+      init(vn(G3K.svt, s), 0);
+      init(vn(G3K.baroPreselect, s), 29.92);
+      init(vn(AP.selCourse, s), 0);
+      init(vn(G3K.micSelect, s), s);
       init(G3K.comMonitor(s, 1), 0);
       init(G3K.comMonitor(s, 2), 0);
-      init(G3K.markerAudio(s), 1);
+      init(vn(G3K.markerAudio, s), 1);
       init(G3K.comVolume(s, 1), 0.8);
       init(G3K.comVolume(s, 2), 0.8);
     }
@@ -258,18 +286,18 @@ export class G3000System implements Subsystem {
       init(G3K.gtcPane(g.id), PANE_IDS.indexOf(firstPane) + 1);
     }
     // Radios: power-up frequencies (EST: Garmin restores the last frequencies; these are neutral defaults).
-    init(NAV.comActive(1), 118.1);
-    init(NAV.comStandby(1), 121.5);
-    init(NAV.comActive(2), 121.9);
-    init(NAV.comStandby(2), 118.0);
+    init(vn(NAV.comActive, 1), 118.1);
+    init(vn(NAV.comStandby, 1), 121.5);
+    init(vn(NAV.comActive, 2), 121.9);
+    init(vn(NAV.comStandby, 2), 118.0);
     for (let r = 1; r <= this.cfg.radios.nav; r++) {
-      init(NAV.activeFreq(r), 110.0);
-      init(NAV.standbyFreq(r), 113.0);
-      init(NAV.obs(r), 0);
+      init(vn(NAV.activeFreq, r), 110.0);
+      init(vn(NAV.standbyFreq, r), 113.0);
+      init(vn(NAV.obs, r), 0);
     }
     if (this.cfg.radios.adf) {
-      init(NAV.adfActive(1), 350);
-      init(NAV.adfStandby(1), 400);
+      init(vn(NAV.adfActive, 1), 350);
+      init(vn(NAV.adfStandby, 1), 400);
     }
     init(NAV.xpdrCode, VFR_CODE);
     init(NAV.xpdrMode, 1);
@@ -295,27 +323,33 @@ export class G3000System implements Subsystem {
       }
       return 1;
     };
-    for (const s of [1, 2]) {
-      on(G3K_EVENTS.baroTurn(s), (p) => this.baroTurn(s, clicks(p)));
+    // Rotary encoders: signed clicks on `<name>`, or positive clicks on `<name>_inc` / `<name>_dec`
+    // (the cockpit RotaryKnob encoder convention).
+    const turn = (name: string, fn: (n: number) => void): void => {
+      on(name, (p) => fn(clicks(p)));
+      on(`${name}_inc`, (p) => fn(Math.abs(clicks(p))));
+      on(`${name}_dec`, (p) => fn(-Math.abs(clicks(p))));
+    };
+    // GMC 710 knobs are dead while the controller is unpowered (`g3k.gmc.powered`, written by Gmc710).
+    const gmc = (): boolean => this.vars.get(G3K.gmcPowered, 1) >= 0.5;
+    for (const s of SIDES) {
+      turn(G3K_EVENTS.baroTurn(s), (n) => this.baroTurn(s, n));
       on(G3K_EVENTS.baroPush(s), () => this.baroPush(s));
-      on(G3K_EVENTS.rangeTurn(s), (p) => this.pfdRangeStep(s, clicks(p)));
-      on(G3K_EVENTS.minsTurn(s), (p) => this.minsTurn(clicks(p)));
+      turn(G3K_EVENTS.rangeTurn(s), (n) => this.pfdRangeStep(s, n));
+      turn(G3K_EVENTS.minsTurn(s), (n) => this.minsTurn(n));
       on(G3K_EVENTS.minsPush(s), () => this.minsPush());
-      on(G3K_EVENTS.crsTurn(s), (p) => this.crsTurn(s, clicks(p)));
-      on(G3K_EVENTS.crsPush(s), () => this.crsPush(s));
+      turn(G3K_EVENTS.crsTurn(s), (n) => gmc() && this.crsTurn(s, n));
+      on(G3K_EVENTS.crsPush(s), () => gmc() && this.crsPush(s));
     }
-    on(G3K_EVENTS.hdgTurn, (p) => this.hdgTurn(clicks(p)));
-    on(G3K_EVENTS.hdgPush, () => this.hdgPush());
-    on(G3K_EVENTS.altTurnOuter, (p) => this.altTurn(clicks(p), true));
-    on(G3K_EVENTS.altTurnInner, (p) => this.altTurn(clicks(p), false));
-    on(G3K_EVENTS.altPush, () => this.altPush());
-    on(G3K_EVENTS.spdTurn, (p) => this.spdTurn(clicks(p)));
-    on(G3K_EVENTS.spdPush, () => this.spdPush());
-    on(G3K_EVENTS.xfr, () => this.xfr());
-    on(G3K_EVENTS.noseWheel, (p) => {
-      const n = clicks(p);
-      this.emitAfcs(n >= 0 ? 'up' : 'dn', { steps: Math.abs(n) });
-    });
+    turn(G3K_EVENTS.hdgTurn, (n) => gmc() && this.hdgTurn(n));
+    on(G3K_EVENTS.hdgPush, () => gmc() && this.hdgPush());
+    turn(G3K_EVENTS.altTurnOuter, (n) => gmc() && this.altTurn(n, true));
+    turn(G3K_EVENTS.altTurnInner, (n) => gmc() && this.altTurn(n, false));
+    on(G3K_EVENTS.altPush, () => gmc() && this.altPush());
+    turn(G3K_EVENTS.spdTurn, (n) => gmc() && this.spdTurn(n));
+    on(G3K_EVENTS.spdPush, () => gmc() && this.spdPush());
+    on(G3K_EVENTS.xfr, () => gmc() && this.xfr());
+    turn(G3K_EVENTS.noseWheel, (n) => gmc() && this.emitAfcs(n >= 0 ? 'up' : 'dn', { steps: Math.abs(n) }));
     on(G3K_EVENTS.casAck, () => {
       this.cas.acknowledge('warning');
       this.cas.acknowledge('caution');
@@ -324,6 +358,11 @@ export class G3000System implements Subsystem {
     on('cas.ack_warning', () => this.cas.acknowledge('warning'));
     on('cas.ack_caution', () => this.cas.acknowledge('caution'));
     on('cas.ack', () => this.cas.acknowledgeAll());
+  }
+
+  /** Current traffic threats, or null when no traffic system is connected. */
+  trafficThreats(): readonly TrafficThreatLike[] | null {
+    return this.trafficSource ? this.trafficSource.threats : null;
   }
 
   // ================================================================ units / reversion
@@ -350,9 +389,9 @@ export class G3000System implements Subsystem {
       u.powered = p;
       if (p && u.left > 0) u.left -= dt;
       u.up = p && u.left <= 0;
-      v.set(`display.${u.id}.power`, p ? 1 : 0);
-      v.set(G3K.unitPowered(u.id), p ? 1 : 0);
-      v.set(G3K.unitBooting(u.id), p && !u.up ? 1 : 0);
+      v.set(u.displayPowerVar, p ? 1 : 0);
+      v.set(u.poweredVar, p ? 1 : 0);
+      v.set(u.bootingVar, p && !u.up ? 1 : 0);
       // Power cycle resets: the MFD splash returns and minimums reset (PG §2.4).
       const was = this.prevPowered.get(u.id) ?? false;
       if (u.id === 'mfd' && p && !was) v.set(G3K.mfdSplashAck, 0);
@@ -378,26 +417,29 @@ export class G3000System implements Subsystem {
     const mfd = this.unitUp('mfd');
     const pfd2 = this.cfg.pfdCount === 2 && this.unitUp('pfd2');
     // PG §1.4 "Reversionary Display Operation": PFD1 failure -> MFD reversionary, PFD2 split;
-    // MFD failure -> PFD1 reversionary, PFD2 split; PFD2 failure -> no change. Manual switches force it.
-    const revMfd = (v.get(this.revSw.mfd) >= 0.5 || !pfd1) && mfd;
-    const revPfd1 = (v.get(this.revSw.pfd1) >= 0.5 || !mfd) && pfd1;
+    // MFD failure -> PFD1 reversionary, PFD2 split; PFD2 failure -> no change. "The system does not
+    // automatically switch to reversionary mode": the crew uses the reversion switches, unless the
+    // installation enables `autoReversion`.
+    const auto = this.cfg.autoReversion;
+    const revMfd = (v.get(this.revSw.mfd) >= 0.5 || (auto && !pfd1)) && mfd;
+    const revPfd1 = (v.get(this.revSw.pfd1) >= 0.5 || (auto && !mfd)) && pfd1;
     const revPfd2 = v.get(this.revSw.pfd2) >= 0.5 && pfd2 && !pfd1;
     const prevMfd = v.get(G3K.reversionary('mfd'));
     const prevPfd1 = v.get(G3K.reversionary('pfd1'));
     v.set(G3K.reversionary('mfd'), revMfd ? 1 : 0);
     v.set(G3K.reversionary('pfd1'), revPfd1 ? 1 : 0);
     v.set(G3K.reversionary('pfd2'), revPfd2 ? 1 : 0);
-    if (((revMfd && !prevMfd) || (revPfd1 && !prevPfd1)) && pfd2) v.set(G3K.pfdSplit(2), 1);
+    if (((revMfd && !prevMfd) || (revPfd1 && !prevPfd1)) && pfd2) v.set(vn(G3K.pfdSplit, 2), 1);
   }
 
   isReversionary(id: GduId): boolean {
-    return this.vars.get(G3K.reversionary(id)) >= 0.5;
+    return this.vars.get(vn(G3K.reversionary, id)) >= 0.5;
   }
 
   // ================================================================ panes
 
   paneContent(p: PaneId): PaneContent {
-    return this.vars.get(G3K.paneContent(p)) as PaneContent;
+    return this.vars.get(vn(G3K.paneContent, p)) as PaneContent;
   }
 
   /** Panes currently shown on some display. */
@@ -407,8 +449,8 @@ export class G3000System implements Subsystem {
     if (p === 'mfd2') return this.unitUp('mfd') && !this.isReversionary('mfd') && v.get(G3K.mfdHalf) >= 0.5;
     const s = p === 'pfd1' ? 1 : 2;
     const gdu: GduId = s === 1 ? 'pfd1' : 'pfd2';
-    // A reversionary PFD shows a condensed pane (PG Figure 1-24) that acts as its split pane.
-    return this.unitUp(gdu) && (v.get(G3K.pfdSplit(s)) >= 0.5 || this.isReversionary(gdu));
+    // A reversionary GDU shows PFD + condensed EIS only; the pane moves to the other PFD in split mode (PG §1.4).
+    return this.unitUp(gdu) && v.get(vn(G3K.pfdSplit, s)) >= 0.5 && !this.isReversionary(gdu);
   }
 
   /** Synoptics and a few other panes are half-size only (Longitude OG 4-8). */
@@ -417,8 +459,8 @@ export class G3000System implements Subsystem {
   }
 
   setPaneContent(p: PaneId, c: PaneContent, synoptic?: number): void {
-    this.vars.set(G3K.paneContent(p), c);
-    if (synoptic !== undefined) this.vars.set(G3K.paneSynoptic(p), synoptic);
+    this.vars.set(vn(G3K.paneContent, p), c);
+    if (synoptic !== undefined) this.vars.set(vn(G3K.paneSynoptic, p), synoptic);
     if (p === 'mfd1' && this.vars.get(G3K.mfdHalf) < 0.5 && !G3000System.fullCapable(c)) this.vars.set(G3K.mfdHalf, 1);
     this.revision++;
   }
@@ -431,7 +473,7 @@ export class G3000System implements Subsystem {
   }
 
   setPfdSplit(side: number, split: boolean): void {
-    this.vars.set(G3K.pfdSplit(side), split ? 1 : 0);
+    this.vars.set(vn(G3K.pfdSplit, side), split ? 1 : 0);
     this.revision++;
   }
 
@@ -485,7 +527,7 @@ export class G3000System implements Subsystem {
   }
 
   paneRange(p: PaneId): number {
-    return this.vars.get(G3K.paneRange(p), DEFAULT_PANE_RANGE);
+    return this.vars.get(vn(G3K.paneRange, p), DEFAULT_PANE_RANGE);
   }
 
   /** Steps a range var through the Garmin range set. */
@@ -500,24 +542,24 @@ export class G3000System implements Subsystem {
   }
 
   paneRangeStep(p: PaneId, dir: number): void {
-    this.stepRange(G3K.paneRange(p), dir, DEFAULT_PANE_RANGE);
+    this.stepRange(vn(G3K.paneRange, p), dir, DEFAULT_PANE_RANGE);
   }
 
   pfdRangeStep(side: number, dir: number): void {
-    this.stepRange(G3K.pfdMapRange(side), dir, DEFAULT_INSET_RANGE);
+    this.stepRange(vn(G3K.pfdMapRange, side), dir, DEFAULT_INSET_RANGE);
   }
 
   // ================================================================ PFD settings
 
   navSource(side: number): number {
-    return this.vars.get(G3K.navSource(side));
+    return this.vars.get(vn(G3K.navSource, side));
   }
 
   setNavSource(side: number, src: number): void {
     const v = this.vars;
     if (src > this.cfg.radios.nav) src = NAV_SOURCE.fms;
-    v.set(G3K.navSource(side), src);
-    if (src !== NAV_SOURCE.fms) v.set(G3K.obs(side), 0);
+    v.set(vn(G3K.navSource, side), src);
+    if (src !== NAV_SOURCE.fms) v.set(vn(G3K.obs, side), 0);
     // Manual source change cancels the FMS->LOC AFCS override (PG §7.3: source switched manually -> ROL).
     this.afcsNavOverride = 0;
     this.revision++;
@@ -532,7 +574,7 @@ export class G3000System implements Subsystem {
 
   /** Bearing pointer source cycle OFF -> NAV1 -> NAV2 -> FMS -> ADF (PG §1.3 PFD Home). */
   cycleBearing(side: number, which: 1 | 2): void {
-    const name = which === 1 ? G3K.brg1Source(side) : G3K.brg2Source(side);
+    const name = which === 1 ? vn(G3K.brg1Source, side) : vn(G3K.brg2Source, side);
     const order: number[] = [BRG_SOURCE.off, BRG_SOURCE.nav1];
     if (this.cfg.radios.nav >= 2) order.push(BRG_SOURCE.nav2);
     order.push(BRG_SOURCE.fms);
@@ -562,16 +604,16 @@ export class G3000System implements Subsystem {
   toggleObs(side: number): void {
     const v = this.vars;
     if (this.navSource(side) !== NAV_SOURCE.fms) return;
-    const on = v.get(G3K.obs(side)) < 0.5;
+    const on = v.get(vn(G3K.obs, side)) < 0.5;
     // Suspended (at the MAP): the OBS key reads SUSP and un-suspends by activating the missed approach leg.
     if (v.get(FMS.suspended) >= 0.5 && !on) {
       this.fpl?.activateMissedApproach();
       return;
     }
-    v.set(G3K.obs(side), on ? 1 : 0);
+    v.set(vn(G3K.obs, side), on ? 1 : 0);
     if (on) {
       const brg = v.get(FMS.dtkMag);
-      v.set(G3K.obsCourse(side), Math.round(Number.isFinite(brg) ? brg : 0) || 360);
+      v.set(vn(G3K.obsCourse, side), Math.round(Number.isFinite(brg) ? brg : 0) || 360);
       this.applyObs(side);
     } else if (this.fms) {
       // Resume sequencing: direct to the same waypoint without a course.
@@ -584,13 +626,13 @@ export class G3000System implements Subsystem {
   private applyObs(side: number): void {
     if (!this.fms) return;
     const i = this.fms.plans.active.activeLegIndex;
-    if (i >= 0) this.fms.directTo(i, this.vars.get(G3K.obsCourse(side)));
+    if (i >= 0) this.fms.directTo(i, this.vars.get(vn(G3K.obsCourse, side)));
   }
 
   setSensor(side: number, kind: 'adc' | 'ahrs', index: number): void {
     const n = kind === 'adc' ? this.cfg.sensors.adc : this.cfg.sensors.ahrs;
     if (index < 1 || index > n) return;
-    this.vars.set(kind === 'adc' ? G3K.adcSel(side) : G3K.ahrsSel(side), index);
+    this.vars.set(kind === 'adc' ? vn(G3K.adcSel, side) : vn(G3K.ahrsSel, side), index);
     this.revision++;
   }
 
@@ -611,7 +653,7 @@ export class G3000System implements Subsystem {
   /** HDG knob push: synchronize the bug to the current heading on the coupled side (PG §2.1). */
   hdgPush(): void {
     const side = this.coupledSide();
-    const hdg = this.vars.get(ADC.heading(this.vars.get(G3K.ahrsSel(side), side)));
+    const hdg = this.vars.get(ADC.heading(this.vars.get(vn(G3K.ahrsSel, side), side)));
     this.vars.set(AP.selHeading, Math.round(wrap360(hdg)) || 360);
     this.hdgChangedS = 0;
   }
@@ -626,13 +668,13 @@ export class G3000System implements Subsystem {
       v.set(name, c);
     };
     if (src === NAV_SOURCE.fms) {
-      if (v.get(G3K.obs(side)) < 0.5) return;
-      bump(G3K.obsCourse(side));
+      if (v.get(vn(G3K.obs, side)) < 0.5) return;
+      bump(vn(G3K.obsCourse, side));
       this.applyObs(side);
-      v.set(AP.selCourse(side), v.get(G3K.obsCourse(side)));
+      v.set(vn(AP.selCourse, side), v.get(vn(G3K.obsCourse, side)));
     } else {
-      bump(NAV.obs(src));
-      v.set(AP.selCourse(side), v.get(NAV.obs(src)));
+      bump(vn(NAV.obs, src));
+      v.set(vn(AP.selCourse, side), v.get(vn(NAV.obs, src)));
     }
     this.crsChangedS[side] = 0;
   }
@@ -642,17 +684,17 @@ export class G3000System implements Subsystem {
     const v = this.vars;
     const src = this.navSource(side);
     if (src === NAV_SOURCE.fms) {
-      if (v.get(G3K.obs(side)) < 0.5) return;
+      if (v.get(vn(G3K.obs, side)) < 0.5) return;
       const b = v.get(FMS.bearingToWptMag);
-      if (Number.isFinite(b)) v.set(G3K.obsCourse(side), Math.round(wrap360(b)) || 360);
+      if (Number.isFinite(b)) v.set(vn(G3K.obsCourse, side), Math.round(wrap360(b)) || 360);
       this.applyObs(side);
-    } else if (v.get(NAV.isLoc(src)) >= 0.5) {
-      const c = v.get(NAV.locCourse(src));
-      if (Number.isFinite(c) && c > 0) v.set(NAV.obs(src), Math.round(wrap360(c)) || 360);
-    } else if (v.get(NAV.bearingValid(src)) >= 0.5) {
-      v.set(NAV.obs(src), Math.round(wrap360(v.get(NAV.bearing(src)))) || 360);
+    } else if (v.get(vn(NAV.isLoc, src)) >= 0.5) {
+      const c = v.get(vn(NAV.locCourse, src));
+      if (Number.isFinite(c) && c > 0) v.set(vn(NAV.obs, src), Math.round(wrap360(c)) || 360);
+    } else if (v.get(vn(NAV.bearingValid, src)) >= 0.5) {
+      v.set(vn(NAV.obs, src), Math.round(wrap360(v.get(vn(NAV.bearing, src)))) || 360);
     }
-    v.set(AP.selCourse(side), src === NAV_SOURCE.fms ? v.get(G3K.obsCourse(side)) : v.get(NAV.obs(src)));
+    v.set(vn(AP.selCourse, side), src === NAV_SOURCE.fms ? v.get(vn(G3K.obsCourse, side)) : v.get(vn(NAV.obs, src)));
     this.crsChangedS[side] = 0;
   }
 
@@ -677,7 +719,7 @@ export class G3000System implements Subsystem {
   /** ALT knob push: synchronize to the current altitude (nearest 10 ft). */
   altPush(): void {
     const side = this.coupledSide();
-    const alt = this.vars.get(ADC.baroAlt(this.vars.get(G3K.adcSel(side), side)));
+    const alt = this.vars.get(ADC.baroAlt(this.vars.get(vn(G3K.adcSel, side), side)));
     this.vars.set(AP.selAltitude, Math.round(alt / 10) * 10);
   }
 
@@ -698,7 +740,7 @@ export class G3000System implements Subsystem {
   xfr(): void {
     const v = this.vars;
     v.set(G3K.fdCoupledSide, this.coupledSide() === 1 ? 2 : 1);
-    if (v.get(AP.engaged) >= 0.5 || v.get(AP.fdOn(1)) >= 0.5 || v.get(AP.fdOn(2)) >= 0.5) {
+    if (v.get(AP.engaged) >= 0.5 || v.get(vn(AP.fdOn, 1)) >= 0.5 || v.get(vn(AP.fdOn, 2)) >= 0.5) {
       this.emitAfcs('rol');
       this.emitAfcs('pit');
     }
@@ -721,7 +763,7 @@ export class G3000System implements Subsystem {
     if (this.vars.get('ap.btn_apr') >= 0.5) return; // pressing APR again cancels: no override needed
     if (!this.fpl.approachIsLoc()) return;
     const rx = Math.min(side, this.cfg.radios.nav);
-    if (this.vars.get(NAV.isLoc(rx)) < 0.5) return;
+    if (this.vars.get(vn(NAV.isLoc, rx)) < 0.5) return;
     this.afcsNavOverride = rx;
     this.vars.set('ap.nav_source', rx);
   }
@@ -731,19 +773,19 @@ export class G3000System implements Subsystem {
   /** Baro knob: 0.01 inHg or 1 hPa per click; while STD the preselect changes (G5000 "Altimeter Setting Preview"). */
   baroTurn(side: number, clicks: number): void {
     const v = this.vars;
-    const hpa = v.get(G3K.baroHpa(side)) >= 0.5;
+    const hpa = v.get(vn(G3K.baroHpa, side)) >= 0.5;
     const step = hpa ? 1 / 33.8639 : 0.01;
     const sides = v.get(G3K.baroSync) >= 0.5 ? [1, 2] : [side];
-    const adc = v.get(G3K.adcSel(side), side);
-    const std = v.get(ADC.baroStd(adc)) >= 0.5;
+    const adc = v.get(vn(G3K.adcSel, side), side);
+    const std = v.get(vn(ADC.baroStd, adc)) >= 0.5;
     for (const s of sides) {
-      const a = v.get(G3K.adcSel(s), s);
+      const a = v.get(vn(G3K.adcSel, s), s);
       if (std) {
-        const p = Math.min(32.5, Math.max(26, v.get(G3K.baroPreselect(s), 29.92) + clicks * step));
-        v.set(G3K.baroPreselect(s), hpa ? Math.round(p * 33.8639) / 33.8639 : Math.round(p * 100) / 100);
+        const p = Math.min(32.5, Math.max(26, v.get(vn(G3K.baroPreselect, s), 29.92) + clicks * step));
+        v.set(vn(G3K.baroPreselect, s), hpa ? Math.round(p * 33.8639) / 33.8639 : Math.round(p * 100) / 100);
       } else {
-        const b = Math.min(32.5, Math.max(26, v.get(ADC.baroSetting(a), 29.92) + clicks * step));
-        v.set(ADC.baroSetting(a), hpa ? Math.round(b * 33.8639) / 33.8639 : Math.round(b * 100) / 100);
+        const b = Math.min(32.5, Math.max(26, v.get(vn(ADC.baroSetting, a), 29.92) + clicks * step));
+        v.set(vn(ADC.baroSetting, a), hpa ? Math.round(b * 33.8639) / 33.8639 : Math.round(b * 100) / 100);
       }
     }
   }
@@ -752,20 +794,20 @@ export class G3000System implements Subsystem {
   baroPush(side: number): void {
     const v = this.vars;
     const sides = v.get(G3K.baroSync) >= 0.5 ? [1, 2] : [side];
-    const adc0 = v.get(G3K.adcSel(side), side);
-    const toStd = v.get(ADC.baroStd(adc0)) < 0.5;
+    const adc0 = v.get(vn(G3K.adcSel, side), side);
+    const toStd = v.get(vn(ADC.baroStd, adc0)) < 0.5;
     for (const s of sides) {
-      const a = v.get(G3K.adcSel(s), s);
+      const a = v.get(vn(G3K.adcSel, s), s);
       if (toStd) {
-        v.set(G3K.baroPreselect(s), v.get(ADC.baroSetting(a), 29.92));
-        v.set(ADC.baroStd(a), 1);
+        v.set(vn(G3K.baroPreselect, s), v.get(vn(ADC.baroSetting, a), 29.92));
+        v.set(vn(ADC.baroStd, a), 1);
       } else {
-        v.set(ADC.baroSetting(a), v.get(G3K.baroPreselect(s), 29.92));
-        v.set(ADC.baroStd(a), 0);
+        v.set(vn(ADC.baroSetting, a), v.get(vn(G3K.baroPreselect, s), 29.92));
+        v.set(vn(ADC.baroStd, a), 0);
       }
     }
     // Keep both ADCs consistent when a side uses the cross-side ADC.
-    for (let a = 1; a <= this.cfg.sensors.adc; a++) if (sides.length === 2) v.set(ADC.baroStd(a), toStd ? 1 : 0);
+    for (let a = 1; a <= this.cfg.sensors.adc; a++) if (sides.length === 2) v.set(vn(ADC.baroStd, a), toStd ? 1 : 0);
   }
 
   minsTurn(clicks: number): void {
@@ -783,51 +825,51 @@ export class G3000System implements Subsystem {
   // ================================================================ radios
 
   comActive(r: number): number {
-    return this.vars.get(NAV.comActive(r));
+    return this.vars.get(vn(NAV.comActive, r));
   }
   comStandby(r: number): number {
-    return this.vars.get(NAV.comStandby(r));
+    return this.vars.get(vn(NAV.comStandby, r));
   }
   swapCom(r: number): void {
     const v = this.vars;
-    const a = v.get(NAV.comActive(r));
-    v.set(NAV.comActive(r), v.get(NAV.comStandby(r)));
-    v.set(NAV.comStandby(r), a);
+    const a = v.get(vn(NAV.comActive, r));
+    v.set(vn(NAV.comActive, r), v.get(vn(NAV.comStandby, r)));
+    v.set(vn(NAV.comStandby, r), a);
   }
   stepComStandby(r: number, clicks: number, knob: 'outer' | 'inner'): void {
-    this.vars.set(NAV.comStandby(r), stepCom(this.comStandby(r), clicks, knob, this.vars.get(G3K.comSpacing833) >= 0.5));
+    this.vars.set(vn(NAV.comStandby, r), stepCom(this.comStandby(r), clicks, knob, this.vars.get(G3K.comSpacing833) >= 0.5));
   }
   setComStandby(r: number, mhz: number): void {
-    if (Number.isFinite(mhz)) this.vars.set(NAV.comStandby(r), mhz);
+    if (Number.isFinite(mhz)) this.vars.set(vn(NAV.comStandby, r), mhz);
   }
   /** Emergency: 121.5 MHz into the active COM (press and hold the COM transfer, PG §4.2). */
   com121(r: number): void {
-    this.vars.set(NAV.comStandby(r), this.comActive(r));
-    this.vars.set(NAV.comActive(r), 121.5);
+    this.vars.set(vn(NAV.comStandby, r), this.comActive(r));
+    this.vars.set(vn(NAV.comActive, r), 121.5);
   }
   swapNav(r: number): void {
     const v = this.vars;
-    const a = v.get(NAV.activeFreq(r));
-    v.set(NAV.activeFreq(r), v.get(NAV.standbyFreq(r)));
-    v.set(NAV.standbyFreq(r), a);
+    const a = v.get(vn(NAV.activeFreq, r));
+    v.set(vn(NAV.activeFreq, r), v.get(vn(NAV.standbyFreq, r)));
+    v.set(vn(NAV.standbyFreq, r), a);
   }
   stepNavStandby(r: number, clicks: number, knob: 'outer' | 'inner'): void {
-    this.vars.set(NAV.standbyFreq(r), stepNav(this.vars.get(NAV.standbyFreq(r)), clicks, knob));
+    this.vars.set(vn(NAV.standbyFreq, r), stepNav(this.vars.get(vn(NAV.standbyFreq, r)), clicks, knob));
   }
   setNavStandby(r: number, mhz: number): void {
-    if (Number.isFinite(mhz)) this.vars.set(NAV.standbyFreq(r), mhz);
+    if (Number.isFinite(mhz)) this.vars.set(vn(NAV.standbyFreq, r), mhz);
   }
   swapAdf(): void {
     const v = this.vars;
-    const a = v.get(NAV.adfActive(1));
-    v.set(NAV.adfActive(1), v.get(NAV.adfStandby(1)));
-    v.set(NAV.adfStandby(1), a);
+    const a = v.get(vn(NAV.adfActive, 1));
+    v.set(vn(NAV.adfActive, 1), v.get(vn(NAV.adfStandby, 1)));
+    v.set(vn(NAV.adfStandby, 1), a);
   }
   stepAdfStandby(clicks: number, knob: 'outer' | 'inner'): void {
-    this.vars.set(NAV.adfStandby(1), stepAdf(this.vars.get(NAV.adfStandby(1)), clicks, knob));
+    this.vars.set(vn(NAV.adfStandby, 1), stepAdf(this.vars.get(vn(NAV.adfStandby, 1)), clicks, knob));
   }
   setAdfStandby(khz: number): void {
-    if (Number.isFinite(khz)) this.vars.set(NAV.adfStandby(1), khz);
+    if (Number.isFinite(khz)) this.vars.set(vn(NAV.adfStandby, 1), khz);
   }
   setSquawk(code: number): void {
     if (Number.isFinite(code)) this.vars.set(NAV.xpdrCode, code);
@@ -842,7 +884,7 @@ export class G3000System implements Subsystem {
     this.vars.set(NAV.xpdrIdent, 1);
   }
   setMic(side: number, r: number): void {
-    this.vars.set(G3K.micSelect(side), r);
+    this.vars.set(vn(G3K.micSelect, side), r);
     // Selecting a COM for transmit also selects it for receive (GMA 36 behaviour).
     this.vars.set(G3K.comMonitor(side, r), 0);
   }
@@ -856,11 +898,11 @@ export class G3000System implements Subsystem {
       const magVar = v.get(GPS.magVar, this.fms?.plans.active.destination?.magVar ?? 0);
       const course = proc.navCourseTrue !== undefined ? Math.round(wrap360(proc.navCourseTrue - magVar)) || 360 : NaN;
       for (let r = 1; r <= this.cfg.radios.nav; r++) {
-        if (Math.abs(v.get(NAV.activeFreq(r)) - proc.navFrequencyMhz) > 0.001) {
-          v.set(NAV.standbyFreq(r), v.get(NAV.activeFreq(r)));
-          v.set(NAV.activeFreq(r), proc.navFrequencyMhz);
+        if (Math.abs(v.get(vn(NAV.activeFreq, r)) - proc.navFrequencyMhz) > 0.001) {
+          v.set(vn(NAV.standbyFreq, r), v.get(vn(NAV.activeFreq, r)));
+          v.set(vn(NAV.activeFreq, r), proc.navFrequencyMhz);
         }
-        if (Number.isFinite(course)) v.set(NAV.obs(r), course);
+        if (Number.isFinite(course)) v.set(vn(NAV.obs, r), course);
       }
     }
     const dest = this.fms?.plans.active.destination;
@@ -883,7 +925,7 @@ export class G3000System implements Subsystem {
     const latArmed = v.getString(AP.lateralArmed);
     const locEngaged = latActive.startsWith('LOC') || latActive.startsWith('BC');
     const locArmed = latArmed.startsWith('LOC');
-    for (const s of [1, 2]) {
+    for (const s of SIDES) {
       if (s === 2 && this.cfg.pfdCount < 2) break;
       const rx = Math.min(s, this.cfg.radios.nav);
       // Auto-switch FMS -> LOC (PG §2.1 conditions): LOC approach loaded, FAF active < 15 nm,
@@ -891,21 +933,21 @@ export class G3000System implements Subsystem {
       if (this.navSource(s) === NAV_SOURCE.fms && locApproach && plan) {
         const fafActive = plan.activeLegIndex >= 0 && plan.activeLegIndex === plan.fafIndex;
         const near = v.get(FMS.distToWptNm) < 15;
-        const loc = v.get(NAV.isLoc(rx)) >= 0.5 && v.get(NAV.received(rx)) >= 0.5;
+        const loc = v.get(vn(NAV.isLoc, rx)) >= 0.5 && v.get(vn(NAV.received, rx)) >= 0.5;
         const cdiOk = Math.abs(v.get(FMS.cdi)) < 1.2;
         if (loc && ((fafActive && near && cdiOk && (locArmed || locEngaged)) || locEngaged)) {
-          v.set(G3K.navSource(s), rx);
-          v.set(G3K.obs(s), 0);
+          v.set(vn(G3K.navSource, s), rx);
+          v.set(vn(G3K.obs, s), 0);
           this.revision++;
         }
       }
       // With a localizer received on the selected source, the course follows the localizer course once.
       const src = this.navSource(s);
-      if (src !== NAV_SOURCE.fms && v.get(NAV.isLoc(src)) >= 0.5 && v.get(NAV.received(src)) >= 0.5) {
-        const ident = v.getString(NAV.ident(src));
+      if (src !== NAV_SOURCE.fms && v.get(vn(NAV.isLoc, src)) >= 0.5 && v.get(vn(NAV.received, src)) >= 0.5) {
+        const ident = v.getString(vn(NAV.ident, src));
         if (this.locCourseSetFor[s] !== ident) {
-          const c = v.get(NAV.locCourse(src));
-          if (Number.isFinite(c) && c > 0) v.set(NAV.obs(src), Math.round(wrap360(c)) || 360);
+          const c = v.get(vn(NAV.locCourse, src));
+          if (Number.isFinite(c) && c > 0) v.set(vn(NAV.obs, src), Math.round(wrap360(c)) || 360);
           this.locCourseSetFor[s] = ident;
         }
       } else if (src !== NAV_SOURCE.fms) this.locCourseSetFor[s] = '';
@@ -918,9 +960,9 @@ export class G3000System implements Subsystem {
     }
     v.set('ap.nav_source', this.afcsNavOverride || this.navSource(side));
     // Selected course mirror per side (AP.selCourse).
-    for (const s of [1, 2]) {
+    for (const s of SIDES) {
       const src = this.navSource(s);
-      if (src !== NAV_SOURCE.fms) v.set(AP.selCourse(s), v.get(NAV.obs(src)));
+      if (src !== NAV_SOURCE.fms) v.set(vn(AP.selCourse, s), v.get(vn(NAV.obs, src)));
     }
     // OBS is cancelled when the source leaves FMS or there is no active leg.
     this.hdgChangedS += dt;
@@ -978,15 +1020,15 @@ export class G3000System implements Subsystem {
   private updateComparators(): void {
     const v = this.vars;
     let mask = 0;
-    if (this.cfg.sensors.adc >= 2 && v.get(ADC.valid(1)) >= 0.5 && v.get(ADC.valid(2)) >= 0.5) {
-      if (Math.abs(v.get(ADC.baroAlt(1)) - v.get(ADC.baroAlt(2))) > CMP.alt) mask |= 1;
-      if (Math.abs(v.get(ADC.ias(1)) - v.get(ADC.ias(2))) > CMP.ias && Math.max(v.get(ADC.ias(1)), v.get(ADC.ias(2))) > 35) mask |= 2;
+    if (this.cfg.sensors.adc >= 2 && v.get(vn(ADC.valid, 1)) >= 0.5 && v.get(vn(ADC.valid, 2)) >= 0.5) {
+      if (Math.abs(v.get(vn(ADC.baroAlt, 1)) - v.get(vn(ADC.baroAlt, 2))) > CMP.alt) mask |= 1;
+      if (Math.abs(v.get(vn(ADC.ias, 1)) - v.get(vn(ADC.ias, 2))) > CMP.ias && Math.max(v.get(vn(ADC.ias, 1)), v.get(vn(ADC.ias, 2))) > 35) mask |= 2;
     }
-    if (this.cfg.sensors.ahrs >= 2 && v.get(ADC.ahrsValid(1)) >= 0.5 && v.get(ADC.ahrsValid(2)) >= 0.5) {
-      const dh = Math.abs(((v.get(ADC.heading(1)) - v.get(ADC.heading(2)) + 540) % 360) - 180);
+    if (this.cfg.sensors.ahrs >= 2 && v.get(vn(ADC.ahrsValid, 1)) >= 0.5 && v.get(vn(ADC.ahrsValid, 2)) >= 0.5) {
+      const dh = Math.abs(((v.get(vn(ADC.heading, 1)) - v.get(vn(ADC.heading, 2)) + 540) % 360) - 180);
       if (dh > CMP.hdg) mask |= 4;
-      if (Math.abs(v.get(ADC.pitch(1)) - v.get(ADC.pitch(2))) > CMP.pit) mask |= 8;
-      if (Math.abs(v.get(ADC.bank(1)) - v.get(ADC.bank(2))) > CMP.rol) mask |= 16;
+      if (Math.abs(v.get(vn(ADC.pitch, 1)) - v.get(vn(ADC.pitch, 2))) > CMP.pit) mask |= 8;
+      if (Math.abs(v.get(vn(ADC.bank, 1)) - v.get(vn(ADC.bank, 2))) > CMP.rol) mask |= 16;
     }
     v.set(G3K.miscompare, mask);
   }
@@ -1001,9 +1043,9 @@ export class G3000System implements Subsystem {
     m.set('tod', 'TOD within 1 minute', v.get(FMS.vnavValid) >= 0.5 && tod > 0 && tod <= 60);
     m.set('taws', 'TAWS UNAVAILABLE - TAWS is not available.', v.get('taws.inop') >= 0.5);
     if (this.cfg.pfdCount === 2) {
-      const b1 = v.get(ADC.baroSetting(v.get(G3K.adcSel(1), 1)));
-      const b2 = v.get(ADC.baroSetting(v.get(G3K.adcSel(2), 2)));
-      const std = v.get(ADC.baroStd(1)) >= 0.5 && v.get(ADC.baroStd(2)) >= 0.5;
+      const b1 = v.get(ADC.baroSetting(v.get(vn(G3K.adcSel, 1), 1)));
+      const b2 = v.get(ADC.baroSetting(v.get(vn(G3K.adcSel, 2), 2)));
+      const std = v.get(vn(ADC.baroStd, 1)) >= 0.5 && v.get(vn(ADC.baroStd, 2)) >= 0.5;
       m.set('baro', 'BARO DISAGREE - Barometric settings on the PFDs differ.', !std && Math.abs(b1 - b2) > 0.02);
     }
     const mis = v.get(G3K.miscompare);
@@ -1030,7 +1072,7 @@ export class G3000System implements Subsystem {
       return;
     }
     this.forceBooted();
-    for (const s of [1, 2]) v.set(G3K.navSource(s), NAV_SOURCE.fms);
+    for (const s of [1, 2]) v.set(vn(G3K.navSource, s), NAV_SOURCE.fms);
     if (state === 'takeoff' || state === 'ready_to_taxi') {
       v.set(G3K.flightTimeS, 0);
       this.vspeeds.setGroup('takeoff', true);
@@ -1040,10 +1082,10 @@ export class G3000System implements Subsystem {
       // The app tunes NAV1 to the ILS; show it on the CDI when it is a localizer.
       for (const s of [1, 2]) {
         const rx = Math.min(s, this.cfg.radios.nav);
-        if (v.get(NAV.activeFreq(1)) > 0 && this.cfg.radios.nav >= rx) {
-          if (rx === 2) v.set(NAV.activeFreq(2), v.get(NAV.activeFreq(1)));
-          if (rx === 2) v.set(NAV.obs(2), v.get(NAV.obs(1)));
-          v.set(G3K.navSource(s), rx);
+        if (v.get(vn(NAV.activeFreq, 1)) > 0 && this.cfg.radios.nav >= rx) {
+          if (rx === 2) v.set(vn(NAV.activeFreq, 2), v.get(vn(NAV.activeFreq, 1)));
+          if (rx === 2) v.set(vn(NAV.obs, 2), v.get(vn(NAV.obs, 1)));
+          v.set(vn(G3K.navSource, s), rx);
         }
       }
     }
