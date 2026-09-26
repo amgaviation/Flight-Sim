@@ -438,13 +438,16 @@ export class LayoutManager {
       l.wins.set(half, w);
       rev[n - 1] = true;
     };
-    // RSP DSPL REV: PFD + EICAS composite on the on-side outboard AFD.
+    // RSP DSPL REV: PFD + EICAS composite on the on-side outboard AFD (this EICAS
+    // instance wins over the selected one; the pilot's switch takes precedence).
+    let forcedEicas = 0;
     for (const side of [1, 2] as const) {
       if (this.rspDspl(side) < 0.5) continue;
       const n = side === 1 ? 1 : 4;
       if (!op[n - 1]) continue;
       setHalf(n, side === 1 ? 'L' : 'R', Win.Pfd);
       setHalf(n, side === 1 ? 'R' : 'L', Win.Eicas);
+      if (!forcedEicas) forcedEicas = n;
     }
     // PFD reversion to the upper centre display.
     for (const side of [1, 2] as const) {
@@ -454,7 +457,7 @@ export class LayoutManager {
       else if (op[2]) setHalf(3, side === 1 ? 'L' : 'R', Win.Pfd);
     }
     // EICAS must be shown somewhere operating (only one instance).
-    let eicasAt = 0;
+    let eicasAt = forcedEicas;
     for (let n = 1; n <= 4 && !eicasAt; n++) {
       if (!op[n - 1]) continue;
       for (const w of lay[n - 1].wins.values()) if (w === Win.Eicas) eicasAt = n;

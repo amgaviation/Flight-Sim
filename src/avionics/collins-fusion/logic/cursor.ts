@@ -147,14 +147,15 @@ export class CursorLogic {
     let vy = oy + c.y + dy;
     let du = this.duAt(side, vx, vy);
     if (!du) {
-      // Slide along the edge: try each axis alone.
-      if (this.duAt(side, vx, oy + c.y)) {
-        vy = oy + c.y;
-      } else if (this.duAt(side, ox + c.x, vy)) {
-        vx = ox + c.x;
-      } else {
-        vx = ox + Math.min(AFD_W - 1, Math.max(0, c.x + dx));
-        vy = oy + Math.min(AFD_H - 1, Math.max(0, c.y + dy));
+      // Slide along the edge: keep the axis that crosses into a reachable display,
+      // clamp the other one to the current display's edge.
+      const cx = ox + Math.min(AFD_W - 1, Math.max(0, c.x + dx));
+      const cy = oy + Math.min(AFD_H - 1, Math.max(0, c.y + dy));
+      if (this.duAt(side, vx, cy)) vy = cy;
+      else if (this.duAt(side, cx, vy)) vx = cx;
+      else {
+        vx = cx;
+        vy = cy;
       }
       du = this.duAt(side, vx, vy) || c.du;
     }
