@@ -16,13 +16,17 @@ describe('procedural synthesis', () => {
     for (const [id, r] of [...Object.entries(ONE_SHOTS), ...Object.entries(LOOPS)]) {
       const b = r(SR);
       expect(b.length, id).toBeGreaterThan(10);
+      // One assertion per buffer: an expect() per sample makes this test take
+      // tens of seconds on CI runners.
       let peak = 0;
       let energy = 0;
+      let finite = true;
       for (const x of b) {
-        expect(Number.isFinite(x), id).toBe(true);
+        if (!Number.isFinite(x)) finite = false;
         peak = Math.max(peak, Math.abs(x));
         energy += x * x;
       }
+      expect(finite, id).toBe(true);
       expect(peak, id).toBeLessThanOrEqual(1.0001);
       expect(energy, id).toBeGreaterThan(0);
     }

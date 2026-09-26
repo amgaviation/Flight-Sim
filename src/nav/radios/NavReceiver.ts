@@ -48,6 +48,11 @@ import {
 } from './geometry';
 import { morse } from './morse';
 
+/** Station-selection rank bonus for a localizer received on its front course (beats any back-course signal). */
+const FRONT_COURSE_RANK = 2;
+/** Rank bonus of the currently locked station (receiver hysteresis). EST: larger than any signal-quality difference (0..1). */
+const LOCKED_STATION_RANK = 1;
+
 export interface NavReceiverOptions {
   /** Multiplier on the published service volume radius for usable reception (EST default 1.25: signals extend beyond the protected SSV). */
   rangeFactor?: number;
@@ -285,19 +290,34 @@ export class NavReceiver {
     v.set(this.vIsLoc, isLocFreq ? 1 : 0);
 
     // ---- azimuth station
+    // Several stations can share a frequency. Opposite-direction localizers
+    // (both ends of a runway, or opposite-direction runways of one airport)
+    // are interlocked so that only the one serving the approach in use
+    // radiates (AIM 1-1-9 a: "not in service simultaneously"; 14 CFR
+    // 171.261 interlock). Model that by always preferring a localizer whose
+    // FRONT course the aircraft is in over one it only receives on the back
+    // course, and keep the locked station while it stays receivable
+    // (hysteresis), so the needle never jumps to the other localizer near
+    // the threshold, where the opposite antenna's back course is strongest.
     let best: Navaid | null = null;
     let bestSig = 0;
+    let bestRank = 0;
     for (let i = 0; i < this.cands.length; i++) {
       const n = this.cands[i];
       let sig = 0;
+      let rank = 0;
       if (isLocFreq) {
         if (n.type !== 'ILS' && n.type !== 'LOC') continue;
         sig = this.locSignal(n, lat, lon, alt);
+        rank = sig > 0 ? sig + (this.loc.backCourse ? 0 : FRONT_COURSE_RANK) : 0;
       } else {
         if (n.type !== 'VOR' && n.type !== 'VORDME' && n.type !== 'VORTAC') continue;
         sig = this.stationSignal(n, lat, lon, alt, false);
+        rank = sig;
       }
-      if (sig > bestSig) {
+      if (sig > 0 && n === this.station) rank += LOCKED_STATION_RANK;
+      if (rank > bestRank) {
+        bestRank = rank;
         bestSig = sig;
         best = n;
       }
