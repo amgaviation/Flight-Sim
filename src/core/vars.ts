@@ -284,3 +284,26 @@ export const FMS = {
   cdiScaleNm: 'fms.cdi_scale_nm',
   approachMode: 'fms.approach_mode', // string: 'TERM', 'ENR', 'OCN', 'LPV', 'LNAV', 'LNAV+V', 'LNAV/VNAV'
 } as const;
+
+/** Ice accretion. Written by systems/IceProtection; read by FDM (lift/drag penalties) and ADC (pitot blockage). */
+export const ICE = {
+  airframe: 'ice.airframe', // 0..1 accumulated wing/tail ice (FDM: reduces CLmax & stall AoA, raises CD)
+  inlet: (i: number) => `ice.inlet${i}`, // 0..1 engine inlet ice (engine: thrust/N1 loss, vibration)
+  pitot: (s: number) => `ice.pitot${s}`, // 0..1 pitot blockage
+  static: (s: number) => `ice.static${s}`, // 0..1 static port blockage
+  windshield: (side: number) => `ice.windshield${side}`, // 0..1 (render: frost overlay)
+} as const;
+
+/** Master warning/caution and generic alerting shared by all aircraft. */
+export const ALERT = {
+  masterWarning: 'alert.master_warning', // latched until pushed
+  masterCaution: 'alert.master_caution',
+  stickShaker: 'alert.stick_shaker',
+  stallHorn: 'alert.stall_horn',
+  overspeed: 'alert.overspeed',
+  gearWarning: 'alert.gear_warning',
+  configWarning: 'alert.takeoff_config',
+  tawsWarning: 'alert.taws_warning', // PULL UP
+  tawsCaution: 'alert.taws_caution', // TERRAIN / SINK RATE / GLIDESLOPE etc.
+  annunTest: 'alert.annun_test', // lamp test active
+} as const;
