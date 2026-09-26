@@ -86,3 +86,100 @@ export interface CockpitBuild {
   update?(dt: number): void;
   dispose?(): void;
 }
+
+// ---------------------------------------------------------------------------
+// Appended by the cockpit module (append-only; see CLAUDE.md shared contracts).
+// Implementations: src/cockpit/*. Reference: docs/modules/cockpit.md.
+// ---------------------------------------------------------------------------
+
+/**
+ * Optional capabilities a control may expose to the interaction manager
+ * (declaration-merged into CockpitControl; every member is optional so
+ * existing implementations keep compiling).
+ */
+export interface CockpitControl {
+  /** Request pointer lock while this control is being dragged (yokes, levers). */
+  readonly pointerLock?: boolean;
+  /** CSS cursor shown while hovering this control (default 'pointer'). */
+  cursor?(p: ControlPointer): string;
+  /**
+   * Keyboard input while this control has focus (focus is given by clicking a
+   * control that implements onKey, e.g. a CDU keypad). Return true when the
+   * key was consumed (the manager then calls preventDefault).
+   */
+  onKey?(key: string, code: string, down: boolean, shift: boolean): boolean;
+  /** Called by the interaction manager when hover starts/ends (optional extra feedback). */
+  onHover?(hovered: boolean): void;
+  /** Called when the drag / press ends because the pointer was lost (window blur, pointer cancel). */
+  onCancel?(): void;
+  /** When false the manager ignores the control (hover and clicks pass through to what is behind). */
+  readonly enabled?: boolean;
+}
+
+/** Extra, optional data on a CockpitBuild produced by `CockpitBuilder`. */
+export interface CockpitBuild {
+  /**
+   * Non-interactive cockpit geometry that must block pointer rays (yoke
+   * columns, seats, glareshield) so controls behind it cannot be clicked.
+   */
+  occluders?: THREE.Object3D[];
+}
+
+/** SimVars written by the cockpit module (in addition to each control's own bindings). */
+export const COCKPIT_VARS = {
+  /** 1 while the pilot drags the 3D yoke with the mouse. Input module: use yoke_pitch/roll as the pitch/roll source while 1. */
+  yokeActive: 'cockpit.yoke_active',
+  /** -1..1, + = yoke aft (nose up). Same sign as input.pitch. */
+  yokePitch: 'cockpit.yoke_pitch',
+  /** -1..1, + = right roll. Same sign as input.roll. */
+  yokeRoll: 'cockpit.yoke_roll',
+  /** 1 while the pilot drags the 3D rudder pedals. */
+  pedalsActive: 'cockpit.pedals_active',
+  /** -1..1, + = right pedal forward. Same sign as input.yaw. */
+  pedalsYaw: 'cockpit.pedals_yaw',
+  /** 0..1 toe brake applied by clicking and holding the 3D pedal toe. Input module: max() with input.brake_*. */
+  toeBrakeLeft: 'cockpit.toe_brake_left',
+  toeBrakeRight: 'cockpit.toe_brake_right',
+} as const;
+
+/** Per-display power/brightness vars read by `DisplayManager` (defaults: powered, full brightness when unset). */
+export const DISPLAY_VARS = {
+  /** 0 = unpowered (black screen), 1 = powered. Missing var = powered. */
+  power: (id: string) => `display.${id}.power`,
+  /** 0..1 brightness (dimming system). Missing var = 1. */
+  brightness: (id: string) => `display.${id}.brt`,
+  /** Written by DisplayManager: 1 once the boot splash has finished after power-up. */
+  ready: (id: string) => `display.${id}.ready`,
+} as const;
+
+/**
+ * Sound ids played through `AudioApi.play(id, { volume, position })` when a
+ * cockpit control actuates. `position` is the control's location in body
+ * metres (x fwd, y right, z down) from the aircraft datum.
+ */
+export const COCKPIT_SOUNDS = {
+  toggle: 'switch.toggle', // light toggle / bat-handle switch
+  toggleHeavy: 'switch.toggle_heavy', // lever-lock / large toggles, battery switches
+  rocker: 'switch.rocker',
+  guardOpen: 'switch.guard_open',
+  guardClose: 'switch.guard_close',
+  buttonPress: 'button.press',
+  buttonRelease: 'button.release',
+  key: 'key.press', // CDU / keyboard key
+  knobDetent: 'knob.detent', // encoder click
+  knobSelector: 'knob.selector', // heavier rotary selector detent
+  knobPush: 'knob.push',
+  leverDetent: 'lever.detent',
+  leverGate: 'lever.gate', // lever stopped at / lifted over a gate
+  leverSlide: 'lever.slide',
+  gearHandle: 'gear.handle',
+  cbPull: 'cb.pull',
+  cbPush: 'cb.push',
+  cbTrip: 'cb.trip',
+  handlePull: 'handle.pull', // T-handles, fire handles, push-pull knobs
+  handlePush: 'handle.push',
+  handleRotate: 'handle.rotate',
+  fuelSelector: 'fuel.selector',
+  trimWheel: 'trim.wheel', // one clack per spoke passing (spinning trim wheels)
+  yokeButton: 'yoke.button',
+} as const;

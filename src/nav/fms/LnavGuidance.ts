@@ -78,6 +78,7 @@ export class LnavGuidance {
   private inTurn = false;
   private turnLeg: PlanLeg | null = null;
   private forcedDir = 0;
+  private pendingForcedDir = 0;
   private holdExitRequested = false;
   private holdCrossed = false;
   private legStartSign = 0;
@@ -134,10 +135,17 @@ export class LnavGuidance {
     const v = this.vars;
     const plan = this.plans.active;
     if (plan !== this.plan) {
+      // New plan object (EXEC, replace). Leg ids survive EXEC, so the active
+      // leg (and e.g. a hold in progress) continues when its id is unchanged.
       this.plan = plan;
-      this.activeLegId = -1;
       this.inTurn = false;
-      this.suspended = false;
+      this.turnLeg = null;
+    }
+    if (plan.version !== this.identVersion) {
+      // Leg contents may have changed: drop cached pseudo-waypoint names.
+      this.identVersion = plan.version;
+      this.identLegA = -1;
+      this.identLegB = -1;
     }
     const gpsOk = v.getBool(GPS.valid);
     if (!gpsOk || plan.legs.length === 0) {
@@ -235,6 +243,11 @@ export class LnavGuidance {
     this.activeLegId = leg.id;
     this.suspended = false;
     this.forcedDir = leg.turnDirection === 'L' ? -1 : leg.turnDirection === 'R' ? 1 : 0;
+    if (this.pendingForcedDir !== 0) {
+      // Procedure-turn reversal carried into the inbound leg.
+      this.forcedDir = this.pendingForcedDir;
+      this.pendingForcedDir = 0;
+    }
     this.legStartSign = 0;
     this.holdCrossed = false;
     const g = leg.geom;
@@ -287,7 +300,6 @@ export class LnavGuidance {
 
   private evaluate(leg: PlanLeg, lat: number, lon: number, trk: number, gs: number): void {
     const out = this.path;
-    const g = leg.geom;
     if (this.inTurn && this.turnLeg) {
       const t = this.turnLeg.geom;
       const dir = t.turnAngleDeg > 0 ? 1 : -1;
@@ -379,9 +391,8 @@ export class LnavGuidance {
         return false;
       }
       if (this.ptPhase === 1 && dtg <= 0) {
-        // Reverse (coded turn direction) onto the inbound leg.
-        const next = plan.legs[plan.activeLegIndex + 1];
-        if (next) next.turnDirection = next.turnDirection ?? leg.turnDirection;
+        // Reverse onto the inbound leg in the coded turn direction.
+        this.pendingForcedDir = leg.turnDirection === 'L' ? -1 : leg.turnDirection === 'R' ? 1 : 0;
         return true;
       }
       return false;
@@ -444,9 +455,28 @@ export class LnavGuidance {
     this.bankCmdDeg = 0;
   }
 
-  /** Display ident for legs without a fix (Boeing-style pseudo waypoints). */
+  // Two-entry cache so pseudo-waypoint names are not rebuilt every update.
+  private identVersion = -1;
+  private identLegA = -1;
+  private identA = '';
+  private identLegB = -1;
+  private identB = '';
+
+  /** Display ident (cached per leg id). */
   private legIdent(leg: PlanLeg | undefined): string {
     if (!leg) return '';
+    if (leg.id === this.identLegA) return this.identA;
+    if (leg.id === this.identLegB) return this.identB;
+    const s = this.buildIdent(leg);
+    this.identLegB = this.identLegA;
+    this.identB = this.identA;
+    this.identLegA = leg.id;
+    this.identA = s;
+    return s;
+  }
+
+  /** Display ident for legs without a fix (Boeing-style pseudo waypoints). */
+  private buildIdent(leg: PlanLeg): string {
     if (leg.type === 'DISCO') return '';
     const t = leg.type;
     if (t === 'CA' || t === 'VA' || t === 'FA') return `(${Math.round(leg.altitude?.lowerFt ?? leg.altitude?.upperFt ?? 0)})`;

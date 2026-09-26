@@ -10,7 +10,7 @@
  *  3. Tile meshes are placed in the floating-origin frame from their own
  *     centre (see tileMesh.ts); a recenter only re-places objects.
  *  4. Hidden meshes are kept for a few seconds (hysteresis), then disposed.
- * Tiles at z >= 11 are rebuilt when airport surfaces overlapping them change,
+ * Tiles at z >= FLATTEN_MIN_ZOOM (10) are rebuilt when airport surfaces overlapping them change,
  * so terrain is flattened under runways.
  */
 import * as THREE from 'three';
@@ -26,7 +26,7 @@ import { TERRAIN_NOISE_PERIOD_M } from './TerrainMaterial';
 import type { SurfaceIndex, FlattenSurface } from '../airports/surfaces';
 
 /** Tiles at or above this zoom are flattened under airports. */
-export const FLATTEN_MIN_ZOOM = 11;
+export const FLATTEN_MIN_ZOOM = 10;
 /** Hidden meshes older than this are disposed when over the cache budget (ms). */
 const HIDDEN_TTL_MS = 4000;
 

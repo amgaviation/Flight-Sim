@@ -167,6 +167,11 @@ function unzipEntry(zip, predicate) {
 /** Current CIFP zip URL: discovered from the FAA download page, else computed from the AIRAC schedule. */
 async function cifpUrls() {
   const urls = [];
+  if (OFFLINE) {
+    // Newest cached cycle only (cached() resolves the file name from the URL).
+    const cachedZips = existsSync(CACHE) ? readdirSync(CACHE).filter((f) => /^CIFP_\d{6}\.zip$/.test(f)).sort().reverse() : [];
+    return cachedZips.map((f) => CIFP_BASE + f);
+  }
   try {
     const html = (await fetchBuffer(CIFP_PAGE)).toString('utf8');
     const found = [...new Set([...html.matchAll(/https?:\/\/[^"'\s>]*CIFP_(\d{6})\.zip/g)].map((m) => m[0]))];

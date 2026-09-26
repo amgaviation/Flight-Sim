@@ -144,8 +144,9 @@ vec3 terrainAlbedo() {
   // Water where the terrain model is at or below sea level (and not an airport).
   float w = smoothstep(0.4, -0.4, elev) * (1.0 - vFlat);
   float depth = max(-elev, 0.0);
-  vec3 shallow = vec3(0.020, 0.090, 0.085);
-  vec3 deep = vec3(0.003, 0.014, 0.030);
+  // Coastal water: turbid green-blue in the shallows, dark blue offshore (EST albedos).
+  vec3 shallow = vec3(0.028, 0.068, 0.062);
+  vec3 deep = vec3(0.004, 0.016, 0.032);
   vec3 waterC = mix(shallow, deep, 1.0 - exp(-depth / 12.0));
   // Beach / shoreline sand just above sea level, and surf foam at the edge.
   float beach = (1.0 - smoothstep(0.5, 3.0, elev)) * step(0.0, elev) * (1.0 - vFlat) * (1.0 - smoothstep(0.08, 0.15, slope));

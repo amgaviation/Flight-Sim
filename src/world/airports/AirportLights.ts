@@ -100,9 +100,12 @@ void main() {
   }
   float T = exp(-uLightBeta * d);
   float E = I * 1.0e4 / (d * d) * T * uBrightness * mix(1.0, 0.08, uDay);
-  float size = E < 2e-6 ? 0.0 : clamp(1.6 + 3.2 * log(1.0 + E * 60.0) / 2.302585, 0.0, 44.0);
+  float size = clamp(1.6 + 3.2 * log(1.0 + E * 60.0) / 2.302585, 0.0, 44.0);
   gl_PointSize = size * uPixelRatio;
   vColor = col * clamp(0.3 + 0.7 * pow(E, 0.25), 0.0, 3.0);
+  // Off / back-facing / negligible: move outside the clip volume. (gl_PointSize = 0 is not a
+  // cull: implementations clamp it to the minimum point size, usually 1 px.)
+  if (E < 2e-6) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
 }
 `;
 

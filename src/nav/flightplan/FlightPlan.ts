@@ -10,8 +10,8 @@
  *     enroute fix) is merged, keeping the later leg's constraints;
  *   - an IF that does not continue the previous leg becomes a route
  *     discontinuity (Boeing style) or a direct TF connection (Garmin style);
- *   - a manual-termination leg (FM, VM, HM) is always followed by a
- *     discontinuity when more legs follow.
+ *   - a vectors leg (FM, VM) is always followed by a discontinuity when more
+ *     legs follow (a manual hold, HM, continues along the route once exited).
  *
  * Editing semantics differ by `style` exactly where the real systems do:
  * Boeing inserts a discontinuity after a waypoint inserted on the LEGS page
@@ -207,8 +207,9 @@ export class FlightPlan {
         continue;
       }
       const prev = lastReal();
-      if (prev && prevAny && prevAny.type !== 'DISCO' && isManualLeg(prev.type)) {
-        // Vectors / manual hold: always a discontinuity before anything that follows.
+      if (prev && prevAny && prevAny.type !== 'DISCO' && (prev.type === 'FM' || prev.type === 'VM')) {
+        // Vectors (manual termination): always a discontinuity before anything
+        // that follows. A manual hold (HM) continues along the route once exited.
         out.push(discoLeg(leg.segment));
       }
       if (prev && (leg.type === 'IF' || leg.type === 'TF') && sameFix(prev.fix, leg.fix) && !isManualLeg(prev.type)) {

@@ -122,6 +122,8 @@ export class Fms implements Subsystem {
     this.plans.onChange((plan, reason) => {
       this.geomDirty = true;
       if (reason === 'replace') this.lnav.reset();
+      // A new/re-flown approach clears a previous missed approach.
+      else if (this.lnav.missedApproachActive && plan.activeLeg?.segment !== 'missed') this.lnav.missedApproachActive = false;
       if (!(plan.descentFpaDeg > 0)) plan.descentFpaDeg = opts.descentFpaDeg ?? DEFAULT_DESCENT_FPA_DEG;
     });
     const ev = ctx.events;
@@ -204,6 +206,7 @@ export class Fms implements Subsystem {
 
   /** Direct to the first leg of the loaded approach (Garmin "Activate Approach"). */
   activateApproach(): boolean {
+    this.lnav.missedApproachActive = false;
     const plan = this.plans.edit();
     const i = plan.legs.findIndex((l) => l.segment === 'approach' && l.type !== 'DISCO' && !!l.fix);
     if (i < 0) return false;
@@ -212,6 +215,7 @@ export class Fms implements Subsystem {
 
   /** Vectors-to-final: fly the extended final approach course into the FAF. */
   activateVectorsToFinal(): boolean {
+    this.lnav.missedApproachActive = false;
     const plan = this.plans.edit();
     const faf = plan.fafIndex;
     if (faf < 0) return false;
@@ -316,6 +320,15 @@ export class Fms implements Subsystem {
     }
   }
 
+  /** Along-path distance (nm) from the aircraft to the end of leg `k` (0 when `k` is behind). */
+  private distToLegEnd(plan: FlightPlan, k: number): number {
+    const i = plan.activeLegIndex;
+    if (i < 0 || k < i) return 0;
+    let d = Math.max(0, this.lnav.distToGoNm);
+    for (let j = i + 1; j <= k; j++) d += plan.legs[j].geom.lengthNm;
+    return d;
+  }
+
   /** CDI scale, approach mode, lateral CDI and approach glidepath. */
   private updateApproach(plan: FlightPlan, dt: number): void {
     const v = this.vars;
@@ -331,19 +344,12 @@ export class Fms implements Subsystem {
     let scale: number = CDI_SCALE_NM.ENR;
     let apprActive = false;
     let distToThr = NaN;
-    // Along-path distance to a later leg's end.
-    const distTo = (k: number): number => {
-      if (!leg || k < i) return 0;
-      let d = Math.max(0, this.lnav.distToGoNm);
-      for (let j = i + 1; j <= k; j++) d += plan.legs[j].geom.lengthNm;
-      return d;
-    };
     const vertical = !!proc && (proc.fas?.levelOfService === 'LPV' || proc.glidepathDeg !== undefined) && !(proc.approachType === 'ILS' || proc.approachType === 'LOC' || proc.approachType === 'LOC_BC' || proc.approachType === 'LDA' || proc.approachType === 'SDF' || proc.approachType === 'IGS');
     if (leg && this.lnav.missedApproachActive && leg.segment === 'missed') {
       mode = 'MAPR';
       scale = CDI_SCALE_NM.MAPR;
     } else if (leg && proc && faf >= 0 && map >= 0 && i <= map && (leg.segment === 'approach' || i >= faf)) {
-      const dFaf = i <= faf ? distTo(faf) : 0;
+      const dFaf = i <= faf ? this.distToLegEnd(plan, faf) : 0;
       if (i > faf || dFaf <= APPROACH_RAMP_NM) {
         apprActive = true;
         const sbas = v.getBool(GPS.sbas);
@@ -351,7 +357,7 @@ export class Fms implements Subsystem {
         else if (proc.fas?.levelOfService === 'LP' && sbas) mode = 'LP';
         else if (vertical) mode = 'LNAV/VNAV';
         else mode = 'LNAV';
-        distToThr = distTo(map);
+        distToThr = this.distToLegEnd(plan, map);
         if (i > faf && (mode === 'LPV' || mode === 'LNAV/VNAV' || mode === 'LP')) {
           let widthM = 350 * 0.3048;
           let garpNm = (8000 + 1000) / FT_PER_NM;

@@ -31,7 +31,7 @@ export type { PlanChangeListener } from './flightplan/FlightPlanManager';
 export * from './flightplan/types';
 export { computePlanGeometry, turnRadiusNm, holdTurnRadiusNm, holdSpeedLimitKt, defaultHoldMinutes } from './flightplan/geometry';
 export type { GeometryParams } from './flightplan/geometry';
-export { parseRoute, parseLatLon, parseSpeedLevel } from './flightplan/RouteParser';
+export { parseRoute, parseLatLon, parseSpeedLevel, latLonIdent } from './flightplan/RouteParser';
 export type { RouteParseResult } from './flightplan/RouteParser';
 export { expandAirway } from './flightplan/airways';
 export { synthesizeApproaches, syntheticRnavApproach, syntheticIlsApproach, runwayThreshold } from './flightplan/synthetic';

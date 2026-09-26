@@ -298,7 +298,7 @@ export class NavReceiver {
     const settled = this.settle <= 0;
     let received = false;
     if (best && settled) {
-      received = isLocFreq ? this.updateLocalizer(best, lat, lon, alt) : this.updateVor(best, lat, lon, alt);
+      received = isLocFreq ? this.updateLocalizer(best, lat, lon) : this.updateVor(best, lat, lon, alt);
     }
     if (!received) {
       v.set(this.vReceived, 0);
@@ -372,7 +372,7 @@ export class NavReceiver {
     return true;
   }
 
-  private updateLocalizer(n: Navaid, lat: number, lon: number, alt: number): boolean {
+  private updateLocalizer(n: Navaid, lat: number, lon: number): boolean {
     const v = this.vars;
     const course = n.courseTrue ?? 0;
     const dev = locDeviation(n.lat, n.lon, course, lat, lon, this.loc);

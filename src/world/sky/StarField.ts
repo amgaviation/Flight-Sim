@@ -33,7 +33,8 @@ void main() {
   float b = flux * 9.0 * uVis * tw;
   gl_PointSize = clamp(1.6 + 1.3 * log(1.0 + flux * 40.0), 1.5, 5.0) * uPixelRatio;
   vColor = aColor * min(b, 3.0);
-  if (wdir.y < -0.02 || b < 0.0015) gl_PointSize = 0.0;
+  // Cull below the horizon or too faint (a zero point size is clamped to 1 px, not culled).
+  if (wdir.y < -0.02 || b < 0.0015) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
 }
 `;
 

@@ -337,10 +337,11 @@ chevrons. Asphalt vs concrete (slab joints), rubber deposits, wear, wet darkenin
 Lights (`lightLayout.ts` pure + `AirportLights.ts` GPU): bidirectional colours (edge
 white/yellow caution zone facing each instrument end, threshold green/end red, centreline
 colour coding), sequenced flashers "twice a second", rotating beacon white/green 24
-flashes/min, blue taxiway edge lights. On when `env.ambient_light < 0.5` or visibility
-< 5 km or in cloud; PAPI always; beacon dusk-to-dawn or visibility < 5 km. Sprite size and
-brightness follow the illuminance at the eye with atmospheric extinction (lights reach
-farther than objects), dimmed in daylight.
+flashes/min, blue taxiway edge lights, REIL flashers. Runway/approach/taxiway lights are on
+when `env.ambient_light < 0.62` (sunset, ~400 lux) or visibility < 5 km or in cloud; PAPI
+always; beacon sunset-to-sunrise or visibility < 5 km. Sprite size and brightness follow
+the illuminance at the eye with atmospheric extinction (lights reach farther than
+objects), strongly dimmed in daylight. Each airport's lights are one `THREE.Points` draw.
 
 `world.airports.get(icao): BuiltAirport | undefined` gives `{ icao, layout, group, lights, dispose() }`.
 
@@ -365,7 +366,12 @@ class Environment {
   drawn as a lit sphere (correct terminator). Stars: 1,630 real stars (Yale BSC5, V <= 5)
   + 2,500 faint ones, rotated by local sidereal time and latitude, extinction near the horizon.
 - Sky: Preetham single scattering (altitude-aware) plus a twilight term calibrated to the
-  civil/nautical twilight illuminance curve; partial eye adaptation.
+  civil/nautical twilight illuminance curve; partial eye adaptation (gain (L_ref/L)^0.7,
+  max x80, 2 s time constant) applied to sky, sun/moon and ambient light, not to airport
+  lights or self-lit displays.
+- Below a broken/overcast deck the sky light is the grey cloud base, with radiance =
+  transmitted global irradiance / pi (transmission 1 - 0.7 cover^2, EST), CIE overcast
+  zenith/horizon gradation; direct sun is cut by up to 95%.
 - Haze: exponential layer from the field elevation (scale height 1.5 km; 400 m below
   5 km visibility; 120 m in fog) + Rayleigh clear air; the same aerial perspective is applied
   by terrain, runways, clouds and the base ground. `scene.fog` (FogExp2) is matched at the
@@ -390,7 +396,7 @@ class Environment {
   threshold` with `K = h / (2 tan(fov/2))`; independent of view direction. Leaf budget
   enforced by relaxing the threshold.
 - Meshes (`tileMesh.ts`): per-tile ENU frame, geodetic -> ECEF -> ENU in float64, skirts,
-  airport flattening for z >= 11 (rebuilt when airport surfaces change), sea flattened to 0.
+  airport flattening for z >= 10 (rebuilt when airport surfaces change), sea flattened to 0.
 - Material (`TerrainMaterial.ts`): MeshStandardMaterial + onBeforeCompile (scene lights,
   landing lights and shadows work). Biomes: grass, forest, farmland patchwork, dry grass and
   desert (subtropical belts, high continental plains), boreal/tundra, rock by slope,

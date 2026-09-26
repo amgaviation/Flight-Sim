@@ -69,7 +69,10 @@ describe('route parsing', () => {
     expect(r.plan.star?.enrouteTransition).toBe('ACORI');
     const arr = r.plan.legsIn('arrival');
     expect(arr.length).toBeGreaterThan(2);
-    expect(arr[0].fix?.ident).toBe('ACORI');
+    // 'DCT ACORI.FROGZ5': the route reaches the transition fix, which merges with the STAR's first leg (no discontinuity).
+    const iFirst = r.plan.legs.indexOf(arr[0]);
+    expect(r.plan.legs[iFirst - 1].fix?.ident).toBe('ACORI');
+    expect(r.plan.legs.some((l) => l.type === 'DISCO' && l.segment !== 'enroute')).toBe(false);
     const ll = r.plan.legs.find((l) => l.fix?.kind === 'latlon')!;
     expect(ll.fix!.lat).toBeCloseTo(35, 6);
     expect(ll.fix!.lon).toBeCloseTo(-75, 6);
@@ -160,13 +163,13 @@ describe('flight plan editing', () => {
     computePlanGeometry(p, { groundSpeedKt: 200, startAltFt: 5000 });
     const hold = p.insertHold(1, { turnDirection: 'L', legTimeMin: 1 })!;
     expect(hold.type).toBe('HM');
-    expect(idents(p)).toEqual(['AAA', 'BBB', 'BBB', '---', 'CCC']);
+    expect(idents(p)).toEqual(['AAA', 'BBB', 'BBB', 'CCC']);
     // Inbound course defaults to the course arriving at the fix (~090 true, minus variation).
     expect(hold.course! + hold.magVar).toBeGreaterThan(85);
     expect(hold.course! + hold.magVar).toBeLessThan(95);
-    const leg = p.directTo(4, 40.2, -73.5)!;
+    const leg = p.directTo(3, 40.2, -73.5)!;
     expect(leg.type).toBe('DF');
-    expect(p.activeLegIndex).toBe(4);
+    expect(p.activeLegIndex).toBe(3);
     expect(leg.dfStartLat).toBe(40.2);
     // Off-plan direct-to: inserted before the active leg, followed by a discontinuity.
     p.directTo(w('ZZZ', 40.5, -73.2), 40.3, -73.4);

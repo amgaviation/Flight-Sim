@@ -74,6 +74,14 @@ export function parseLatLon(tok: string): { lat: number; lon: number } | null {
   return null;
 }
 
+/** Display ident of a lat/lon waypoint: 'N35W075' for whole degrees (Boeing style), else the entered token. */
+export function latLonIdent(lat: number, lon: number, token: string): string {
+  if (Number.isInteger(lat) && Number.isInteger(lon)) {
+    return `${lat >= 0 ? 'N' : 'S'}${String(Math.abs(lat)).padStart(2, '0')}${lon >= 0 ? 'E' : 'W'}${String(Math.abs(lon)).padStart(3, '0')}`;
+  }
+  return token;
+}
+
 function findProc(list: Procedure[], ident: string): Procedure | undefined {
   const u = ident.toUpperCase();
   return list.find((p) => p.ident.toUpperCase() === u);
@@ -190,7 +198,7 @@ export async function parseRoute(db: NavDatabase, route: string, style: EditStyl
     // Coordinates.
     const ll = parseLatLon(tok);
     if (ll) {
-      const w: Waypoint = { ident: tok.length > 7 ? tok.slice(0, 7) : tok, lat: ll.lat, lon: ll.lon, kind: 'latlon' };
+      const w: Waypoint = { ident: latLonIdent(ll.lat, ll.lon, tok), lat: ll.lat, lon: ll.lon, kind: 'latlon' };
       enroute.push({ w });
       prev = w;
       continue;
