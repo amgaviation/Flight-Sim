@@ -197,6 +197,18 @@ export const G6K_VARS = {
   hornMuteEff: `${P}gear.horn_muted`,
   btmsWarn: `${P}btms.warn`,
   dcpcFail: `${P}elec.dcpc_fail`,
+
+  // ======================================================== 3D COCKPIT INPUTS (added with the cockpit build)
+  // The app's input module rewrites input.pitch_trim_rate / input.ap_disc / input.tiller every frame from the
+  // keyboard and hardware, so the 3D control-wheel switches and the tiller handle write their own vars and
+  // systems/cockpitInputs.ts merges them (the same pattern as the Citation Longitude).
+  yokeTrim: (s: 1 | 2) => `${P}yoke.trim${s}`, // control-wheel pitch trim (split) switch, momentary: +1 NOSE UP, 0, -1 NOSE DN
+  yokeDisc: (s: 1 | 2) => `${P}yoke.disc${s}`, // AP/SP DISC (MASTER DISC) button held: 1
+  tiller3d: `${P}tiller`, // NOSE STEER handwheel of the 3D cockpit -1..1 (+ right)
+  // Derived by systems/cockpitInputs.ts:
+  yokeTrimCmd: `${P}yoke.trim_cmd`, // merged wheel trim command (pilot priority), read by the stabilizer trim
+  discHeld: `${P}yoke.disc_held`, // either AP/SP DISC held: trim and pusher interrupted
+  tillerCmd: `${P}tiller_cmd`, // merged tiller command (hardware axis or 3D handle) for the NWS
 } as const;
 
 type S = 'l' | 'r';
@@ -316,6 +328,11 @@ export const G6K_CONTROL_VARS: string[] = [
   G6K_VARS.ltMap(1),
   G6K_VARS.ltMap(2),
   ...(['pax', 'emer', 'bag', 'aft_eqpt', 'svc_large', 'svc_small'] as const).map((d) => G6K_VARS.door(d)),
+  G6K_VARS.yokeTrim(1),
+  G6K_VARS.yokeTrim(2),
+  G6K_VARS.yokeDisc(1),
+  G6K_VARS.yokeDisc(2),
+  G6K_VARS.tiller3d,
 ];
 
 /** Events emitted by cockpit buttons (momentary commands). */

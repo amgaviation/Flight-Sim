@@ -151,6 +151,7 @@ export function setG800Switches(ctx: Pick<SimContext, 'vars'>, sys: G800Systems,
   // ---- sidesticks / side consoles
   for (const side of [1, 2] as const) {
     v.set(V.ssTrim(side), 0);
+    v.set(V.ssDisc(side), 0);
     v.set(V.hudRocker(side), 0);
     v.set(V.oxyMask(side), 0);
     v.set(V.oxyMode(side), 0);

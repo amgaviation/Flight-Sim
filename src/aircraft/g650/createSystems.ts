@@ -50,6 +50,7 @@ import { createEngines, TLA } from './systems/engines';
 import { G650Logic, G650PostLogic, STAB_PER_DEG } from './systems/logic';
 import { G650_CAS } from './systems/cas';
 import { createLighting } from './systems/lighting';
+import { G650CockpitInputs } from './systems/cockpitInputs';
 import { G650_CHECKLISTS } from './checklists';
 
 export interface G650SystemsOptions {
@@ -141,6 +142,8 @@ export function createSystems(ctx: SimContext, opts: G650SystemsOptions = {}): G
   const v = ctx.vars;
   const failures = new FailureManager(v, { events: ctx.events, seed: 650 });
   const logic = new G650Logic(v);
+  // 3D yoke trim / AP-TRIM DISC / tiller merge (added with the cockpit build, systems/cockpitInputs.ts).
+  const cockpitInputs = new G650CockpitInputs(v, ctx.events);
   const elec = createElectrical(ctx);
   const apu = createApu(ctx);
   const fuel = createFuel(ctx);
@@ -262,6 +265,8 @@ export function createSystems(ctx: SimContext, opts: G650SystemsOptions = {}): G
     power: 'elec.fcc1a_powered || elec.fcc1b_powered || elec.fcc2a_powered || elec.fcc2b_powered',
     actuators: { pitch: act, roll: act, yaw: act },
     modeSelectVar: V.fcModeSel,
+    // Yoke split trim switches (cockpit), merged with pilot priority by systems/cockpitInputs.ts.
+    trimSwitchVars: [V.yokeTrimCmd],
     airDataValid: '(adc1.valid + adc2.valid + adc3.valid) >= 2',
     inertialValid: 'ahrs1.att_valid || ahrs2.att_valid || ahrs3.att_valid',
     pitch: {
@@ -326,7 +331,7 @@ export function createSystems(ctx: SimContext, opts: G650SystemsOptions = {}): G
     travelS: 1.5,
   });
   const steering = new NosewheelSteering(ctx, {
-    tiller: { maxDeg: 80 }, // LUC / AIN: tiller 80 deg
+    tiller: { maxDeg: 80, input: V.tillerCmd }, // LUC / AIN: tiller 80 deg; hardware axis or 3D handle (cockpitInputs)
     pedals: { maxDeg: 7 }, // pedals 7 deg
     power: `${V.nwsPower} == 1 && elec.nwscu_powered && hyd.left_psi > 1000`,
     rateDegPerS: 25,
@@ -394,6 +399,7 @@ export function createSystems(ctx: SimContext, opts: G650SystemsOptions = {}): G
 
   const list: Subsystem[] = [
     failures,
+    cockpitInputs,
     logic,
     elec,
     apu,

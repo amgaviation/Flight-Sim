@@ -207,6 +207,19 @@ export const G650_VARS = {
   hfrsOn: (i: number) => `${P}fuel.hfrs${i}_on`,
   noTakeoff: `${P}no_takeoff`,
   aircraftConfig: `${P}aircraft_config`, // speed brake with flaps 39 / gear down in flight
+
+  // ======================================================== YOKE / TILLER (added with the cockpit build)
+  // The app's input module rewrites input.pitch_trim_rate / input.ap_disc / input.tiller every frame, so the
+  // 3D yoke switches and the tiller handle write their own vars; systems/cockpitInputs.ts merges them.
+  yokeTrimL: `${P}fc.yoke_trim_l`, // pilot yoke split pitch-trim switch: momentary +1 NOSE UP / -1 NOSE DN
+  yokeTrimR: `${P}fc.yoke_trim_r`, // copilot yoke
+  yokeDiscL: `${P}fc.yoke_disc_l`, // AP / TRIM DISC button (outboard yoke horn): momentary 1
+  yokeDiscR: `${P}fc.yoke_disc_r`,
+  tiller3d: `${P}tiller_3d`, // pilot side-console tiller handle -1..1 (+ right)
+  // Derived by systems/cockpitInputs.ts
+  yokeTrimCmd: `${P}fc.yoke_trim_cmd`, // merged yoke trim switch (pilot priority), read by the FBW as a trim switch
+  discHeld: `${P}fc.disc_held`, // an AP/TRIM DISC button held: yoke trim interrupted
+  tillerCmd: `${P}tiller_cmd`, // hardware tiller axis or the 3D handle, whichever is deflected more
 } as const;
 
 /** Every cockpit control var (inputs), for the "every control is consumed" audit test. */
@@ -238,6 +251,7 @@ export const G650_CONTROL_VARS: string[] = [
   G650_VARS.gearHandle, G650_VARS.gearEmer, G650_VARS.gearLockRelease, G650_VARS.parkBrake, G650_VARS.autobrake, G650_VARS.nwsPower,
   G650_VARS.terrInhibit, G650_VARS.gpwsInhibit,
   G650_VARS.doorMain, G650_VARS.doorBaggage, G650_VARS.doorExtBaggage,
+  G650_VARS.yokeTrimL, G650_VARS.yokeTrimR, G650_VARS.yokeDiscL, G650_VARS.yokeDiscR, G650_VARS.tiller3d,
 ];
 
 /** Events emitted by cockpit buttons (momentary commands). */

@@ -51,6 +51,7 @@ import { createEngines, TLA } from './systems/engines';
 import { G6kLogic, G6kPostLogic } from './systems/logic';
 import { G6K_CAS } from './systems/cas';
 import { createLighting } from './systems/lighting';
+import { G6kCockpitInputs } from './systems/cockpitInputs';
 import { G6K_CHECKLISTS, G6K_CAS_CHECKLISTS } from './checklists';
 
 export interface G6kSystemsOptions {
@@ -355,7 +356,9 @@ export function createSystems(ctx: SimContext, opts: G6kSystemsOptions = {}): G6
     neutral: 7,
     electric: {
       power: `(elec.stab_trim1_powered && ${V.stabCh(1)} == 0) || (elec.stab_trim2_powered && ${V.stabCh(2)} == 0)`,
-      enable: `input.ap_disc == 0`,
+      enable: `input.ap_disc == 0 && ${V.discHeld} == 0`,
+      // Hardware / keyboard trim (input.pitch_trim_rate) and the 3D control-wheel switches (cockpitInputs.ts).
+      switchVars: ['input.pitch_trim_rate', V.yokeTrimCmd],
       rate: { x: [0, 250, 320], y: [G6K_LIMITS.trimRateLowMachDps * U_PER_DEG, G6K_LIMITS.trimRateLowMachDps * U_PER_DEG, G6K_LIMITS.trimRateHighMachDps * U_PER_DEG] },
     },
     autopilot: { power: `(elec.stab_trim1_powered && ${V.stabCh(1)} == 0) || (elec.stab_trim2_powered && ${V.stabCh(2)} == 0)`, rate: 0.25 * U_PER_DEG },
@@ -409,7 +412,7 @@ export function createSystems(ctx: SimContext, opts: G6kSystemsOptions = {}): G6
   });
   // Nosewheel steering (GXLG): NOSE STEER armed, WOW, gear down; handwheel +/-75 deg, pedals +/-7.5 deg, system 3.
   const steering = new NosewheelSteering(ctx, {
-    tiller: { maxDeg: G6K_LIMITS.tillerMaxDeg },
+    tiller: { input: V.tillerCmd, maxDeg: G6K_LIMITS.tillerMaxDeg },
     pedals: { maxDeg: G6K_LIMITS.pedalSteerMaxDeg },
     power: `${V.nwsArm} == 1 && (elec.nws1_powered || elec.nws2_powered) && hyd.sys3_psi > 1000 && gear.handle_down`,
     rateDegPerS: 25,
@@ -485,6 +488,7 @@ export function createSystems(ctx: SimContext, opts: G6kSystemsOptions = {}): G6
   });
   const disc = new DisconnectAlerts(ctx, { apToneMaxS: 1.5 });
   const post = new G6kPostLogic(v, ctx.events ?? null);
+  const cockpitInputs = new G6kCockpitInputs(v, ctx.events ?? null);
   const lights = createLighting(ctx);
 
   const list: Subsystem[] = [
@@ -509,6 +513,7 @@ export function createSystems(ctx: SimContext, opts: G6kSystemsOptions = {}): G6
     radios,
     fms,
     ...(suite ? [suite.system] : []),
+    cockpitInputs,
     eng.ratings,
     afcs,
     bankLimit,

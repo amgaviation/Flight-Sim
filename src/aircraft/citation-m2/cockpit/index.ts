@@ -96,8 +96,8 @@ export function buildM2Cockpit(ctx: SimContext, opts: M2CockpitOptions = {}): M2
   env.lighting.setAnnunciatorDimming(COCKPIT_LOCAL_VARS.annunBright, 0.45, false, 'elec.emer_powered');
   env.lighting.lampTestVar = COCKPIT_LOCAL_VARS.lampTest;
   // Glareshield floodlights (LED strips under the brow, EST 3 cd) and overhead map lights (EST 4 cd).
-  env.lighting.addFloodLight('m2.flood.l', 'flood', [3.5, -0.35, -0.3], [3.66, -0.37, -0.02], b.root, 3, 60);
-  env.lighting.addFloodLight('m2.flood.r', 'flood', [3.5, 0.35, -0.3], [3.66, 0.37, -0.02], b.root, 3, 60);
+  env.lighting.addFloodLight('m2.flood.l', 'flood', [3.6, -0.36, -0.265], [3.68, -0.37, 0.05], b.root, 1.2, 55);
+  env.lighting.addFloodLight('m2.flood.r', 'flood', [3.6, 0.36, -0.265], [3.68, 0.37, 0.05], b.root, 1.2, 55);
   env.lighting.addMapLight('m2.map.l', 'map_l', [2.95, -0.42, -0.68], [3.2, -0.3, 0.15], b.root, 4);
   env.lighting.addMapLight('m2.map.r', 'map_r', [2.95, 0.42, -0.68], [3.2, 0.3, 0.15], b.root, 4);
 
@@ -148,6 +148,8 @@ export function buildM2Cockpit(ctx: SimContext, opts: M2CockpitOptions = {}): M2
     const powered = vars.get('elec.emer_powered') !== 0;
     vars.set(COCKPIT_LOCAL_VARS.lampTest, powered && vars.get(M2.testSel) === TEST_SEL.annu ? 1 : 0);
     vars.set(COCKPIT_LOCAL_VARS.annunBright, vars.get('ac.light.annun', 1) >= 0.9 ? 1 : 0);
+    // Truthful display power for the ESI-1000 (the display itself follows ac.m2.esi_powered).
+    vars.set('display.esi.power', vars.get(M2.esiPowered));
   });
 
   return { build: b.build(), systems: extraSystems };

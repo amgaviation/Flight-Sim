@@ -295,6 +295,7 @@ export function createM2Exterior(vars: SimVars): M2Exterior {
   const seam = std(0xc9ccd0, 0.45, 0.05, THREE.DoubleSide);
   const metal = std(0xb9bdc3, 0.3, 0.85);
   const dark = std(0x1c1e21, 0.55, 0.3);
+  const darkDS = std(0x1c1e21, 0.55, 0.3, THREE.DoubleSide);
   const glass = std(0x0e141c, 0.06, 0.7, THREE.DoubleSide);
   const tyre = std(0x141414, 0.92, 0);
   const chrome = std(0xdadada, 0.14, 1);
@@ -593,9 +594,8 @@ export function createM2Exterior(vars: SimVars): M2Exterior {
     // Inlet duct (dark) and fan with spinner (rotates with N1).
     const duct = new THREE.CylinderGeometry(NAC_R * 0.84, NAC_R * 0.8, 0.3, 32, 1, true);
     duct.rotateX(Math.PI / 2);
-    const dm = mesh(duct, dark, 'inlet_duct', g);
+    const dm = mesh(duct, darkDS, 'inlet_duct', g);
     dm.position.copy(bl(NAC_LEN * 0.46 - 0.15, 0, 0));
-    (dm.material as THREE.MeshStandardMaterial).side = THREE.DoubleSide;
     const fan = new THREE.Group();
     fan.position.copy(bl(NAC_LEN * 0.46 - 0.28, 0, 0));
     g.add(fan);
@@ -618,7 +618,7 @@ export function createM2Exterior(vars: SimVars): M2Exterior {
     mesh(plug, dark, 'exhaust_plug', g).position.copy(bl(-NAC_LEN * 0.54 - 0.12, 0, 0));
     const noz = new THREE.CylinderGeometry(NAC_R * 0.58, NAC_R * 0.58, 0.08, 28, 1, true);
     noz.rotateX(Math.PI / 2);
-    const nm = mesh(noz, dark, 'nozzle', g);
+    const nm = mesh(noz, darkDS, 'nozzle', g);
     nm.position.copy(bl(-NAC_LEN * 0.54 + 0.02, 0, 0));
     // Pylon to the fuselage side (inboard edge inside the skin), aerofoil-ish box.
     const pylW = Math.abs(y) - 0.5;
@@ -739,16 +739,16 @@ export function createM2Exterior(vars: SimVars): M2Exterior {
   const strobeR = lamp(0xf4f7ff, [tip.xLe - 0.3, SEMI_SPAN + 0.04, tipZ], 0.03, wings, 20);
   const strobeL = lamp(0xf4f7ff, [tip.xLe - 0.3, -SEMI_SPAN - 0.04, tipZ], 0.03, wings, 20);
   // Red flashing beacons: top of the T-tail bullet and belly (S&D21 §9.4).
-  const beaconTop = lamp(0xff2200, [STAB_X70 + 0.35, 0, STAB_Z - 0.2], 0.045, tail, 16);
-  const beaconBot = lamp(0xff2200, [0.4, 0, 0.9], 0.045, body, 16);
+  const beaconTop = lamp(0xff2200, [STAB_X70 + 0.35, 0, STAB_Z - 0.14], 0.028, tail, 22);
+  const beaconBot = lamp(0xff2200, [0.4, 0, 0.87], 0.028, body, 22);
   // Landing / recognition lights in the wing-root leading edges, taxi light on the nose gear (EST positions).
   const lroot = wingAt(1.05);
   const landL = lamp(0xfff6e8, [lroot.xLe + 0.01, -1.05, lroot.z], 0.05, wings, 12);
   const landR = lamp(0xfff6e8, [lroot.xLe + 0.01, 1.05, lroot.z], 0.05, wings, 12);
   const taxiLamp = lamp(0xfff6e8, [0.05, 0, 0.62], 0.035, noseLeg.strut, 10);
   // Logo lights (upper stabilizer surface, shining on the fin) and wing inspection light (LH fuselage).
-  const logoL = lamp(0xffffff, [STAB_X70 + 0.2, -0.9, STAB_Z - 0.06], 0.02, tail, 8);
-  const logoR = lamp(0xffffff, [STAB_X70 + 0.2, 0.9, STAB_Z - 0.06], 0.02, tail, 8);
+  const logoL = lamp(0xffffff, [STAB_X70 + 0.2, -0.9, STAB_Z - 0.035], 0.012, tail, 10);
+  const logoR = lamp(0xffffff, [STAB_X70 + 0.2, 0.9, STAB_Z - 0.035], 0.012, tail, 10);
   const inspPos: [number, number, number] = [1.2, -0.8, -0.1];
   const inspLamp = lamp(0xffffff, inspPos, 0.02, body, 8);
 

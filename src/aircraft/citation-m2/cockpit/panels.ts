@@ -18,6 +18,7 @@
 import * as THREE from 'three';
 import type { CockpitBuilder, Panel } from '../../../cockpit/CockpitBuilder';
 import type { CockpitDisplay } from '../../../cockpit/types';
+import type { MaterialName } from '../../../cockpit/materials';
 import { AnnunciatorLight, KeyPad, PushButton, RotaryKnob, Thumbwheel, ToggleSwitch } from '../../../cockpit/controls';
 import { plateGeometry } from '../../../cockpit/geometry/structure';
 import { ALERT } from '../../../core/vars';
@@ -53,9 +54,9 @@ function disp(c: PanelCtx, id: string): CockpitDisplay {
 }
 
 /** A flat trim plate (static) on a panel. */
-function plate(c: PanelCtx, p: Panel, x: number, y: number, w: number, h: number, material: THREE.Material | string = 'bezel', z = 0.0005): THREE.Mesh {
+function plate(c: PanelCtx, p: Panel, x: number, y: number, w: number, h: number, material: MaterialName = 'bezel', z = 0.0005): THREE.Mesh {
   const env = c.b.env;
-  const m = new THREE.Mesh(env.geometry.get(`m2.plate.${w.toFixed(4)}.${h.toFixed(4)}`, () => plateGeometry(w, h, 0.002, 0.003)), typeof material === 'string' ? env.materials.get(material as never) : material);
+  const m = new THREE.Mesh(env.geometry.get(`m2.plate.${w.toFixed(4)}.${h.toFixed(4)}`, () => plateGeometry(w, h, 0.002, 0.003)), env.materials.get(material));
   m.userData.cockpitStatic = true;
   return p.addObject(m, x, y, { z });
 }
@@ -86,7 +87,7 @@ export function buildMainPanel(c: PanelCtx): void {
     ['pfd2', GDU.xPfd2],
   ];
   for (const [id, cx] of gdus) {
-    const sx = cx + (bl - br) / 2 - (bl - br) / 2; // bezel symmetric within 0.1 mm
+    const sx = cx; // bezel borders left / right differ by 0.1 mm
     main.display(disp(c, id), sx, screenCy, GDU.screenW, GDU.screenH, { bezel: { border: [bl, br, bt, bb], depth: 0.012, material: 'bezel' }, display: { boot: false } });
     main.label('GARMIN', sx, GDU.top + 0.0072, { height: 0.0028, weight: 700, color: '#b8bcc2', zone: null });
     // SD card slots (upper: database, lower: terrain/charts, S&D15 §10.3.K / S) on the right bezel.

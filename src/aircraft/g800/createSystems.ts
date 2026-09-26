@@ -220,7 +220,7 @@ export function createG800Systems(ctx: SimContext, opts: G800SystemsOptions = {}
     },
     roll: { maxRateDps: 15, bankHoldDeg: 33, maxBankDeg: 67 },
     trimSwitchVars: [V.ssTrim(1), V.ssTrim(2)],
-    speedSync: 'input.ap_disc && !ap.engaged',
+    speedSync: `(input.ap_disc || ${V.ssDisc(1)} || ${V.ssDisc(2)}) && !ap.engaged`, // hardware button or either 3D grip button
     addVars: { yaw: [V.eldac] },
   });
   // Roll and rudder trim (pedestal switches; the FCCs apply them, SCQ ROLL MOTOR CONTROL / AUTO CENTER).

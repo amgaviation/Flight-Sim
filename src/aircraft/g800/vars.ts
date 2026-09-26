@@ -133,6 +133,9 @@ export const G800_VARS = {
   // Pitch/roll: input.pitch/roll (via the cockpit sidestick drag vars, COCKPIT_VARS.yoke*).
   // AP DISC / TRIM SYNC button (top, thumb): input.ap_disc (hold) - disconnects the AP; with the AP off it syncs the FBW trim speed.
   ssTrim: (s: 1 | 2) => `${P}ss_trim${s}`, // pitch trim switch on the grip: +1 nose up (slower trim speed), -1 nose down; spring to 0
+  // AP DISC / TRIM SYNC button on each 3D grip (hold var, momentary 1). The app's input module rewrites input.ap_disc every
+  // frame from the keyboard/hardware, so the 3D buttons write these; the grip button also emits 'ap.disc' (AFCS DISC).
+  ssDisc: (s: 1 | 2) => `${P}ss_disc${s}`,
   hudRocker: (s: 1 | 2) => `${P}hud_rocker${s}`, // HUD/EVS rocker: +1 cycles SVS/EVS/CVS video, -1 clears video (FSB App. 4); spring to 0
 
   // =============================================================== SIDE CONSOLES

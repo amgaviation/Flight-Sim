@@ -339,7 +339,7 @@ export class G6kLogic implements Subsystem {
 
     // ---------------- stall protection configuration (flaps deg + 100 x slats) and pusher enable (GXFC)
     v.set(V.stallCfg, v.get('surf.flaps_deg') + 100 * v.get('surf.slats'));
-    v.set(V.pusherEnabled, v.get(V.pusher(1)) === 1 && v.get(V.pusher(2)) === 1 && v.get('input.ap_disc') === 0 ? 1 : 0);
+    v.set(V.pusherEnabled, v.get(V.pusher(1)) === 1 && v.get(V.pusher(2)) === 1 && v.get('input.ap_disc') === 0 && v.get(V.discHeld) === 0 ? 1 : 0);
 
     // ---------------- park / emergency brake (GXLG): pulled fully = locked (parking); partial = proportional emergency.
     const pb = v.get(V.parkBrake);

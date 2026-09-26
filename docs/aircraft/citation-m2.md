@@ -530,3 +530,53 @@ EST (CJ-family single-pilot flow; AFM Vol. 2 525NPD not public).
 - No thrust attenuators/reversers (correct for the M2); no autothrottle (Gen2 option not modelled).
 - Vapor-cycle A/C is a heat sink in the cabin zone model; no pack/ACM temperature detail.
 - Weather radar, ChartView, CVR/ELT are state-only (G3000 family scope).
+
+## 13. Flight deck and exterior implementation (cockpit-main agent)
+
+Code: `src/aircraft/citation-m2/index.ts` (AircraftModule), `exterior.ts`,
+`cockpit/` (`index.ts` assembles; `layout.ts` geometry; `shell.ts`, `panels.ts`,
+`lower.ts`, `pedestal.ts`, `flightControls.ts`, `displays.ts` ESI-1000 + hour
+meter, `controls.ts` GTC map knob / joystick, `logic.ts` GTC knob push / hold).
+Test: `tests/aircraft/citation-m2/cockpit-main/controls.test.ts` (writes the
+coverage report `tests/output/citation-m2-cockpit-coverage.txt`: 133 controls,
+0 unbound).
+
+**Layout sources.** S&D15 §10.2 lists the panels left to right (glareshield,
+instrument panel, tilt panel, pedestal, beneath the panel); the S&D Figure III
+photograph gives the arrangement. The tilt panel follows the S&D order
+(pressurization, ice, W/S, fuel, manual temp | gear module | lighting, EMER
+COMM, event, CVR, hour meter, ELT); items the S&D does not list there (SYSTEM
+TEST, cabin fan / air distribution, PASS OXY, cabin lights) sit with the
+nearest group (EST). The ESI-1000 is on the centre glareshield panel left of
+the GMC 710 (S&D15 §10.2.A; L-3 bezel 3 x 4 in, four buttons). All positions
+and sizes in `layout.ts` are EST from the photograph.
+
+**Eye point.** x 2.99 / y -0.33 / z -0.42 (6 cm aft of the §9.0 estimate so the
+PFD centre is ~26 deg below the horizon; z from a 0.76 m seated eye height
+above the cushion with the floor at z 0.70). Seats, yokes and pedals are
+placed around it.
+
+**Bindings (beyond §9).** Yoke AP/TRIM DISC, CWS and the TO/GA button emit the
+AFCS events `ap.disc`, `ap.cws` {pressed}, `ap.toga` (the `input.*` vars are
+rewritten by the input module every frame, so cockpit buttons use the events).
+ESI-1000 buttons: `ac.m2.esi_b1..4` (BARO -, BARO +, STD, BRT) handled by
+`EsiController` (writes `adc3.baro_inhg` / `adc3.baro_std`). GTC dual knob
+push: `ac.m2.gtc<n>_upper_push` -> `GtcKnobPushLogic` emits `upper_push` (< 0.8 s)
+or `upper_hold`. Lamp test = SYSTEM TEST ANNU (`ac.m2.ckpt_lamp_test`);
+annunciators dim with the panel lights (`ac.light.annun`).
+
+**Overhead / sidewalls.** `cockpit/overhead/index.ts` and `cockpit/side/index.ts`
+are picked up automatically when they exist (`import.meta.glob`): each default-
+exports `(b: CockpitBuilder, c: M2CockpitContext) => void`; `c.mounts` holds
+groups at `MOUNTS.overhead / sideL / sideR`, `c.systems` takes extra
+subsystems. Not built by the main deck: crew oxygen masks (`ac.m2.mask*`), the
+sidewall CB panels (`cb.*`), map-light fixtures (the MAP L/R dimmers are on the
+RH tilt panel per §9.6), magnetic compass, cup holders.
+
+**Exterior.** Outer skin `M2_FUSELAGE` (monotone-cubic stations, super-elliptic
+sections) shared with the cockpit shell; wing / tail / nacelles from the S&D
+dimensions and TCDS surface travels; animated gear (nose forward, trailing-link
+mains inboard, nose doors), flaps, ailerons + LH trim tab, upper / lower speed
+brakes, elevators + tabs, rudder + tab, fans, airstair door
+(`ac.m2.door_cabin`), exterior lights (LED, EST candela through
+`world.render_units_per_lux`).

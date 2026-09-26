@@ -172,6 +172,8 @@ export function setG650Switches(ctx: Pick<SimContext, 'vars'>, sys: G650Systems,
   v.set(V.nwsPower, b(powered));
   v.set(V.terrInhibit, 0);
   v.set(V.gpwsInhibit, 0);
+  // ---- yoke switches / tiller handle (3D cockpit, systems/cockpitInputs.ts)
+  for (const k of [V.yokeTrimL, V.yokeTrimR, V.yokeDiscL, V.yokeDiscR, V.tiller3d]) v.set(k, 0);
   // ---- doors
   v.set(V.doorMain, s === 'cold_dark' ? 1 : 0);
   v.set(V.doorBaggage, 0);
