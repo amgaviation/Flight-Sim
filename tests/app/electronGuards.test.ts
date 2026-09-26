@@ -15,6 +15,11 @@ describe('Electron main-process guards', () => {
     expect(isTrustedSenderUrl(undefined, 'app://app', '')).toBe(false);
     expect(isTrustedSenderUrl('http://localhost:5173/', 'app://app', '')).toBe(false);
     expect(isTrustedSenderUrl('http://localhost:5173/index.html', 'app://app', 'http://localhost:5173')).toBe(true);
+    expect(isTrustedSenderUrl('http://localhost:5173/', 'app://app', 'http://localhost:5173/')).toBe(true);
+    // Prefix look-alikes of the dev server are not the dev server.
+    expect(isTrustedSenderUrl('http://localhost:51730/', 'app://app', 'http://localhost:5173')).toBe(false);
+    expect(isTrustedSenderUrl('http://localhost:5173.evil.com/', 'app://app', 'http://localhost:5173')).toBe(false);
+    expect(isTrustedSenderUrl('https://localhost:5173/', 'app://app', 'http://localhost:5173')).toBe(false);
   });
 
   it('http:get only reaches allow-listed https hosts (also checked on the final URL after redirects)', () => {

@@ -775,6 +775,18 @@ Options: `engine`, `startSwitch`, `startKind`, `releaseSwitch`, `runLever`, `man
 (true), `onGround`, `starterVar` (`fadec.eng{i}.starter_cmd`), `ignitionVar` (`eng{i}.ignition`),
 `fuelCmdVar` (`fadec.eng{i}.fuel_cmd`).
 
+**`starterAvailable` pitfall (found in QA).** This condition is re-evaluated
+every update, and false releases the starter immediately. For a DC starter,
+bind it to the starter bus voltage above the start relay's drop-out, for
+example `'elec.batt_bus_v >= 7'`, and model the relay as the electrical
+starter's `contactor: { pickupV: 15, dropoutV: 7 }` (MIL-PRF-6106/26: 15 V
+maximum pull-in for a 28 V-class relay). Do not bind it to a bus `_powered`
+flag. A battery start pulls about 700-800 A locked-rotor and dips the bus to
+about 16 V, which is below the 18 V `_powered` threshold. The starter then
+chatters at 60 Hz and the engine never starts (the `_test-jet` shipped with
+this bug). `tests/integration/testJet.test.ts` shows a cold-and-dark start
+test to copy.
+
 - **Wiring.** Feed `fadec.eng{i}.starter_cmd` into the systems-power starter block (or set `starterVar: 'eng{i}.starter'` when there is no starter model). Feed `fadec.eng{i}.fuel_cmd` into the FuelSystem consumer's `run` binding; never write `eng{i}.fuel_on`.
 - **Writes:** the three outputs, `fadec.eng{i}.start_state`, `start_status` (string), `abort`, `abort_reason` (string HOT/HUNG/NO LIGHT/STARTER), `starter_s`.
 - **Reads:** `eng{i}.n2_pct`, `eng{i}.itt_c`, `eng{i}.running`.

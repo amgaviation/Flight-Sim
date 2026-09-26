@@ -29,6 +29,7 @@ You can code against it without reading the sources.
 | Browser smoke | `npm run build && npm run smoke` | Prints `SMOKE PASSED: n/n checks`; exit code 0. Look at every PNG in `tests/output/`. |
 | Dev server | `npm run dev` then `curl http://localhost:5173/` | HTML with `<div id="app">` and `/src/main.ts`; `/data/*.json.gz` served (Vite adds `Content-Encoding: gzip`; the nav loader sniffs the gzip magic, so both encodings work). |
 | Packaging | `npx electron-builder --linux dir` | `release/linux-unpacked/amg-flight-sim` exists; `resources/app.asar` lists `/dist/index.html`, `/dist/assets/*`, `/dist/data/*`, `/electron/main.cjs`, `/electron/preload.cjs`, `/electron/guards.cjs`, `/package.json`, and no `node_modules` and no `.map`. |
+| Packaged app runs | `xvfb-run -a release/linux-unpacked/amg-flight-sim --no-sandbox --remote-debugging-port=9335`, then playwright `connectOverCDP` (set `NO_PROXY`) | Page `app://app/index.html` reaches `__sim.phase === 'menu'` with `isSecureContext` and `window.amg`; `__sim.launch({ aircraftId: '_test-jet', airport: 'KTEB', state: 'takeoff' })` flies. `window.amg.httpGet` rejects hosts that are not allow-listed. Do not use `--headless=new`: Electron 44 segfaults there once WebGL starts. |
 | Windows exe | CI: `.github/workflows/build-windows.yml` | Built on `windows-latest` (not reproducible on Linux without wine). |
 
 `tests/output/` is ignored by git; it holds the last smoke run.
@@ -51,7 +52,8 @@ fail by design. Every check prints a `PASS`/`FAIL` line. The script writes
 `tests/output/stats.json` (every check plus profiles), `vars.json`,
 `console.log` and the screenshots.
 
-The run takes about 8 to 10 minutes under SwiftShader, which renders at about 4 fps.
+A full run takes about 12-13 minutes under SwiftShader. It renders 0.5-4 fps, and a frame is
+clamped to 0.25 s of sim time, so sim time runs at 1/8 to 1 of real time.
 
 ### 2.1 Checks
 
@@ -295,7 +297,8 @@ minutes. Every aircraft should have the same test.
 5. **Assert, at minimum:**
    - **Parking brake at idle for 20 s, in 230/10G16 wind with turbulence.** Drift < 0.3 m, GS < 0.2 kt, heading change < 0.2 deg, altitude span < 10 cm, pitch span < 0.3 deg, all vars finite.
    - **Full thrust with `pilot.startTakeoff({ vrKt, courseTrueDeg })` for 45 s.** Test in calm air, a 10 kt direct crosswind and gusts. Rotation at VR; lift-off speed and distance within your AFM data (cite them); centre-line deviation < 5 m; max pitch below your tail-strike attitude; > 1,000 ft AGL; gear up.
-   - **In-air states.** Altitude hold within your trim tolerance.
+   - **Cold and dark, then start.** Drive only the cockpit switch vars (battery, generators, fuel, run levers, start). Both engines reach idle; generators come on line; bus voltage is regulated. Check the bus dip and the starter current against your AFM or maintenance data.
+   - **In-air states (`approach`, `cruise`).** Repositioned in the air as the app does (`reposition({ altFtMsl, iasKt })`, then `applyState`). They must hold altitude (the test jet uses 300 ft), IAS within 10 kt and bank within 5 deg for 20 s, hands-off.
 
 ---
 
@@ -309,15 +312,55 @@ minutes. Every aircraft should have the same test.
   - **Problem.** A freshly uploaded mesh had `lastShown = 0`. If it was hidden in its first frame, the cache trim disposed it at once, so it was rebuilt every frame and coarse fallbacks never cleared at low quality.
   - **Fix.** The hidden-TTL now starts at upload. Uploads are coarse-first and time-budgeted (2 ms, up to 4x the preset count).
   - **Tests.** `tests/world/terrainStreaming.test.ts`.
+- **Beach everywhere in low-lying land.**
+  - **Problem.** The shader drew sand wherever the elevation was 0.5-3 m. The KTEB/KEWR Meadowlands and other coastal plains showed large pale polygons.
+  - **Fix.** A per-vertex coast mask (water dilated by 60 m), packed into `aFlat` as +2 (`tileMesh.ts` `coastMask`, `COAST_FLAG`).
+  - **Related.** Coarse tiles now get the geometric pavement clearance only. The flatten weight and shading are applied at z >= 10, as before.
+  - **Tests.** `tests/world/tileMesh.test.ts`.
+- **Test jet could not start from cold and dark.**
+  - **Problem.** `starterAvailable` was bound to `elec.batt_bus_powered` (18 V threshold). The realistic ~16 V cranking dip at ~800 A made the start controller release the starter every other step, so N2 never rose.
+  - **Fix.** Availability is now `elec.batt_bus_v >= 7`, and a start relay coil models the physics (pull-in 15 V, MIL-PRF-6106/26; drop-out 7 V, EST). The pitfall is documented in `EngineStartController` and systems-control.md.
+  - **Tests.** `tests/integration/testJet.test.ts` (cold-and-dark start: light-off ~6 s, idle ~28 s, peak ITT ~650 °C).
 - **Landing light 40x brighter than the sun.** A 30,000 "cd" SpotLight with decay 1.6 was used against a sun of about 3 scene units. The world now publishes `world.render_units_per_lux`, and the test jet uses 600,000 cd x that scale with decay 2. Every aircraft light must follow this rule (docs/modules/world.md).
 - **Smoke test.**
   - **Before.** The takeoff was hands-off (no pilot), so the jet ground-looped off the runway in the crosswind and never rotated. The run still passed, because it only checked GS > 15 kt.
   - **Now.** The scripted pilot flies the takeoff, and every requirement is checked numerically (section 2).
+- **Electron sender and navigation guard.** The dev-server check was a string prefix, so `http://localhost:51730` passed for `http://localhost:5173`. It now compares origins (`electron/guards.cjs`), and `will-navigate` uses the same guard. Tested in `tests/app/electronGuards.test.ts`.
 - **Per-frame allocations in `App.frame`.** The camera inputs were two object literals per frame, and the status line was rebuilt every frame. Both are now reused or cached.
 - **Test jet `applyState`.** It moved to `src/aircraft/_test/state.ts` so headless tests use the app's code path.
 
 ---
 
-## 8. Performance baseline (smoke, SwiftShader, 1280x720, `quality=low`)
+## 8. Performance baseline (smoke, SwiftShader, 1280x720 at 0.75 scale, `quality=low`)
 
-(Filled in from the latest smoke run; see `tests/output/stats.json` `profileGround` / `profileFlight`.)
+From `tests/output/stats.json` (`profileGround`: cockpit view, parked; `profileFlight`: chase view, takeoff and climb):
+
+| Section (ms per frame) | Parked, cockpit | Takeoff, chase |
+|---|---|---|
+| total main-thread JS | 12.3-12.8 | 8.5 |
+| render (JS side of `renderer.render`, 250 draw calls) | 5.9-6.2 | 2.7 |
+| physics (30 steps/frame, the 0.25 s frame clamp) | 1.9 | 1.3 |
+| world (terrain LOD, airports, sky) | 1.5 | 1.6 |
+| systems (15 steps/frame) | 1.1 | 1.2 |
+| cockpit (controls + 2 displays) | 1.0 | 1.0 |
+| vehicle, nav, input, camera, audio, ui, shadows | < 0.8 each | < 0.5 each |
+| **frame interval** | **~2,000 ms** | **~1,450 ms** |
+
+What the numbers show:
+
+- **The main thread is not the bottleneck.** At a real 60 fps each frame runs 2 physics and 1 systems step, so the fixed-rate work is about 0.2 ms. The JS total would be about 6-9 ms of a 16.7 ms budget.
+- **The GPU is.** SwiftShader rasterises on the CPU, and the frame interval is its GPU work. Per frame that is about 480k triangles (283k of terrain) and a heavy per-fragment terrain shader. There is also a logarithmic depth buffer, which writes `gl_FragDepth` and so disables early-Z (renderer description: `log depth on`).
+- **No per-frame JS hot spots.** The ones found (camera input literals and the status string) were removed.
+- **Run time.** The smoke runs at about 0.5-1 fps, so simulated time advances at 1/8 to 1/4 of real time, and the run takes ~12 minutes.
+
+---
+
+## 9. Known issues (open)
+
+- **Land below sea level renders and behaves as sea.**
+  - **Where.** EHAM and the Dutch polders, the Caspian and Dead Sea depressions, Death Valley, New Orleans.
+  - **Cause.** Terrain at or below 0 m is flattened to a 0 m sea surface. The mesh (`tileMesh.ts`), the shader and physics (`GroundQuery`, surface `water`) all do this. Terrarium elevation cannot tell a polder from shallow sea. At EHAM the airport pad is correct, but the surrounding land is water at 0 m, 3-4 m above the runways.
+  - **Fix.** Bundle a land/water mask built by `npm run navdata` (for example from Natural Earth 10 m land polygons, public domain). Terrain tiles and `GroundQuery` would then classify water from the mask instead of `elevation <= 0`.
+- **No land-use data.** Cities render as farmland and forest (the biomes are procedural). Only airports have buildings.
+- **Headless Electron.** `--headless=new` segfaults as soon as WebGL starts. Under Xvfb the packaged app runs and flies. The Windows exe is only built in CI and was not run here.
+- **Slow smoke.** The smoke needs network access to AWS Terrain Tiles and takes ~12 minutes under SwiftShader.

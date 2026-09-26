@@ -11,7 +11,8 @@ import { SimVars } from '../../src/core/SimVars';
 import { EventBus } from '../../src/core/EventBus';
 import { SimLoop, ManualScheduler } from '../../src/core/SimLoop';
 import type { SimContext } from '../../src/core/SimContext';
-import { ENV, FDM, FUEL, GEAR } from '../../src/core/vars';
+import { ENG, ENV, FDM, FUEL, GEAR } from '../../src/core/vars';
+import { cruiseIas } from '../../src/ui/startPosition';
 import { FlightModel } from '../../src/physics/FlightModel';
 import { TEST_JET } from '../../src/physics/testAircraft';
 import testJet from '../../src/aircraft/_test/index';
@@ -47,7 +48,13 @@ interface Wind {
   turbulence?: number;
 }
 
-function makeJet(state: InitialState, wind: Wind = { dir: 0, kt: 0 }) {
+/** In-air start (the app's placement: altitude MSL and IAS), or undefined for the runway. */
+interface AirStart {
+  altFtMsl: number;
+  iasKt: number;
+}
+
+function makeJet(state: InitialState, wind: Wind = { dir: 0, kt: 0 }, air?: AirStart) {
   const vars = new SimVars();
   const events = new EventBus();
   const world = new FlatWorld(FIELD.elevM, 'asphalt', 0, FIELD.lat);
@@ -70,7 +77,7 @@ function makeJet(state: InitialState, wind: Wind = { dir: 0, kt: 0 }) {
     storage: { get: <T>(k: string, f: T) => (store.has(k) ? (store.get(k) as T) : f), set: (k, x) => void store.set(k, x) },
   };
   const sys = createTestJetSystems(ctx);
-  fdm.reposition({ lat: FIELD.lat, lon: FIELD.lon, onGround: true, headingTrue: FIELD.courseTrue });
+  fdm.reposition(air ? { lat: FIELD.lat, lon: FIELD.lon, altFtMsl: air.altFtMsl, iasKt: air.iasKt, headingTrue: FIELD.courseTrue } : { lat: FIELD.lat, lon: FIELD.lon, onGround: true, headingTrue: FIELD.courseTrue });
   applyTestJetState(ctx, sys, state);
   const router = new CommandRouter(vars, events);
   router.setMap(INPUT_MAP);
@@ -175,6 +182,70 @@ describe('_test-jet on the runway (takeoff state)', () => {
       expect(log.gearUpCommanded).toBe(true);
       expect(v.get(DEMO_VARS.gear)).toBe(1);
       expect(v.get(GEAR.pos(1))).toBeLessThan(0.02);
+    });
+  }
+});
+
+describe('_test-jet other initial states', () => {
+  it('cold & dark: battery, fuel, run levers and START bring both engines and generators on line', () => {
+    const j = makeJet('cold_dark');
+    const v = j.vars;
+    j.run(1);
+    expect(v.get(ENG.running(1))).toBe(0);
+    expect(v.get(ENG.running(2))).toBe(0);
+    expect(v.get('elec.main_v')).toBeLessThan(1); // battery contactor open
+    // Before-start flow through the cockpit switch vars only.
+    v.set(DEMO_VARS.batt, 1);
+    j.run(1);
+    expect(v.get('elec.main_v')).toBeGreaterThan(22); // battery on the main bus
+    expect(v.get('elec.main_v')).toBeLessThan(26.5);
+    v.set(DEMO_VARS.gen, 1);
+    v.set(DEMO_VARS.fuelPump, 1);
+    v.set(DEMO_VARS.fuelSel, 1);
+    v.set(DEMO_VARS.cutoff, 1);
+    v.set(DEMO_VARS.start, 2); // START: engine 1, then engine 2
+    let t = 0;
+    while (t < 150 && !(v.get(ENG.running(1)) && v.get(ENG.running(2)) && v.get(ENG.n2(2)) > 55)) {
+      j.run(1);
+      t++;
+    }
+    v.set(DEMO_VARS.start, 1);
+    j.run(5);
+    expect(t).toBeLessThan(150);
+    expect(v.get(ENG.running(1))).toBe(1);
+    expect(v.get(ENG.running(2))).toBe(1);
+    expect(v.get(ENG.n2(1))).toBeGreaterThan(55);
+    expect(v.get('elec.sg1_online')).toBe(1);
+    expect(v.get('elec.sg2_online')).toBe(1);
+    expect(v.get('elec.main_v')).toBeGreaterThan(27.5); // regulated 28.5 V
+  });
+
+  const air: [InitialState, AirStart][] = [
+    ['approach', { altFtMsl: 3200, iasKt: testJet.meta.typical.approachKias + 15 }],
+    ['cruise', { altFtMsl: testJet.meta.typical.cruiseAltFt, iasKt: cruiseIas(testJet.meta.typical.cruiseKtas, testJet.meta.typical.cruiseAltFt) }],
+  ];
+  for (const [state, start] of air) {
+    it(`${state}: starts trimmed (altitude, speed and attitude hold hands-off for 20 s)`, () => {
+      const j = makeJet(state, { dir: 0, kt: 0 }, start);
+      const v = j.vars;
+      const alt0 = v.get(FDM.altMsl);
+      const ias0 = v.get(FDM.ias);
+      let maxDAlt = 0;
+      let maxBank = 0;
+      let finite = true;
+      j.run(20, () => {
+        maxDAlt = Math.max(maxDAlt, Math.abs(v.get(FDM.altMsl) - alt0));
+        maxBank = Math.max(maxBank, Math.abs(v.get(FDM.bank)));
+        for (const k of FINITE_VARS) if (!Number.isFinite(v.get(k))) finite = false;
+      });
+      expect(finite).toBe(true);
+      expect(v.get(FDM.crashed)).toBe(0);
+      expect(v.get(FDM.onGround)).toBe(0);
+      expect(Math.abs(alt0 - start.altFtMsl)).toBeLessThan(50);
+      expect(maxDAlt).toBeLessThan(300);
+      expect(Math.abs(v.get(FDM.ias) - ias0)).toBeLessThan(10);
+      expect(maxBank).toBeLessThan(5);
+      expect(v.get(ENG.running(1))).toBe(1);
     });
   }
 });

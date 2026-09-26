@@ -92,7 +92,15 @@ export interface EngineStartConfig {
   hungWindowS?: number;
   maxStarterS?: number;
   clearingMotorS?: number;
-  /** Starter can be engaged (bleed/DC available). Default true. */
+  /**
+   * Starter can be engaged (bleed/DC available). Default true. Evaluated every
+   * update; false drops the starter at once. For a DC starter bind it to the
+   * starter bus voltage above the start relay's drop-out (e.g.
+   * `'elec.batt_bus_v >= 7'`) and model the relay as the electrical starter's
+   * `contactor`. Do not use a bus `_powered` flag: the normal cranking dip
+   * (~16 V on a 24 V battery at ~800 A) falls below its 18 V threshold and the
+   * starter chatters at the systems rate without turning the engine.
+   */
   starterAvailable?: Binding;
   /** Igniter power. Default true. */
   ignitionPower?: Binding;

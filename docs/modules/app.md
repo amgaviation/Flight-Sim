@@ -483,8 +483,20 @@ interface SimDebugApi {
   zoom(notches: number): void;
   stats(): { fps, render, world, loop, aircraft, renderer, camera, vehicle, placement };
   launch(partial: Partial<LaunchConfig>): Promise<void>;   // e.g. { state: 'approach', spot: { kind: 'auto' } }
+  profile(reset?: boolean): ProfileReport;                  // per-frame JS time by stage (FrameProfiler)
+  pick(ndcX, ndcY): PickResult | null;                      // visible opaque surface under a screen point
+  displays(): DisplayProbe[];                               // cockpit display power / renders / lit fraction
+  ground(): { surface, elevation_m, precise };              // world ground under the aircraft
+  pilot: { takeoff(opts?): phase; stop(): void; state(): { phase, log } };   // scripted test pilot
 }
 ```
+
+`docs/modules/qa.md` is the full reference: argument and result types, the
+`ScriptedPilot` takeoff script and its gains, the profiler sections, and the
+headless integration-test pattern. The app calls the scripted pilot
+(`App.pilot`, idle unless started) at 60 Hz before the aircraft systems, so its
+`input.pitch/roll/yaw` override the frame's device values. A reposition or
+relaunch stops it.
 
 `scripts/smoke.mjs` serves `dist/` and drives Chromium through
 playwright-core, headless with SwiftShader WebGL. Set `CHROMIUM_PATH` to use
@@ -494,18 +506,26 @@ a different browser; the default is `/opt/pw-browsers/chromium-1194/chrome-linux
 TLS-inspecting proxy's CA. Only those CA keys are added, pinned with
 `--ignore-certificate-errors-spki-list`, and certificate verification stays
 on.
-The scenario:
 
-1. Menu screenshot.
-2. `_test-jet` takeoff at KTEB rwy 01: checks engines running and bus
-   voltage, then takes cockpit and pedestal shots.
-3. Brakes released at full thrust for 20 s: ground speed must exceed 15 kt.
-   Chase, orbit, tower and cockpit-roll screenshots are taken.
-4. 10 nm final: the altitude must stay within 600 ft over 10 s. When the
+The scenario asserts about 40 numeric checks, listed in `docs/modules/qa.md`
+section 2:
+
+1. Menu with no query: the aircraft catalog lists the eight requested types.
+2. `_test-jet` lined up at KTEB rwy 01 (scattered weather). Terrain converges,
+   the runway is under the aircraft, the displays draw, the sky is visible,
+   and the runway is visible from the cockpit and chase views.
+3. Parking brake for 20 s of sim time: no drift, no bounce, every var finite.
+   The frame profile is logged.
+4. Scripted takeoff. Brakes off and full thrust go through the input router.
+   The `ScriptedPilot` holds the centre line and rotates at VR. The aircraft
+   must lift off within the runway and climb above 1,000 ft with the gear up,
+   and it must be visible in the orbit and tower views.
+5. 10 nm final: the altitude must stay within 600 ft over 10 s. When the
    placement has an ILS, NAV1 must receive the localizer.
 
-The script fails on any uncaught page error or failed check. It writes
-`tests/output/*.png`, `vars.json`, `stats.json` and `console.log`.
+The script fails on any uncaught page error, any unexpected console error or
+any failed check. It writes `tests/output/*.png`, `vars.json`, `stats.json`
+(every check plus the profiles) and `console.log`.
 
 ---
 
@@ -528,6 +548,13 @@ it. It uses:
   steering; a stall warning (AoA); an engine 1 fire loop with handle and
   bottle;
 - an exterior with animated surfaces, gear, reversers, fans and lights.
+
+Its `applyState` lives in `state.ts` (`applyTestJetState(ctx, sys, state)`,
+free of Three.js), so the headless integration test
+(`tests/integration/testJet.test.ts`) runs the same code as the app. The
+landing light is a 600,000 cd class lamp scaled by the world's photometric
+var `world.render_units_per_lux`, with `decay = 2`. Copy that for every
+exterior light.
 
 All numbers are EST. Its `index.ts` shows the full integration pattern:
 `inputMap`, `applyState` with in-air trim, checklists with live checks, and

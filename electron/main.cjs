@@ -214,8 +214,7 @@ function createWindow() {
     return { action: 'deny' };
   });
   wc.on('will-navigate', (event, url) => {
-    const ok = url.startsWith(`${SCHEME}://${HOST}/`) || (DEV_URL && url.startsWith(DEV_URL));
-    if (!ok) event.preventDefault();
+    if (!isTrustedSenderUrl(url, `${SCHEME}://${HOST}`, DEV_URL)) event.preventDefault();
   });
 
   if (DEV_URL) void mainWindow.loadURL(DEV_URL);

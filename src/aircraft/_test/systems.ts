@@ -143,6 +143,10 @@ export function createTestJetSystems(ctx: SimContext): TestJetSystems {
         resistanceOhm: 0.02, // EST, systems-power doc
         nominalV: 24,
         engineStarterVar: ENG.starter(i),
+        // Start relay: pull-in 15 V max (MIL-PRF-6106/26, 28 V class relay); hold down to 7 V (EST, between
+        // the spec's 1.5 V drop-out floor and pull-in). The normal ~16 V dip under the ~800 A locked-rotor
+        // current of a battery start keeps it closed; a flat battery makes it chatter or drop out.
+        contactor: { pickupV: 15, dropoutV: 7 },
       },
     })),
     links: [
@@ -258,7 +262,9 @@ export function createTestJetSystems(ctx: SimContext): TestJetSystems {
         starterCutoutN2Pct: 45, // EST
         idleN2Pct: 58,
         hotStartIttC: 800, // TEST_JET ittMax
-        starterAvailable: 'elec.batt_bus_powered',
+        // DC at the starter bus above the start relay's drop-out voltage. Not 'elec.batt_bus_powered' (18 V
+        // bus threshold): the normal cranking dip made that flag chatter at 60 Hz and the engine never started.
+        starterAvailable: 'elec.batt_bus_v >= 7',
         ignitionPower: TEST_VARS.mainPowered,
       }),
   );

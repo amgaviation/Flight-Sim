@@ -17,7 +17,7 @@ every animation frame:
   input.poll()                          -> input.* vars
   accumulate real dt * sim.rate
   while accumulator >= 1/120 s:
-      if (step % 2 == 0) systems.update(1/60)   // aircraft Subsystems in order
+      if (step % 2 == 0) systems.update(1/60)   // scripted test pilot (idle unless started), then aircraft Subsystems in order
       fdm.step(1/120)                           // engines -> aero -> ground -> integrate -> publish fdm.*
       radios/fms.update at 20 Hz
   world.update(camera)                  // tile LOD, airport meshes
@@ -26,6 +26,8 @@ every animation frame:
   exterior.update(dt); renderer.render(scene, camera)
   audio.update(dt)
 ```
+
+Every stage is timed by `core/FrameProfiler` (`window.__sim.profile()`, docs/modules/qa.md).
 
 ## Coordinate frames
 

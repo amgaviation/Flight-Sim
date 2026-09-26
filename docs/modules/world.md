@@ -397,7 +397,14 @@ class Environment {
   threshold` with `K = h / (2 tan(fov/2))`; independent of view direction. Leaf budget
   enforced by relaxing the threshold.
 - Meshes (`tileMesh.ts`): per-tile ENU frame, geodetic -> ECEF -> ENU in float64, skirts,
-  airport flattening at every zoom (rebuilt when airport surfaces change), sea flattened to 0.
+  airport surfaces baked into every zoom (rebuilt when airport surfaces change): the height
+  blend and mowed-grass shading at z >= `FLATTEN_WEIGHT_MIN_ZOOM` (10), the pavement
+  clearance below at all zooms. Sea flattened to 0.
+- Coast mask (`tileMesh.ts` `coastMask`): water pixels (elevation <= `WATER_ELEV_M` 0.4 m)
+  dilated by `BEACH_WIDTH_M` (60 m, EST). A vertex inside it gets `COAST_FLAG` (+2) packed
+  into the `aFlat` attribute. The shader decodes `vCoast`, and beach sand (0.5-3 m) is drawn
+  only near water. Before, every low-lying inland area (the KTEB/KEWR Meadowlands, river
+  plains) was painted as beach. Tested in `tests/world/tileMesh.test.ts`.
   **Pavement clearance invariant:** every vertex within one grid-cell diagonal of a rendered
   paved rect is kept at or below `plane - sinkM` (`surfaces.ts` `evalClearance`), so no
   terrain triangle can rise above a runway, taxiway or apron at any LOD, including a coarse
