@@ -6,7 +6,8 @@
  * maps work unchanged. The albedo is synthesised per fragment from per-vertex
  * attributes written by the tile builder:
  *   aTerrain = (noise x, noise y [m, periodic], elevation [m MSL], latitude [deg])
- *   aFlat    = airport flattening weight (mowed grass)
+ *   aFlat    = airport flattening weight (mowed grass) + 2 when within the beach
+ *              width of water (tileMesh.ts COAST_FLAG), decoded per vertex
  * Biomes: grass, forest, farmland patchwork (Voronoi fields), dry grass and
  * desert in the subtropical belts, boreal forest and tundra at high latitude,
  * rock on steep slopes, snow above a latitude/season dependent snow line,
@@ -26,6 +27,7 @@ attribute vec4 aTerrain;
 attribute float aFlat;
 varying vec4 vTerrain;
 varying float vFlat;
+varying float vCoast;
 varying float vUpDot;
 varying vec3 vWorldPosT;
 `;
@@ -33,6 +35,7 @@ varying vec3 vWorldPosT;
 const FRAG_PARS = /* glsl */ `
 varying vec4 vTerrain;
 varying float vFlat;
+varying float vCoast;
 varying float vUpDot;
 varying vec3 vWorldPosT;
 ${GLSL_WORLD_UNIFORMS}
@@ -148,8 +151,8 @@ vec3 terrainAlbedo() {
   vec3 shallow = vec3(0.028, 0.068, 0.062);
   vec3 deep = vec3(0.004, 0.016, 0.032);
   vec3 waterC = mix(shallow, deep, 1.0 - exp(-depth / 12.0));
-  // Beach / shoreline sand just above sea level, and surf foam at the edge.
-  float beach = (1.0 - smoothstep(0.5, 3.0, elev)) * step(0.0, elev) * (1.0 - vFlat) * (1.0 - smoothstep(0.08, 0.15, slope));
+  // Beach / shoreline sand just above sea level and near water only (vCoast), and surf foam at the edge.
+  float beach = (1.0 - smoothstep(0.5, 3.0, elev)) * step(0.0, elev) * (1.0 - vFlat) * (1.0 - smoothstep(0.08, 0.15, slope)) * vCoast;
   col = mix(col, vec3(0.45, 0.39, 0.28), beach * 0.8);
   float foam = smoothstep(-1.2, -0.1, elev) * (1.0 - smoothstep(-0.1, 0.3, elev)) * (0.6 + 0.4 * det);
   waterC = mix(waterC, vec3(0.55, 0.58, 0.60), foam * 0.7 * (1.0 - smoothstep(2000.0, 8000.0, dist)));
@@ -227,7 +230,7 @@ export function createTerrainMaterial(uniforms: WorldUniforms): THREE.MeshStanda
       .replace('#include <common>', `#include <common>\n${VERT_PARS}`)
       .replace(
         '#include <begin_vertex>',
-        `#include <begin_vertex>\nvTerrain = aTerrain;\nvFlat = aFlat;\nvUpDot = objectNormal.y;\nvWorldPosT = (modelMatrix * vec4(transformed, 1.0)).xyz;`,
+        `#include <begin_vertex>\nvTerrain = aTerrain;\nvCoast = step(1.5, aFlat);\nvFlat = aFlat - 2.0 * vCoast;\nvUpDot = objectNormal.y;\nvWorldPosT = (modelMatrix * vec4(transformed, 1.0)).xyz;`,
       );
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\n${FRAG_PARS}`)
@@ -237,6 +240,6 @@ export function createTerrainMaterial(uniforms: WorldUniforms): THREE.MeshStanda
       .replace('#include <normal_fragment_maps>', NORMAL_FRAGMENT)
       .replace('#include <opaque_fragment>', OUTPUT_FRAGMENT);
   };
-  mat.customProgramCacheKey = () => 'amg-terrain-v1';
+  mat.customProgramCacheKey = () => 'amg-terrain-v2';
   return mat;
 }

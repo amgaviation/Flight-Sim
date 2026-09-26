@@ -175,6 +175,42 @@ export function evalFlatten(surfaces: readonly FlattenSurface[], lat: number, lo
 }
 
 /**
+ * Render clearance for coarse terrain grids: the highest elevation a terrain
+ * vertex may have when it lies within `radiusM` of any rendered paved rect
+ * (sinkM > 0), i.e. the lowest (plane - sinkM) over those rects, or
+ * +Infinity when no pavement is that close.
+ *
+ * A terrain triangle whose vertices all respect this bound lies entirely
+ * below the pavement. With `radiusM` = the grid-cell diagonal, every cell
+ * that overlaps pavement has all its corners cleared, whatever the tile's
+ * resolution, so a coarse LOD tile can never draw over a runway (the
+ * vertex-based flatten weight alone cannot guarantee that once the grid is
+ * coarser than the flattened pad). Allocation-free.
+ */
+export function evalClearance(surfaces: readonly FlattenSurface[], lat: number, lon: number, radiusM: number): number {
+  let limit = Infinity;
+  for (let i = 0; i < surfaces.length; i++) {
+    const sf = surfaces[i];
+    const rLat = radiusM / sf.mLat;
+    if (lat < sf.south - rLat || lat > sf.north + rLat) continue;
+    const rLon = radiusM / sf.mLon;
+    const dw = lonDelta(sf.west, lon) + rLon;
+    if (dw < 0 || dw > lonDelta(sf.west, sf.east) + 2 * rLon) continue;
+    toSurfaceCoords(sf, lat, lon, _st);
+    const s = _st.s;
+    const t = _st.t;
+    for (let k = 0; k < sf.paved.length; k++) {
+      const p = sf.paved[k];
+      if (p.sinkM <= 0 || rectDistance(p, s, t) > radiusM) continue;
+      const sc = s < p.s0 ? p.s0 : s > p.s1 ? p.s1 : s;
+      const e = planeElevation(sf, sc) - p.sinkM;
+      if (e < limit) limit = e;
+    }
+  }
+  return limit;
+}
+
+/**
  * Uniform lat/lon grid of surfaces for O(1) lookups from physics. Cells are
  * `cellDeg` square; each cell lists the surfaces whose bounds overlap it.
  */

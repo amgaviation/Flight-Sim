@@ -4,16 +4,16 @@
  * Each frame:
  *  1. `selectTiles` picks the desired leaves (screen-space error, distance based).
  *  2. Missing leaves are requested; while they load, their nearest ancestor
- *     with a mesh is drawn instead, unless that ancestor would cover finer
- *     tiles that are already shown (lod.ts `resolveVisibility`): coverage
- *     never overlaps, and loaded detail (flattened airport tiles) is never
- *     replaced by a coarse, unflattened ancestor while distant leaves stream.
- *     Finished meshes are uploaded coarse-first so coverage arrives top-down.
+ *     with a mesh is drawn instead and every descendant of that ancestor is
+ *     hidden (lod.ts `resolveVisibility`), so coverage never overlaps and
+ *     never has holes once the roots are in. Finished meshes are uploaded
+ *     coarse-first, so that ancestor is normally the missing leaf's parent,
+ *     not a tile hundreds of kilometres wide.
  *  3. Tile meshes are placed in the floating-origin frame from their own
  *     centre (see tileMesh.ts); a recenter only re-places objects.
  *  4. Hidden meshes are kept for a few seconds (hysteresis), then disposed.
- * Tiles at z >= FLATTEN_MIN_ZOOM (10) are rebuilt when airport surfaces overlapping them change,
- * so terrain is flattened under runways.
+ * Tiles are rebuilt when airport surfaces overlapping them change, so terrain is flattened
+ * under runways and kept below pavement at every LOD (FLATTEN_MIN_ZOOM).
  */
 import * as THREE from 'three';
 import type { GeoPosition } from '../types';
@@ -27,10 +27,25 @@ import type { TileMeshData, TileMeshParams } from './tileMesh';
 import { TERRAIN_NOISE_PERIOD_M } from './TerrainMaterial';
 import type { SurfaceIndex, FlattenSurface } from '../airports/surfaces';
 
-/** Tiles at or above this zoom are flattened under airports. */
-export const FLATTEN_MIN_ZOOM = 10;
+/**
+ * Tiles at or above this zoom are flattened under airports. Every rendered
+ * zoom is: a coarse tile shown as a fallback near the camera must not cover
+ * a runway (tileMesh.ts clears pavement at any grid resolution). Coarse tiles
+ * only list the airports the world has built nearby, so their rebuilds stay rare.
+ */
+export const FLATTEN_MIN_ZOOM = 0;
 /** Hidden meshes older than this are disposed when over the cache budget (ms). */
 const HIDDEN_TTL_MS = 4000;
+/**
+ * Mesh uploads per frame: at least `quality.meshUploadsPerFrame`, then more
+ * while the main-thread time spent here stays under this budget (ms), up to
+ * UPLOAD_HARD_CAP_FACTOR x the preset count. Creating the BufferGeometry is
+ * cheap (the GPU copy happens at first draw), so a backlog after a launch or
+ * a view change drains in a few frames even at low frame rates.
+ * EST: 2 ms of a 16.7 ms frame.
+ */
+const UPLOAD_BUDGET_MS = 2;
+const UPLOAD_HARD_CAP_FACTOR = 4;
 
 interface TileRecord {
   key: number;
@@ -203,12 +218,14 @@ export class TerrainRenderer {
     }
   }
 
-  private upload(maxCount: number): void {
+  private upload(minCount: number, nowMs: number): void {
     // Coarse first (stable within a zoom, i.e. in build order, which follows the loader's
     // distance priority): parents give coverage for everything below them.
-    if (this.pendingMeshes.length > maxCount) this.pendingMeshes.sort(byPendingZoom);
+    if (this.pendingMeshes.length > minCount) this.pendingMeshes.sort(byPendingZoom);
+    const t0 = performance.now();
+    const hardCap = minCount * UPLOAD_HARD_CAP_FACTOR;
     let n = 0;
-    while (this.pendingMeshes.length > 0 && n < maxCount) {
+    while (this.pendingMeshes.length > 0 && n < hardCap && (n < minCount || performance.now() - t0 < UPLOAD_BUDGET_MS)) {
       const { key, mesh: m, sig } = this.pendingMeshes.shift()!;
       this.pendingKeys.delete(key);
       n++;
@@ -239,7 +256,9 @@ export class TerrainRenderer {
         centerLon: m.centerLon,
         minElev: m.minElev,
         maxElev: m.maxElev,
-        lastShown: prev ? prev.lastShown : 0,
+        // A new mesh starts its hidden-TTL now: disposing it before it could ever be shown (e.g. an
+        // ancestor hidden under a coarser fallback until its siblings arrive) made it rebuild forever.
+        lastShown: prev ? Math.max(prev.lastShown, nowMs) : nowMs,
         surfSig: sig,
         segments: this.quality.terrainSegments,
         // Surfaces may have changed while this mesh was being built.
@@ -285,7 +304,7 @@ export class TerrainRenderer {
     const surfacesChanged = sv !== this.lastSurfaceVersion;
     this.lastSurfaceVersion = sv;
 
-    this.upload(this.quality.meshUploadsPerFrame);
+    this.upload(this.quality.meshUploadsPerFrame, nowMs);
 
     const lod = this.lod;
     lod.fovYDeg = fovYDeg;
@@ -343,7 +362,7 @@ export class TerrainRenderer {
       }
     }
 
-    // Visibility: all candidates; fallbacks only where they cover no finer shown tile.
+    // Visibility: candidates unless covered by a fallback ancestor; fallbacks unless nested.
     resolveVisibility(this.candidates, this.fallbacks, this.shown, this.visScratch);
 
     let triangles = 0;

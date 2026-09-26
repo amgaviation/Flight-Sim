@@ -24,7 +24,7 @@ export interface QualitySettings {
   elevationCacheTiles: number;
   /** Built tile meshes kept hidden for reuse before disposal. */
   meshCacheTiles: number;
-  /** Mesh uploads per frame (main-thread cost cap). */
+  /** Minimum mesh uploads per frame; more while under the upload time budget, up to 4x (TerrainRenderer UPLOAD_BUDGET_MS). */
   meshUploadsPerFrame: number;
   /** Concurrent tile fetches. */
   maxConcurrentLoads: number;

@@ -288,6 +288,7 @@ Written (every `update`):
 | `world.sun_az_deg`, `world.moon_elev_deg` | Sun azimuth (true), moon elevation. |
 | `world.cam_agl_ft` | Camera height above terrain/runway. |
 | `world.tiles_pending` | Terrain tiles queued or in flight. |
+| `world.render_units_per_lux` | Photometric scale of the renderer: scene light units per lux, including eye adaptation (~3e-5 in daylight, up to ~2.4e-3 at night). A lamp of I candela is a three.js light of intensity `I * world.render_units_per_lux` with `decay = 2`; it is then exactly as bright relative to sun and sky as the real lamp (landing lights vanish in daylight, dominate at night). |
 
 Names are exported as `WORLD_VARS` (`src/world/worldVars.ts`).
 
@@ -396,7 +397,21 @@ class Environment {
   threshold` with `K = h / (2 tan(fov/2))`; independent of view direction. Leaf budget
   enforced by relaxing the threshold.
 - Meshes (`tileMesh.ts`): per-tile ENU frame, geodetic -> ECEF -> ENU in float64, skirts,
-  airport flattening for z >= 10 (rebuilt when airport surfaces change), sea flattened to 0.
+  airport flattening at every zoom (rebuilt when airport surfaces change), sea flattened to 0.
+  **Pavement clearance invariant:** every vertex within one grid-cell diagonal of a rendered
+  paved rect is kept at or below `plane - sinkM` (`surfaces.ts` `evalClearance`), so no
+  terrain triangle can rise above a runway, taxiway or apron at any LOD, including a coarse
+  fallback tile drawn while finer tiles stream. The pad-based flatten weight alone cannot
+  guarantee that once the grid is coarser than the pad (z <= 12 at low quality). By the SSE
+  criterion one cell is at most ~threshold px on screen, so the extra clearing is invisible
+  on leaves. Tested in `tests/world/tileMesh.test.ts`.
+- Streaming (`TerrainRenderer.ts`): a missing leaf is drawn by its nearest loaded ancestor,
+  which hides the ancestor's other descendants (no overlap, no holes; `lod.ts`
+  `resolveVisibility`). Finished meshes upload **coarse-first**, at least
+  `meshUploadsPerFrame` per frame and more while under 2 ms (up to 4x), so the fallback is
+  normally the leaf's parent. A new mesh starts its hidden-TTL at upload (before, a mesh
+  hidden in its first frame was disposed at once and rebuilt forever, so coarse fallbacks
+  never cleared at low quality). Tested in `tests/world/terrainStreaming.test.ts`.
 - Material (`TerrainMaterial.ts`): MeshStandardMaterial + onBeforeCompile (scene lights,
   landing lights and shadows work). Biomes: grass, forest, farmland patchwork, dry grass and
   desert (subtropical belts, high continental plains), boreal/tundra, rock by slope,

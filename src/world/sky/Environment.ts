@@ -310,6 +310,8 @@ export class Environment {
     const target = clamp(Math.pow(this.refSkyLum / key, ADAPT_EXPONENT), 1, ADAPT_MAX);
     this.adapt += (target - this.adapt) * (dt > 0 ? Math.min(1, dt / ADAPT_TAU_S) : 1);
     this.sp.exposure = this.skyExposure * this.adapt;
+    // Direct sun of ~1e5 lux renders at sunScale * adapt: that ratio converts lamp candela to light units.
+    vars.set(WORLD_VARS.renderUnitsPerLux, (this.sunScale * this.adapt) / 1e5);
     u.uSkyAltitude.value = this.sp.altitude;
     u.uSkyExposure.value = this.sp.exposure;
 

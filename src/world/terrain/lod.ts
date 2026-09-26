@@ -197,63 +197,14 @@ export function selectTiles(cam: LodCamera, p: LodParams, elevRange: ElevRangeFn
   return threshold;
 }
 
-/** Reusable scratch for `resolveVisibility` (avoids per-frame allocation). */
+/** Reusable scratch for `resolveVisibility` (kept for API stability; no per-frame allocation). */
 export interface VisibilityScratch {
-  /** Every ancestor of a tile already chosen for display. */
-  covered: Set<number>;
-  /** Fallback keys in processing order (finest first). */
-  order: number[];
+  /** Fallback keys (a copy, so `fallbacks` may be any iterable). */
+  fallbacks: Set<number>;
 }
 
 export function createVisibilityScratch(): VisibilityScratch {
-  return { covered: new Set<number>(), order: [] };
-}
-
-const byZoomDesc = (a: number, b: number): number => keyZ(b) - keyZ(a);
-
-function markAncestors(key: number, covered: Set<number>): void {
-  let k = key;
-  while (keyZ(k) > 0) {
-    k = parentKey(k);
-    if (covered.has(k)) return; // its ancestors are already marked
-    covered.add(k);
-  }
-}
-
-/**
- * Chooses which loaded tiles to draw (fills `shown`), never overlapping:
- *
- *  - every candidate (a desired leaf with its own mesh, or the loaded
- *    children standing in for a missing coarse leaf) is shown;
- *  - a fallback (the nearest loaded ancestor of a missing leaf) is shown only
- *    when no finer tile already shown lies inside it. Fallbacks are taken
- *    finest first, so the smallest available ancestor fills each gap.
- *
- * A coarse ancestor therefore never replaces finer terrain that is already
- * loaded (for example the flattened tiles under an airport) just because
- * some other leaf inside it is still streaming; that leaf's area stays
- * empty (the world's base ground shows) until it or a finer ancestor loads.
- * Candidates are disjoint by construction (they come from one quadtree cut).
- */
-export function resolveVisibility(candidates: Iterable<number>, fallbacks: Iterable<number>, shown: Set<number>, scratch: VisibilityScratch): Set<number> {
-  shown.clear();
-  const covered = scratch.covered;
-  covered.clear();
-  for (const key of candidates) {
-    shown.add(key);
-    markAncestors(key, covered);
-  }
-  const order = scratch.order;
-  order.length = 0;
-  for (const key of fallbacks) order.push(key);
-  order.sort(byZoomDesc);
-  for (let i = 0; i < order.length; i++) {
-    const key = order[i];
-    if (shown.has(key) || covered.has(key) || hasAncestorIn(key, shown)) continue;
-    shown.add(key);
-    markAncestors(key, covered);
-  }
-  return shown;
+  return { fallbacks: new Set<number>() };
 }
 
 function hasAncestorIn(key: number, set: Set<number>): boolean {
@@ -263,4 +214,32 @@ function hasAncestorIn(key: number, set: Set<number>): boolean {
     if (set.has(k)) return true;
   }
   return false;
+}
+
+/**
+ * Chooses which loaded tiles to draw (fills `shown`) with no overlap and,
+ * once the roots are loaded, no holes (the standard "refine only when the
+ * children can be drawn" rule of chunked LOD):
+ *
+ *  - a fallback (the nearest loaded ancestor of a missing desired leaf) is
+ *    shown unless another fallback contains it;
+ *  - a candidate (a desired leaf with its own mesh, or the loaded children
+ *    standing in for a missing coarse leaf) is shown unless a fallback
+ *    contains it (the fallback already draws that area).
+ *
+ * Consequence: while a leaf is missing, its whole nearest-loaded-ancestor
+ * area is drawn at that ancestor's resolution. That is only a small area
+ * when the intermediate levels are loaded, which is why the renderer uploads
+ * coarse tiles first; and airport pavement stays visible over any fallback
+ * because every tile, at any resolution, is cleared below the pavement
+ * (tileMesh.ts, surfaces.ts `evalClearance`).
+ */
+export function resolveVisibility(candidates: Iterable<number>, fallbacks: Iterable<number>, shown: Set<number>, scratch: VisibilityScratch): Set<number> {
+  shown.clear();
+  const fb = scratch.fallbacks;
+  fb.clear();
+  for (const key of fallbacks) fb.add(key);
+  for (const key of candidates) if (!hasAncestorIn(key, fb)) shown.add(key);
+  for (const key of fb) if (!hasAncestorIn(key, fb)) shown.add(key);
+  return shown;
 }

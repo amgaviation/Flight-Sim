@@ -14,6 +14,7 @@
  * `userData.visibleFromCockpit = true` (seen through the windows).
  */
 import * as THREE from 'three';
+import { WORLD_VARS } from '../../world/worldVars';
 import type { SimVars } from '../../core/SimVars';
 import { ENG, GEAR, SURF } from '../../core/vars';
 import { bl } from '../../cockpit/frame';
@@ -341,7 +342,8 @@ export function createTestExterior(vars: SimVars): TestExterior {
   const strobeL = lamp(0xffffff, [-1.9, -7.8, 0.12], 0.05, wings);
   const beaconTop = lamp(0xff2000, [-6.6, 0, -3.1], 0.07);
   const beaconBot = lamp(0xff2000, [1.0, 0, 0.74], 0.07);
-  const landing = new THREE.SpotLight(0xfff4e0, 0, 900, 12 * D2R, 0.35, 1.6);
+  // Physical inverse-square decay: intensity is set in scene units from candela each frame (below).
+  const landing = new THREE.SpotLight(0xfff4e0, 0, 900, 12 * D2R, 0.35, 2);
   landing.position.copy(bl(5.2, 0, 0.9));
   landing.target.position.copy(bl(60, 0, 3.5));
   // The landing light must keep lighting the runway in the cockpit view.
@@ -420,8 +422,9 @@ export function createTestExterior(vars: SimVars): TestExterior {
     setLamp(beaconBot, bc);
     const ll = v.get('light.landing');
     setLamp(landingLamp, ll);
-    // EST: ~ 600,000 cd class LED landing light; three.js SpotLight intensity in candela.
-    landing.intensity = ll * 600_000 * 0.05;
+    // EST: ~600,000 cd class LED landing light, in scene light units via the world's photometric
+    // scale (world.render_units_per_lux): a faint pool in daylight, the main light on the runway at night.
+    landing.intensity = ll * 600_000 * v.get(WORLD_VARS.renderUnitsPerLux, 3e-5);
   }
 
   return {

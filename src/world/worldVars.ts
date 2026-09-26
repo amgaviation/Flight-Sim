@@ -15,4 +15,12 @@ export const WORLD_VARS = {
   camAglFt: 'world.cam_agl_ft',
   /** Terrain tiles queued or in flight. */
   tilesPending: 'world.tiles_pending',
+  /**
+   * Photometric scale of the renderer: scene light units per lux, including
+   * the current eye adaptation (~3e-5 in daylight, up to ~2.4e-3 at night).
+   * An aircraft light of I candela is a three.js light of intensity
+   * I x this value with physical inverse-square decay (decay = 2), so it is
+   * as bright relative to the sun and sky as the real lamp would be.
+   */
+  renderUnitsPerLux: 'world.render_units_per_lux',
 } as const;

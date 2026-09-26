@@ -35,7 +35,7 @@ import { APP_EVENTS, INPUT_EVENTS } from './input/actions';
 import { ScriptedPilot, type ScriptedPilotPhase, type TakeoffLog, type TakeoffScript } from './input/ScriptedPilot';
 import { RenderSystem, sanitizeGraphics, type GraphicsSettings } from './render/RenderSystem';
 import { VehicleNode } from './render/VehicleNode';
-import { CameraSystem, type CameraMode } from './render/CameraSystem';
+import { CameraSystem, type CameraControlInput, type CameraMode, type CameraMotionInput } from './render/CameraSystem';
 import { CockpitShadows } from './render/CockpitShadows';
 import { createStorage, type KeyValueStore } from './platform/storage';
 import { toggleFullscreen, platformLabel, getBridge } from './platform/env';
@@ -92,6 +92,16 @@ export interface SimDebugApi {
    * reading.
    */
   profile(reset?: boolean): ProfileReport;
+  /**
+   * The visible opaque surface under a screen point (NDC, -1..1, +y up):
+   * nearest visible mesh along the camera ray, skipping transparent
+   * materials (clouds, glass) and non-mesh objects. `kind` classifies it.
+   */
+  pick(ndcX: number, ndcY: number): PickResult | null;
+  /** Cockpit displays: power, render counters and the fraction of lit (non-black) canvas pixels. */
+  displays(): DisplayProbe[];
+  /** World ground sample under the aircraft (surface type, elevation, precise = terrain tile loaded). */
+  ground(): { surface: string; elevation_m: number; precise: boolean };
   /** Scripted test pilot (input/ScriptedPilot) flying through the normal pilot inputs. */
   pilot: {
     /**
@@ -105,6 +115,23 @@ export interface SimDebugApi {
   };
 }
 
+export interface PickResult {
+  name: string;
+  parent: string;
+  kind: 'aircraft' | 'terrain' | 'airport' | 'base-ground' | 'other';
+  distance_m: number;
+}
+
+export interface DisplayProbe {
+  id: string;
+  powered: boolean;
+  booting: boolean;
+  renders: number;
+  uploads: number;
+  /** Fraction of sampled canvas pixels that are not black (0..1). */
+  lit: number;
+}
+
 /** Frame stages measured by the profiler (App.frame order; `total` spans input poll to UI). */
 const PROFILE_SECTIONS = ['total', 'input', 'systems', 'physics', 'nav', 'vehicle', 'cockpit', 'camera', 'world', 'shadows', 'render', 'audio', 'ui'] as const;
 type ProfileSectionName = (typeof PROFILE_SECTIONS)[number];
@@ -116,6 +143,39 @@ declare global {
 }
 
 const LISTENER: ListenerPose = { position_m: [0, 0, 0], forward: [1, 0, 0], up: [0, 0, -1] };
+/** Per-frame camera inputs, filled in place (no allocation per frame). */
+const _camCtl: CameraControlInput = { lookX: 0, lookY: 0, zoomRate: 0 };
+const _camMotion: CameraMotionInput = { nx: 0, ny: 0, nz: 1, buffet: 0, onGround: false, gsKt: 0, trackDeg: 0, speed_ms: 0, vs_ms: 0 };
+const _pickRay = new THREE.Raycaster();
+const _pickNdc = new THREE.Vector2();
+
+function effectivelyVisible(o: THREE.Object3D): boolean {
+  for (let p: THREE.Object3D | null = o; p; p = p.parent) if (!p.visible) return false;
+  return true;
+}
+
+function isOpaque(m: THREE.Material | THREE.Material[]): boolean {
+  const mat = Array.isArray(m) ? m[0] : m;
+  return !!mat && mat.visible && mat.depthWrite && !(mat.transparent && mat.opacity < 0.99);
+}
+
+/** Fraction of non-black pixels on a display canvas (16 x 16 sample grid). Diagnostics only. */
+function litFraction(canvas: HTMLCanvasElement | OffscreenCanvas): number {
+  const ctx = canvas.getContext('2d') as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null;
+  if (!ctx || canvas.width < 2 || canvas.height < 2) return 0;
+  const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+  let lit = 0;
+  const n = 16;
+  for (let j = 0; j < n; j++) {
+    for (let i = 0; i < n; i++) {
+      const x = Math.floor(((i + 0.5) / n) * canvas.width);
+      const y = Math.floor(((j + 0.5) / n) * canvas.height);
+      const k = (y * canvas.width + x) * 4;
+      if (data[k] + data[k + 1] + data[k + 2] > 24) lit++;
+    }
+  }
+  return lit / (n * n);
+}
 const _camWorld = new THREE.Vector3();
 
 export class App {
@@ -166,6 +226,7 @@ export class App {
   private loading: LoadingScreen | null = null;
   private autotest = false;
   private hudTimer = 0;
+  private statusKey = -1;
   /** Days in the simulated year (for the UTC clock's day-of-year wrap). */
   private daysInYear = 365;
   private crashedShown = false;
@@ -759,22 +820,20 @@ export class App {
       s.runtime.update(dt);
       prof.end(P.cockpit);
       prof.begin(P.camera);
-      this.camera.update(
-        dt,
-        { lookX: this.input.lookX, lookY: this.input.lookY, zoomRate: this.input.zoomRate },
-        {
-          nx: v.get(FDM.nx),
-          ny: v.get(FDM.ny),
-          nz: v.get(FDM.nz, 1),
-          buffet: v.get(FDM.buffet),
-          onGround: v.get(FDM.onGround) !== 0,
-          gsKt: v.get(FDM.gs),
-          trackDeg: v.get(FDM.trackTrue),
-          speed_ms: v.get(FDM.gs) * 0.514444,
-          vs_ms: v.get(FDM.vs) * 0.00508,
-        },
-        geo,
-      );
+      _camCtl.lookX = this.input.lookX;
+      _camCtl.lookY = this.input.lookY;
+      _camCtl.zoomRate = this.input.zoomRate;
+      const cm = _camMotion;
+      cm.nx = v.get(FDM.nx);
+      cm.ny = v.get(FDM.ny);
+      cm.nz = v.get(FDM.nz, 1);
+      cm.buffet = v.get(FDM.buffet);
+      cm.onGround = v.get(FDM.onGround) !== 0;
+      cm.gsKt = v.get(FDM.gs);
+      cm.trackDeg = v.get(FDM.trackTrue);
+      cm.speed_ms = cm.gsKt * 0.514444;
+      cm.vs_ms = v.get(FDM.vs) * 0.00508;
+      this.camera.update(dt, _camCtl, cm, geo);
       prof.end(P.camera);
       prof.begin(P.world);
       this.world.update(dt, this.camera.camera, geo);
@@ -810,12 +869,19 @@ export class App {
         this.overlays.toast(`CRASHED: ${v.getString(FDM.crashReason) || 'impact'} (Esc > Position to reset)`, 8);
       }
     }
-    const parts: string[] = [];
+    // Status line, rebuilt only when one of its inputs changes (this runs every frame).
     const rate = v.get(SIM.rate, 1);
-    if (rate !== 1) parts.push(`${rate}x`);
-    if (this.input.mouseYoke.active) parts.push('MOUSE YOKE');
-    if (v.get(FDM.crashed) !== 0) parts.push('CRASHED');
-    this.overlays.setStatus(parts.join(' · '));
+    const yoke = this.input.mouseYoke.active;
+    const crashed = v.get(FDM.crashed) !== 0;
+    const key = rate * 4 + (yoke ? 2 : 0) + (crashed ? 1 : 0);
+    if (key !== this.statusKey) {
+      this.statusKey = key;
+      const parts: string[] = [];
+      if (rate !== 1) parts.push(`${rate}x`);
+      if (yoke) parts.push('MOUSE YOKE');
+      if (crashed) parts.push('CRASHED');
+      this.overlays.setStatus(parts.join(' · '));
+    }
     this.hudTimer += dt;
     if (this.overlays.hudVisible && this.hudTimer >= 0.25) {
       this.hudTimer = 0;
@@ -881,6 +947,43 @@ export class App {
           : null,
       }),
       launch: (partial) => app.launch({ ...app.cfg, ...partial }),
+      pick(ndcX: number, ndcY: number): PickResult | null {
+        if (!app.render || !app.camera) return null;
+        const cam = app.camera.camera;
+        cam.updateMatrixWorld();
+        _pickRay.setFromCamera(_pickNdc.set(ndcX, ndcY), cam);
+        _pickRay.camera = cam;
+        const hits = _pickRay.intersectObject(app.render.scene, true);
+        for (const h of hits) {
+          const o = h.object as THREE.Mesh;
+          if (!o.isMesh || !effectivelyVisible(o) || !isOpaque(o.material)) continue;
+          let kind: PickResult['kind'] = 'other';
+          for (let p: THREE.Object3D | null = o; p; p = p.parent) {
+            if (p === app.vehicle.object) kind = 'aircraft';
+            else if (p.name === 'airports') kind = kind === 'other' ? 'airport' : kind;
+            else if (p.name === 'terrain') kind = kind === 'other' ? 'terrain' : kind;
+          }
+          if (o.name === 'base-ground') kind = 'base-ground';
+          return { name: o.name, parent: o.parent?.name ?? '', kind, distance_m: h.distance };
+        }
+        return null;
+      },
+      displays(): DisplayProbe[] {
+        const s = app.session;
+        if (!s) return [];
+        return s.runtime.displays.handles().map((h) => ({
+          id: h.display.id,
+          powered: h.powered,
+          booting: h.booting,
+          renders: h.renders,
+          uploads: h.uploads,
+          lit: litFraction(h.display.canvas as HTMLCanvasElement | OffscreenCanvas),
+        }));
+      },
+      ground() {
+        const g = app.world.sampleGround(app.vars.get(FDM.lat), app.vars.get(FDM.lon));
+        return { surface: String(g.surface), elevation_m: g.elevation_m, precise: g.precise };
+      },
       profile(reset = false): ProfileReport {
         const r = app.profiler.report();
         if (reset) app.profiler.reset();

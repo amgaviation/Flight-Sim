@@ -13,8 +13,50 @@
  * neighbouring tiles of different LOD.
  */
 import { DEG2RAD, MERCATOR_CIRCUMFERENCE_M, WGS84_A, WGS84_E2, enuBasis, geodeticToEcef } from '../geo';
-import { createFlattenHit, evalFlatten, type FlattenSurface } from '../airports/surfaces';
+import { createFlattenHit, evalClearance, evalFlatten, type FlattenSurface } from '../airports/surfaces';
 import { TILE_SIZE, mercatorYToLat, tileXToLon } from './tileMath';
+
+/**
+ * Tiles at or above this zoom blend terrain to the airport surface planes and
+ * shade the flattened area; coarser tiles only get the pavement clearance
+ * (every tile with surfaces does, see `evalClearance`).
+ */
+/** Terrain at or below this elevation (m) is drawn as water (must match the shader's water band). */
+export const WATER_ELEV_M = 0.4;
+/**
+ * Beach sand is drawn only within this distance of water (m). EST: typical
+ * sandy shore widths are tens of metres; without this limit every low-lying
+ * inland area (marsh, polder, river plain at 0.5-3 m) was painted as beach.
+ */
+export const BEACH_WIDTH_M = 60;
+/** Added to the flatten weight in `TileMeshData.flat` for vertices near water. */
+export const COAST_FLAG = 2;
+
+/**
+ * 1 for grid pixels within `r` pixels (square window) of a water pixel
+ * (elev <= WATER_ELEV_M), else 0. Separable prefix-sum dilation, O(N).
+ */
+export function coastMask(elev: Float32Array, r: number): Uint8Array {
+  const N = TILE_SIZE;
+  const water = new Uint8Array(N * N);
+  for (let k = 0; k < N * N; k++) water[k] = elev[k] <= WATER_ELEV_M ? 1 : 0;
+  const rows = new Uint8Array(N * N);
+  const pre = new Int32Array(N + 1);
+  for (let j = 0; j < N; j++) {
+    pre[0] = 0;
+    for (let i = 0; i < N; i++) pre[i + 1] = pre[i] + water[j * N + i];
+    for (let i = 0; i < N; i++) rows[j * N + i] = pre[Math.min(N, i + r + 1)] - pre[Math.max(0, i - r)] > 0 ? 1 : 0;
+  }
+  const out = new Uint8Array(N * N);
+  for (let i = 0; i < N; i++) {
+    pre[0] = 0;
+    for (let j = 0; j < N; j++) pre[j + 1] = pre[j] + rows[j * N + i];
+    for (let j = 0; j < N; j++) out[j * N + i] = pre[Math.min(N, j + r + 1)] - pre[Math.max(0, j - r)] > 0 ? 1 : 0;
+  }
+  return out;
+}
+
+export const FLATTEN_WEIGHT_MIN_ZOOM = 10;
 
 export interface TileMeshParams {
   z: number;
@@ -43,7 +85,11 @@ export interface TileMeshData {
   normals: Float32Array;
   /** Per vertex: noise x, noise y (m, periodic), elevation (m MSL, negative below sea level), latitude (deg). */
   terrain: Float32Array;
-  /** Per vertex: airport flatten weight 0..1. */
+  /**
+   * Per vertex: airport flatten weight 0..1, plus COAST_FLAG (2) when the
+   * vertex lies within BEACH_WIDTH_M of water (the shader decodes both:
+   * `coast = step(1.5, aFlat)`, `flat = aFlat - 2 * coast`).
+   */
   flat: Float32Array;
   index: Uint16Array | Uint32Array;
   /** Bounding sphere centre (tile-local) and radius (m). */
@@ -127,6 +173,10 @@ export function buildTileMesh(elev: Float32Array, p: TileMeshParams): TileMeshDa
     nRad[j] = WGS84_A / Math.sqrt(1 - WGS84_E2 * s * s);
   }
 
+  // Coast mask: beach shading only near water (radius in grid pixels, at least one pixel).
+  const pixelM = (MERCATOR_CIRCUMFERENCE_M * Math.cos(centerLat * DEG2RAD)) / (n * TILE_SIZE);
+  const coast = coastMask(elev, Math.max(1, Math.min(32, Math.round(BEACH_WIDTH_M / pixelM))));
+
   // Periodic noise coordinates anchored in global Web Mercator metres.
   const tileM = MERCATOR_CIRCUMFERENCE_M / n;
   const P = p.noisePeriodM;
@@ -134,7 +184,13 @@ export function buildTileMesh(elev: Float32Array, p: TileMeshParams): TileMeshDa
   const baseY = ((y * tileM) % P + P) % P;
 
   const hit = createFlattenHit();
-  const useFlatten = p.surfaces.length > 0;
+  const hasSurfaces = p.surfaces.length > 0;
+  // Flatten weights (height blend, mowed-grass shading, water/beach suppression) only where the
+  // grid can resolve an airport; coarser tiles get the geometric pavement clearance alone, so they
+  // never tint kilometre-sized triangles.
+  const useFlatten = hasSurfaces && z >= FLATTEN_WEIGHT_MIN_ZOOM;
+  // Grid-cell diagonal (m) at the tile centre, plus 1 m: the pavement render-clearance radius.
+  const clearRadiusM = hasSurfaces ? (Math.SQRT2 * MERCATOR_CIRCUMFERENCE_M * Math.cos(latArr[seg >> 1] * DEG2RAD)) / (n * seg) + 1 : 0;
   let minElev = Infinity;
   let maxElev = -Infinity;
 
@@ -157,6 +213,11 @@ export function buildTileMesh(elev: Float32Array, p: TileMeshParams): TileMeshDa
       }
       // Sea surface is flat at 0 m; the (negative) depth stays in the shading attribute.
       if (h < 0 && w < 0.5) h = 0;
+      // Every corner of a cell that overlaps pavement stays below it (any grid resolution).
+      if (hasSurfaces) {
+        const lim = evalClearance(p.surfaces, latArr[j], lonArr[i], clearRadiusM);
+        if (h > lim) h = lim;
+      }
       if (raw < minElev) minElev = raw;
       if (raw > maxElev) maxElev = raw;
 
@@ -178,7 +239,9 @@ export function buildTileMesh(elev: Float32Array, p: TileMeshParams): TileMeshDa
       terrain[v * 4 + 1] = baseY + (j / seg) * tileM;
       terrain[v * 4 + 2] = shadeElev;
       terrain[v * 4 + 3] = latArr[j];
-      flat[v] = w;
+      const cx = Math.min(TILE_SIZE - 1, Math.max(0, Math.round(px)));
+      const cy = Math.min(TILE_SIZE - 1, Math.max(0, Math.round(py)));
+      flat[v] = w + (coast[cy * TILE_SIZE + cx] ? COAST_FLAG : 0);
     }
   }
 
