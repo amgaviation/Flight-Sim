@@ -15,3 +15,4 @@ export * from './Handles';
 export * from './KeyPad';
 export * from './Placard';
 export * from './logic';
+export * from './Sidestick';

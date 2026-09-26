@@ -98,7 +98,7 @@ export function br725(name: string, side: -1 | 1): TurbofanConfig {
     // TSFC kg/(N h) vs N1 fraction: 0.0375 at rated = 0.368 lb/lbf/h SL static (EST, BPR 4.2 class); Mach factor
     // calibrated to the AIN cruise fuel flow (0.63 lb/lbf/h installed at M0.91 FL450).
     tsfc: { x: [0, 0.25, 0.5, 0.8, 1.0, 1.1], y: [0.1, 0.08, 0.052, 0.04, 0.0375, 0.0375] },
-    tsfcMachFactor: 1.18,
+    tsfcMachFactor: 0.93,
     idleFuelFlow_pph: 480, // EST: ground idle per engine (scaled from HTF7000-class 260 pph by thrust class)
     ittIdle_c: 440, // EST ground-idle TGT
     ittMax_c: 845, // EST: TGT at rated thrust SL ISA, below the 900 degC takeoff limit (LIM)
@@ -114,6 +114,7 @@ export function br725(name: string, side: -1 | 1): TurbofanConfig {
     windmillN1PerKt: 0.075, // EST (windmill airstart 250-340 KCAS, LIM)
     windmillN2PerKt: 0.04,
     starterTau_s: 4,
+    selfSustainN2_pct: 36, // EST: core self-sustaining below the 42 % HP starter cut-out (LIM)
     ittStartLimit_c: G650_LIMITS.tgtStartGroundC,
   };
 }
@@ -208,12 +209,16 @@ function clColumn(cl0: number, slope: number, stall: number, peak: number): numb
     return 0.85 - (a - 60) * 0.0283;
   });
 }
-/** CL build-up per flap setting: `peak` = CLMAX (data.ts) + the tail download of the trimmed stall (EST). */
+/**
+ * CL build-up per flap setting. `peak` is tuned so the trimmed 1-g stall (idle, 1 kt/s, DIRECT law;
+ * performance.test.ts) reproduces the CLMAX EST of data.ts: the whole-aircraft lift at the stall AoA
+ * (pitch-rate / alpha-dot and elevator terms of the deceleration) exceeds the wing table peak by ~4 %.
+ */
 export const CL_TUNE = {
-  f0: { cl0: 0.17, stall: 13, peak: CLMAX.f0 + 0.06 },
-  f10: { cl0: 0.38, stall: 12.5, peak: CLMAX.f10 + 0.07 },
-  f20: { cl0: 0.5, stall: 12, peak: CLMAX.f20 + 0.08 },
-  f39: { cl0: 0.78, stall: 11, peak: CLMAX.f39 + 0.1 },
+  f0: { cl0: 0.17, stall: 13, peak: CLMAX.f0 - 0.04 },
+  f10: { cl0: 0.38, stall: 12.5, peak: CLMAX.f10 - 0.045 },
+  f20: { cl0: 0.5, stall: 12, peak: CLMAX.f20 - 0.05 },
+  f39: { cl0: 0.78, stall: 11, peak: CLMAX.f39 - 0.055 },
 };
 const SLOPE = 0.08;
 const CL_F0 = clColumn(CL_TUNE.f0.cl0, SLOPE, CL_TUNE.f0.stall, CL_TUNE.f0.peak);

@@ -75,6 +75,7 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): ElectricalNetwo
     dc('cowl_valve_l', 'l_ess_dc', 0.2, 3),
     // ------------------------------------------------ R ESS DC
     dc('fcc2a', 'r_ess_dc', 3.5, 7.5),
+    dc('nav2', 'r_ess_dc', 1.0, 3), // VHF NAV 2
     dc('du4', 'r_ess_dc', 6.5, 10), // DU 4 copilot PFD
     dc('adc2', 'r_ess_dc', 0.8, 3),
     dc('gps2', 'r_ess_dc', 0.8, 3),
@@ -99,6 +100,7 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): ElectricalNetwo
     dc('mcdu2', 'l_main_dc', 1.0, 3),
     dc('radar', 'l_main_dc', 4.0, 7.5), // RDR-4000 (EST)
     dc('taws', 'l_main_dc', 1.0, 3),
+    dc('adf', 'l_main_dc', 0.5, 3),
     dc('xpdr1', 'l_main_dc', 1.5, 5),
     dc('ldg_lt_l', 'l_main_dc', 7, 15, { enabled: V.ltLdgL }), // LED landing light (EST 200 W)
     dc('taxi_lt', 'l_main_dc', 5, 10, { enabled: V.ltTaxi }),

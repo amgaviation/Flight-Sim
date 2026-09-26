@@ -112,6 +112,9 @@ export const G650_VARS = {
   crewOxy: 'ac.oxy.crew_sw', // crew supply: 1 ON
   paxOxy: 'ac.oxy.pax_sw', // PASSENGER OXYGEN rotary: 0 OFF, 1 AUTO, 2 MAN
   paxShutoff: `${P}oxy.pass_shutoff`, // PASS OXYGEN shutoff: 1 ON (open), 0 OFF
+  oxyMaskL: `${P}oxy.mask_l`, // pilot quick-donning mask out of its stowage (EROS MLD 20, LUC): 1 in use
+  oxyMaskR: `${P}oxy.mask_r`,
+  oxyMaskMode: `${P}oxy.mask_mode`, // mask regulator: 0 N (diluter), 1 100 %, 2 EMERGENCY
 
   // ---- EXTERIOR / INTERIOR LIGHTS (overhead)
   ltNav: 'ac.light.nav_sw',
@@ -197,17 +200,13 @@ export const G650_VARS = {
   tlaEff: (i: number) => `${P}tla_eff${i}`,
   fcModeSel: `${P}fc.mode_sel`, // FBW mode selection latch: 0 auto, 1 ALTERNATE latched (FLT CTRL RESET clears)
   fcsBatt: `${P}fc.batt_on`, // flight-control batteries discharging
+  yokeRollTrim: `${P}fc.yoke_roll_trim`, // yoke back-drive by the roll trim motor (0 with ROLL MOTOR CONTROL OFF), for the cockpit
   starterCmd: (i: number) => `fadec.eng${i}.starter_cmd`,
-  autoStarter: (i: number) => `fadec.eng${i}.auto_starter`,
+  crankLatch: (i: number) => `${P}eng${i}_crank`, // L/R ENG switchlight latched ON with CRANK MASTER (logic.ts)
   engFail: (i: number) => `${P}eng${i}_fail`,
-  epr: (i: number) => `ac.eng${i}.epr`,
   hfrsOn: (i: number) => `${P}fuel.hfrs${i}_on`,
   noTakeoff: `${P}no_takeoff`,
   aircraftConfig: `${P}aircraft_config`, // speed brake with flaps 39 / gear down in flight
-  edmActive: `${P}edm_active`,
-  apuFireShot: `${P}fire.apu_shot`,
-  stabDeg: `${P}stab_deg`,
-  refuelActive: `${P}fuel.refuel_active`,
 } as const;
 
 /** Every cockpit control var (inputs), for the "every control is consumed" audit test. */
@@ -228,7 +227,7 @@ export const G650_CONTROL_VARS: string[] = [
   G650_VARS.wshldL, G650_VARS.wshldR, G650_VARS.cabinWdo, G650_VARS.evsWdo,
   G650_VARS.startMaster, G650_VARS.crankMaster, G650_VARS.startL, G650_VARS.startR, G650_VARS.contIgn,
   G650_VARS.fireTestLA, G650_VARS.fireTestLB, G650_VARS.fireTestRA, G650_VARS.fireTestRB, G650_VARS.fireFaultTest,
-  G650_VARS.crewOxy, G650_VARS.paxOxy, G650_VARS.paxShutoff,
+  G650_VARS.crewOxy, G650_VARS.paxOxy, G650_VARS.paxShutoff, G650_VARS.oxyMaskL, G650_VARS.oxyMaskR, G650_VARS.oxyMaskMode,
   G650_VARS.ltNav, G650_VARS.ltBeacon, G650_VARS.ltStrobe, G650_VARS.ltLdgL, G650_VARS.ltLdgR, G650_VARS.ltTaxi, G650_VARS.ltRecog,
   G650_VARS.ltLogo, G650_VARS.ltWing, G650_VARS.ltEmer, G650_VARS.seatBelt, G650_VARS.noSmoke, G650_VARS.ltPanel, G650_VARS.ltFlood,
   G650_VARS.ltDome, G650_VARS.ltMapL, G650_VARS.ltMapR, G650_VARS.duBrt(1), G650_VARS.duBrt(2), G650_VARS.duBrt(3), G650_VARS.duBrt(4),

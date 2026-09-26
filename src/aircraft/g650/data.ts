@@ -212,12 +212,12 @@ export function vsKcas(weightLb: number, clmax: number): number {
 /**
  * Takeoff speeds, flaps 20 (EST from 14 CFR 25.107 with the CLMAX above):
  * V2 = max(1.13 VSR, 1.10 VMCA 101.5 = 112 kt); VR = max(1.05 VMCA = 107 kt
- * (AIN: VR 107 at 67,084 lb), V2 - 16 kt); V1 = VR - 3 kt (balanced EST).
+ * (AIN: VR 107 at 67,084 lb), V2 - 17 kt); V1 = VR - 3 kt (balanced EST).
  */
 export function takeoffSpeeds(weightLb: number): { v1: number; vr: number; v2: number } {
   const vsr = vsKcas(weightLb, CLMAX.f20);
   const v2 = Math.max(1.13 * vsr, 1.1 * G650_LIMITS.vmcaF20Kt);
-  const vr = Math.max(1.05 * G650_LIMITS.vmcaF20Kt, v2 - 16);
+  const vr = Math.max(1.05 * G650_LIMITS.vmcaF20Kt, v2 - 17);
   return { v1: Math.round(vr - 3), vr: Math.round(vr), v2: Math.round(v2) };
 }
 

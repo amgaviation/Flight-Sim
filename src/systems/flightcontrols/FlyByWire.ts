@@ -89,6 +89,9 @@ export interface FlyByWireConfig {
     alphaMax: Table1D;
     /** AoA-limiter onset as a fraction of alphaMax. Default 0.9 (code7700: 0.88–0.93 NAOA). */
     alphaOnset?: number;
+    /** (Appended by the g800 aircraft.) AoA-limiter gain (g per deg beyond alphaMax) and pitch-rate anticipation (g per deg/s). Defaults 0.15 / 0.05. */
+    alphaLimitGain?: number;
+    alphaLimitRateGain?: number;
     vmoKt: Schedule;
     mmo: number;
     pitchUpLimitDeg?: number;
@@ -115,6 +118,18 @@ export interface FlyByWireConfig {
   direct?: { pitch?: Schedule; roll?: number; yaw?: number; stabRate?: number };
   /** Reference IAS for the gain schedule (kt). Default 250. */
   gainRefKt?: number;
+  /**
+   * (Appended by the g800 aircraft.) Extra pitch-trim switch vars (-1..1, + nose up) summed with
+   * `input.pitch_trim_rate` (e.g. the trim switches on each active sidestick). Default none.
+   */
+  trimSwitchVars?: string[];
+  /**
+   * (Appended by the g800 aircraft.) While true (NORMAL law, AP off), the trim reference speed is
+   * synchronised to the current IAS ("trim speed sync", Gulfstream sidestick AP DISC button). Default never.
+   */
+  speedSync?: Binding;
+  /** (Appended by the g800 aircraft.) Extra inceptor-equivalent vars added per axis (e.g. yaw assist). Default none. */
+  addVars?: { pitch?: string[]; roll?: string[]; yaw?: string[] };
 }
 
 export class FlyByWire implements Subsystem {
@@ -144,6 +159,11 @@ export class FlyByWire implements Subsystem {
   private wasGround = true;
   private readonly fFcc = failVar('fbw.fcc');
   private readonly fAdc = failVar('fbw.adc_data');
+  private readonly trimVars: string[];
+  private readonly extraPitch: string[];
+  private readonly extraRoll: string[];
+  private readonly extraYaw: string[];
+  private readonly sync: () => boolean;
 
   constructor(env: BlockEnv, cfg: FlyByWireConfig) {
     const v = env.vars;
@@ -160,6 +180,17 @@ export class FlyByWire implements Subsystem {
     this.rollPid = new Pid({ kp: r.kp ?? 0.04, ki: r.ki ?? 0.02, iLimit: 10, outLimit: 1 });
     this.yawWashout = new Washout(cfg.yaw?.washoutS ?? 3);
     this.stab = v.get(SURF.pitchTrim);
+    this.trimVars = cfg.trimSwitchVars ?? [];
+    this.extraPitch = cfg.addVars?.pitch ?? [];
+    this.extraRoll = cfg.addVars?.roll ?? [];
+    this.extraYaw = cfg.addVars?.yaw ?? [];
+    this.sync = compileCondition(v, cfg.speedSync ?? 0, false);
+  }
+
+  private sumVars(names: string[]): number {
+    let s = 0;
+    for (let i = 0; i < names.length; i++) s += this.vars.get(names[i]);
+    return s;
   }
 
   failures(): FailureDef[] {
@@ -203,10 +234,10 @@ export class FlyByWire implements Subsystem {
     const flaps = v.get(SURF.flapsDeg);
     const ias = v.get(ADC.ias(1));
     const onGround = this.ground();
-    const yoke = v.get(INPUT.pitch) + v.get(FCS_VARS.apServo('pitch'));
-    const wheel = v.get(INPUT.roll) + v.get(FCS_VARS.apServo('roll'));
-    const pedal = v.get(INPUT.yaw) + v.get(FCS_VARS.apServo('yaw'));
-    const trimSw = v.get(INPUT.pitchTrimRate);
+    const yoke = v.get(INPUT.pitch) + v.get(FCS_VARS.apServo('pitch')) + this.sumVars(this.extraPitch);
+    const wheel = v.get(INPUT.roll) + v.get(FCS_VARS.apServo('roll')) + this.sumVars(this.extraRoll);
+    const pedal = v.get(INPUT.yaw) + v.get(FCS_VARS.apServo('yaw')) + this.sumVars(this.extraYaw);
+    const trimSw = clamp(v.get(INPUT.pitchTrimRate) + this.sumVars(this.trimVars), -1, 1);
     const apOn = v.get(AP.engaged) !== 0;
 
     let aoaLim = false;
@@ -232,7 +263,7 @@ export class FlyByWire implements Subsystem {
         this.bankRef = phi;
       }
       // Reference speed (U): trim switch moves it, AP engagement keeps it synchronised.
-      if (apOn) this.uRef = ias;
+      if (apOn || this.sync()) this.uRef = ias;
       else this.uRef -= trimSw * (p.trimRateKtPerS ?? 4) * dt;
       const nzMax = p.nzMax ? interp1(p.nzMax, flaps) : flaps > 0.5 ? 2.0 : 2.5;
       const nzMin = p.nzMin ? interp1(p.nzMin, flaps) : flaps > 0.5 ? 0 : -1;
@@ -243,7 +274,7 @@ export class FlyByWire implements Subsystem {
       const aMax = interp1(p.alphaMax, flaps);
       const onset = aMax * (p.alphaOnset ?? 0.9);
       if (alpha > onset) {
-        const lim = 0.15 * (aMax - alpha) - 0.05 * q; // EST: 0.15 g/deg, with rate anticipation
+        const lim = (p.alphaLimitGain ?? 0.15) * (aMax - alpha) - (p.alphaLimitRateGain ?? 0.05) * q; // EST: 0.15 g/deg, with rate anticipation
         if (dnz > lim) {
           dnz = lim;
           aoaLim = true;

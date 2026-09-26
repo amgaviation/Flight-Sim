@@ -161,11 +161,8 @@ export const G800_VARS = {
   steerCmd: `${P}tiller_cmd`,
   eldac: `${P}eldac_cmd`,
   fccFault: `${P}fcc_fault`,
-  fireBottleRight: `${P}shot1`, // SHOT 1 command (right bottle)
-  fireBottleLeft: `${P}shot2`, // SHOT 2 command (left bottle)
   epr: (i: number) => `ac.eng${i}.epr`, // EPR (P50/P20) for the Epic engine window (read by the suite)
   avionicsPowered: `${P}avn_powered`,
-  hydGearFrac: `${P}hyd_gear_frac`,
 } as const;
 
 /** Autobrake selector values. */
