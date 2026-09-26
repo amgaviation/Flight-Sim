@@ -484,7 +484,10 @@ One generic AFCS. `style` selects the behavior family ('garmin' GFC 700, 'kap140
   - LNAV: `fms.lnav_bank_cmd_deg`.
   - VOR/LOC/BC: desired track = course + clamp(xtk / (V·τ)). The cross-track comes from the angular deviation
     × DME distance. The mode flies GPS track when valid, heading otherwise. VOR over-station: the deviation is
-    ignored in the cone.
+    ignored in the cone. The course (station declination) is referred to today's variation with
+    `nav{r}.station_magvar_deg − gps.mag_var_deg` while `gps.valid` (otherwise a stale station declination
+    leaves a steady offset, ~90 ft per degree beside a localizer); without GPS a slow cross-track integrator
+    trims the offset.
 - **Pitch.** Every path mode commands a vertical speed. The flight-path loop is
   `θc = γc + α̂ + kp(γc − γ) + ki∫`.
   - ALT: `vs = k·Δh`.
@@ -590,8 +593,9 @@ HDG_SYNC, CRS_SYNC, SPD_MACH, ROL, PIT, FPA.
   `adc1.ias_kt/mach/tas_kt/alt_ft/vs_fpm/ias_rate_kts`, `ra1.alt_ft` (+ `ra1.valid`), `gps.gs_kt`,
   `gps.trk_mag_deg` (+ `gps.valid`), `surf.flaps_deg`. Validity is
   `sensors.valid` = `'ahrs1.valid && adc1.valid'`, and `onGround` = `gear.air_ground`.
-- Nav: `nav{r}.cdi`, `dev_deg`, `dist_nm`, `obs_deg`, `loc_course_deg`, `is_loc`, `received`, `gs_dev`,
-  `gs_dev_deg`, `gs_valid`, `to_from`, `bearing_deg`, `bearing_valid`.
+- Nav: `nav{r}.cdi`, `dev_deg`, `dist_nm`, `obs_deg`, `loc_course_deg`, `station_magvar_deg`, `is_loc`,
+  `received`, `gs_dev`, `gs_dev_deg`, `gs_valid`, `to_from`, `bearing_deg`, `bearing_valid`; `gps.mag_var_deg`,
+  `gps.valid`. Receiver indices 1–4 (var names are built once; the laws do not allocate).
 - FMS: `fms.lnav_valid`, `xtk_nm`, `dtk_mag_deg`, `lnav_bank_cmd_deg`, `vnav_valid`, `vnav_dev_ft`,
   `vnav_tgt_alt_ft`, `vs_req_fpm`, `vnav_phase` (string CLB/CRZ/DES), `vnav_tgt_speed_kt/mach`, `gp_dev`,
   `gp_valid`, `gp_angle_deg`.

@@ -277,6 +277,7 @@ model the physical signal.
 | `nav{r}.to_from` | 1 TO, −1 FROM, 0 ambiguous/none. LOC: 1. |
 | `nav{r}.bearing_deg`, `nav{r}.bearing_valid` | magnetic bearing TO the VOR (= radial+180) for RMI needles; not valid for localizers |
 | `nav{r}.loc_course_deg` | localizer front course (magnetic, station declination) — for auto-set course |
+| `nav{r}.station_magvar_deg` | declination (deg, + east) the received VOR's radials / the localizer's magnetic course refer to; true course = `obs_deg` or `loc_course_deg` + this. Written while `received` (appended to `NAV` as `stationMagVar`). Autopilots use it to fly a course against today's-variation heading/track. |
 | `nav{r}.back_course` | 1 in the back-course sector |
 | `nav{r}.gs_valid`, `nav{r}.gs_dev` | glideslope flag; −1..1, **+ = glideslope above aircraft (fly up)**, full scale ±0.24·θ (0.72° at 3°) |
 | `nav{r}.gs_dev_deg` | θ − elevation angle (deg) |
@@ -290,12 +291,23 @@ model the physical signal.
 Behaviour: reception needs `distance ≤ rangeNm × rangeFactor` (default
 1.25; LOC coverage 25/17/10 nm by angle off course, ICAO Annex 10; back
 course 60 %) **and** radio line of sight `1.23·(√(h_ac−h_stn) + √15 ft)`
-(4/3 earth). Strongest station on a shared frequency wins. After retuning:
-0.5 s settling flag, 1.5 s DME search. VOR cone of confusion: flag and
-TO/FROM 0 within 45° of vertical (DME keeps working). Glideslope:
-null-reference antenna model — false glidepath at 3θ with reversed sensing,
-carrier null (flag) at 2θ and near the ground; coverage ±8° azimuth,
-10 nm × rangeFactor; earth curvature included.
+(4/3 earth). Stations sharing a frequency: opposite-direction localizers
+are interlocked so only the one serving the approach in use radiates (AIM
+1-1-9 a, 14 CFR 171.261), so the receiver ranks a localizer whose approach
+sector the aircraft is in (front course, farther out than that runway's
+landing threshold) above one whose front beam it only sees over the runway
+(short final passes over the opposite localizer's antenna), above
+back-course reception; within a rank the strongest wins, and the locked
+station is kept while receivable (hysteresis). VORs: strongest wins, with the
+same hysteresis. After retuning: 0.5 s settling flag, 1.5 s DME search. VOR
+cone of confusion: flag and TO/FROM 0 within 45° of vertical (DME keeps
+working). Glideslope: null-reference antenna model — false glidepath at 3θ
+with reversed sensing, carrier null (flag) at 2θ and near the ground;
+coverage ±8° azimuth about the glide path centre line (measured from the
+course-line point abeam the GS antenna, ICAO Annex 10 3.1.5.3.1 — the
+antenna stands 250–650 ft beside the runway, so the GS stays valid on the
+centre line down to touchdown), not in the back-course sector, 10 nm ×
+rangeFactor; earth curvature included.
 
 `NavReceiverOptions`: `rangeFactor` (1.25), `retuneIntervalS` (5),
 `stationAntennaFt` (15), `settleS` (0.5), `dmeLockS` (1.5),
@@ -338,7 +350,11 @@ Outputs (valid after acquisition: 45 s cold, 15 s if power returns within
 `vorCdi(radial, obs, out: VorCdi, ambiguityDeg = 2)` → `{devDeg, cdi, toFrom}`,
 `locDeviation(locLat, locLon, courseTrue, acLat, acLon, out)` → `{devDeg, offCourseDeg, backCourse, distNm}`,
 `locCourseWidthDeg(locToThresholdNm, publishedDeg?)`, `locCoverageNm(offCourseDeg)`,
-`glideslope(gsLat, gsLon, gsElevFt, angleDeg, courseTrue, acLat, acLon, acAltFt, out)` → `{elevationDeg, dev, devDeg, carrier, azimuthOffDeg, distNm}`,
+`glideslope(gsLat, gsLon, gsElevFt, angleDeg, courseTrue, acLat, acLon, acAltFt, out)` → `{elevationDeg, dev, devDeg, carrier, azimuthOffDeg, distNm}`
+(`azimuthOffDeg` is seen from the antenna itself: diagnostic only),
+`glidePathAbeamAlongNm(locLat, locLon, courseTrue, gsLat, gsLon)` → along-course nm from the LOC antenna to the
+course-line point abeam the GS antenna, `glidePathAzimuthDeg(locDevDeg, locDistNm, abeamAlongNm)` → azimuth (deg)
+off the glide path centre line used for GS coverage (180 past the abeam point),
 `inMarkerCone(mLat, mLon, mElevFt, courseTrue, acLat, acLon, acAltFt, sensitivity = 1)`,
 `isLocalizerFrequency(mhz)`, `VOR_FULL_SCALE_DEG = 10`, `FT_PER_NM`. `morse(ident)`.
 
