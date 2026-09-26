@@ -26,3 +26,27 @@ export interface WorldQuery {
   /** Resolves once terrain around the point is loaded at physics resolution. */
   ensureLoaded(latDeg: number, lonDeg: number, radius_m?: number): Promise<void>;
 }
+
+// ---------------------------------------------------------------------------
+// Appended by the world module (append-only; see CLAUDE.md shared contracts).
+// ---------------------------------------------------------------------------
+
+/** Geodetic position: latitude/longitude in degrees (+N/+E), altitude in metres MSL. */
+export interface GeoPosition {
+  lat: number;
+  lon: number;
+  alt_m: number;
+}
+
+/** Rendering quality presets understood by `World.setQuality`. */
+export type WorldQuality = 'low' | 'medium' | 'high' | 'ultra';
+
+/**
+ * EventBus event names emitted by the world module.
+ * `world.recenter` payload: `{ lat, lon, previousLat, previousLon, version }`
+ * (degrees). It fires synchronously when the floating origin moves; anything
+ * positioned in scene coordinates must be re-placed (see `ReferenceFrame`).
+ */
+export const WORLD_EVENTS = {
+  recenter: 'world.recenter',
+} as const;

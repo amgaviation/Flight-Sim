@@ -100,6 +100,13 @@ export const ENG = {
   accessoryDrive: (i: number) => `eng${i}.accessory_drive`,
   /** Bleed air available pressure (psi) at the engine port. */
   bleedPressPsi: (i: number) => `eng${i}.bleed_press_psi`,
+  // --- appended by physics (append-only)
+  /** Piston: engine-driven vacuum pump suction available (inHg), before any vacuum-system failure logic. */
+  vacuumInHg: (i: number) => `eng${i}.vacuum_inhg`,
+  /** 0..1 combustion roughness (misfire from mixture/magneto/flooding) for audio & vibration. */
+  roughness: (i: number) => `eng${i}.rough`,
+  /** Piston: brake horsepower delivered to the propeller (hp). */
+  powerHp: (i: number) => `eng${i}.power_hp`,
 } as const;
 
 /** Written by aircraft fuel system. Read by FDM (mass) and engines. kg per tank, 0-based. */
@@ -154,6 +161,19 @@ export const FDM = {
   windDir: 'fdm.wind_dir_deg', // true, direction wind is FROM
   windSpeed: 'fdm.wind_kt',
   groundElevFt: 'fdm.ground_elev_ft',
+  // --- appended by physics (append-only)
+  /** 0..1 airframe buffet intensity (stall buffet, Mach buffet, speedbrake/gear buffet) for shake & sound. */
+  buffet: 'fdm.buffet',
+  /** String var: human-readable crash cause ('' when not crashed). */
+  crashReason: 'fdm.crash_reason',
+  /** Normalized AoA: alpha / effective stall alpha (flaps, slats, ice). 1.0 = stall. */
+  aoaNorm: 'fdm.aoa_norm',
+  /** Effective stall AoA (deg) for the current flap/slat/ice state. */
+  alphaStall: 'fdm.alpha_stall_deg',
+  /** Equivalent airspeed (kt). */
+  eas: 'fdm.eas_kt',
+  /** 1 while the FDM is frozen (slew / position freeze). */
+  frozen: 'fdm.frozen',
 } as const;
 
 /** Environment, written by the weather/time modules. */
@@ -170,6 +190,10 @@ export const ENV = {
   dayOfYear: 'env.day_of_year',
   sunElevation: 'env.sun_elev_deg',
   ambientLight: 'env.ambient_light', // 0..1 used for display auto-dimming
+  // --- appended by physics (append-only). Surface wind at 10 m AGL; read by the FDM every step.
+  surfaceWindDir: 'env.wind_dir_deg', // true, direction wind is FROM
+  surfaceWindKt: 'env.wind_kt',
+  surfaceGustKt: 'env.wind_gust_kt', // gust increment above the steady wind (kt), 0 = none
 } as const;
 
 /** Simulation control. */

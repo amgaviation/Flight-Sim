@@ -264,3 +264,51 @@ export interface FdmConfig {
     maxSinkRateOnGround_fpm: number;
   };
 }
+
+// ---------------------------------------------------------------------------
+// Appended by the physics module (append-only; see CLAUDE.md shared contracts).
+// ---------------------------------------------------------------------------
+
+/**
+ * Optional piston-engine refinements, merged into `PistonConfig` below (all
+ * fields optional, so existing configs keep compiling). Read by
+ * `physics/engines/Piston.ts`.
+ */
+export interface PistonConfigExtras {
+  /**
+   * 'injected' (default; e.g. IO-360-L2A with RSA servo: aux pump + open
+   * mixture primes the cylinders) or 'carbureted' (only `eng.primer` primes).
+   */
+  induction?: 'injected' | 'carbureted';
+  /**
+   * Propeller rotation seen from the cockpit: 1 = clockwise (Lycoming/
+   * Continental tractor default), -1 = counter-clockwise. Sets the sign of
+   * torque reaction, P-factor, slipstream yaw and gyroscopic moments.
+   */
+  propRotation?: 1 | -1;
+  /** P-factor lateral thrust offset per radian of AoA, as a fraction of prop radius (default 0.35). */
+  pFactorCoeff?: number;
+  /** Spiral-slipstream yaw coefficient: N = -k * dq_prop * S * b (default 0.004). */
+  slipstreamYawCoeff?: number;
+  /** Full-rich fuel/air ratio at sea level as a multiple of best-power FAR (default 1.12). */
+  fullRichFactor?: number;
+}
+
+/** Turbofan refinements (all optional), merged into `TurbofanConfig` below. Read by `physics/engines/Turbofan.ts`. */
+export interface TurbofanConfigExtras {
+  /** Starter time constant (s) spooling N2 toward starterMaxN2 (default 4). */
+  starterTau_s?: number;
+  /** N2 (%) above which the core self-sustains without the starter (default 0.75 * n2Idle). */
+  selfSustainN2_pct?: number;
+  /** ITT limit (degC) used only to scale the hot-start overshoot (default ittStartPeak + 150). */
+  ittStartLimit_c?: number;
+  /** N1 (%) vs N2 (%) mapping exponent above idle (default 1.3). */
+  n1MapExponent?: number;
+}
+
+// Declaration merging: the optional extras become part of the config
+// interfaces themselves, so aircraft may set them in plain object literals.
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export interface PistonConfig extends PistonConfigExtras {}
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export interface TurbofanConfig extends TurbofanConfigExtras {}

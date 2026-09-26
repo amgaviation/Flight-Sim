@@ -23,6 +23,14 @@ export interface FlightModelHandle {
   setFrozen(frozen: boolean): void;
   /** Payload (kg per station) changes from the weight & balance page. */
   setStationMass(index: number, kg: number): void;
+  /**
+   * (Appended by physics.) Instantly puts every engine into a stabilized
+   * running state at the currently commanded power (true) or shuts them down
+   * (false), skipping start/spool transients. Used by `applyState` presets
+   * such as 'ready_to_taxi' or 'cruise' after the systems have set the
+   * engine input vars.
+   */
+  setEnginesRunning?(running: boolean): void;
 }
 
 export interface SimContext {
