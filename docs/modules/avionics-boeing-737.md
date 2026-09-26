@@ -12,7 +12,7 @@ import {
 } from '../../avionics/boeing-737';
 ```
 
-Tests: `tests/avionics/boeing-737/*.test.ts` (47 tests, about 5 s; they load the real navigation
+Tests: `tests/avionics/boeing-737/*.test.ts` (48 tests, about 5 s; they load the real navigation
 database from `public/data`):
 
 | File | Covers |
@@ -309,7 +309,7 @@ Pages (`fmc/pages/*`, per-CDU page and scratchpad):
 | PROG | PROGRESS 1/3 (FROM / TO / NEXT, DEST ETA and fuel, fuel quantity), 2/3 (wind, XTK, VTK, TAS, SAT, fuel used), RNP PROGRESS |
 | CLB / CRZ / DES | ECON (cost index speeds), MAX RATE / MAX ANGLE, LRC, selected speeds, SPD REST, OPT / MAX altitude, TURB N1, E/D, WPT / ALT, FPA / V/B / V/S, DES NOW, FORECAST |
 | FIX | FIX INFO 1/2: fix, radial / distance entries, ABEAM, ETA / DTG / ALT, drawn on the ND |
-| MENU | FMC <ACT>, ACARS placeholder |
+| MENU | <FMC <ACT> (ACARS / DFDAU subsystems are not simulated) |
 
 Scratchpad (FCOM 11.40): 24 characters. CLR deletes one character, or the whole line when held
 1 s. DEL writes DELETE. +/- toggles the sign. INVALID ENTRY, NOT IN DATA BASE and INVALID DELETE
@@ -387,8 +387,8 @@ switches.
   RTA, lateral OFFSET (OFST light always off), ENG OUT pages, step climb, ACARS / datalink (CALL
   light never lights) or uplinks. DES FORECAST winds are stored and displayed but not used by the
   VNAV path.
-- The FMC position is the GPS position (no IRS drift, no radio updating): ANP is fixed and POS
-  SHIFT shows the GPS-derived values.
+- The FMC position is the GPS position (no IRS / radio position mixing). ANP is the GPS EPU
+  (`gps.epu_nm`), or `irs<n>.pos_err_nm` when GPS is lost; POS SHIFT shows the GPS-derived values.
 - VHF NAV tuning is manual (no FMC autotuning of the ILS). VOR/LOC and APP use the receiver of the
   engaged channel.
 - There is no weather radar model: the WXR button toggles the state and draws through the
