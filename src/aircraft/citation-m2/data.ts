@@ -21,7 +21,7 @@
 
 export const LB = 0.45359237;
 /** Inches aft of the TCDS datum -> body x metres (datum = empty-weight CG, x forward). */
-export const EMPTY_CG_FS_IN = 247.0; // EST: typical empty CG (TCDS gives no empty-CG range; see fdm.ts)
+export const EMPTY_CG_FS_IN = 250.0; // EST: typical empty CG (TCDS gives no empty-CG range; see fdm.ts)
 export const fs = (stationIn: number): number => (EMPTY_CG_FS_IN - stationIn) * 0.0254;
 
 export const M2_LIMITS = {

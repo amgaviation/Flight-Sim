@@ -31,10 +31,11 @@ export const WING_AREA_M2 = 22.3;
 export const SPAN_M = 14.39;
 
 /**
- * Empty CG. The TCDS lists no empty-weight CG range; FS 247.0 (27.4 % MAC) is
+ * Empty CG. The TCDS lists no empty-weight CG range; FS 250.0 (30 % MAC) is
  * EST so that the FPG basic operating weight (6,990 lb with a 200 lb pilot at
- * FS 135) sits at FS 243.8 (21.8 % MAC) and a full-fuel single-pilot ramp
- * load at FS 246.8 (26 % MAC), inside the TCDS envelope FS 240.14-248.43.
+ * FS 135) sits at FS 246.7 (26 % MAC), four passengers in the club seats move
+ * it forward to ~20 % MAC and full fuel (FS 253) back to ~23-26 % MAC: typical
+ * loadings stay inside the TCDS envelope FS 240.14-248.43 (16.5-28.5 % MAC).
  */
 
 /** Wing chord plane below the fuselage centreline (low wing; EST from the three-view, fuselage dia. ~1.6 m). */
@@ -43,27 +44,29 @@ const WING_Z = 0.55;
 // ------------------------------------------------------------------ engine
 
 /**
- * EST thrust lapse for a BPR 2.58 turbofan (S&D15 §8), in the form used by
- * the physics test jet: F/F0 = delta^a * (1 - b M + c M^2) / theta^0.5.
- * a/b/c calibrated so that the CRU detent reproduces the FPG high-speed
- * cruise speeds at FL330-FL410 (tests/aircraft/citation-m2/performance.test.ts).
+ * EST thrust lapse for a BPR 2.58 turbofan (S&D15 §8):
+ *   F/F0 = delta^a * (1 - b(delta) M + c M^2) / theta^0.5,
+ *   b(delta) = B_HI + (B_LO - B_HI) * clamp((delta - 0.26) / 0.74, 0, 1)
+ * i.e. a strong Mach lapse at low altitude (FPG sea-level MTOW climb rate
+ * 3,698 fpm) fading to a weak one at cruise altitudes (ram recovery), with
+ * a/B_HI/c calibrated so that the CRU detent reproduces the FPG high-speed
+ * cruise table at FL330-FL410 (tests/aircraft/citation-m2/performance.test.ts).
  */
 export const LAPSE_A = 0.95;
-export const LAPSE_B = 0.25;
+export const LAPSE_B_LO = 0.95; // sea level
+export const LAPSE_B_HI = 0.25; // FL330 and above
 export const LAPSE_C = 0.25;
+export function thrustLapse(mach: number, altFt: number): number {
+  const H = altFt * FT_TO_M;
+  const delta = isaPressure(H) / 101325;
+  const theta = isaTemperature(H) / 288.15;
+  const b = LAPSE_B_HI + (LAPSE_B_LO - LAPSE_B_HI) * Math.min(1, Math.max(0, (delta - 0.26) / 0.74));
+  return (Math.pow(delta, LAPSE_A) * (1 - b * mach + LAPSE_C * mach * mach)) / Math.sqrt(theta);
+}
 function lapseTable(): Table2D {
-  const machs = [0, 0.2, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9];
-  const alts = [0, 5000, 10000, 15000, 20000, 25000, 30000, 36089, 41000, 45000];
-  const z = machs.map((m) =>
-    alts.map((ft) => {
-      const H = ft * FT_TO_M;
-      const delta = isaPressure(H) / 101325;
-      const theta = isaTemperature(H) / 288.15;
-      const v = (Math.pow(delta, LAPSE_A) * (1 - LAPSE_B * m + LAPSE_C * m * m)) / Math.sqrt(theta);
-      return Math.round(v * 10000) / 10000;
-    }),
-  );
-  return { x: machs, y: alts, z };
+  const machs = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9];
+  const alts = [0, 2500, 5000, 10000, 15000, 20000, 25000, 30000, 33000, 36089, 41000, 45000];
+  return { x: machs, y: alts, z: machs.map((m) => alts.map((ft) => Math.round(thrustLapse(m, ft) * 10000) / 10000)) };
 }
 
 /**
@@ -90,7 +93,7 @@ export function fj44(name: string, side: -1 | 1): TurbofanConfig {
     n2Idle_pct: 52, // EST: FJ44-class ground idle N2 (100 % = 41,200 rpm, TCDS)
     n2Max_pct: 98.5, // EST: N2 at rated N1; red line 100 % (TCDS)
     // Net thrust fraction vs corrected-N1 fraction (EST, turbofan cube-ish law; extends past 1.0 for hot-day FADEC margin).
-    thrustVsN1: { x: [0, 0.2, 0.246, 0.4, 0.6, 0.8, 0.9, 1.0, 1.05], y: [0, 0.018, 0.032, 0.09, 0.25, 0.53, 0.74, 1.0, 1.13] },
+    thrustVsN1: { x: [0, 0.2, 0.246, 0.4, 0.6, 0.8, 0.9, 1.0, 1.05], y: [0, 0.018, 0.032, 0.09, 0.25, 0.53, 0.74, 1.0, 1.2] },
     spoolUpTau_s: { x: [0, 20, 52, 65, 80, 98], y: [4, 3.5, 2.0, 1.3, 0.9, 0.6] }, // EST: ~5 s idle -> TO (Part 33 acceleration class)
     spoolDownTau_s: { x: [0, 52, 98], y: [3, 2.2, 1.2] },
     // TSFC (kg/(N h)) vs N1 fraction. 0.0465 at rated thrust = 0.456 lb/lbf/h (EST: FJ44-1A published static SFC class).
@@ -98,7 +101,7 @@ export function fj44(name: string, side: -1 | 1): TurbofanConfig {
     tsfcMachFactor: 1.72, // EST: calibrated to the FPG cruise fuel flows (see physics TurbofanConfigExtras)
     idleFuelFlow_pph: 125, // EST: FJ44-class ground idle fuel flow per engine
     ittIdle_c: 470, // EST
-    ittMax_c: 830, // EST: ITT at rated N1 SL ISA, below the 835 degC MCT / 855 degC takeoff limits (TCDS)
+    ittMax_c: 800, // EST: ITT at rated N1 SL ISA (bleed on), below the 835 degC MCT / 855 degC takeoff limits (TCDS)
     ittStartPeak_c: 640, // EST: typical start peak well below the 1,000 degC 15 s start transient limit (TCDS)
     starterMaxN2_pct: 26, // EST: 300 A starter-generator motoring speed on battery
     lightOffN2_pct: 9, // EST: FADEC schedules start fuel at ~8-10 % N2 (CJ family)
@@ -119,13 +122,13 @@ export function fj44(name: string, side: -1 | 1): TurbofanConfig {
 
 /**
  * Landing gear from S&D15 §1.2: tread 13 ft 0 in (3.96 m), wheelbase 15 ft 4 in
- * (4.67 m). Main gear placed 0.45 m aft of the empty CG (EST: ~9.6 % of the
- * weight on the nose wheel at the MTOW CG, typical 8-12 % for light jets);
+ * (4.67 m). Main gear at FS 264.7 (EST: ~10 % of the weight on the nose
+ * wheel at a mid-envelope CG, typical 8-12 % for light jets);
  * nose gear 4.67 m ahead of it. Trailing-link mains (S&D15 §7).
  * Strut springs give ~45 % static deflection at MTOW (physics guidance):
  * mains 21.5 kN each over 0.11 m, nose 4.6 kN over 0.08 m.
  */
-const MAIN_X = -0.45;
+const MAIN_X = fs(264.7); // EST: FS 264.7
 const NOSE_X = MAIN_X + 4.67;
 const HALF_TREAD = 3.96 / 2;
 const GEAR_Z = 1.4; // EST: contact point with struts extended (fuselage centreline ~1.3 m above the ground when parked)
@@ -181,7 +184,7 @@ function structure(name: string, p: [number, number, number]): GearContactConfig
  * (EST, Helmbold). CL tables tuned so the 1-g trimmed stall speeds match FPG
  * p.32 (tests). Flaps 60 = ground flaps (lift dump / drag, TCDS §10: prohibited in flight).
  */
-const ALPHAS = [-180, -90, -30, -20, -14, -10, -5, 0, 5, 8, 10, 11, 12, 13, 14, 15, 16, 18, 20, 25, 30, 45, 60, 90, 180];
+const ALPHAS = [-180, -90, -30, -20, -14, -10, -5, 0, 5, 8, 10, 10.5, 11, 11.5, 12, 12.5, 13, 13.5, 14, 14.5, 15, 16, 18, 20, 25, 30, 45, 60, 90, 180];
 function clColumn(cl0: number, slope: number, stall: number, peak: number): number[] {
   // Linear to stall-3, rounded to `peak` at `stall`, post-stall drop.
   return ALPHAS.map((a) => {
@@ -202,10 +205,10 @@ function clColumn(cl0: number, slope: number, stall: number, peak: number): numb
     return 0.85 - (a - 60) * 0.0283;
   });
 }
-const CL_F0 = clColumn(0.2, 0.088, 14, 1.31);
-const CL_F15 = clColumn(0.5, 0.088, 13, 1.51);
-const CL_F35 = clColumn(0.74, 0.088, 12, 1.73);
-const CL_F60 = clColumn(0.8, 0.086, 11, 1.76);
+const CL_F0 = clColumn(0.08, 0.088, 15, 1.31);
+const CL_F15 = clColumn(0.33, 0.088, 14.5, 1.51);
+const CL_F35 = clColumn(0.5, 0.088, 14, 1.73);
+const CL_F60 = clColumn(0.52, 0.088, 13.5, 1.76);
 
 export const CITATION_M2_FDM: FdmConfig = {
   aero: {
@@ -220,7 +223,7 @@ export const CITATION_M2_FDM: FdmConfig = {
     },
     // Elevator: horizontal tail 60.7 ft^2 (S&D15), tail arm ~5.7 m (EST, T-tail at FS ~470),
     // travel up 18.5 / down 15 deg (TCDS §16): full command ~0.32 rad x tau 0.45 x a_t 4/rad.
-    CL_de: -0.12,
+    CL_de: -0.11,
     CL_q: 5.5,
     CL_alphadot: 2,
     CL_spoiler: -0.08, // S&D21: speed brakes "allow for drag control with minimum pitching moments" (small lift loss EST)
@@ -251,10 +254,10 @@ export const CITATION_M2_FDM: FdmConfig = {
     // Static margin ~12 % MAC about 25 % MAC (EST): -0.0106 per deg.
     Cm_alpha: { x: [-30, -14, 0, 14, 16, 20, 30, 45, 90], y: [0.32, 0.148, 0, -0.148, -0.18, -0.26, -0.39, -0.5, -0.7] },
     Cm0: 0.035,
-    Cm_q: -17,
+    Cm_q: -14,
     Cm_alphadot: -6,
-    Cm_de: 0.45,
-    Cm_trim: 0.16, // elevator trim tabs up 12 / down 20 deg (TCDS §16), EST effectiveness
+    Cm_de: 0.6,
+    Cm_trim: 0.24, // elevator trim tabs up 12 / down 20 deg (TCDS §16), EST effectiveness
     Cm_flap: { x: [0, 15, 35, 60], y: [0, -0.035, -0.06, -0.07] },
     Cm_gear: 0.004,
     Cm_spoiler: 0.005,
@@ -265,7 +268,7 @@ export const CITATION_M2_FDM: FdmConfig = {
     Cn_da: -0.004,
     Cn_dr: 0.085,
     Cn_trim: 0.012,
-    alphaStall_deg: { x: [0, 15, 35, 60], y: [14, 13, 12, 11] },
+    alphaStall_deg: { x: [0, 15, 35, 60], y: [15, 14.5, 14, 13.5] },
     buffetMach: 0.76, // EST: buffet onset above Mmo 0.71
   },
   mass: {

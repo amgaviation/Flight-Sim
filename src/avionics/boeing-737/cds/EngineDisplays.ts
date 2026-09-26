@@ -390,8 +390,8 @@ export class EngPrimary implements CdsFormatRenderer {
     this.fuelGauge(ctx, 576, 738, 66, d.fuelL, main, k, d.fuelL < B738_FUEL.lowKg, '1');
     this.fuelGauge(ctx, 720, 738, 66, d.fuelR, main, k, d.fuelR < B738_FUEL.lowKg, '2');
     text(ctx, 'CTR', 648, 612, 20, CDS.cyan, 'center');
-    text(ctx, 'FUEL', 648, 696, 18, CDS.cyan, 'center');
-    text(ctx, lb ? 'LBS' : 'KG', 648, 716, 18, CDS.cyan, 'center');
+    text(ctx, 'FUEL', 545, 622, 18, CDS.cyan, 'center');
+    text(ctx, lb ? 'LBS' : 'KG', 545, 642, 18, CDS.cyan, 'center');
     // Alerts: IMBAL (in flight, > 453 kg difference), CONFIG (centre fuel with both centre pumps off, engine running).
     if (!d.onGround && Math.abs(d.fuelL - d.fuelR) > B738_FUEL.imbalanceKg) {
       const lowSide = d.fuelL < d.fuelR ? 576 : 720;

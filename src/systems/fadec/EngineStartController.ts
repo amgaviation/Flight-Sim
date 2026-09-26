@@ -93,6 +93,12 @@ export interface EngineStartConfig {
   maxStarterS?: number;
   clearingMotorS?: number;
   /**
+   * (Appended by citation-longitude.) Look-ahead (s) of the predicted-hot-start abort: ITT + rate x
+   * this > hotStartIttC + 30. Default 2. Engines whose start ITT rises steeply from ambient toward a
+   * start peak close to the limit need a shorter horizon or every light-off transient aborts.
+   */
+  hotStartPredictS?: number;
+  /**
    * Starter can be engaged (bleed/DC available). Default true. Evaluated every
    * update; false drops the starter at once. For a DC starter bind it to the
    * starter bus voltage above the start relay's drop-out (e.g.
@@ -271,7 +277,7 @@ export class EngineStartController implements Subsystem {
           fuel = runLever;
           if (!starter && cfg.releaseSwitch && held) v.set(cfg.releaseSwitch.var, cfg.releaseSwitch.offValue);
           if (!runLever) this.abort('CUTOFF');
-          else if (itt > cfg.hotStartIttC || itt + this.ittRate * 2 > cfg.hotStartIttC + 30) this.abort('HOT');
+          else if (itt > cfg.hotStartIttC || itt + this.ittRate * (cfg.hotStartPredictS ?? 2) > cfg.hotStartIttC + 30) this.abort('HOT');
           else if (running || n2 >= 0.98 * cfg.idleN2Pct) this.enter(StartState.Running);
           else {
             this.hungT += dt;
