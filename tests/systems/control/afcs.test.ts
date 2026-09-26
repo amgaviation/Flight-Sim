@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SimVars } from '../../../src/core/SimVars';
 import { EventBus } from '../../../src/core/EventBus';
-import { AP, FMS, INPUT, NAV } from '../../../src/core/vars';
+import { AP, FMS, GPS, INPUT, NAV } from '../../../src/core/vars';
 import { Afcs } from '../../../src/systems/autopilot/Afcs';
 import { AFCS_B737_AFDS, AFCS_GFC700_G1000, AFCS_GFC700_G3000, AFCS_KAP140, AFCS_PRIMUS_EPIC } from '../../../src/systems/autopilot/presets';
 import { AFCS_VARS, AtRequest } from '../../../src/systems/autopilot/vars';
@@ -206,6 +206,41 @@ describe('AFCS navigation capture', () => {
     expect(Math.abs(vars.get(NAV.gsDev(1)))).toBeLessThan(0.2);
     expect(vars.getString(AP.lateralActive)).toBe('LOC');
     expect(vars.getString(AP.verticalActive)).toBe('GS');
+  });
+
+  it('LOC tracking on GPS track holds no steady offset when the station declination differs from today\'s variation', () => {
+    // Station declared 14.0 E, today's variation 12.8 E: the localizer's magnetic course is 1.2 deg
+    // smaller than the true course (090 in the plant) expressed in today's magnetic reference.
+    const track = (withStationVar: boolean) => {
+      const { vars, afcs, plant, run } = setup(AFCS_GFC700_G3000, { tasKt: 150, x: -12, y: 0.4, hdgDeg: 100, altFt: 2600 });
+      plant.enableIls(90, 1, 3);
+      vars.set(AFCS_VARS.navSource, 1);
+      vars.set(AP.selAltitude, 2600);
+      vars.set(AP.selHeading, 100);
+      const skew = () => {
+        vars.set(NAV.locCourse(1), 90 - 1.2);
+        vars.set(NAV.obs(1), 90 - 1.2);
+        vars.set(GPS.magVar, 12.8);
+        if (withStationVar) vars.set(NAV.stationMagVar(1), 14.0);
+      };
+      skew();
+      run(0.1, skew);
+      afcs.press('AP');
+      afcs.press('HDG');
+      afcs.press('ALT');
+      afcs.press('NAV');
+      let worst = 0;
+      run(200, (t) => {
+        skew();
+        if (t > 120) worst = Math.max(worst, Math.abs(vars.get(NAV.devDeg(1))));
+      });
+      expect(afcs.lat).toBe('LOC');
+      return worst;
+    };
+    // Without the declination the law flies the stale course: a steady offset remains.
+    expect(track(false)).toBeGreaterThan(0.1);
+    // With nav{r}.station_magvar_deg the course is referred to today's variation: centred.
+    expect(track(true)).toBeLessThan(0.02);
   });
 
   it('LNAV follows the FMS roll command once captured', () => {

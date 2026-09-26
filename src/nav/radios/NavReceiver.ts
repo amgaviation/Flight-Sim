@@ -48,9 +48,16 @@ import {
 } from './geometry';
 import { morse } from './morse';
 
-/** Station-selection rank bonus for a localizer received on its front course (beats any back-course signal). */
-const FRONT_COURSE_RANK = 2;
-/** Rank bonus of the currently locked station (receiver hysteresis). EST: larger than any signal-quality difference (0..1). */
+/**
+ * Station-selection rank bonuses (signal quality adds 0..1). A localizer's
+ * approach sector (front course, farther out than its landing threshold)
+ * beats its runway sector (front course between the threshold and the
+ * antenna), which beats back-course reception; the locked station gets
+ * LOCKED_STATION_RANK so that equal sectors do not flip-flop, but a locked
+ * runway-sector station still yields to an approach-sector one.
+ */
+const APPROACH_SECTOR_RANK = 4;
+const RUNWAY_SECTOR_RANK = 2;
 const LOCKED_STATION_RANK = 1;
 
 export interface NavReceiverOptions {
@@ -242,6 +249,19 @@ export class NavReceiver {
     return Math.max(0.01, 1 - q * q);
   }
 
+  /**
+   * Sector rank of a localizer candidate from `this.loc` (just filled by
+   * `locSignal` for `n`): approach sector, runway sector or back course.
+   */
+  private locSectorRank(n: Navaid): number {
+    const d = this.loc;
+    if (d.backCourse) return 0;
+    if (n.thresholdLat === undefined || n.thresholdLon === undefined) return APPROACH_SECTOR_RANK;
+    const along = d.distNm * Math.cos((d.devDeg * Math.PI) / 180);
+    const thr = distanceNm(n.lat, n.lon, n.thresholdLat, n.thresholdLon);
+    return along >= thr ? APPROACH_SECTOR_RANK : RUNWAY_SECTOR_RANK;
+  }
+
   update(dt: number): void {
     const v = this.vars;
     if (!v.getBool(this.vPowered)) {
@@ -294,11 +314,13 @@ export class NavReceiver {
     // (both ends of a runway, or opposite-direction runways of one airport)
     // are interlocked so that only the one serving the approach in use
     // radiates (AIM 1-1-9 a: "not in service simultaneously"; 14 CFR
-    // 171.261 interlock). Model that by always preferring a localizer whose
-    // FRONT course the aircraft is in over one it only receives on the back
-    // course, and keep the locked station while it stays receivable
-    // (hysteresis), so the needle never jumps to the other localizer near
-    // the threshold, where the opposite antenna's back course is strongest.
+    // 171.261 interlock). Model that by ranking a localizer whose approach
+    // sector the aircraft is in (front course, outside its landing
+    // threshold) above one whose front beam it only sees over the runway
+    // (short final to the opposite runway passes over that antenna), above
+    // back-course reception, and by keeping the locked station while it
+    // stays receivable (hysteresis). Otherwise the needle jumps to the other
+    // localizer near the threshold, where its antenna is closest.
     let best: Navaid | null = null;
     let bestSig = 0;
     let bestRank = 0;
@@ -309,7 +331,7 @@ export class NavReceiver {
       if (isLocFreq) {
         if (n.type !== 'ILS' && n.type !== 'LOC') continue;
         sig = this.locSignal(n, lat, lon, alt);
-        rank = sig > 0 ? sig + (this.loc.backCourse ? 0 : FRONT_COURSE_RANK) : 0;
+        if (sig > 0) rank = sig + this.locSectorRank(n);
       } else {
         if (n.type !== 'VOR' && n.type !== 'VORDME' && n.type !== 'VORTAC') continue;
         sig = this.stationSignal(n, lat, lon, alt, false);
