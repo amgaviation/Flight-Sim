@@ -13,8 +13,8 @@
  *     then heading after `hdgAlignS` (magnetometer settles).
  *   - `fail.ahrs{s}`: everything invalid. `fail.ahrs{s}.hdg` (magnetometer
  *     fault): heading invalid, attitude valid (G1000 "HDG" red X).
- *   - `fail.ahrs{s}.drift`: slow attitude drift (EST 2 deg/min bank and pitch
- *     error) — the classic "subtle AHRS failure" training scenario.
+ *   - `fail.ahrs{s}.drift`: slow attitude drift without a flag (EST 2 deg/min
+ *     bank, 1 deg/min pitch) — the classic "subtle AHRS failure" training scenario.
  *
  * Vars written (s = `outputIndex`): ahrs{s}.pitch_deg, bank_deg, hdg_mag_deg,
  * hdg_true_deg, turn_rate_dps, slip, valid + SENSOR_VARS p/q/r_dps,
@@ -180,7 +180,7 @@ export class Ahrs implements Subsystem {
     return [
       { id: `ahrs${s}`, name: `AHRS ${s}`, category: 'attitude', description: 'AHRS fails: attitude and heading flagged.' },
       { id: `ahrs${s}.hdg`, name: `AHRS ${s} magnetometer`, category: 'attitude', description: 'Heading flagged; attitude remains.' },
-      { id: `ahrs${s}.drift`, name: `AHRS ${s} attitude drift`, category: 'attitude', description: 'Attitude slowly drifts (2 deg/min) without a flag.' },
+      { id: `ahrs${s}.drift`, name: `AHRS ${s} attitude drift`, category: 'attitude', description: 'Attitude slowly drifts (2 deg/min bank, 1 deg/min pitch) without a flag.' },
     ];
   }
 

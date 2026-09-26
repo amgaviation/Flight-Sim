@@ -42,8 +42,10 @@
  * taws.gs_cancel, string taws.alert (highest active alert text), string
  * taws.callout (last callout), taws.inop, taws.terr_inop, taws.test,
  * taws.height_ft (height used), taws.closure_fpm + MinimumsMonitor vars.
+ * Failure: taws (computer fault: taws.inop, everything silent).
  */
 import type { Subsystem } from '../../aircraft/types';
+import type { FailureDef } from '../failures/FailureManager';
 import type { SimVars } from '../../core/SimVars';
 import type { AudioApi } from '../../core/SimContext';
 import type { WorldQuery } from '../../world/types';
@@ -51,6 +53,7 @@ import type { NavDatabase, Airport } from '../../nav/types';
 import { ADC, ALERT, AP, GPS, NAV } from '../../core/vars';
 import { destinationPoint, distanceNm } from '../../core/geo';
 import { compileCondition, type Binding } from '../util/binding';
+import { failVar } from '../util/ids';
 import { RateFilter, listen, type BlockEnv } from '../autopilot/lib';
 import { SENSOR_VARS } from '../sensors/vars';
 import { MinimumsMonitor, type MinimumsConfig } from './AltitudeAlert';
@@ -208,6 +211,7 @@ export class Taws implements Subsystem {
   private flta = 0;
   private pda = false;
   private closure = 0;
+  private readonly fTaws = failVar('taws');
 
   constructor(env: BlockEnv, cfg: TawsConfig = {}) {
     const v = env.vars;
@@ -264,6 +268,10 @@ export class Taws implements Subsystem {
     });
   }
 
+  failures(): FailureDef[] {
+    return [{ id: 'taws', name: 'TAWS/EGPWS computer', category: 'warning', description: 'TAWS inoperative: no GPWS/terrain alerts or callouts (TAWS FAIL / GPWS INOP).' }];
+  }
+
   reset(): void {
     this.raRate.reset();
     this.m1 = this.m2 = this.m2Preface = this.m4 = this.m5 = this.flta = 0;
@@ -282,7 +290,7 @@ export class Taws implements Subsystem {
   update(dt: number): void {
     const v = this.vars;
     const b = this.b;
-    const powered = b.power();
+    const powered = b.power() && v.get(this.fTaws) === 0;
     if (!powered) {
       this.clear();
       v.set('taws.inop', 1);

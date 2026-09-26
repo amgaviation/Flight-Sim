@@ -132,7 +132,8 @@ export class FlyByWire implements Subsystem {
   private readonly ground: () => boolean;
   private readonly act: { pitch: Evaluator[]; roll: Evaluator[]; yaw: Evaluator[] };
   private readonly modeSel: string;
-  private readonly pitchPid: Pid;
+  /** Pitch integrator contribution (elevator units). */
+  private pI = 0;
   private readonly rollPid: Pid;
   private readonly yawWashout: Washout;
   private elev = 0;
@@ -155,8 +156,6 @@ export class FlyByWire implements Subsystem {
     const mk = (b?: Binding[]): Evaluator[] => (b ?? []).map((x) => compileBinding(v, x, 1));
     this.act = { pitch: mk(cfg.actuators?.pitch), roll: mk(cfg.actuators?.roll), yaw: mk(cfg.actuators?.yaw) };
     this.modeSel = cfg.modeSelectVar ?? 'ac.fcs_mode_sel';
-    const p = cfg.pitch;
-    this.pitchPid = new Pid({ kp: p.kp ?? 0.35, ki: p.ki ?? 0.5, iLimit: 1 / Math.max(1e-6, p.ki ?? 0.5), outLimit: 1 });
     const r = cfg.roll;
     this.rollPid = new Pid({ kp: r.kp ?? 0.04, ki: r.ki ?? 0.02, iLimit: 10, outLimit: 1 });
     this.yawWashout = new Washout(cfg.yaw?.washoutS ?? 3);
@@ -174,7 +173,7 @@ export class FlyByWire implements Subsystem {
     const v = this.vars;
     this.stab = v.get(SURF.pitchTrim);
     this.uRef = v.get(ADC.ias(1));
-    this.pitchPid.reset(v.get(SURF.elevator));
+    this.pI = v.get(SURF.elevator);
     this.rollPid.reset(0);
     this.elev = v.get(SURF.elevator);
     this.ail = 0;
@@ -196,7 +195,7 @@ export class FlyByWire implements Subsystem {
     else mode = 'NORMAL';
     if (mode !== this.mode) {
       // Bumpless: preload the integrators with the current surfaces.
-      this.pitchPid.reset(this.elev);
+      this.pI = this.elev;
       this.rollPid.reset(0);
     }
     this.mode = mode;
@@ -228,7 +227,7 @@ export class FlyByWire implements Subsystem {
       const mach = v.get(ADC.mach(1));
       if (this.wasGround) {
         // Lift-off: start the flight law from the current state.
-        this.pitchPid.reset(this.elev);
+        this.pI = this.elev;
         this.uRef = ias;
         this.bankRef = phi;
       }
@@ -269,14 +268,18 @@ export class FlyByWire implements Subsystem {
       const nzCmd = 1 / c + dnz;
       nzCmdOut = nzCmd;
       const gs = this.gainScale(ias);
-      this.pitchPid.kp = (p.kp ?? 0.35) * gs;
-      this.pitchPid.ki = (p.ki ?? 0.5) * gs;
+      const kp = (p.kp ?? 0.35) * gs;
+      const ki = (p.ki ?? 0.5) * gs;
+      const kq = (p.kq ?? 0.02) * gs;
       const e = nzCmd - nz;
-      this.elev = this.pitchPid.update(e, dt) - (p.kq ?? 0.02) * gs * q;
+      // PI on the load-factor error with pitch-rate damping; anti-windup on the final surface command.
+      const trial = kp * e + this.pI - kq * q;
+      const saturated = (trial >= 1 && e > 0) || (trial <= -1 && e < 0);
+      if (!saturated) this.pI = clamp1(this.pI + ki * e * dt);
+      this.elev = clamp1(kp * e + this.pI - kq * q);
       // Auto-trim: offload the integrator into the stabilizer.
-      const iOut = this.pitchPid.ki * this.pitchPid.integral;
-      if (Math.abs(iOut) > 0.02) {
-        const step = Math.sign(iOut) * (p.stabRate ?? 0.03) * dt;
+      if (Math.abs(this.pI) > 0.02) {
+        const step = Math.sign(this.pI) * (p.stabRate ?? 0.03) * dt;
         this.stab = clamp1(this.stab + step);
       }
 

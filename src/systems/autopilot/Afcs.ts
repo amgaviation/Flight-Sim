@@ -1738,7 +1738,8 @@ export class Afcs implements Subsystem {
     let status = '';
     if (this.style === 'boeing') {
       if (this.engaged && (this.cwsA || this.cwsB)) status = 'CWS';
-      else if (this.engaged && this.lat === 'LOC' && this.approach) status = 'SINGLE CH';
+      // SINGLE CH: one A/P in APP mode until the second channel couples (SmartCockpit 737 AFDS status annunciations).
+      else if (this.engaged && this.approach && this.channels < 2) status = 'SINGLE CH';
       else if (this.engaged) status = 'CMD';
       else if (this.fdOn()) status = 'FD';
     } else {

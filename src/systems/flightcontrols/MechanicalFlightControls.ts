@@ -51,7 +51,7 @@ export interface ControlChannelConfig {
   addVars?: string[];
   /** Var that removes the pilot input from the sum while non-zero. Default ap.force_<axis> (pitch/roll), none for yaw. `null` disables. */
   pilotSensedVar?: string | null;
-  /** Pilot input deadband (normalized). Default 0.01. */
+  /** Pilot input deadband (normalized, rescaled so ±1 still gives ±1). Default 0.01. */
   deadband?: number;
   /** Pilot gearing (surface per unit input), constant or vs IAS. Default 1. */
   gearing?: Schedule;
@@ -173,7 +173,8 @@ export class MechanicalFlightControls implements Subsystem {
 
       // ---- command
       const sensed = c.sensed !== null && v.get(c.sensed) !== 0;
-      const pilot = sensed ? 0 : deadband(v.get(c.input), c.db) * sched(c.gearing, ias);
+      // Deadband rescaled so full deflection still gives full command.
+      const pilot = sensed ? 0 : (deadband(v.get(c.input), c.db) / (1 - c.db)) * sched(c.gearing, ias);
       let cmd = pilot;
       if (!manual) for (let i = 0; i < c.adds.length; i++) cmd += v.get(c.adds[i]);
       else if (c.manual) cmd = pilot * sched(c.manual.authority, ias);

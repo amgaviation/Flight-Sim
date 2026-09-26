@@ -234,6 +234,11 @@ describe('Taws subsystem', () => {
     expect(vars.get(ALERT.tawsWarning)).toBe(1);
     expect(audio.callouts).toContain('PULL UP');
     expect(vars.getString('taws.alert')).toBe('PULL UP');
+    // Computer failure: inoperative, lamps out.
+    vars.set('fail.taws', 1);
+    run(0.2);
+    expect(vars.get('taws.inop')).toBe(1);
+    expect(vars.get(ALERT.tawsWarning)).toBe(0);
   });
 
   it('Mode 2A: TERRAIN TERRAIN then PULL UP on rapidly rising terrain', () => {

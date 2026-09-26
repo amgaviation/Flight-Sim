@@ -61,3 +61,49 @@ export interface AircraftModule {
   fdm: FdmConfig;
   create(ctx: SimContext): Promise<AircraftInstance> | AircraftInstance;
 }
+
+// ---------------------------------------------------------------------------
+// Appended by the app shell (append-only; see CLAUDE.md shared contracts).
+// Reference: docs/modules/app.md ("Input" and "Aircraft integration").
+// ---------------------------------------------------------------------------
+
+/**
+ * Optional mapping from the simulator's generic keyboard/joystick commands
+ * (throttle up/down, flaps step, gear, speedbrake, parking brake, AP) to the
+ * aircraft's own cockpit vars. The app's `CommandRouter` writes these vars
+ * (the cockpit controls follow external writes and animate). Every field is
+ * optional; commands with no mapping are still emitted as `input.*` events
+ * (see `INPUT_EVENTS` in `src/input/actions.ts`) that an aircraft may handle
+ * itself.
+ */
+export interface AircraftInputMap {
+  /** Thrust/power lever vars, one per lever in engine order. */
+  throttles?: string[];
+  /** Values at idle and full forward thrust (default [0, 1]). */
+  throttleRange?: [number, number];
+  /**
+   * Reverse thrust: `{ value }` = integral reverse range on the same lever
+   * (value written at full reverse, e.g. -0.3 or -1); `{ vars, full }` =
+   * separate reverse levers (737 piggy-back levers, 0 = stowed).
+   */
+  reverse?: { value: number } | { vars: string[]; full: number };
+  /** Mixture/condition lever vars and their [cutoff, full rich] values (default [0, 1]). */
+  mixtures?: string[];
+  mixtureRange?: [number, number];
+  /** Flap lever var and its detent values in retract -> extend order. */
+  flaps?: { var: string; detents: number[] };
+  /** Gear handle var and its UP / DOWN values. */
+  gear?: { var: string; up: number; down: number };
+  /** Speedbrake lever var and its positions in stowed -> fully extended order; `armed` = ARM detent value (optional). */
+  speedbrake?: { var: string; positions: number[]; armed?: number };
+  /** Parking brake var and its set / released values. */
+  parkingBrake?: { var: string; on: number; off: number };
+  /** Events emitted for the AP engage toggle and the A/T disconnect key (e.g. the aircraft's MCP button events). */
+  apToggleEvent?: string;
+  atDisconnectEvent?: string;
+}
+
+// Declaration merging: the optional map becomes part of AircraftInstance.
+export interface AircraftInstance {
+  inputMap?: AircraftInputMap;
+}
