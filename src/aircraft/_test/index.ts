@@ -113,6 +113,10 @@ const module: AircraftModule = {
     build.views = (build.views ?? []).map((v) => ({ ...v, position_m: shift(v.position_m) }));
     const shell = createCockpitShell(build.env.materials);
     build.root.add(shell.group);
+    // The demo panel's yoke hub sits in the line of sight to the display; drop it 12 cm and move it 4 cm
+    // forward, where a bizjet control wheel sits below the PFD (EST, typical layouts).
+    const yoke = build.controls.find((c) => c.id === 'demo.yoke');
+    if (yoke) yoke.object.position.add(bodyToLocal(0.04, 0, 0.12, new THREE.Vector3()));
 
     // The PFD replaces the demo display on the same screen mesh (the display manager maps it on).
     const pfd = new TestPfd(ctx.vars, ctx.audio);

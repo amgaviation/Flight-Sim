@@ -74,18 +74,32 @@ export function usableRunways(a: Airport): Runway[] {
  * true); ties and calm wind pick the longest runway. Returns undefined if
  * the airport has no usable runway.
  */
-export function bestRunway(a: Airport, windFromDeg = 0, windKt = 0): Runway | undefined {
+export function bestRunway(a: Airport, windFromDeg = 0, windKt = 0, preferIls = false): Runway | undefined {
   let best: Runway | undefined;
   let score = -Infinity;
   for (const r of usableRunways(a)) {
     const head = windKt * Math.cos(((windFromDeg - r.headingTrue) * Math.PI) / 180);
-    const s = head * 1000 + r.lengthFt / 100;
+    // EST: a tailwind above 3 kt takes a runway out of use (most AFMs limit tailwind to 10 kt;
+    // ATC changes runways well before). Among runways in use, an approach prefers an ILS.
+    const inUse = head >= -3;
+    const s = (inUse ? 1e7 : 0) + (preferIls && inUse && r.ils ? 1e6 : 0) + head * 1000 + r.lengthFt / 100;
     if (s > score) {
       score = s;
       best = r;
     }
   }
   return best;
+}
+
+/** Normalized runway designator for comparison: upper case, leading zeros dropped ('01' = '1', '06L' = '6L'). */
+export function normalizeRunwayIdent(ident: string): string {
+  return ident.trim().toUpperCase().replace(/^RWY?\s*/, '').replace(/^0+(?=\d)/, '');
+}
+
+/** Usable runway end by designator ('01', '1', 'RW01', '6L'...). */
+export function findRunway(a: Airport, ident: string): Runway | undefined {
+  const want = normalizeRunwayIdent(ident);
+  return usableRunways(a).find((r) => normalizeRunwayIdent(r.ident) === want);
 }
 
 /** Parking spots on the generic apron (up to 8), numbered from the runway's A end. */
@@ -127,7 +141,7 @@ function landingThreshold(r: Runway): { lat: number; lon: number } {
  * @param wind surface wind (FROM, true, kt) for automatic runway choice
  */
 export function planStart(a: Airport, spot: StartSpot, state: InitialState, meta: AircraftMeta, wind: { dir: number; kt: number } = { dir: 0, kt: 0 }): StartPlacement {
-  const runwayFor = (): Runway | undefined => (spot.kind === 'runway' ? usableRunways(a).find((r) => r.ident.toUpperCase() === spot.runway.toUpperCase()) : undefined) ?? bestRunway(a, wind.dir, wind.kt);
+  const runwayFor = (): Runway | undefined => (spot.kind === 'runway' ? findRunway(a, spot.runway) : undefined) ?? bestRunway(a, wind.dir, wind.kt, state === 'approach');
   if (state === 'approach') {
     const r = runwayFor();
     if (!r) return airborneOver(a, meta, 3000, 'Approach (no runway)');

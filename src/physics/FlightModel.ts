@@ -478,7 +478,7 @@ export class FlightModel implements FlightModelHandle {
 
   private readEnvironment(): void {
     const v = this.vars;
-    this.atmosphere.setConditions(v.get(ENV.qnhInHg, 29.92126), v.get(ENV.oatSeaLevelC, 15));
+    this.atmosphere.setConditions(v.get(ENV.qnhInHg, 29.92126), v.get(ENV.oatSeaLevelC, 15), v.get(ENV.qnhRefElevFt, 0));
     this.wind.setSurfaceWind(v.get(ENV.surfaceWindDir, 0), v.get(ENV.surfaceWindKt, 0), v.get(ENV.surfaceGustKt, 0));
     this.ground.wetness = v.get(ENV.precip, 0);
   }

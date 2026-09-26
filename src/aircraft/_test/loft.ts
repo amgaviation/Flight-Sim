@@ -80,8 +80,10 @@ export function loftFuselage(p: FuselageProfile, x0: number, x1: number, theta0:
     for (let j = 0; j < segT; j++) {
       const a = i * row + j;
       const b = a + row;
-      if (opts.inward) idx.push(a, a + 1, b, b, a + 1, b + 1);
-      else idx.push(a, b, a + 1, b, b + 1, a + 1);
+      // (b - a) points forward (-z local) and (a+1 - a) toward increasing theta, so (a, a+1, b) winds
+      // counter-clockwise seen from outside the section: outward-facing skin.
+      if (opts.inward) idx.push(a, b, a + 1, b, b + 1, a + 1);
+      else idx.push(a, a + 1, b, b, a + 1, b + 1);
     }
   }
   const g = new THREE.BufferGeometry();

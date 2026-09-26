@@ -256,7 +256,7 @@ vars or `getDatumPosition`) with attitude from `q` (or `fdm.hdg_true_deg/pitch_d
 | `fuel.tank{i}_kg` | Tank masses (default 0 if never written — the fuel system must initialise them). |
 | `ice.airframe`, `ice.inlet{i}` | 0..1. |
 | `eng{i}.*` inputs | See §4. |
-| `env.qnh_inhg` (default 29.92126), `env.sl_temp_c` (15), `env.turbulence` (0), `env.precip` (wet runway), `env.wind_dir_deg`, `env.wind_kt`, `env.wind_gust_kt` | Environment (the last three were appended to `ENV` by physics: surface wind at 10 m). |
+| `env.qnh_inhg` (default 29.92126), `env.sl_temp_c` (15), `env.qnh_ref_elev_ft` (0), `env.turbulence` (0), `env.precip` (wet runway), `env.wind_dir_deg`, `env.wind_kt`, `env.wind_gust_kt` | Environment (surface wind at 10 m appended by physics; `env.qnh_ref_elev_ft` = elevation of the station that reported QNH/temperature, appended by the review pass). |
 
 ### 2.4 SimVars written by the FDM (every step)
 
@@ -328,18 +328,24 @@ interface AirState { altitude_m; pressure_Pa; temperature_K; density_kgm3; speed
                      pressureAltitude_m /* geopotential, 29.92 */; densityAltitude_m; delta; theta; sigma; isaDeviation_K }
 createAirState(): AirState
 class Atmosphere {
-  qnh_Pa; deltaT_K;
-  constructor(qnhInHg = 29.92126, seaLevelTempC = 15);
-  setConditions(qnhInHg, seaLevelTempC): void          // cheap when unchanged
+  qnh_Pa; deltaT_K; refElevation_m;
+  constructor(qnhInHg = 29.92126, seaLevelTempC = 15, refElevFt = 0);
+  setConditions(qnhInHg, seaLevelTempC, refElevFt = 0): void   // cheap when unchanged
   sample(alt_m /* geometric MSL */, out: AirState): AirState   // allocation-free
   pressureAltitudeAt(zGeopotential): number
   geopotentialFromPressureAltitude(hp): number
   trueAltitudeForIndicated(indicatedFt, baroInHg): number       // geometric m
 }
 ```
-Non-standard day: constant ISA deviation at every pressure level such that the MSL
-temperature equals `env.sl_temp_c`; MSL pressure = QNH; true altitude from the
-hydrostatic integral (warm day → true altitude above indicated, ≈ +4 % per 10 °C).
+Non-standard day: constant ISA deviation at every pressure level such that the
+(virtual) MSL temperature equals `env.sl_temp_c` (so the station temperature is
+`env.sl_temp_c` − 1.98 °C/1000 ft × station elevation). QNH is treated as an
+altimeter setting reported at `refElevFt` (`env.qnh_ref_elev_ft`): at that
+elevation the pressure altitude is Hp(QNH) + elevation, i.e. an altimeter set to
+QNH reads the station elevation on the ground on any day. True altitude away from
+the station follows the hydrostatic integral from that anchor (warm day → true
+altitude above indicated, ≈ +4 % per 10 °C of height above the station). With
+`refElevFt = 0` (default) MSL pressure = QNH.
 
 Wind:
 ```ts

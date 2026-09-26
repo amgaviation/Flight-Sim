@@ -290,7 +290,8 @@ export function createTestJetSystems(ctx: SimContext): TestJetSystems {
     parking: { var: DEMO_VARS.park, kind: 'mechanical' },
     antiskid: { enabled: TEST_VARS.mainPowered },
   });
-  const stall = new StallWarning(env, { kind: 'aoa', aoaVar: 'fdm.aoa_norm', shakerNorm: 0.85, power: TEST_VARS.mainPowered });
+  // Stick shaker from the ADC AoA vane against the FDM's stall AoA schedule (TEST_JET alphaStall_deg vs flaps).
+  const stall = new StallWarning(env, { kind: 'aoa', alphaStall: TEST_JET.aero.alphaStall_deg, shakerNorm: 0.85, power: TEST_VARS.mainPowered });
   const overspeed = new Overspeed(env, { vmoKt: TEST_JET.limits.vmo_kt, mmo: TEST_JET.limits.mmo, power: TEST_VARS.mainPowered });
   const lights = new LightingSystem(ctx.vars, {
     exterior: [

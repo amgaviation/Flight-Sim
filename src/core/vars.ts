@@ -194,6 +194,14 @@ export const ENV = {
   surfaceWindDir: 'env.wind_dir_deg', // true, direction wind is FROM
   surfaceWindKt: 'env.wind_kt',
   surfaceGustKt: 'env.wind_gust_kt', // gust increment above the steady wind (kt), 0 = none
+  // --- appended by the review pass (append-only).
+  /**
+   * Elevation (ft MSL) of the station that reported `qnh_inhg` / the temperature
+   * (the departure field or METAR station). The FDM anchors the non-standard
+   * temperature correction there, so an altimeter set to QNH reads the station
+   * elevation on the ground (ICAO altimetry). Default 0 (sea-level station).
+   */
+  qnhRefElevFt: 'env.qnh_ref_elev_ft',
 } as const;
 
 /** Simulation control. */
@@ -298,6 +306,14 @@ export const NAV = {
   adfMorse: (r: number) => `adf${r}.ident_morse`, // string
   adfSignal: (r: number) => `adf${r}.signal`, // 0..1
   adfDistNm: (r: number) => `adf${r}.dist_nm`,
+  // --- appended by the review pass (append-only).
+  /**
+   * Magnetic variation (deg, + east) the received VOR's radials / the
+   * localizer's magnetic course are referenced to (the station declination,
+   * which can differ from today's variation). True course = obs or
+   * loc_course_deg + this. Written by nav/Radios while `received`.
+   */
+  stationMagVar: (r: number) => `nav${r}.station_magvar_deg`,
 } as const;
 
 /**

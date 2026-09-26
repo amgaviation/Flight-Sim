@@ -780,7 +780,7 @@ Typical var mapping:
   |---|---|
   | `ias` | `adc1.ias_kt` |
   | `altitude` | `adc1.alt_ft` |
-  | `pressureAlt` | `fdm.press_alt_ft` (static pressure, used by the standby-altimeter mode) |
+  | `pressureAlt` | `adc1.press_alt_ft` (pressure altitude of the measured static pressure, written by `AirDataComputer`; used by the standby-altimeter mode — give a standby altimeter on its own static port its own ADC index) |
   | `vs` | `adc1.vs_fpm` |
   | `baroSetting` | `adc1.baro_inhg` |
   | `oatC` | `adc1.tat_c` |
@@ -973,7 +973,7 @@ the options below.
 ### `Altimeter`
 
 - Options: `source: 'adc' | 'pressure' = 'adc'`, `altVar = adc1.alt_ft`, `pressureAltVar =
-  fdm.press_alt_ft`, `baroVar = adc1.baro_inhg`, `degPerInHg = 55`.
+  adc1.press_alt_ft`, `baroVar = adc1.baro_inhg`, `degPerInHg = 55`.
 - Three pointers (100 / 1,000 / 10,000 ft) and the Kollsman drum (inHg at 3 o'clock, mb at 9).
 - Knob `BARO` (lower left): 0.01 inHg per detent (0.002 with Shift), 28.1-31.0.
 - In `'adc'` mode the knob writes `adc1.baro_inhg`, which the 172's air-data model uses.

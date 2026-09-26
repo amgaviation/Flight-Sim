@@ -12,11 +12,15 @@ import { loftFuselage } from './loft';
 import { TEST_FUSELAGE, NOSE_SPLIT_X } from './exterior';
 
 /** Angular window limits (rad, 0 = top): side windows between the roof edge and the sill. */
-const ROOF_T = 0.66;
-const SILL_T = 1.36;
-const WS_T = 1.2;
+export const ROOF_T = 0.55;
+export const SILL_T = 1.36;
+export const WS_T = 0.95;
 const X_AFT = 3.55;
-const X_A = 4.97;
+/** Windshield frame (A-pillar ring) station; the windshield slopes from here down to the glareshield. */
+export const X_A = 4.62;
+/** Side window posts. */
+export const X_B = 4.25;
+export const X_WIN_AFT = 3.92;
 const INSET = 0.05;
 
 export function createCockpitShell(mats: CockpitMaterials): { group: THREE.Group; dispose(): void } {
@@ -47,16 +51,16 @@ export function createCockpitShell(mats: CockpitMaterials): { group: THREE.Group
   add(loftFuselage(P, X_A, NOSE_SPLIT_X, WS_T, SILL_T, 6, 3, inward), wall, 'ws_side_r');
   add(loftFuselage(P, X_A, NOSE_SPLIT_X, TWO_PI - SILL_T, TWO_PI - WS_T, 6, 3, inward), wall, 'ws_side_l');
   // Solid wall aft of the side windows.
-  add(loftFuselage(P, X_AFT, 3.9, ROOF_T, SILL_T, 4, 6, inward), wall, 'aft_wall_r');
-  add(loftFuselage(P, X_AFT, 3.9, -SILL_T, -ROOF_T, 4, 6, inward), wall, 'aft_wall_l');
+  add(loftFuselage(P, X_AFT, X_WIN_AFT, ROOF_T, SILL_T, 4, 6, inward), wall, 'aft_wall_r');
+  add(loftFuselage(P, X_AFT, X_WIN_AFT, -SILL_T, -ROOF_T, 4, 6, inward), wall, 'aft_wall_l');
   // Window frames: A-pillar ring, B-pillars, windshield centre post.
   const frameInset = { inset: INSET - 0.012, inward: true };
-  add(loftFuselage(P, 4.93, 5.0, -SILL_T, SILL_T, 2, 24, frameInset), frame, 'a_pillar');
-  add(loftFuselage(P, 4.4, 4.47, ROOF_T, SILL_T, 2, 6, frameInset), frame, 'b_pillar_r');
-  add(loftFuselage(P, 4.4, 4.47, -SILL_T, -ROOF_T, 2, 6, frameInset), frame, 'b_pillar_l');
-  add(loftFuselage(P, 5.0, NOSE_SPLIT_X - 0.01, -0.035, 0.035, 6, 2, frameInset), frame, 'center_post');
-  add(loftFuselage(P, 3.88, 3.95, ROOF_T, SILL_T, 2, 6, frameInset), frame, 'aft_frame_r');
-  add(loftFuselage(P, 3.88, 3.95, -SILL_T, -ROOF_T, 2, 6, frameInset), frame, 'aft_frame_l');
+  add(loftFuselage(P, X_A - 0.06, X_A, -SILL_T, SILL_T, 2, 24, frameInset), frame, 'a_pillar');
+  add(loftFuselage(P, X_B - 0.06, X_B, ROOF_T, SILL_T, 2, 6, frameInset), frame, 'b_pillar_r');
+  add(loftFuselage(P, X_B - 0.06, X_B, -SILL_T, -ROOF_T, 2, 6, frameInset), frame, 'b_pillar_l');
+  add(loftFuselage(P, X_A, NOSE_SPLIT_X - 0.01, -0.035, 0.035, 8, 2, frameInset), frame, 'center_post');
+  add(loftFuselage(P, X_WIN_AFT - 0.06, X_WIN_AFT, ROOF_T, SILL_T, 2, 6, frameInset), frame, 'aft_frame_r');
+  add(loftFuselage(P, X_WIN_AFT - 0.06, X_WIN_AFT, -SILL_T, -ROOF_T, 2, 6, frameInset), frame, 'aft_frame_l');
   // Aft bulkhead (faces forward).
   const s = P.at(X_AFT);
   const bulk = new THREE.CircleGeometry(1, 40);

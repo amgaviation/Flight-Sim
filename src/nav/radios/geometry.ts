@@ -155,7 +155,11 @@ export interface GsSignal {
   devDeg: number;
   /** Carrier (CSB) relative strength 0..1; near 0 at the ground and at 2*theta (flag). */
   carrier: number;
-  /** Azimuth off the front course seen from the GS antenna (deg, unsigned). */
+  /**
+   * Azimuth off the front course seen from the GS antenna itself (deg,
+   * unsigned). Diagnostic only: coverage is judged about the glide path
+   * centre line with `glidePathAzimuthDeg` (the antenna is offset from the runway).
+   */
   azimuthOffDeg: number;
   /** Horizontal distance to the GS antenna (nm). */
   distNm: number;
@@ -193,6 +197,40 @@ export function glideslope(
   out.azimuthOffDeg = Math.abs(wrap180(initialBearing(gsLat, gsLon, acLat, acLon) - courseTrue - 180));
   out.distNm = dNm;
   return out;
+}
+
+/**
+ * Along-course distance (nm) from the localizer antenna to the point on the
+ * course line abeam the glideslope antenna, measured toward the approach
+ * side (course + 180). This point is the origin of the glide path centre
+ * line used for the glideslope azimuth coverage.
+ */
+export function glidePathAbeamAlongNm(locLat: number, locLon: number, courseTrue: number, gsLat: number, gsLon: number): number {
+  const d = distanceNm(locLat, locLon, gsLat, gsLon);
+  const b = initialBearing(locLat, locLon, gsLat, gsLon);
+  return d * Math.cos(wrap180(b - courseTrue - 180) * DEG2RAD);
+}
+
+/**
+ * Azimuth (deg, unsigned) of the aircraft off the centre line of the ILS
+ * glide path, seen from the course-line point abeam the GS antenna. ICAO
+ * Annex 10 Vol I 3.1.5.3.1 defines the glide path coverage as 8 deg in
+ * azimuth on each side of the centre line of the ILS glide path (which lies
+ * in the vertical plane of the localizer course), not about the GS antenna
+ * itself: the antenna stands 250-650 ft beside the runway (FAA Order
+ * 6750.16), so an azimuth measured from the antenna would exceed 8 deg on
+ * the centre line inside ~0.5 nm and flag the glideslope at 100-200 ft.
+ *
+ * @param locDevDeg front-course angular deviation from `locDeviation` (deg, sign ignored)
+ * @param locDistNm horizontal distance to the localizer antenna (nm)
+ * @param abeamAlongNm `glidePathAbeamAlongNm` of the GS antenna
+ * @returns 180 when the aircraft is past the abeam point (over the runway) or in the back-course sector
+ */
+export function glidePathAzimuthDeg(locDevDeg: number, locDistNm: number, abeamAlongNm: number): number {
+  const a = locDevDeg * DEG2RAD;
+  const along = locDistNm * Math.cos(a) - abeamAlongNm;
+  if (!(along > 0)) return 180;
+  return Math.atan2(Math.abs(locDistNm * Math.sin(a)), along) * RAD2DEG;
 }
 
 /** Marker beacon cone half-extents per foot of height above the antenna (AIM 1-1-9 e.1: 4,200 x 2,400 ft at 1,000 ft). */

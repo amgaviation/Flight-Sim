@@ -276,3 +276,16 @@ describe('twin gauge geometry', () => {
     expect(lMin - 90).toBeCloseTo(270 - rMin, 9);
   });
 });
+
+describe('analog instrument default var sources (CLAUDE.md: avionics read sensor vars)', () => {
+  it('no ANALOG_VARS default reads FDM truth; mechanical sensors are the documented PHYSICAL_INPUTS exception', async () => {
+    const { ANALOG_VARS, PHYSICAL_INPUTS } = await import('../../src/avionics/analog/vars');
+    for (const [k, v] of Object.entries(ANALOG_VARS)) {
+      const name = typeof v === 'function' ? (v as (i: number) => string)(1) : v;
+      expect(name.startsWith('fdm.'), `${k} = ${name}`).toBe(false);
+    }
+    // The standby-altimeter mode reads the ADC's measured-static pressure altitude.
+    expect(ANALOG_VARS.pressureAlt).toBe('adc1.press_alt_ft');
+    for (const v of Object.values(PHYSICAL_INPUTS)) expect(v.startsWith('fdm.')).toBe(true);
+  });
+});

@@ -112,9 +112,10 @@ export function createTestExterior(vars: SimVars): TestExterior {
   mesh(loftFuselage(TEST_FUSELAGE, -5.2, 5.2, 1.62, 1.72, 60, 2, { inset: -0.004 }), stripe, 'stripe_r', body);
   mesh(loftFuselage(TEST_FUSELAGE, -5.2, 5.2, -1.72, -1.62, 60, 2, { inset: -0.004 }), stripe, 'stripe_l', body);
   // Windshield and side cockpit windows (dark glass skins slightly outside the structure).
-  mesh(loftFuselage(TEST_FUSELAGE, 4.98, 5.44, -1.2, 1.2, 8, 24, { inset: -0.006 }), glass, 'windshield', body);
-  mesh(loftFuselage(TEST_FUSELAGE, 3.95, 4.95, 0.66, 1.36, 10, 6, { inset: -0.006 }), glass, 'side_window_r', body);
-  mesh(loftFuselage(TEST_FUSELAGE, 3.95, 4.95, -1.36, -0.66, 10, 6, { inset: -0.006 }), glass, 'side_window_l', body);
+  // Cockpit glazing, matching the cockpit shell openings (shell.ts: A-pillar at x 4.62, windows 0.55..1.36 rad).
+  mesh(loftFuselage(TEST_FUSELAGE, 4.62, 5.44, -0.95, 0.95, 10, 24, { inset: -0.006 }), glass, 'windshield', body);
+  mesh(loftFuselage(TEST_FUSELAGE, 3.92, 4.56, 0.55, 1.36, 10, 6, { inset: -0.006 }), glass, 'side_window_r', body);
+  mesh(loftFuselage(TEST_FUSELAGE, 3.92, 4.56, -1.36, -0.55, 10, 6, { inset: -0.006 }), glass, 'side_window_l', body);
   // Cabin windows: 5 per side, oval (instanced).
   const winGeo = track(new THREE.SphereGeometry(0.17, 16, 8));
   winGeo.scale(0.02, 1, 0.8);
@@ -307,12 +308,26 @@ export function createTestExterior(vars: SimVars): TestExterior {
   makeLeg(2, [-0.6, 1.9, 1.55], 0.5, 0.33, 0.2, 0.28, false, [1, 0, 0], 88 * D2R);
 
   // ---------------------------------------------------------------- lights
+  // Radial glow texture for the lamp halos (procedural, node-safe DataTexture).
+  const GLOW = 64;
+  const glowData = new Uint8Array(GLOW * GLOW * 4);
+  for (let y = 0; y < GLOW; y++) {
+    for (let x = 0; x < GLOW; x++) {
+      const r = Math.hypot(x + 0.5 - GLOW / 2, y + 0.5 - GLOW / 2) / (GLOW / 2);
+      const a = Math.max(0, 1 - r);
+      const o = (y * GLOW + x) * 4;
+      glowData[o] = glowData[o + 1] = glowData[o + 2] = 255;
+      glowData[o + 3] = Math.round(255 * a * a * a);
+    }
+  }
+  const glowTex = track(new THREE.DataTexture(glowData, GLOW, GLOW));
+  glowTex.needsUpdate = true;
   const lamp = (color: number, pos: [number, number, number], size = 0.06, parent: THREE.Object3D = root) => {
     const m = track(new THREE.MeshBasicMaterial({ color, toneMapped: false }));
     const me = mesh(new THREE.SphereGeometry(size, 10, 8), m, 'lamp', parent);
     me.castShadow = false;
     me.position.copy(bl(...pos));
-    const halo = track(new THREE.SpriteMaterial({ color, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0 }));
+    const halo = track(new THREE.SpriteMaterial({ color, map: glowTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0 }));
     const sp = new THREE.Sprite(halo);
     sp.scale.setScalar(size * 14);
     sp.position.copy(me.position);

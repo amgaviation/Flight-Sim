@@ -8,8 +8,15 @@
  *    r0 = 6,356,766 m, P0 = 101,325 Pa, T0 = 288.15 K.
  *  - Non-standard day: a constant temperature deviation dT = env.sl_temp_c - 15
  *    applied at all pressure levels (ICAO convention used for altimeter
- *    temperature error), sea-level pressure = QNH. True (geopotential)
- *    altitude is the hydrostatic integral dz = (T_std + dT)/T_std dHp.
+ *    temperature error). QNH is an altimeter setting: at the reporting
+ *    station (elevation env.qnh_ref_elev_ft, default MSL) the pressure
+ *    altitude is Hp(QNH) + elevation, so an altimeter set to QNH reads the
+ *    station elevation on the ground (ICAO Annex 3 / Doc 8896 QNH definition;
+ *    FAA-H-8083-15B ch. 5: altimeter within 75 ft of field elevation with the
+ *    current setting). True (geopotential) altitude away from the station is
+ *    the hydrostatic integral dz = (T_std + dT)/T_std dHp from that anchor,
+ *    which is why the temperature error grows with height above the altimeter
+ *    setting source (ICAO Doc 8168 Vol I cold-temperature correction).
  *  - Airspeed: compressible pitot relations (subsonic isentropic, Rayleigh
  *    pitot formula above M 1), gamma = 1.4.
  *  - Winds: surface wind at 10 m, logarithmic surface layer, boundary-layer
@@ -303,33 +310,49 @@ export function createTurbulenceSample(): TurbulenceSample {
  * from its conditions; `sample()` is allocation-free.
  */
 export class Atmosphere {
-  /** Sea-level (MSL) pressure, Pa. */
+  /** Altimeter setting QNH, Pa (the MSL pressure on an ISA day). */
   qnh_Pa = P0;
   /** Temperature deviation from ISA (K), constant with altitude. */
   deltaT_K = 0;
-  /** Pressure altitude of the MSL datum (geopotential m); negative when QNH > 1013.25 hPa. */
+  /** Elevation (m MSL, geometric) of the station the QNH refers to. */
+  refElevation_m = 0;
+  /** Pressure altitude of the QNH datum, Hp(QNH) (geopotential m); negative when QNH > 1013.25 hPa. */
   private hp0 = 0;
+  /** ISA temperature integral at the station's pressure level (anchor of the true-altitude integral). */
   private f0 = 0;
   private lastQnhInHg = NaN;
   private lastSlTempC = NaN;
+  private lastRefElevFt = NaN;
 
-  constructor(qnhInHg = 29.92126, seaLevelTempC = 15) {
-    this.setConditions(qnhInHg, seaLevelTempC);
+  constructor(qnhInHg = 29.92126, seaLevelTempC = 15, refElevFt = 0) {
+    this.setConditions(qnhInHg, seaLevelTempC, refElevFt);
   }
 
-  /** Sets QNH (inHg) and sea-level temperature (degC); ISA deviation = T_sl - 15 degC. */
-  setConditions(qnhInHg: number, seaLevelTempC: number): void {
-    if (qnhInHg === this.lastQnhInHg && seaLevelTempC === this.lastSlTempC) return;
+  /**
+   * Sets QNH (inHg), sea-level temperature (degC; ISA deviation = T_sl - 15
+   * degC) and the elevation (ft MSL) of the station that reported them.
+   * At that elevation the pressure is the QNH-implied station pressure
+   * isaPressure(Hp(QNH) + elevation) whatever the temperature, and the
+   * temperature is `seaLevelTempC` reduced by the ISA lapse rate.
+   */
+  setConditions(qnhInHg: number, seaLevelTempC: number, refElevFt = 0): void {
+    if (qnhInHg === this.lastQnhInHg && seaLevelTempC === this.lastSlTempC && refElevFt === this.lastRefElevFt) return;
     this.lastQnhInHg = qnhInHg;
     this.lastSlTempC = seaLevelTempC;
+    this.lastRefElevFt = refElevFt;
     const qnh = Number.isFinite(qnhInHg) && qnhInHg > 20 && qnhInHg < 35 ? qnhInHg * INHG_TO_PA : P0;
     const tsl = Number.isFinite(seaLevelTempC) ? seaLevelTempC : 15;
+    const ref = Number.isFinite(refElevFt) ? clamp(refElevFt * FT_TO_M, -500, 9000) : 0;
     this.qnh_Pa = qnh;
+    this.refElevation_m = ref;
     this.hp0 = pressureAltitude(qnh);
-    // ISA deviation is referenced to the standard temperature at the MSL
-    // datum's pressure level, so env.sl_temp_c is the actual MSL temperature.
+    // ISA deviation is referenced to the standard temperature at the QNH
+    // datum's pressure level, so env.sl_temp_c is the (virtual) MSL
+    // temperature and the station temperature is env.sl_temp_c - lapse * elevation.
     this.deltaT_K = tsl + ZERO_C_IN_K - isaTemperature(this.hp0);
-    this.f0 = isaTempIntegral(this.hp0);
+    // z(Hp) = Hp - hp0 + dT * (F(Hp) - F(hp0 + z_ref)): exact at the station
+    // (z = z_ref where Hp = hp0 + z_ref), temperature error grows away from it.
+    this.f0 = isaTempIntegral(this.hp0 + geometricToGeopotential(ref));
   }
 
   /** True geopotential altitude (m MSL) of a pressure altitude (geopotential m). */

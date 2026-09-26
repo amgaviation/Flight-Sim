@@ -31,6 +31,8 @@ import type { Navaid } from '../types';
 import type { StationSource } from './stationSource';
 import {
   FT_PER_NM,
+  glidePathAbeamAlongNm,
+  glidePathAzimuthDeg,
   glideslope,
   isLocalizerFrequency,
   locCourseWidthDeg,
@@ -96,6 +98,7 @@ export class NavReceiver {
   private readonly vLocCourse: string;
   private readonly vIdent: string;
   private readonly vBearing: string;
+  private readonly vStationMagVar: string;
   private readonly vSignal: string;
   private readonly vDevDeg: string;
   private readonly vGsDevDeg: string;
@@ -124,6 +127,10 @@ export class NavReceiver {
   private readonly vor: VorCdi = { devDeg: 0, cdi: 0, toFrom: 0 };
   private readonly loc: LocDeviation = { devDeg: 0, offCourseDeg: 0, backCourse: false, distNm: 0 };
   private readonly gs: GsSignal = { elevationDeg: 0, dev: 0, devDeg: 0, carrier: 0, azimuthOffDeg: 0, distNm: 0 };
+  /** Glide path centre-line origin (along-course nm from the LOC antenna) of `gsAbeamFor`, cached per station pair. */
+  private gsAbeamAlongNm = 0;
+  private gsAbeamFor: Navaid | null = null;
+  private gsAbeamLoc: Navaid | null = null;
 
   /** Station currently received for azimuth (VOR or localizer), if any. */
   station: Navaid | null = null;
@@ -160,6 +167,7 @@ export class NavReceiver {
     this.vLocCourse = NAV.locCourse(r);
     this.vIdent = NAV.ident(r);
     this.vBearing = NAV.bearing(r);
+    this.vStationMagVar = NAV.stationMagVar(r);
     this.vSignal = NAV.signal(r);
     this.vDevDeg = NAV.devDeg(r);
     this.vGsDevDeg = NAV.gsDevDeg(r);
@@ -330,8 +338,15 @@ export class NavReceiver {
       if (g) {
         const s = glideslope(g.lat, g.lon, g.elevationFt, g.gsAngleDeg ?? 3, g.courseTrue ?? best.courseTrue ?? 0, lat, lon, alt, this.gs);
         const los = radioLineOfSightNm(alt - g.elevationFt, this.antennaFt);
-        // ICAO Annex 10 3.1.5.3.1: +/-8 deg azimuth, 10 nm (x rangeFactor); carrier nulls flag the GS.
-        gsValid = s.azimuthOffDeg <= 8 && s.distNm <= 10 * this.rangeFactor && s.distNm <= los && s.carrier >= this.gsCarrierMin && s.elevationDeg > 0;
+        if (this.gsAbeamFor !== g || this.gsAbeamLoc !== best) {
+          this.gsAbeamFor = g;
+          this.gsAbeamLoc = best;
+          this.gsAbeamAlongNm = glidePathAbeamAlongNm(best.lat, best.lon, best.courseTrue ?? 0, g.lat, g.lon);
+        }
+        // ICAO Annex 10 3.1.5.3.1: +/-8 deg azimuth about the glide path centre line (this.loc was
+        // just computed for `best` by updateLocalizer), 10 nm (x rangeFactor); carrier nulls flag the GS.
+        const az = glidePathAzimuthDeg(this.loc.devDeg, this.loc.distNm, this.gsAbeamAlongNm);
+        gsValid = !this.loc.backCourse && az <= 8 && s.distNm <= 10 * this.rangeFactor && s.distNm <= los && s.carrier >= this.gsCarrierMin && s.elevationDeg > 0;
         if (gsValid) {
           v.set(this.vGsDev, s.dev);
           v.set(this.vGsDevDeg, s.devDeg);
@@ -367,6 +382,7 @@ export class NavReceiver {
     v.set(this.vDevDeg, this.vor.devDeg);
     v.set(this.vToFrom, this.vor.toFrom);
     v.set(this.vBearing, wrap360(radial + 180));
+    v.set(this.vStationMagVar, n.magVar);
     v.set(this.vBearingValid, 1);
     v.set(this.vBackCourse, 0);
     return true;
@@ -386,6 +402,7 @@ export class NavReceiver {
     v.set(this.vToFrom, 1);
     v.set(this.vBackCourse, dev.backCourse ? 1 : 0);
     v.set(this.vLocCourse, wrap360(course - n.magVar));
+    v.set(this.vStationMagVar, n.magVar);
     v.set(this.vRadial, wrap360(initialBearing(n.lat, n.lon, lat, lon) - n.magVar));
     v.set(this.vBearingValid, 0);
     return true;

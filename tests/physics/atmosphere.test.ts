@@ -87,6 +87,44 @@ describe('non-standard atmosphere', () => {
   });
 });
 
+describe('QNH altimetry anchored at the reporting station', () => {
+  // An altimeter set to QNH must read field elevation on the ground whatever the
+  // temperature (QNH definition; FAA-H-8083-15B ch. 5: within 75 ft of field elevation).
+  const indicatedFt = (atm: Atmosphere, altM: number, baroInHg: number): number =>
+    (atm.sample(altM, createAirState()).pressureAltitude_m - pressureAltitude(baroInHg * INHG_TO_PA)) / FT_TO_M;
+  const slTemp = (stationC: number, elevFt: number): number => stationC + 0.0019812 * elevFt;
+
+  it.each([
+    ['Denver hot', 5434, 35, 30.1],
+    ['Denver cold', 5434, -25, 30.45],
+    ['Leadville ISA+20', 9934, 13, 30.02],
+    ['sea level hot', 0, 38, 29.8],
+  ] as const)('%s: altimeter reads field elevation on the ground, station temperature exact', (_n, elevFt, stationC, qnh) => {
+    const atm = new Atmosphere(qnh, slTemp(stationC, elevFt), elevFt);
+    const fieldM = elevFt * FT_TO_M;
+    // Residual = geometric vs geopotential height (h^2 / R: 4.7 ft at 10,000 ft), far inside the 75 ft check.
+    const geopotentialFt = (elevFt * elevFt * FT_TO_M) / 6356766;
+    expect(Math.abs(indicatedFt(atm, fieldM, qnh) - elevFt)).toBeLessThan(1 + geopotentialFt);
+    expect(atm.sample(fieldM, createAirState()).temperature_K - 273.15).toBeCloseTo(stationC, 1);
+  });
+
+  it('temperature error grows with height above the station (ICAO: ~4 % per 10 degC of height above the source)', () => {
+    const elevFt = 5434;
+    const atm = new Atmosphere(30.1, slTemp(-15.8, elevFt), elevFt); // ISA-20 at the field
+    // 3000 ft above the field indicated: the aircraft is lower than indicated by roughly 8 % of 3000 ft.
+    const trueAboveField = atm.trueAltitudeForIndicated(elevFt + 3000, 30.1) / FT_TO_M - elevFt;
+    expect(trueAboveField).toBeGreaterThan(3000 * 0.9);
+    expect(trueAboveField).toBeLessThan(3000 * 0.95);
+  });
+
+  it('a sea-level reference reproduces the previous MSL-anchored model', () => {
+    const a = new Atmosphere(29.5, 30);
+    const b = new Atmosphere(29.5, 30, 0);
+    expect(a.sample(3000, createAirState()).pressure_Pa).toBe(b.sample(3000, createAirState()).pressure_Pa);
+    expect(indicatedFt(a, 0, 29.5)).toBeCloseTo(0, 3);
+  });
+});
+
 describe('airspeed relations', () => {
   it('CAS == TAS at sea level ISA; round trips at altitude', () => {
     for (const kt of [60, 150, 350, 600, 800]) {

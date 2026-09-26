@@ -18,7 +18,13 @@ export const UI_CSS = `
   --amg-green: #38d27a;
   --amg-font: 'Segoe UI', 'Inter', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
   --amg-mono: 'Cascadia Mono', 'Consolas', 'DejaVu Sans Mono', ui-monospace, monospace;
+  /* Dark native widgets (scrollbars, date/time pickers, selects). */
+  color-scheme: dark;
 }
+#app ::-webkit-scrollbar { width: 10px; height: 10px; }
+#app ::-webkit-scrollbar-track { background: transparent; }
+#app ::-webkit-scrollbar-thumb { background: #2f3d4c; border-radius: 5px; border: 2px solid transparent; background-clip: padding-box; }
+#app ::-webkit-scrollbar-thumb:hover { background-color: #3f5163; }
 #app { font-family: var(--amg-font); color: var(--amg-text); user-select: none; }
 .amg-view { display: block; width: 100%; height: 100%; outline: none; }
 .amg-layer { position: fixed; inset: 0; pointer-events: none; z-index: 10; }

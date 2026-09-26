@@ -1,0 +1,63 @@
+# electron-builder v26 configuration.
+#
+#   npm run dist:win     -> release/AMG-Flight-Simulator-Setup-<ver>-x64.exe  (NSIS, per-user, desktop shortcut)
+#                           release/AMG-Flight-Simulator-<ver>-x64-portable.exe (single-file portable)
+#   npm run dist:linux   -> release/linux-unpacked/ (local verification of the packaging)
+#
+# The renderer is the Vite build (dist/), served by electron/main.cjs through the
+# privileged app:// scheme. three.js is bundled by Vite, so no node_modules ship.
+appId: com.amgaviation.flightsim
+productName: AMG Flight Simulator
+copyright: Copyright (c) 2026 AMG Aviation Group
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - dist/**/*
+  - '!dist/**/*.map'
+  - electron/**/*
+  - package.json
+  - '!node_modules/**/*'
+
+asar: true
+compression: normal
+npmRebuild: false
+nodeGypRebuild: false
+buildDependenciesFromSource: false
+# Never publish from a build (CI uploads the artifacts itself).
+publish: null
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+  icon: build/icon.ico
+  # Unsigned builds: no code-signing certificate is configured.
+  signAndEditExecutable: true
+
+nsis:
+  oneClick: true
+  perMachine: false
+  allowElevation: false
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: AMG Flight Simulator
+  runAfterFinish: true
+  deleteAppDataOnUninstall: false
+  artifactName: AMG-Flight-Simulator-Setup-${version}-${arch}.${ext}
+
+portable:
+  artifactName: AMG-Flight-Simulator-${version}-${arch}-portable.${ext}
+
+linux:
+  target:
+    - target: dir
+      arch: [x64]
+  icon: build/icon.png
+  category: Game
+  executableName: amg-flight-sim
+  synopsis: High-fidelity flight simulator

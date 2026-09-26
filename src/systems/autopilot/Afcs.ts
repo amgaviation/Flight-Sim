@@ -105,6 +105,46 @@ export const DEFAULT_LIMITS: AfcsLimits = {
 };
 
 const DEG = Math.PI / 180;
+
+/** SimVar names of one nav receiver, built once (the 60 Hz laws must not build strings). */
+interface NavNames {
+  received: string;
+  isLoc: string;
+  cdi: string;
+  devDeg: string;
+  distNm: string;
+  toFrom: string;
+  gsValid: string;
+  gsDev: string;
+  gsDevDeg: string;
+  locCourse: string;
+  obs: string;
+  bearing: string;
+  bearingValid: string;
+  stationMagVar: string;
+}
+
+/** Highest nav receiver index the AFCS can couple to. */
+const MAX_NAV_RX = 4;
+
+function navNames(r: number): NavNames {
+  return {
+    received: NAV.received(r),
+    isLoc: NAV.isLoc(r),
+    cdi: NAV.cdi(r),
+    devDeg: NAV.devDeg(r),
+    distNm: NAV.distNm(r),
+    toFrom: NAV.toFrom(r),
+    gsValid: NAV.gsValid(r),
+    gsDev: NAV.gsDev(r),
+    gsDevDeg: NAV.gsDevDeg(r),
+    locCourse: NAV.locCourse(r),
+    obs: NAV.obs(r),
+    bearing: NAV.bearing(r),
+    bearingValid: NAV.bearingValid(r),
+    stationMagVar: NAV.stationMagVar(r),
+  };
+}
 const KT_TO_FPS = 1.6878099;
 const G_FPS2 = 32.174049;
 const NAV_LATERAL: ReadonlySet<LateralMode> = new Set<LateralMode>(['LNAV', 'VOR', 'LOC', 'BC']);
@@ -172,6 +212,8 @@ export class Afcs implements Subsystem {
     autoDisc: () => boolean;
   };
   private readonly s: Record<'pitch' | 'bank' | 'heading' | 'p' | 'q' | 'ias' | 'mach' | 'tas' | 'alt' | 'vs' | 'iasRate' | 'ra' | 'gs' | 'track' | 'flaps', string>;
+  /** Nav receiver var names, index = receiver number (0 aliases 1). */
+  private readonly nav: NavNames[];
   private readonly latAllowed: ReadonlySet<LateralMode>;
   private readonly vertAllowed: ReadonlySet<VerticalMode>;
 
@@ -279,6 +321,8 @@ export class Afcs implements Subsystem {
       inhibit: compileCondition(v, cfg.disconnect?.engageInhibit, false),
       autoDisc: compileCondition(v, cfg.disconnect?.auto, false),
     };
+    this.nav = [];
+    for (let r = 0; r <= MAX_NAV_RX; r++) this.nav.push(navNames(Math.max(1, r)));
     this.latAllowed = new Set(cfg.lateralModes ?? LATERAL_MODES);
     this.vertAllowed = new Set(cfg.verticalModes ?? VERTICAL_MODES);
     const g = this.gains;
@@ -455,7 +499,7 @@ export class Afcs implements Subsystem {
         break;
       case 'CRS_SYNC': {
         const r = this.navReceiver();
-        if (v.get(NAV.bearingValid(r)) !== 0) v.set(NAV.obs(r), Math.round(norm360(v.get(NAV.bearing(r)))));
+        if (v.get(this.nv(r).bearingValid) !== 0) v.set(this.nv(r).obs, Math.round(norm360(v.get(this.nv(r).bearing))));
         break;
       }
       case 'SPD_MACH': {
@@ -589,7 +633,7 @@ export class Afcs implements Subsystem {
     }
     if (other && this.engaged) {
       const al = this.cfg.autoland;
-      const bothIls = this.vars.get(NAV.isLoc(1)) !== 0 && this.vars.get(NAV.isLoc(2)) !== 0;
+      const bothIls = this.vars.get(this.nv(1).isLoc) !== 0 && this.vars.get(this.nv(2).isLoc) !== 0;
       if (al && this.approach && bothIls && this.ra > (al.secondChannelBeforeFt ?? 800)) {
         // Second channel armed for the dual approach (couples below 1500 ft after LOC+GS capture).
         if (a) this.cmdA = true;
@@ -691,6 +735,11 @@ export class Afcs implements Subsystem {
 
   // -------------------------------------------------------------- lateral nav buttons
 
+  /** Cached var names of nav receiver `r` (clamped to 1..MAX_NAV_RX). */
+  private nv(r: number): NavNames {
+    return this.nav[r >= 1 && r <= MAX_NAV_RX ? r | 0 : 1];
+  }
+
   private navSource(): number {
     return this.vars.get(this.cfg.nav?.sourceVar ?? AFCS_VARS.navSource);
   }
@@ -719,7 +768,7 @@ export class Afcs implements Subsystem {
     } else {
       const r = radioOnly ? this.navReceiver() : src;
       this.navRx = r;
-      target = this.vars.get(NAV.isLoc(r)) !== 0 ? 'LOC' : 'VOR';
+      target = this.vars.get(this.nv(r).isLoc) !== 0 ? 'LOC' : 'VOR';
     }
     if (!this.latAllowed.has(target)) return;
     if (this.lat !== target) this.latArmed = target;
@@ -754,7 +803,7 @@ export class Afcs implements Subsystem {
     } else {
       const r = this.style === 'boeing' ? this.navReceiver() : src;
       this.navRx = r;
-      const loc = v.get(NAV.isLoc(r)) !== 0;
+      const loc = v.get(this.nv(r).isLoc) !== 0;
       if (this.style === 'boeing' && !loc) return; // APP needs an ILS on the master receiver
       this.approach = true;
       const target: LateralMode = loc ? 'LOC' : 'VOR';
@@ -781,7 +830,7 @@ export class Afcs implements Subsystem {
       return;
     }
     const r = this.navSource() >= 1 ? this.navSource() : this.navReceiver();
-    if (this.vars.get(NAV.isLoc(r)) === 0) return;
+    if (this.vars.get(this.nv(r).isLoc) === 0) return;
     this.navRx = r;
     this.latArmed = 'BC';
     this.vertArmed &= ~ARM.GS;
@@ -1081,7 +1130,7 @@ export class Afcs implements Subsystem {
     if (this.lat === 'LNAV' && v.get(FMS.lnavValid) === 0) this.setLat(this.defaultLat());
     if (this.lat === 'VOR' || this.lat === 'LOC' || this.lat === 'BC') {
       const r = this.navRx;
-      this.prevNavValidT = v.get(NAV.received(r)) !== 0 ? 0 : this.prevNavValidT + dt;
+      this.prevNavValidT = v.get(this.nv(r).received) !== 0 ? 0 : this.prevNavValidT + dt;
       if (this.prevNavValidT > 5 && !(this.style === 'boeing' && this.ra > 1500 && this.lat === 'LOC')) this.setLat(this.defaultLat());
     }
     if (this.lat === 'TO' && !this.onGround && this.cfg.to?.lateral === 'TRK' && this.trackRef === 0) this.trackRef = this.trk;
@@ -1151,8 +1200,8 @@ export class Afcs implements Subsystem {
     const gsCap = this.cfg.nav?.gsCaptureDev ?? 0.2;
     if ((this.vertArmed & ARM.GS) !== 0 && this.lat === 'LOC') {
       const r = this.navRx;
-      if (v.get(NAV.gsValid(r)) !== 0) {
-        const dev = v.get(NAV.gsDev(r));
+      if (v.get(this.nv(r).gsValid) !== 0) {
+        const dev = v.get(this.nv(r).gsDev);
         if (Math.abs(dev) <= gsCap) this.setVert('GS');
       }
     }
@@ -1236,7 +1285,7 @@ export class Afcs implements Subsystem {
       if (this.vert === 'GS' && (this.vertArmed & ARM.FLARE) === 0 && !this.flareActive) this.vertArmed |= ARM.FLARE;
     }
     if (this.channels === 2) {
-      const navOk = v.get(NAV.received(1)) !== 0 && v.get(NAV.received(2)) !== 0 && v.get(NAV.gsValid(1)) !== 0 && v.get(NAV.gsValid(2)) !== 0;
+      const navOk = v.get(this.nv(1).received) !== 0 && v.get(this.nv(2).received) !== 0 && v.get(this.nv(1).gsValid) !== 0 && v.get(this.nv(2).gsValid) !== 0;
       const raOk = this.raOk && v.get(SENSOR_VARS.raValid(2), 1) !== 0;
       this.noAutolandT = navOk && raOk ? 0 : this.noAutolandT + dt;
       this.autoland = this.noAutolandT > 2 ? 'NO AUTOLAND' : raOk && navOk ? 'LAND 3' : 'LAND 2';
@@ -1341,10 +1390,10 @@ export class Afcs implements Subsystem {
   private courseCaptured(kind: LateralMode, dt: number): boolean {
     const v = this.vars;
     const r = this.navRx;
-    if (v.get(NAV.received(r)) === 0) return false;
-    const isLoc = v.get(NAV.isLoc(r)) !== 0;
+    if (v.get(this.nv(r).received) === 0) return false;
+    const isLoc = v.get(this.nv(r).isLoc) !== 0;
     if ((kind === 'LOC' || kind === 'BC') !== isLoc) return false;
-    const cdi = v.get(NAV.cdi(r)) * (kind === 'BC' ? -1 : 1);
+    const cdi = v.get(this.nv(r).cdi) * (kind === 'BC' ? -1 : 1);
     const cap = kind === 'VOR' ? this.cfg.nav?.vorCaptureCdi ?? 0.5 : this.cfg.nav?.locCaptureCdi ?? 0.25;
     if (Math.abs(cdi) <= cap) return true;
     // Turn lead: capture early enough to roll out on the course.
@@ -1358,7 +1407,13 @@ export class Afcs implements Subsystem {
 
   private courseFor(kind: LateralMode, r: number): number {
     const v = this.vars;
-    let c = v.get(NAV.isLoc(r)) !== 0 && v.has(NAV.locCourse(r)) ? v.get(NAV.locCourse(r)) : v.get(NAV.obs(r));
+    const n = this.nv(r);
+    let c = v.get(n.isLoc) !== 0 && v.has(n.locCourse) ? v.get(n.locCourse) : v.get(n.obs);
+    // VOR radials and localizer courses are magnetic w.r.t. the station's declination, while the
+    // heading/track they are flown against use today's variation (AHRS / GPS, WMM). Refer the course
+    // to today's variation, or the law holds a steady cross-track offset (1 deg of declination
+    // difference ~ 90 ft beside a localizer centre line at the default gains).
+    if (v.has(n.stationMagVar) && v.get(GPS.valid) !== 0) c += v.get(n.stationMagVar) - v.get(GPS.magVar);
     if (kind === 'BC') c += 180;
     return norm360(c);
   }
@@ -1366,9 +1421,9 @@ export class Afcs implements Subsystem {
   /** Cross-track (nm, + = aircraft left of course / fly right) from the angular deviation and distance. */
   private crossTrackNm(kind: LateralMode, r: number): number {
     const v = this.vars;
-    let dev = v.get(NAV.devDeg(r));
+    let dev = v.get(this.nv(r).devDeg);
     if (kind === 'BC') dev = -dev;
-    let dist = v.get(NAV.distNm(r));
+    let dist = v.get(this.nv(r).distNm);
     if (!(dist > 0.05)) dist = kind === 'VOR' ? 10 : 5; // no DME: nominal distance (EST)
     return dist * Math.sin(dev * DEG);
   }
@@ -1381,8 +1436,8 @@ export class Afcs implements Subsystem {
     // VOR over-station: the deviation is meaningless in the cone of confusion.
     let os = false;
     if (kind === 'VOR') {
-      const tf = v.get(NAV.toFrom(r));
-      const dist = v.get(NAV.distNm(r));
+      const tf = v.get(this.nv(r).toFrom);
+      const dist = v.get(this.nv(r).distNm);
       const cone = Math.max(0.5, (Math.max(0, this.alt) / 6076) * 1.2);
       if ((dist > 0 && dist < cone) || (tf !== this.prevToFrom && this.prevToFrom !== 0)) this.overStationT = 20;
       this.prevToFrom = tf;
@@ -1533,8 +1588,8 @@ export class Afcs implements Subsystem {
     let distFt: number;
     if (this.vert === 'GS') {
       const r = this.navRx;
-      devDeg = v.get(NAV.gsDevDeg(r));
-      const d = v.get(NAV.distNm(r));
+      devDeg = v.get(this.nv(r).gsDevDeg);
+      const d = v.get(this.nv(r).distNm);
       distFt = d > 0.05 ? d * 6076 : NaN;
     } else {
       angle = v.get(FMS.gpAngleDeg) > 0 ? v.get(FMS.gpAngleDeg) : 3;
@@ -1583,7 +1638,7 @@ export class Afcs implements Subsystem {
     this.servoR += clampAbs(clampAbs(rCmd, ra) - this.servoR, (sr.rate ?? 0.5) * dt);
     // Rollout: rudder to the localizer.
     if (this.lat === 'ROLLOUT') {
-      const dev = v.get(NAV.devDeg(this.navRx));
+      const dev = v.get(this.nv(this.navRx).devDeg);
       this.servoY = clampAbs(0.15 * dev, this.cfg.servos?.yaw?.authority ?? 0.5);
     } else this.servoY = 0;
 

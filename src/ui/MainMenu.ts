@@ -8,7 +8,7 @@ import { appVersion, platformLabel } from '../platform/env';
 import { h, clear, button } from './dom';
 import { menuAircraft } from './catalog';
 import { STATES, type LaunchConfig } from './launch';
-import { parkingSpots, usableRunways } from './startPosition';
+import { normalizeRunwayIdent, parkingSpots, usableRunways } from './startPosition';
 import { WeatherPanel } from './WeatherPanel';
 
 export interface MainMenuOptions {
@@ -157,7 +157,7 @@ export class MainMenu {
     for (const r of usableRunways(a)) {
       const ils = r.ils ? ` · ILS ${r.ils.ident} ${r.ils.freqMhz.toFixed(2)}` : '';
       this.aptBody.appendChild(
-        item(`Runway ${r.ident}`, `${Math.round(r.lengthFt)} x ${Math.round(r.widthFt)} ft · ${r.surface}${ils}`, spot.kind === 'runway' && spot.runway === r.ident.toUpperCase(), () => {
+        item(`Runway ${r.ident}`, `${Math.round(r.lengthFt)} x ${Math.round(r.widthFt)} ft · ${r.surface}${ils}`, spot.kind === 'runway' && normalizeRunwayIdent(spot.runway) === normalizeRunwayIdent(r.ident), () => {
           this.cfg.spot = { kind: 'runway', runway: r.ident.toUpperCase() };
           this.renderAirport();
           this.updateSummary();

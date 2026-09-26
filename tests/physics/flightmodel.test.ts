@@ -224,6 +224,23 @@ describe('FlightModel takeoff and flight', () => {
     expect(vars.get(FDM.headingMag)).toBeCloseTo(160 - d, 1);
   });
 
+  it('altimetry: with QNH set, pressure altitude on a hot high field gives field elevation (env.qnh_ref_elev_ft)', () => {
+    const elevFt = 5434; // Denver-like field
+    const { fdm, vars } = makeFdm(TEST_JET, new FlatWorld(elevFt * 0.3048));
+    const qnh = 30.1;
+    vars.set(ENV.qnhInHg, qnh);
+    vars.set(ENV.oatSeaLevelC, 35 + 0.0019812 * elevFt); // 35 C at the station
+    vars.set(ENV.qnhRefElevFt, elevFt);
+    onRunway(fdm, 170);
+    run(fdm, 0.5);
+    // Indicated altitude of an altimeter set to QNH = Hp - Hp(QNH).
+    const hpQnh = (145366.45 * (1 - Math.pow(qnh / 29.92126, 0.190284)));
+    const indicated = vars.get(FDM.pressAlt) - hpQnh;
+    const gearHeightFt = vars.get(FDM.altMsl) - elevFt; // datum above the runway
+    expect(Math.abs(indicated - (elevFt + gearHeightFt))).toBeLessThan(10);
+    expect(vars.get(FDM.sat)).toBeCloseTo(35, 0);
+  });
+
   it('wind: headwind raises IAS over ground speed; winds reported', () => {
     const { fdm, vars } = makeFdm(TEST_JET);
     vars.set(ENV.surfaceWindDir, 360);

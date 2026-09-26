@@ -14,6 +14,7 @@
  * gauge at zero), so an aircraft with vacuum instruments must write it.
  */
 import { ADC, AP, ENV, FDM, FUEL, NAV } from '../../core/vars';
+import { SENSOR_VARS } from '../../systems/sensors/vars';
 
 export const ANALOG_VARS = {
   // ------------------------------------------------ inputs the aircraft provides
@@ -36,7 +37,13 @@ export const ANALOG_VARS = {
   // ------------------------------------------------ standard sensor vars read by default
   ias: ADC.ias(1),
   altitude: ADC.baroAlt(1),
-  pressureAlt: FDM.pressAlt,
+  /**
+   * Pressure altitude (29.92 datum) measured at a static source, for the
+   * standby-altimeter mode. An ADC/static-source var (not fdm.press_alt_ft)
+   * so static-port blockage, ice and alternate static reach the instrument;
+   * a standby altimeter on its own static port uses its own ADC index.
+   */
+  pressureAlt: SENSOR_VARS.pressAlt(1),
   vs: ADC.vs(1),
   baroSetting: ADC.baroSetting(1),
   navCdi: NAV.cdi,

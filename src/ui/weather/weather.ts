@@ -278,6 +278,8 @@ export interface WindsAloftSink {
 export function applyWeather(vars: SimVars, w: WeatherState, wind?: WindsAloftSink | null): void {
   vars.set(ENV.qnhInHg, w.qnhInHg);
   vars.set(ENV.oatSeaLevelC, seaLevelTemperature(w.temperatureC, w.stationElevFt));
+  // QNH and temperature were reported at the station: the FDM anchors the altimetry there.
+  vars.set(ENV.qnhRefElevFt, Number.isFinite(w.stationElevFt) ? w.stationElevFt : 0);
   vars.set(ENV.visibilityM, Math.max(50, w.visibilityM));
   vars.set(ENV.cloudCover, Math.min(1, Math.max(0, w.cloudCover)));
   vars.set(ENV.cloudBaseFt, Math.max(0, w.cloudBaseFt));

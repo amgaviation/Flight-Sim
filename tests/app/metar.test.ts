@@ -127,6 +127,8 @@ describe('weather model', () => {
     // Presets give 26 C at the station, ISA lapse back to sea level = +1.98 C per 1000 ft.
     expect(vars.get(ENV.oatSeaLevelC)).toBeCloseTo(26, 6);
     expect(vars.get(ENV.cloudCover)).toBeCloseTo(0.8, 6);
+    // QNH reference station for the FDM altimetry.
+    expect(vars.get(ENV.qnhRefElevFt)).toBe(1000);
     expect(layers.length).toBe(w.windsAloft.length);
   });
 
