@@ -113,7 +113,7 @@ export class World implements WorldQuery {
   private q: QualitySettings;
   private readonly physicsWanted: number[] = [];
   private readonly pinned = new Set<number>();
-  private physicsSig = '';
+  private physicsSig = -1;
   private readonly waiters: LoadWaiter[] = [];
   private pendingDelta: THREE.Matrix4 | null = null;
   private recenters = 0;
@@ -177,7 +177,9 @@ export class World implements WorldQuery {
 
     this.loader.onLoaded = (t) => {
       this.store.add(t.z, t.x, t.y, t.elev, t.min, t.max);
-      if (this.physicsWanted.includes(t.key) && !this.pinned.has(t.key)) {
+      // Pin physics tiles and tiles awaited by ensureLoaded so LRU eviction cannot drop them.
+      const wanted = this.physicsWanted.includes(t.key) || this.waiters.some((w) => w.keys.includes(t.key));
+      if (wanted && !this.pinned.has(t.key)) {
         this.store.pin(t.key);
         this.pinned.add(t.key);
       }
@@ -297,7 +299,7 @@ export class World implements WorldQuery {
     const near = aglM < NEAR_GROUND_AGL_M;
     const x13 = Math.floor(lonToTileX(lon, PHYSICS_ZOOM_MID));
     const y13 = Math.floor(latToTileY(lat, PHYSICS_ZOOM_MID));
-    const sig = `${x13},${y13},${near ? 1 : 0}`;
+    const sig = (x13 * 32768 + y13) * 2 + (near ? 1 : 0);
     if (sig !== this.physicsSig) {
       this.physicsSig = sig;
       const want: number[] = [];
@@ -413,7 +415,7 @@ export class World implements WorldQuery {
 
     // Base ground: below all loaded terrain, or at the fallback elevation when offline.
     const terrainLoaded = this.store.size > 0;
-    const baseAlt = terrainLoaded ? Math.min(-60, this.lowestLoadedElevation() - 60) : this.ground.fallbackElevation - 0.4;
+    const baseAlt = terrainLoaded ? this.lowestLoadedElevation() - 60 : this.ground.fallbackElevation - 0.4;
     this.baseGround.update(_camPos, baseAlt);
 
     // Airports.
@@ -423,10 +425,11 @@ export class World implements WorldQuery {
     const vis = this.vars.has(ENV.visibilityM) ? this.vars.get(ENV.visibilityM) : 40_000;
     const ambient = this.uniforms.uAmbient.value;
     const ls = this.lightState;
-    // Runway lights on at night/twilight or in low visibility (< 5 km / 3 SM, 14 CFR 91.155 VFR minimums).
-    ls.runway = ambient < 0.5 || vis < 5000 || this.uniforms.uCloudBeta.value > 0;
+    // Runway lights on from sunset (ambient 0.62 ~ 400 lux) or in low visibility (< 5 km ~ 3 SM,
+    // the 14 CFR 91.155 basic VFR minimum) or inside cloud.
+    ls.runway = ambient < 0.62 || vis < 5000 || this.uniforms.uCloudBeta.value > 0;
     ls.taxiway = ls.runway;
-    ls.beacon = ambient < 0.45 || vis < 5000; // AIM 2-1-9: dusk to dawn, and in IMC in controlled airspace
+    ls.beacon = ambient < 0.62 || vis < 5000; // AIM 2-1-9: sunset to sunrise, and in IMC in controlled airspace
     ls.papi = true;
     ls.daylight = ambient;
     // Lights penetrate haze farther than objects (Allard's law); EST factor 0.5 of object extinction.
@@ -441,13 +444,13 @@ export class World implements WorldQuery {
   }
 
   private lowestLoadedElevation(): number {
-    // Cheap bound from the roots/coarse tiles: sample a few coarse tiles under the view.
-    let lo = 0;
+    // Lower bound of the terrain around the camera from the coarse (z4-z7) tiles covering it.
+    let lo = Infinity;
     for (let z = 4; z <= 7; z++) {
       const t = this.store.findTile(_camGeo.lat, _camGeo.lon, z);
-      if (t) lo = Math.min(lo, t.min);
+      if (t) lo = Math.min(lo, Math.max(t.min, -500));
     }
-    return lo;
+    return Number.isFinite(lo) ? lo : 0;
   }
 
   getStats(): WorldStats {

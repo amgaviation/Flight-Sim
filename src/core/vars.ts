@@ -261,6 +261,75 @@ export const NAV = {
   xpdrCode: 'xpdr.code',
   xpdrMode: 'xpdr.mode', // 0 off, 1 stby, 2 on (mode A), 3 alt (mode C/S), 4 TA only, 5 TA/RA
   xpdrIdent: 'xpdr.ident',
+  // --- appended by nav (append-only). See docs/modules/nav.md for semantics.
+  // Receiver inputs written by the aircraft:
+  /** 1 = DME held on the frequency that was tuned when hold was engaged (DME HOLD). */
+  dmeHold: (r: number) => `nav${r}.dme_hold`,
+  /** ADF receiver power (0/1). */
+  adfPowered: (r: number) => `adf${r}.powered`,
+  /** ADF function: 0 = ANT (audio only, needle parked at 90), 1 = ADF, 2 = BFO (ADF + beat tone). */
+  adfMode: (r: number) => `adf${r}.mode`,
+  /** Marker beacon receiver power (0/1) and sensitivity (1 = HI, 0 = LO). */
+  markerPowered: 'nav.marker_powered',
+  markerHiSens: 'nav.marker_hi_sens',
+  // Receiver outputs written by nav/Radios:
+  /** 0..1 received signal quality (ident audio volume, flag threshold). */
+  signal: (r: number) => `nav${r}.signal`,
+  /** Angular deviation from the selected VOR course / localizer course (deg), + = fly right (same sign as cdi). */
+  devDeg: (r: number) => `nav${r}.dev_deg`,
+  /** Glideslope angular deviation (deg), + = glideslope above aircraft (fly up). */
+  gsDevDeg: (r: number) => `nav${r}.gs_dev_deg`,
+  /** 1 while the aircraft is in the localizer back-course sector. */
+  backCourse: (r: number) => `nav${r}.back_course`,
+  /** Horizontal distance to the received station (nm). */
+  distNm: (r: number) => `nav${r}.dist_nm`,
+  /** 1 when `bearing` (RMI) is valid (VOR received; not for localizers). */
+  bearingValid: (r: number) => `nav${r}.bearing_valid`,
+  /** String: morse pattern of the station ident, e.g. '.. -  . -...'. */
+  morse: (r: number) => `nav${r}.ident_morse`,
+  /** String: station type received ('VOR', 'VORDME', 'VORTAC', 'ILS', 'LOC', 'DME', ...), '' when none. */
+  stationType: (r: number) => `nav${r}.station_type`,
+  /** String: ident of the DME being received (differs from `ident` in DME HOLD). */
+  dmeIdent: (r: number) => `nav${r}.dme_ident`,
+  /** DME-derived ground speed toward/away from the station (kt, always >= 0) and time to station (min). */
+  dmeGs: (r: number) => `nav${r}.dme_gs_kt`,
+  dmeTts: (r: number) => `nav${r}.dme_tts_min`,
+  adfIdent: (r: number) => `adf${r}.ident`, // string
+  adfMorse: (r: number) => `adf${r}.ident_morse`, // string
+  adfSignal: (r: number) => `adf${r}.signal`, // 0..1
+  adfDistNm: (r: number) => `adf${r}.dist_nm`,
+} as const;
+
+/**
+ * GPS receiver (nav/Radios GpsReceiver). GPS position and ground speed are
+ * the documented exception to "avionics never read fdm.*": the receiver
+ * copies FDM truth after its acquisition delay.
+ */
+export const GPS = {
+  /** Input: receiver power (0/1), written by the aircraft electrical logic. */
+  powered: 'gps.powered',
+  /** Input: 1 = receiver failed / no satellites (failure injection). */
+  fail: 'gps.fail',
+  valid: 'gps.valid',
+  lat: 'gps.lat_deg',
+  lon: 'gps.lon_deg',
+  /** Geometric altitude MSL (ft). */
+  alt: 'gps.alt_ft',
+  gs: 'gps.gs_kt',
+  trackTrue: 'gps.trk_true_deg',
+  trackMag: 'gps.trk_mag_deg',
+  vs: 'gps.vs_fpm',
+  /** Magnetic variation at the position (WMM2025, deg + east). */
+  magVar: 'gps.mag_var_deg',
+  /** Satellites tracked and estimated position uncertainty (nm). */
+  sats: 'gps.sats',
+  epuNm: 'gps.epu_nm',
+  /** 1 when SBAS (WAAS/EGNOS) corrections are in use (LPV capable). */
+  sbas: 'gps.sbas',
+  /** Seconds left until position fix after power-up (0 when valid). */
+  acquireS: 'gps.acq_s',
+  /** UTC time of day (hours) from the GPS. */
+  utcH: 'gps.utc_h',
 } as const;
 
 /** Generic autopilot/FD outputs shared by avionics renderers. Aircraft AP logic writes these. */
@@ -307,6 +376,55 @@ export const FMS = {
   todDistNm: 'fms.tod_dist_nm',
   cdiScaleNm: 'fms.cdi_scale_nm',
   approachMode: 'fms.approach_mode', // string: 'TERM', 'ENR', 'OCN', 'LPV', 'LNAV', 'LNAV+V', 'LNAV/VNAV'
+  // --- appended by nav (append-only). Written by nav/fms (Fms / LnavGuidance / VnavGuidance).
+  /** LNAV roll command for the autopilot/flight director (deg, + = right wing down). */
+  lnavBankCmd: 'fms.lnav_bank_cmd_deg',
+  /** VNAV/FMS target speed (kt IAS) and Mach (0 when the target is an IAS). */
+  vnavTargetSpeedKt: 'fms.vnav_tgt_speed_kt',
+  vnavTargetMach: 'fms.vnav_tgt_mach',
+  /** Lateral deviation scaled by the current CDI scale (or LPV angular scale), -1..1, + = fly right (needle right). */
+  cdi: 'fms.cdi',
+  /** Approach glidepath (LPV / LNAV/VNAV / synthetic): deviation -1..1 (+ = path above aircraft, fly up), validity, angle. */
+  gpDev: 'fms.gp_dev',
+  gpValid: 'fms.gp_valid',
+  gpAngleDeg: 'fms.gp_angle_deg',
+  /** String: ident of the FROM waypoint of the active leg. */
+  fromWptIdent: 'fms.from_wpt',
+  /** String: ident of the waypoint after the active one. */
+  afterWptIdent: 'fms.after_wpt',
+  /** 1 = TO, -1 = FROM (past the active waypoint while suspended / in a hold outbound). */
+  toFrom: 'fms.to_from',
+  /** String: ARINC path terminator of the active leg ('TF', 'DF', 'HM', 'VA', ...). */
+  legType: 'fms.leg_type',
+  /** DTK (deg magnetic) of the leg after the active one (for "turn to" advisories). */
+  nextDtkMag: 'fms.next_dtk_mag_deg',
+  /** 1 while waypoint sequencing is suspended (MAP before missed approach activation, discontinuity, manual termination). */
+  suspended: 'fms.suspended',
+  inHold: 'fms.in_hold',
+  /** String: hold entry being flown: 'DIRECT' | 'TEARDROP' | 'PARALLEL' | ''. */
+  holdEntry: 'fms.hold_entry',
+  /** 1 during the last ~10 s before a turn at the active waypoint (Garmin "WPT" alert). */
+  wptAlert: 'fms.wpt_alert',
+  /** Destination predictions: ETE (s), ETA (UTC hours), fuel remaining at destination (kg). */
+  eteDestS: 'fms.ete_dest_s',
+  etaDestUtcH: 'fms.eta_dest_utc_h',
+  fuelDestKg: 'fms.fuel_dest_kg',
+  /** Vertical speed required to meet the VNAV target altitude at its waypoint (fpm, negative = descend). */
+  vsRequiredFpm: 'fms.vs_req_fpm',
+  /** Time to top of descent (s), 0 once past it. */
+  todEteS: 'fms.tod_ete_s',
+  /** String: VNAV phase 'CLB' | 'CRZ' | 'DES' | 'APR' | '' (no plan). */
+  vnavPhase: 'fms.vnav_phase',
+  /** Cruise altitude (ft) of the active plan (mirrors FlightPlan.cruiseAltFt). */
+  cruiseAltFt: 'fms.crz_alt_ft',
+  /** Increments whenever the active plan (or its geometry) changes; displays re-read the plan. */
+  planVersion: 'fms.plan_version',
+  /** Boeing-style editing: 1 while a modified plan awaits EXEC (EXEC light). */
+  modPending: 'fms.mod_pending',
+  /** 1 while the approach is active (final approach mode, CDI ramped to approach scaling). */
+  approachActive: 'fms.approach_active',
+  /** 1 once the missed approach has been activated. */
+  missedActive: 'fms.missed_active',
 } as const;
 
 /** Ice accretion. Written by systems/IceProtection; read by FDM (lift/drag penalties) and ADC (pitot blockage). */

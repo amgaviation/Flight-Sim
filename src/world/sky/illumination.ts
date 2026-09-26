@@ -51,14 +51,15 @@ export function moonIlluminanceLux(moonElevDeg: number, illuminated: number): nu
 }
 
 /**
- * Fraction of daylight reaching the ground below a cloud layer of fractional
- * cover. EST: overcast ~1,000 lux vs 10,000-25,000 lux full daylight (Lux
- * table) -> ~0.1 at full cover; quadratic in cover so scattered cloud barely
- * dims the scene.
+ * Fraction of global daylight reaching the ground below a cloud layer of
+ * fractional cover. EST: a typical stratocumulus/stratus overcast transmits
+ * ~20-40% of clear-sky global irradiance (dense overcast ~1,000 lux in the Lux
+ * table is the dark end); 0.3 at full cover, quadratic in cover so scattered
+ * cloud barely dims the scene.
  */
 export function cloudTransmission(cover: number): number {
   const c = Math.min(1, Math.max(0, cover));
-  return 1 - 0.9 * c * c;
+  return 1 - 0.7 * c * c;
 }
 
 /**

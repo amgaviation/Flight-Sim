@@ -1,0 +1,49 @@
+{
+  "format": "amg-navdata/meta",
+  "version": 1,
+  "generated": "2026-09-26T05:52:31.769Z",
+  "sources": [
+    {
+      "name": "OurAirports",
+      "url": "https://davidmegginson.github.io/ourairports-data/",
+      "license": "Public domain",
+      "date": "2026-09-26"
+    },
+    {
+      "name": "FlightGear fgdata Navaids (X-Plane 810/600/640)",
+      "url": "https://gitlab.com/flightgear/fgdata/-/raw/next/Navaids/",
+      "license": "GPL-2.0",
+      "cycle": "2013.10"
+    },
+    {
+      "name": "FAA CIFP",
+      "url": "https://aeronav.faa.gov/Upload_313-d/cifp/CIFP_260903.zip",
+      "license": "Public domain (US Government work)",
+      "cycle": "2609",
+      "date": "03 SEP 2026"
+    }
+  ],
+  "counts": {
+    "airports": 72525,
+    "runways": 43141,
+    "navaids": 10926,
+    "localizers": 3522,
+    "markers": 3085,
+    "fixes": 144759,
+    "airwaySegments": 80460,
+    "procedureAirports": 3070
+  },
+  "cifp": {
+    "cycle": "2609",
+    "effective": "03 SEP 2026",
+    "url": "https://aeronav.faa.gov/Upload_313-d/cifp/CIFP_260903.zip"
+  },
+  "sizes": {
+    "airports.json.gz": 3362950,
+    "navaids.json.gz": 341151,
+    "ils.json.gz": 206713,
+    "fixes.json.gz": 1653362,
+    "airways.json.gz": 1749518,
+    "procedures/*": 3848896
+  }
+}

@@ -121,3 +121,274 @@ export interface NavDatabase {
   resolve(ident: string, nearLat: number, nearLon: number): Waypoint[];
   airway(name: string): AirwaySegment[];
 }
+
+// ---------------------------------------------------------------------------
+// Appended by the nav module (append-only; see CLAUDE.md shared contracts).
+// Optional fields are merged into the interfaces above by declaration merging,
+// so existing object literals keep compiling.
+// ---------------------------------------------------------------------------
+
+/** Extra runway-end data filled by `nav/NavDatabase.ts`. */
+export interface RunwayExtras {
+  /**
+   * Landing threshold (runway end moved `displacedFt` along `headingTrue`).
+   * `lat`/`lon` above are the physical runway end (start of pavement).
+   */
+  thresholdLat?: number;
+  thresholdLon?: number;
+  /** True when the source had no coordinates and the position was synthesised from the airport reference point and the runway number (EST). */
+  positionEstimated?: boolean;
+}
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export interface Runway extends RunwayExtras {}
+
+/** Extra localizer/glideslope data. */
+export interface IlsInfoExtras {
+  /** 'ILS' (with glideslope), 'LOC', 'LDA', 'SDF' or 'IGS'. */
+  kind?: 'ILS' | 'LOC' | 'LDA' | 'SDF' | 'IGS';
+  /** Published total course width (deg, CIFP); otherwise receivers use 2*atan(350 ft / distance to threshold) clamped 3..6 deg. */
+  courseWidthDeg?: number;
+  /** Localizer antenna elevation (ft MSL). */
+  locElevFt?: number;
+  dmeElevFt?: number;
+  /** Glideslope threshold crossing height (ft). */
+  tchFt?: number;
+  /** Station declination (deg, + east) when published. */
+  declination?: number;
+  /** 'CIFP' (FAA, current AIRAC) or 'FG' (FlightGear nav.dat, 2013.10). */
+  source?: 'CIFP' | 'FG';
+}
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export interface IlsInfo extends IlsInfoExtras {}
+
+/** Extra airport identifiers and data. */
+export interface AirportExtras {
+  iata?: string;
+  gpsCode?: string;
+  localCode?: string;
+  /** Magnetic variation at the reference point (deg, + east; WMM2025). */
+  magVar?: number;
+}
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export interface Airport extends AirportExtras {}
+
+/** Extra navaid data. */
+export interface NavaidExtras {
+  /** Stable index of this record inside the loaded database (cheap identity for receivers). */
+  id?: number;
+  /** DME antenna position when not co-located with the VOR/NDB. */
+  dmeLat?: number;
+  dmeLon?: number;
+  dmeElevationFt?: number;
+  /** True when a DME is paired with this VOR/NDB/localizer. */
+  hasDme?: boolean;
+  /** OurAirports usage class: 'HI' | 'LO' | 'BOTH' | 'TERMINAL' | 'RNAV' | ''. */
+  usage?: string;
+  country?: string;
+  /** TACAN/DME channel, e.g. '114X'. */
+  channel?: string;
+  /** For LOC/ILS: 'ILS' | 'LOC' | 'LDA' | 'SDF' | 'IGS'. */
+  locKind?: 'ILS' | 'LOC' | 'LDA' | 'SDF' | 'IGS';
+  /** For LOC/ILS: published course width (deg). */
+  courseWidthDeg?: number;
+  /** For LOC/ILS/GS: threshold of the served runway (for course-width and marker geometry). */
+  thresholdLat?: number;
+  thresholdLon?: number;
+  thresholdElevFt?: number;
+  /** For GS: threshold crossing height (ft). */
+  tchFt?: number;
+}
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export interface Navaid extends NavaidExtras {}
+
+/** Extra airway segment data (coordinates disambiguate duplicate fix idents). */
+export interface AirwaySegmentExtras {
+  fromLat?: number;
+  fromLon?: number;
+  toLat?: number;
+  toLon?: number;
+  /** 1 = low, 2 = high, 3 = both. */
+  level?: 1 | 2 | 3;
+  maxAltFt?: number;
+  /** True when the segment may only be flown from -> to. */
+  oneWay?: boolean;
+}
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export interface AirwaySegment extends AirwaySegmentExtras {}
+
+/** Extra waypoint data. */
+export interface WaypointExtras {
+  /** ICAO region code for fixes ('' / undefined when unknown). */
+  region?: string;
+  /** Source navaid for 'vor' / 'ndb' waypoints. */
+  navaid?: Navaid;
+  /** Owning airport ident for 'airport' and 'runway' waypoints. */
+  airport?: string;
+  /** Elevation (ft MSL) for airports/runways. */
+  elevationFt?: number;
+}
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export interface Waypoint extends WaypointExtras {}
+
+// ------------------------------------------------------------- procedures
+
+/**
+ * ARINC 424 path terminators (leg types). IF initial fix; TF track to fix;
+ * CF course to fix; DF direct to fix; FA/FC/FD/FM from fix to
+ * altitude / distance / DME distance / manual termination; CA/CD/CI/CR
+ * course to altitude / DME distance / intercept / radial; VA/VD/VI/VM/VR
+ * heading to altitude / DME distance / intercept / manual / radial;
+ * RF radius-to-fix arc; AF DME arc to fix; HA/HF/HM hold to altitude /
+ * single circuit to fix / manual termination; PI 45-degree procedure turn.
+ */
+export type LegType =
+  | 'IF' | 'TF' | 'CF' | 'DF'
+  | 'FA' | 'FC' | 'FD' | 'FM'
+  | 'CA' | 'CD' | 'CI' | 'CR'
+  | 'VA' | 'VD' | 'VI' | 'VM' | 'VR'
+  | 'RF' | 'AF'
+  | 'HA' | 'HF' | 'HM'
+  | 'PI';
+
+/**
+ * Altitude restriction at the leg's terminator. `lowerFt`/`upperFt` are the
+ * limits the aircraft must respect ('at' sets both equal, 'atOrAbove' only
+ * lower, 'atOrBelow' only upper, 'between' both).
+ */
+export interface AltitudeConstraint {
+  kind: 'at' | 'atOrAbove' | 'atOrBelow' | 'between';
+  lowerFt?: number;
+  upperFt?: number;
+  /** ARINC altitude description character as coded (e.g. '+', '-', 'B', 'G', 'H', 'J', 'V'). */
+  code?: string;
+  /** Glideslope/glidepath altitude at the FAF (ARINC 'G'/'H'/'I'/'J' second altitude), when coded. */
+  glideslopeFt?: number;
+}
+
+export interface SpeedConstraint {
+  kind: 'at' | 'atOrBelow' | 'atOrAbove';
+  kt: number;
+}
+
+/** One leg of a published or synthetic procedure. Courses are MAGNETIC unless `courseIsTrue`. */
+export interface ProcedureLeg {
+  type: LegType;
+  /** Terminator fix (or the origin fix of FA/FC/FD/FM, the hold fix of HA/HF/HM, the PI fix). */
+  fix?: Waypoint;
+  /** Fly-over (true) or fly-by (false) at the fix. */
+  flyOver: boolean;
+  turnDirection?: 'L' | 'R';
+  /** Course / heading / hold inbound course / PI outbound course (deg). */
+  course?: number;
+  courseIsTrue?: boolean;
+  /** Leg distance (FC), DME distance (FD/CD/VD), hold leg length, PI excursion limit (nm). */
+  distanceNm?: number;
+  /** Hold leg time (min) when coded by time. */
+  holdTimeMin?: number;
+  altitude?: AltitudeConstraint;
+  speed?: SpeedConstraint;
+  /** Descent path angle (deg, positive = descending), coded on the leg into the MAP/runway. */
+  verticalAngleDeg?: number;
+  /** Recommended navaid (VOR/DME/localizer) for course, radial, DME and arc legs. */
+  recommendedNavaid?: Waypoint & { declination?: number };
+  /** Magnetic bearing from the recommended navaid (deg) and distance (nm). */
+  theta?: number;
+  rho?: number;
+  /** RF: arc radius (nm) and centre. AF: centre is the recommended navaid, radius `rho`. */
+  arcRadiusNm?: number;
+  arcCenter?: Waypoint;
+  /** Variation used to convert `course` to true (deg, + east): navaid declination when referenced, else airport variation. */
+  magVar: number;
+  /** ARINC 424 waypoint description code (4 chars) as coded, e.g. 'E  F'. */
+  descriptor?: string;
+  /** Roles decoded from the description code. */
+  iaf?: boolean;
+  intermediateFix?: boolean;
+  faf?: boolean;
+  map?: boolean;
+  /** First leg of the missed approach. */
+  missedStart?: boolean;
+}
+
+export interface ProcedureTransition {
+  /** Transition name: fix ident for enroute/approach transitions, runway ident ('04L', 'ALL', '04B') for runway transitions. */
+  name: string;
+  legs: ProcedureLeg[];
+}
+
+export type ApproachType =
+  | 'ILS' | 'LOC' | 'LOC_BC' | 'LDA' | 'SDF' | 'IGS' | 'GLS'
+  | 'RNAV' | 'RNP' | 'GPS' | 'FMS'
+  | 'VOR' | 'VORDME' | 'TACAN' | 'NDB' | 'NDBDME' | 'MLS';
+
+/** SBAS final approach segment (FAS) data block (LPV/LP approaches, CIFP PP records). */
+export interface FasData {
+  levelOfService: 'LPV' | 'LP' | '';
+  /** Landing threshold point. */
+  ltpLat: number;
+  ltpLon: number;
+  ltpEllipsoidM: number;
+  glidepathDeg: number;
+  /** Flight path alignment point (defines the final approach course). */
+  fpapLat: number;
+  fpapLon: number;
+  /** Lateral full-scale half-width at the threshold (m). */
+  courseWidthM: number;
+  tchFt: number;
+}
+
+export interface Procedure {
+  type: 'SID' | 'STAR' | 'APPROACH';
+  /** Database identifier, e.g. 'RUUDY6' or 'R06-Y'. */
+  ident: string;
+  /** Human-readable name, e.g. 'RUUDY6' or 'RNAV (GPS) Y RWY 06'. */
+  name: string;
+  /** Runways served (normalised idents, e.g. ['06'], ['04L','04R']). Empty for circling approaches. */
+  runways: string[];
+  /** SID: legs from each runway; STAR: legs to each runway. Names are runway idents or 'ALL'. */
+  runwayTransitions: ProcedureTransition[];
+  /** SID/STAR common route. */
+  commonLegs: ProcedureLeg[];
+  /** SID/STAR enroute transitions; approach transitions (feeder routes) for approaches. */
+  transitions: ProcedureTransition[];
+  /** Approach final route up to and including the MAP / runway leg. */
+  finalLegs: ProcedureLeg[];
+  /** Missed approach legs (after the MAP). */
+  missedLegs: ProcedureLeg[];
+  approachType?: ApproachType;
+  /** Approach suffix letter ('Y', 'Z', 'A' for circling), '' when none. */
+  suffix?: string;
+  /** Primary navaid of the approach (localizer/VOR): frequency (MHz), ident, final course (deg true). */
+  navFrequencyMhz?: number;
+  navIdent?: string;
+  navCourseTrue?: number;
+  /** SBAS FAS data when LPV/LP minima exist. */
+  fas?: FasData;
+  /** Glidepath angle for approaches with vertical guidance (VPA, FAS or GS). */
+  glidepathDeg?: number;
+  /** Generated by the simulator (no published procedure available). */
+  synthetic?: boolean;
+}
+
+export interface AirportProcedures {
+  icao: string;
+  /** AIRAC cycle ('2609') or 'synthetic'. */
+  cycle: string;
+  /** Airport magnetic variation (deg, + east). */
+  magVar: number;
+  sids: Procedure[];
+  stars: Procedure[];
+  approaches: Procedure[];
+}
+
+/** Optional NavDatabase capabilities implemented by `nav/NavDatabase.ts`. */
+export interface NavDatabaseExtras {
+  /**
+   * Published (FAA CIFP) SIDs, STARs and approaches for an airport plus
+   * synthetic approaches for runways without one. Resolves `undefined` for
+   * unknown airports. Results are cached.
+   */
+  loadProcedures?(icao: string): Promise<AirportProcedures | undefined>;
+}
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export interface NavDatabase extends NavDatabaseExtras {}

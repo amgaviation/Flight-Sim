@@ -16,6 +16,7 @@ import type { ReferenceFrame } from '../ReferenceFrame';
 import { DEG2RAD, FT_TO_M, M_TO_FT, clamp, smoothstep } from '../geo';
 import {
   KOSCHMIEDER,
+  NIGHT_SKY,
   defaultSkyParams,
   skyRadiance,
   sunTransmittance,
@@ -34,6 +35,12 @@ import type { QualitySettings } from '../quality';
 import { WORLD_VARS } from '../worldVars';
 
 export { WORLD_VARS };
+
+/** Target linear radiance of the horizon sky under a 60 deg sun (display calibration, EST). */
+const HORIZON_TARGET = 0.3;
+const ADAPT_EXPONENT = 0.7;
+const ADAPT_MAX = 80;
+const ADAPT_TAU_S = 2;
 
 /** Rayleigh extinction of clear air at 550 nm, sea level (1/m). Bucholtz (1995): ~0.0116 /km. */
 const RAYLEIGH_BETA_550 = 1.16e-5;
@@ -74,7 +81,13 @@ export class Environment {
   private readonly skyAmbient = new THREE.Color();
   private readonly year: number | undefined;
   private sunScale = 3;
+  private skyExposure = 0.1;
+  private refSkyLum = 1;
+  /** Current eye-adaptation gain (1 = daylight). */
+  private adapt = 1;
   private hazeBaseSmoothed = NaN;
+  private readonly greyTargets: THREE.Color[];
+  private readonly offRecenter: () => void;
   private cloudRefElevM = NaN;
   private timeS = 0;
   private precipOn = false;
@@ -112,19 +125,47 @@ export class Environment {
     this.group.add(this.hemiLight);
     this.fog = new THREE.FogExp2(0xaabbcc, 1e-5);
     opts.scene.fog = this.fog;
+    this.greyTargets = [this.u.uFogColor.value, this.u.uFogSunColor.value, this.u.uSkyZenith.value, this.u.uSkyHorizon.value, this.skyAmbient];
+    // Keep the cloud field anchored to the ground across floating-origin recenters:
+    // a fixed point moves by the delta translation t, so the sampling offset moves by -t.
+    this.offRecenter = this.frame.onRecenter((e) => {
+      const m = e.delta.elements;
+      this.clouds.drift(-m[12], -m[14]);
+    });
 
-    // Calibrate the sun so a white Lambertian surface under a 60 deg sun is ~4x
-    // brighter than the horizon sky, the daylight luminance ratio (EST from
-    // ~8,000 cd/m2 horizon sky vs ~30,000 cd/m2 white paper in sunlight).
+    // Radiometric calibration (EST, display-referred for ACES filmic tone mapping at
+    // exposure ~1): the horizon sky under a 60 deg sun maps to 0.3 linear, and a white
+    // Lambertian surface in that sun is ~4x brighter than the horizon sky, the daylight
+    // luminance ratio (~8,000 cd/m2 horizon sky vs ~30,000 cd/m2 white paper in sun).
     const sp = defaultSkyParams();
     const sy = Math.sin(60 * DEG2RAD);
     const sx = Math.cos(60 * DEG2RAD);
     skyRadiance(-sx, 0.05, 0, sx, sy, 0, sp, _rgb);
-    const horizonLum = 0.2126 * _rgb[0] + 0.7152 * _rgb[1] + 0.0722 * _rgb[2];
+    const horizonLum1 = 0.2126 * _rgb[0] + 0.7152 * _rgb[1] + 0.0722 * _rgb[2];
+    this.skyExposure = HORIZON_TARGET / horizonLum1;
     sunTransmittance(sy, sp, _rgb2);
     const tLum = 0.2126 * _rgb2[0] + 0.7152 * _rgb2[1] + 0.0722 * _rgb2[2];
     // Radiance of white Lambert in three.js = E * sin(el) / pi.
-    this.sunScale = (4 * horizonLum * Math.PI) / (sy * tLum);
+    this.sunScale = (4 * HORIZON_TARGET * Math.PI) / (sy * tLum);
+    this.sp.exposure = this.skyExposure;
+    this.refSkyLum = this.skyKeyLuminance(sx, sy, 0);
+  }
+
+  /**
+   * "Key" sky luminance used for eye adaptation: mean of zenith and the
+   * horizon away from the sun, at the calibrated (unadapted) exposure,
+   * excluding the display-referred night floor.
+   */
+  private skyKeyLuminance(sx: number, sy: number, sz: number): number {
+    const e = this.sp.exposure;
+    this.sp.exposure = this.skyExposure;
+    skyRadiance(0, 1, 0, sx, sy, sz, this.sp, _rgb);
+    let l = 0.2126 * (_rgb[0] - NIGHT_SKY[0]) + 0.7152 * (_rgb[1] - NIGHT_SKY[1]) + 0.0722 * (_rgb[2] - NIGHT_SKY[2]);
+    const h = Math.hypot(sx, sz) || 1;
+    skyRadiance(-sx / h * 0.999, 0.05, -sz / h * 0.999, sx, sy, sz, this.sp, _rgb);
+    l += 0.2126 * (_rgb[0] - NIGHT_SKY[0]) + 0.7152 * (_rgb[1] - NIGHT_SKY[1]) + 0.0722 * (_rgb[2] - NIGHT_SKY[2]);
+    this.sp.exposure = e;
+    return Math.max(1e-9, l / 2);
   }
 
   setQuality(q: QualitySettings): void {
@@ -251,10 +292,27 @@ export class Environment {
     u.uSkyRayleigh.value = this.sp.rayleigh;
     u.uSkyMie.value = this.sp.mieCoefficient;
     u.uSkyMieG.value = this.sp.mieDirectionalG;
+    const s = this.sunDirScene;
+    // Cloud deck: overcast skylight is sunlight transmitted through the deck, so its
+    // radiance is ~ (transmitted global irradiance) / pi (Lambertian diffuser).
+    const greyCloud = below ? smoothstep(0.5, 1.0, cover) : 0;
+    const cloudT = below || inCloud > 0 ? cloudTransmission(cover) : 1;
+    const keyClear = this.skyKeyLuminance(s.x, s.y, s.z);
+    sunTransmittance(Math.max(s.y, 0), this.sp, _rgb2);
+    const tLum = 0.2126 * _rgb2[0] + 0.7152 * _rgb2[1] + 0.0722 * _rgb2[2];
+    const sunVis = smoothstep(-1.5, 2.5, sunEl);
+    const globalClear0 = this.sunScale * Math.max(0, s.y) * tLum * sunVis + Math.PI * keyClear;
+    const overcastL0 = (globalClear0 * cloudT) / Math.PI;
+    // Partial eye adaptation (EST, like a camera auto-exposure): gain = (L_ref / L)^0.7,
+    // capped at 80, time constant 2 s. Lights and the night floor are not adapted.
+    let key = keyClear + (overcastL0 * 0.8 - keyClear) * greyCloud;
+    key += (overcastL0 - key) * inCloud;
+    const target = clamp(Math.pow(this.refSkyLum / key, ADAPT_EXPONENT), 1, ADAPT_MAX);
+    this.adapt += (target - this.adapt) * (dt > 0 ? Math.min(1, dt / ADAPT_TAU_S) : 1);
+    this.sp.exposure = this.skyExposure * this.adapt;
     u.uSkyAltitude.value = this.sp.altitude;
     u.uSkyExposure.value = this.sp.exposure;
 
-    const s = this.sunDirScene;
     // Horizon colours toward and away from the sun, and the zenith.
     const hx = Math.hypot(s.x, s.z) > 1e-6 ? s.x / Math.hypot(s.x, s.z) : 1;
     const hz = Math.hypot(s.x, s.z) > 1e-6 ? s.z / Math.hypot(s.x, s.z) : 0;
@@ -270,7 +328,6 @@ export class Environment {
 
     // --- Illumination.
     let lux = clearSkyIlluminanceLux(sunEl) + moonIlluminanceLux(this.moon.elevationDeg, this.moon.illuminated);
-    const cloudT = below || inCloud > 0 ? cloudTransmission(cover) : 1;
     lux *= cloudT * (1 - 0.6 * inCloud);
     this.lux = lux;
     const ambient = ambientLevel(lux);
@@ -279,19 +336,28 @@ export class Environment {
     const night = smoothstep(-2, -12, sunEl);
     u.uNight.value = night;
 
-    // Overcast / low visibility greys the sky light seen from below the layer.
-    const grey = below ? smoothstep(0.5, 1.0, cover) : 0;
-    const fogGrey = Math.max(grey, 1 - smoothstep(1500, 6000, visM));
+    // Below a broken/overcast deck the sky is the lit cloud base: neutral grey with the CIE
+    // overcast gradation (zenith ~3x the horizon, Moon & Spencer 1942; EST normalisation
+    // zenith 1.25 L, horizon 0.55 L around the mean L).
+    if (greyCloud > 0) {
+      const L = overcastL0 * this.adapt;
+      u.uSkyZenith.value.lerp(_c.setRGB(1.25 * L, 1.25 * L, 1.28 * L), greyCloud);
+      u.uSkyHorizon.value.lerp(_c.setRGB(0.55 * L, 0.55 * L, 0.57 * L), greyCloud);
+      u.uFogColor.value.lerp(_c.setRGB(0.55 * L, 0.55 * L, 0.57 * L), greyCloud);
+      u.uFogSunColor.value.lerp(_c.setRGB(0.6 * L, 0.6 * L, 0.61 * L), greyCloud);
+      this.skyAmbient.lerp(_c.setRGB(L, L, 1.02 * L), greyCloud);
+    }
+    // Fog/mist desaturates the sky light (luminance kept).
+    const fogGrey = 1 - smoothstep(1500, 6000, visM);
     if (fogGrey > 0) {
-      for (const c of [u.uFogColor.value, u.uFogSunColor.value, u.uSkyZenith.value, u.uSkyHorizon.value, this.skyAmbient]) {
-        const l = (0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b) * (grey > 0 ? cloudT * 1.6 : 1);
+      for (const c of this.greyTargets) {
+        const l = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
         c.lerp(_c.setRGB(l, l, l * 1.03), fogGrey);
       }
     }
 
     // Sun (or moon) directional light.
     sunTransmittance(Math.max(s.y, 0), this.sp, _rgb);
-    const sunVis = smoothstep(-1.5, 2.5, sunEl);
     const moonVis = (1 - sunVis) * smoothstep(-1, 5, this.moon.elevationDeg);
     const directCloud = below ? 1 - 0.95 * smoothstep(0.7, 1.0, cover) : 1;
     const directIn = 1 - inCloud * 0.9;
@@ -299,7 +365,7 @@ export class Environment {
     const usingSun = sunVis > 0.001 || moonVis < 0.001;
     if (usingSun) {
       light.color.setRGB(_rgb[0], _rgb[1], _rgb[2]);
-      light.intensity = this.sunScale * sunVis * directCloud * directIn;
+      light.intensity = this.sunScale * this.adapt * sunVis * directCloud * directIn;
       light.position.copy(cameraWorld).addScaledVector(s, 2000);
     } else {
       // Moonlight: bluish (Purkinje-shifted rendering convention), tiny intensity.
@@ -308,7 +374,7 @@ export class Environment {
       // Physical ratio moon/sun illuminance (lux / 100,000) boosted for display (EST x800,
       // a rendering convention: dark-adapted vision cannot be reproduced on a monitor).
       const moonLux = moonIlluminanceLux(this.moon.elevationDeg, this.moon.illuminated);
-      light.intensity = this.sunScale * (moonLux / 1e5) * 800 * moonVis * directCloud;
+      light.intensity = this.sunScale * this.adapt * (moonLux / 1e5) * 800 * moonVis * directCloud;
       light.position.copy(cameraWorld).addScaledVector(m, 2000);
     }
     light.target.position.copy(cameraWorld);
@@ -376,6 +442,7 @@ export class Environment {
   }
 
   dispose(): void {
+    this.offRecenter();
     this.sky.dispose();
     this.stars.dispose();
     this.clouds.dispose();

@@ -135,7 +135,8 @@ export class Precipitation {
     this.offset.x = (this.offset.x + vx * dt) % this.box.x;
     this.offset.y = (this.offset.y + vy * dt) % this.box.y;
     this.offset.z = (this.offset.z + vz * dt) % this.box.z;
-    const exposure = snow ? 1 / 60 : 1 / 40;
+    // Perceived streak length ~ motion over 1/12 s for rain (persistence of vision, EST), shorter for snow.
+    const exposure = snow ? 1 / 90 : 1 / 12;
     const u = this.material.uniforms;
     (u.uCam.value as THREE.Vector3).copy(cameraWorld);
     (u.uStreak.value as THREE.Vector3).set(vx - this.camVel.x, vy - this.camVel.y, vz - this.camVel.z).multiplyScalar(exposure);
@@ -144,7 +145,7 @@ export class Precipitation {
     u.uTime.value = timeS;
     const b = 0.15 + 0.85 * brightness;
     (u.uColor.value as THREE.Color).setRGB(0.75 * b, 0.78 * b, 0.82 * b);
-    u.uOpacity.value = snow ? 0.85 : 0.28;
+    u.uOpacity.value = snow ? 0.85 : 0.18;
   }
 
   dispose(): void {

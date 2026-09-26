@@ -44,6 +44,8 @@ interface TileRecord {
   /** Signature of the airport surfaces baked into the mesh. */
   surfSig: string;
   segments: number;
+  /** Needs a rebuild (airport surfaces or resolution changed since it was built). */
+  stale: boolean;
 }
 
 export interface TerrainStats {
@@ -52,6 +54,10 @@ export interface TerrainStats {
   meshes: number;
   triangles: number;
   pendingLoads: number;
+  /** Finished meshes waiting for their (budgeted) upload. */
+  pendingUploads: number;
+  /** Desired leaves that have their own mesh (0..1): 1 = fully streamed at target LOD. */
+  completeness: number;
   thresholdPx: number;
   viewRadiusM: number;
 }
@@ -69,6 +75,8 @@ export class TerrainRenderer {
   readonly group = new THREE.Group();
   private readonly records = new Map<number, TileRecord>();
   private readonly pendingMeshes: { key: number; mesh: TileMeshData; sig: string }[] = [];
+  /** Keys with a finished mesh waiting in `pendingMeshes`. */
+  private readonly pendingKeys = new Set<number>();
   private readonly requestedSig = new Map<number, string>();
   private readonly failed = new Set<number>();
   private readonly desired: number[] = [];
@@ -76,8 +84,10 @@ export class TerrainRenderer {
   private readonly fallbacks = new Set<number>();
   private readonly candidates: number[] = [];
   private lastSurfaceVersion = -1;
+  private candidatesOwn = 0;
+  private readonly hiddenScratch: TileRecord[] = [];
   private readonly lod: LodParams;
-  private stats: TerrainStats = { leaves: 0, shown: 0, meshes: 0, triangles: 0, pendingLoads: 0, thresholdPx: 0, viewRadiusM: 0 };
+  private stats: TerrainStats = { leaves: 0, shown: 0, meshes: 0, triangles: 0, pendingLoads: 0, pendingUploads: 0, completeness: 0, thresholdPx: 0, viewRadiusM: 0 };
   /** Ground elevation under the camera used for view-radius selection (m). */
   groundElevationM = 0;
 
@@ -113,7 +123,7 @@ export class TerrainRenderer {
     this.lod.maxLeaves = q.maxLeaves;
     if (segChanged) {
       // Existing meshes stay until rebuilt at the new resolution.
-      for (const r of this.records.values()) r.segments = -1;
+      for (const r of this.records.values()) r.stale = true;
     }
   }
 
@@ -123,11 +133,23 @@ export class TerrainRenderer {
 
   /** Called by the loader when a tile's elevation (and maybe mesh) arrives. */
   handleLoaded(t: LoadedTile): void {
-    if (t.mesh) this.pendingMeshes.push({ key: t.key, mesh: t.mesh, sig: this.requestedSig.get(t.key) ?? '' });
+    if (t.mesh) this.queueMesh(t.key, t.mesh);
   }
 
   handleMesh(key: number, mesh: TileMeshData): void {
-    this.pendingMeshes.push({ key, mesh, sig: this.requestedSig.get(key) ?? '' });
+    this.queueMesh(key, mesh);
+  }
+
+  private queueMesh(key: number, mesh: TileMeshData): void {
+    const sig = this.requestedSig.get(key) ?? '';
+    if (this.pendingKeys.has(key)) {
+      // Replace the older pending build for the same tile.
+      const i = this.pendingMeshes.findIndex((p) => p.key === key);
+      if (i >= 0) this.pendingMeshes[i] = { key, mesh, sig };
+      return;
+    }
+    this.pendingKeys.add(key);
+    this.pendingMeshes.push({ key, mesh, sig });
   }
 
   handleFailed(key: number): void {
@@ -164,6 +186,7 @@ export class TerrainRenderer {
       if (this.loader.isMissing(key)) return;
       this.failed.delete(key);
     }
+    if (this.pendingKeys.has(key)) return; // a finished mesh is already waiting for upload
     const { params, sig } = this.meshParams(z, x, y);
     const data = this.store.get(key);
     if (data) {
@@ -180,6 +203,7 @@ export class TerrainRenderer {
     let n = 0;
     while (this.pendingMeshes.length > 0 && n < maxCount) {
       const { key, mesh: m, sig } = this.pendingMeshes.shift()!;
+      this.pendingKeys.delete(key);
       n++;
       const g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.BufferAttribute(m.positions, 3));
@@ -211,6 +235,8 @@ export class TerrainRenderer {
         lastShown: prev ? prev.lastShown : 0,
         surfSig: sig,
         segments: this.quality.terrainSegments,
+        // Surfaces may have changed while this mesh was being built.
+        stale: m.z >= FLATTEN_MIN_ZOOM && this.meshParams(m.z, m.x, m.y).sig !== sig,
       });
     }
   }
@@ -272,6 +298,7 @@ export class TerrainRenderer {
 
     this.fallbacks.clear();
     this.candidates.length = 0;
+    this.candidatesOwn = 0;
     const camLat = cam.lat;
     for (const key of this.desired) {
       const z = keyZ(key);
@@ -282,9 +309,10 @@ export class TerrainRenderer {
       const d = tileDistanceM(z, x, y, cam, r ? r.minElev : 0, r ? r.maxElev : 0);
       const priority = d / (size * 4) + (z - lod.rootZoom) * 0.35;
       if (r) {
-        const stale = r.segments !== this.quality.terrainSegments || (surfacesChanged && z >= FLATTEN_MIN_ZOOM && this.meshParams(z, x, y).sig !== r.surfSig);
-        if (stale) this.requestMesh(key, priority);
+        if (surfacesChanged && z >= FLATTEN_MIN_ZOOM && this.meshParams(z, x, y).sig !== r.surfSig) r.stale = true;
+        if (r.stale || r.segments !== this.quality.terrainSegments) this.requestMesh(key, priority);
         this.candidates.push(key);
+        this.candidatesOwn++;
       } else {
         this.requestMesh(key, priority);
       }
@@ -334,7 +362,8 @@ export class TerrainRenderer {
     }
 
     // Dispose long-hidden meshes beyond the cache budget, oldest first.
-    const hidden: TileRecord[] = [];
+    const hidden = this.hiddenScratch;
+    hidden.length = 0;
     for (const r of this.records.values()) {
       // Keep the coarse levels resident: they are the fallback coverage when zooming out.
       if (r.z <= lod.rootZoom + 2) continue;
@@ -352,6 +381,8 @@ export class TerrainRenderer {
       meshes: this.records.size,
       triangles,
       pendingLoads: this.loader.pendingCount,
+      pendingUploads: this.pendingMeshes.length,
+      completeness: this.desired.length > 0 ? this.candidatesOwn / this.desired.length : 0,
       thresholdPx: threshold,
       viewRadiusM: lod.viewRadiusM,
     };
@@ -361,5 +392,6 @@ export class TerrainRenderer {
   dispose(): void {
     for (const r of [...this.records.values()]) this.disposeRecord(r);
     this.pendingMeshes.length = 0;
+    this.pendingKeys.clear();
   }
 }

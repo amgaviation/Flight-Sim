@@ -52,8 +52,64 @@ export function sunIntensityFromZenithCos(zenithCos: number): number {
   return EE * Math.max(0, 1 - Math.exp(-(CUTOFF_ANGLE - Math.acos(c)) / STEEPNESS));
 }
 
-/** Night-sky floor radiance (linear RGB) added to the analytic sky: airglow/starlight blue-black. */
+/** Night-sky floor radiance (linear RGB, display-referred) added after exposure: airglow/starlight blue-black. */
 export const NIGHT_SKY: readonly [number, number, number] = [0.00035, 0.00055, 0.0011];
+
+/**
+ * Twilight / multiple-scattering sky level relative to the noon zenith, vs
+ * solar elevation (deg), log10-interpolated. The single-scattering Preetham
+ * model goes black at the Earth-shadow cutoff (sun ~2.3 deg below the
+ * horizon) and is ~100x too dark at sunset; real zenith luminance falls
+ * roughly tenfold per ~3 deg of solar depression through civil and nautical
+ * twilight (consistent with the illuminance table in sky/illumination.ts:
+ * 400 lux at 0 deg, 3.4 lux at -6 deg). EST curve fitted to those anchors.
+ */
+const TW_EL = [-18, -12, -9, -6, -4, -2, 0, 2, 5, 10, 20];
+const TW_LOG = [-6, -4.1, -3.1, -2.1, -1.52, -1.15, -0.92, -0.8, -0.74, -1.0, -3];
+
+export function twilightLevel(sunElDeg: number): number {
+  if (sunElDeg <= TW_EL[0] || sunElDeg >= TW_EL[TW_EL.length - 1]) return 0;
+  for (let i = 1; i < TW_EL.length; i++) {
+    if (sunElDeg <= TW_EL[i]) {
+      const t = (sunElDeg - TW_EL[i - 1]) / (TW_EL[i] - TW_EL[i - 1]);
+      return 10 ** (TW_LOG[i - 1] + (TW_LOG[i] - TW_LOG[i - 1]) * t);
+    }
+  }
+  return 0;
+}
+
+/** Noon zenith luminance of the model at exposure 1 (scales the twilight term). */
+const TWILIGHT_SCALE = 1.9;
+const TW_DOME: readonly [number, number, number] = [0.22 / 0.419, 0.42 / 0.419, 1.0 / 0.419];
+/** Sunward horizon glow colour at sunset (A) and deep in twilight (B), and the anti-twilight arch (Belt of Venus). */
+const TW_GLOW_A: readonly [number, number, number] = [1.0, 0.5, 0.22];
+const TW_GLOW_B: readonly [number, number, number] = [0.75, 0.25, 0.3];
+const TW_PINK: readonly [number, number, number] = [0.8, 0.5, 0.6];
+
+function twilightRadiance(dx: number, dy: number, dz: number, sx: number, sy: number, sz: number, out: [number, number, number]): void {
+  const el = (Math.asin(Math.max(-1, Math.min(1, sy))) * 180) / Math.PI;
+  const lvl = twilightLevel(el) * TWILIGHT_SCALE;
+  if (lvl <= 0) {
+    out[0] = out[1] = out[2] = 0;
+    return;
+  }
+  const up = Math.max(dy, 0);
+  const hs = Math.hypot(sx, sz) || 1;
+  const hd = Math.hypot(dx, dz) || 1;
+  const cosAz = (sx * dx + sz * dz) / (hs * hd);
+  const d = Math.max(0, -el);
+  const k = Math.min(1, Math.max(0, d / 7));
+  const kk = k * k * (3 - 2 * k);
+  const glowW = Math.exp(-up / 0.12) * (0.2 + 0.8 * Math.pow(Math.max(cosAz, 0), 3));
+  const beltT = Math.min(1, d) * (1 - Math.min(1, Math.max(0, (d - 4) / 3)));
+  const antiW = Math.exp(-up / 0.2) * Math.pow(Math.max(-cosAz, 0), 2) * beltT;
+  for (let c = 0; c < 3; c++) {
+    const glow = TW_GLOW_A[c] + (TW_GLOW_B[c] - TW_GLOW_A[c]) * kk;
+    out[c] = lvl * (TW_DOME[c] * (0.6 + 0.4 * up) * 0.8 + glow * glowW * 3.0 + TW_PINK[c] * antiW * 0.8);
+  }
+}
+
+const _tw: [number, number, number] = [0, 0, 0];
 
 /**
  * CPU mirror of the GLSL `skyRadiance` below: linear RGB radiance seen along
@@ -85,6 +141,11 @@ export function skyRadiance(
   const g2 = g * g;
   const mPhase = 0.07957747154594767 * ((1 - g2) / Math.pow(1 - 2 * g * cosT + g2, 1.5));
   const fade = Math.min(1, Math.max(0, Math.pow(1 - sy, 5)));
+  twilightRadiance(dx, dy, dz, sx, sy, sz, _tw);
+  // The constant l0 term fades out with the day so the night sky stays dark under adaptation.
+  const sunElDeg = (Math.asin(Math.max(-1, Math.min(1, sy))) * 180) / Math.PI;
+  const dayK = Math.min(1, Math.max(0, (sunElDeg + 6) / 11));
+  const day = dayK * dayK * (3 - 2 * dayK);
   for (let c = 0; c < 3; c++) {
     const bR = TOTAL_RAYLEIGH[c] * p.rayleigh * densR;
     const bM = mieTot * MIE_CONST[c] * p.mieCoefficient * densM;
@@ -92,8 +153,8 @@ export function skyRadiance(
     const ratio = (bR * rPhase + bM * mPhase) / (bR + bM);
     let lin = Math.pow(sunE * ratio * (1 - fex), 1.5);
     lin *= 1 + (Math.pow(sunE * ratio * fex, 0.5) - 1) * fade;
-    const l0 = 0.1 * fex;
-    out[c] = ((lin + l0) * 0.04 + NIGHT_SKY[c]) * p.exposure;
+    const l0 = 0.1 * fex * day;
+    out[c] = ((lin + l0) * 0.04 + _tw[c]) * p.exposure + NIGHT_SKY[c];
   }
   return out;
 }
@@ -124,6 +185,37 @@ float skySunIntensity(float zenithCos) {
   zenithCos = clamp(zenithCos, -1.0, 1.0);
   return 1000.0 * max(0.0, 1.0 - exp(-((1.6110731556870734 - acos(zenithCos)) / 1.5)));
 }
+float twilightLevel(float el) {
+  if (el <= -18.0 || el >= 20.0) return 0.0;
+  float l;
+  if (el <= -12.0) l = mix(-6.0, -4.1, (el + 18.0) / 6.0);
+  else if (el <= -9.0) l = mix(-4.1, -3.1, (el + 12.0) / 3.0);
+  else if (el <= -6.0) l = mix(-3.1, -2.1, (el + 9.0) / 3.0);
+  else if (el <= -4.0) l = mix(-2.1, -1.52, (el + 6.0) / 2.0);
+  else if (el <= -2.0) l = mix(-1.52, -1.15, (el + 4.0) / 2.0);
+  else if (el <= 0.0) l = mix(-1.15, -0.92, (el + 2.0) / 2.0);
+  else if (el <= 2.0) l = mix(-0.92, -0.8, el / 2.0);
+  else if (el <= 5.0) l = mix(-0.8, -0.74, (el - 2.0) / 3.0);
+  else if (el <= 10.0) l = mix(-0.74, -1.0, (el - 5.0) / 5.0);
+  else l = mix(-1.0, -3.0, (el - 10.0) / 10.0);
+  return pow(10.0, l);
+}
+vec3 twilightRadiance(vec3 dir, vec3 sunDir) {
+  float el = degrees(asin(clamp(sunDir.y, -1.0, 1.0)));
+  float lvl = twilightLevel(el) * 1.9;
+  if (lvl <= 0.0) return vec3(0.0);
+  float up = max(dir.y, 0.0);
+  float hs = max(length(sunDir.xz), 1e-4);
+  float hd = max(length(dir.xz), 1e-4);
+  float cosAz = dot(sunDir.xz, dir.xz) / (hs * hd);
+  float d = max(0.0, -el);
+  vec3 glow = mix(vec3(1.0, 0.5, 0.22), vec3(0.75, 0.25, 0.3), smoothstep(0.0, 7.0, d));
+  float glowW = exp(-up / 0.12) * (0.2 + 0.8 * pow(max(cosAz, 0.0), 3.0));
+  float beltT = min(1.0, d) * (1.0 - clamp((d - 4.0) / 3.0, 0.0, 1.0));
+  float antiW = exp(-up / 0.2) * pow(max(-cosAz, 0.0), 2.0) * beltT;
+  vec3 dome = vec3(0.22, 0.42, 1.0) / 0.419;
+  return lvl * (dome * (0.6 + 0.4 * up) * 0.8 + glow * glowW * 3.0 + vec3(0.8, 0.5, 0.6) * antiW * 0.8);
+}
 vec3 skyRadiance(vec3 dir, vec3 sunDir) {
   float densR = exp(-max(0.0, uSkyAltitude) / 8400.0);
   float densM = exp(-max(0.0, uSkyAltitude) / 1250.0);
@@ -144,8 +236,9 @@ vec3 skyRadiance(vec3 dir, vec3 sunDir) {
   vec3 lin = pow(sunE * ratio * (1.0 - fex), vec3(1.5));
   float fade = clamp(pow(1.0 - sunDir.y, 5.0), 0.0, 1.0);
   lin *= mix(vec3(1.0), pow(sunE * ratio * fex, vec3(0.5)), fade);
-  vec3 l0 = 0.1 * fex;
-  return ((lin + l0) * 0.04 + NIGHT_SKY) * uSkyExposure;
+  float sunElDeg = degrees(asin(clamp(sunDir.y, -1.0, 1.0)));
+  vec3 l0 = 0.1 * fex * smoothstep(-6.0, 5.0, sunElDeg);
+  return ((lin + l0) * 0.04 + twilightRadiance(dir, sunDir)) * uSkyExposure + NIGHT_SKY;
 }
 `;
 

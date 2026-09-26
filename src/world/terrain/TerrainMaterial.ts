@@ -82,10 +82,19 @@ vec3 terrainAlbedo() {
   // Subtropical arid belts (descending Hadley circulation, ~15-35 deg) modulated regionally.
   float belt = smoothstep(10.0, 18.0, absLat) * (1.0 - smoothstep(32.0, 40.0, absLat));
   float arid = clamp(belt * (0.25 + region) - 0.2, 0.0, 1.0);
+  // Continental dryness: high mid-latitude plateaus and plains (e.g. High Plains, Iberian meseta,
+  // Anatolia) are semi-arid in the rain shadow of mountains. EST heuristic without land-cover data.
+  float midLat = smoothstep(28.0, 34.0, absLat) * (1.0 - smoothstep(50.0, 56.0, absLat));
+  arid = max(arid, midLat * smoothstep(900.0, 1700.0, elev) * (0.2 + 0.3 * regionG) * (1.0 - smoothstep(0.01, 0.05, slope)));
+  // Late-summer drought at 30-45 deg (Mediterranean-type summers): golden grass peaking ~day 240
+  // (NH) / ~day 57 (SH). EST seasonal heuristic.
+  float dryPhase = cos((uDayOfYear - (lat >= 0.0 ? 240.0 : 57.0)) / 365.25 * 6.283185307);
+  float summerDry = max(0.0, dryPhase) * smoothstep(28.0, 32.0, absLat) * (1.0 - smoothstep(43.0, 47.0, absLat));
+  arid = max(arid, 0.32 * summerDry * (0.5 + regionG) * (1.0 - smoothstep(1800.0, 2600.0, elev)));
   float boreal = smoothstep(48.0, 58.0, absLat);
   float tundra = smoothstep(62.0, 70.0, absLat);
   float snowL = snowLine(lat, uDayOfYear);
-  float treeLine = max(0.0, snowL - 1000.0 + 250.0 * (mid - 0.5)); // EST: tree line ~1 km below the snow line
+  float treeLine = max(0.0, snowL - 600.0 + 250.0 * (mid - 0.5)); // EST: tree line ~600 m below the snow line (Colorado ~3,300-3,500 m, Alps ~2,200 m)
 
   vec3 grass = mix(vec3(0.050, 0.080, 0.028), vec3(0.085, 0.105, 0.042), mid);
   vec3 forest = mix(vec3(0.020, 0.038, 0.016), vec3(0.030, 0.050, 0.022), regionG);
@@ -98,14 +107,18 @@ vec3 terrainAlbedo() {
 
   vec3 col = grass;
   // Forest patches, denser in wetter regions, none above the tree line or on cliffs.
-  float fcover = mid * 0.55 + regionG * 0.45 + (smallField - 0.5) * 0.15;
-  float fmask = smoothstep(0.50, 0.58, fcover) * (1.0 - arid) * (1.0 - tundra) * (1.0 - smoothstep(treeLine - 150.0, treeLine, elev));
+  // Orographic moisture: mountain slopes below the tree line are mostly forested (e.g. Rockies, Alps).
+  float montane = smoothstep(0.01, 0.06, slope) * smoothstep(600.0, 1500.0, elev);
+  float fcover = mid * 0.55 + regionG * 0.45 + (smallField - 0.5) * 0.15 + 0.2 * montane;
+  float fmask = smoothstep(0.50, 0.58, fcover) * (1.0 - arid * (1.0 - 0.6 * montane)) * (1.0 - tundra) * (1.0 - smoothstep(treeLine - 150.0, treeLine, elev));
   // Farmland on flat, low, temperate, well-watered ground.
-  float farm = smoothstep(0.06, 0.02, slope) * (1.0 - smoothstep(900.0, 1500.0, elev)) * (1.0 - smoothstep(0.25, 0.45, arid))
-             * (1.0 - boreal) * smoothstep(0.35, 0.5, region) * (1.0 - fmask);
+  // Farmland on nearly flat ground (slope metric 1 - cos: 0.006 ~ 6 deg, 0.002 ~ 3.6 deg).
+  float farm = smoothstep(0.006, 0.002, slope) * (1.0 - smoothstep(900.0, 1500.0, elev)) * (1.0 - smoothstep(0.25, 0.45, arid))
+             * (1.0 - boreal) * smoothstep(0.42, 0.58, region) * (1.0 - fmask);
   vec3 fields = mix(fieldColour(fieldId), fieldColour(smallField), step(0.62, midG));
+  fields = mix(fields, grass, 0.3);
   col = mix(col, forest, fmask);
-  col = mix(col, fields, farm * 0.9);
+  col = mix(col, fields, farm * 0.8);
   col = mix(col, dryGrass, smoothstep(0.15, 0.45, arid));
   col = mix(col, sand, smoothstep(0.50, 0.80, arid) * (1.0 - smoothstep(0.2, 0.35, slope)));
   col = mix(col, tundraC, tundra * (1.0 - fmask));
@@ -116,8 +129,9 @@ vec3 terrainAlbedo() {
   // Snow above the snow line, not on cliffs steeper than ~50 deg.
   float snowMask = smoothstep(snowL - 80.0, snowL + 120.0, elev + (mid - 0.5) * 400.0) * (1.0 - smoothstep(0.30, 0.40, slope));
   col = mix(col, snowC, snowMask);
-  // Mowed airport grass inside graded areas.
-  col = mix(col, mix(vec3(0.060, 0.095, 0.035), vec3(0.075, 0.110, 0.040), smallField), vFlat * (1.0 - snowMask) * 0.85);
+  // Mowed airport grass inside graded areas: the local vegetation, more uniform and a little greener.
+  vec3 mowed = mix(col, grass, 0.35) * (0.95 + 0.1 * smallField);
+  col = mix(col, mowed, vFlat * (1.0 - snowMask) * (1.0 - smoothstep(0.5, 0.8, arid) * 0.5));
 
   // Detail variation to avoid blur at low altitude.
   col *= mix(1.0, 0.82 + 0.36 * det, detFade);

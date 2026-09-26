@@ -8,13 +8,15 @@
  *   0-10 deg: ~4,800-5,000 (tropics); 20 deg: ~5,000-5,300 (dry subtropics);
  *   30-35 deg: ~4,000-4,600; 45 deg (Alps): ~2,700-3,000; 60 deg: ~1,500;
  *   70 deg: ~600-1,000; 78+ deg: ~0-300.
+ * EST: 30-40 deg values biased to the dry-continental end (Rockies ~4,000 m at
+ * 40 N, where only the highest summits hold snow in late summer).
  * Seasonal snow cover is added in the local winter at mid/high latitudes:
  * EST up to 1,500 m lower in mid-January (NH) / mid-July (SH), fading toward the tropics.
  */
 import { DEG2RAD } from '../geo';
 
 const SNOW_LAT = [0, 10, 20, 30, 40, 45, 50, 60, 70, 80, 90];
-const SNOW_ELEV = [4900, 4900, 5100, 4500, 3500, 2900, 2500, 1500, 700, 200, 0];
+const SNOW_ELEV = [4900, 4900, 5100, 4800, 3900, 3000, 2500, 1500, 700, 200, 0];
 
 /** Climatic permanent snow line (m) at a latitude. */
 export function permanentSnowLineM(latDeg: number): number {
@@ -54,10 +56,10 @@ float permanentSnowLine(float latDeg) {
   float a = min(90.0, abs(latDeg));
   if (a <= 10.0) return 4900.0;
   if (a <= 20.0) return mix(4900.0, 5100.0, (a - 10.0) / 10.0);
-  if (a <= 30.0) return mix(5100.0, 4500.0, (a - 20.0) / 10.0);
-  if (a <= 40.0) return mix(4500.0, 3500.0, (a - 30.0) / 10.0);
-  if (a <= 45.0) return mix(3500.0, 2900.0, (a - 40.0) / 5.0);
-  if (a <= 50.0) return mix(2900.0, 2500.0, (a - 45.0) / 5.0);
+  if (a <= 30.0) return mix(5100.0, 4800.0, (a - 20.0) / 10.0);
+  if (a <= 40.0) return mix(4800.0, 3900.0, (a - 30.0) / 10.0);
+  if (a <= 45.0) return mix(3900.0, 3000.0, (a - 40.0) / 5.0);
+  if (a <= 50.0) return mix(3000.0, 2500.0, (a - 45.0) / 5.0);
   if (a <= 60.0) return mix(2500.0, 1500.0, (a - 50.0) / 10.0);
   if (a <= 70.0) return mix(1500.0, 700.0, (a - 60.0) / 10.0);
   if (a <= 80.0) return mix(700.0, 200.0, (a - 70.0) / 10.0);

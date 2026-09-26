@@ -30,8 +30,8 @@ void main() {
   float flux = pow(10.0, -0.4 * mag);
   // Scintillation near the horizon.
   float tw = 1.0 + 0.25 * smoothstep(0.5, 0.05, wdir.y) * sin(uTime * 13.0 + position.x * 97.0 + position.y * 57.0);
-  float b = flux * 2.5 * uVis * tw;
-  gl_PointSize = clamp(1.3 + 1.2 * log(1.0 + flux * 40.0), 1.0, 4.5) * uPixelRatio;
+  float b = flux * 9.0 * uVis * tw;
+  gl_PointSize = clamp(1.6 + 1.3 * log(1.0 + flux * 40.0), 1.5, 5.0) * uPixelRatio;
   vColor = aColor * min(b, 3.0);
   if (wdir.y < -0.02 || b < 0.0015) gl_PointSize = 0.0;
 }

@@ -58,7 +58,7 @@ export class SkyDome {
       fragmentShader: FRAG,
       uniforms: {
         ...uniforms,
-        uSunDiscScale: { value: 60 },
+        uSunDiscScale: { value: 1500 },
         uMoonLight: { value: 0 },
       },
       side: THREE.BackSide,

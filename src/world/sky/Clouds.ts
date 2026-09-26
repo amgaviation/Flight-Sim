@@ -43,12 +43,16 @@ varying vec3 vWorld;
 void main() {
   #include <logdepthbuf_fragment>
   float cov = cloudCoverage(vWorld.xz);
-  float thr = cloudThresholdAt(uSliceH);
-  float soft = mix(0.10, 0.06, uCloudStratus);
+  float horizD = length(vWorld.xz - cameraPosition.xz);
+  // Per-slice threshold jitter from fine noise so slice edges never line up (no banding).
+  float jit = (texture2D(uNoiseTex, (vWorld.xz + uCloudOffset) / 1280.0 + uSliceH * 7.31).a - 0.5) * 0.05;
+  float thr = cloudThresholdAt(uSliceH) + jit;
+  // Softer edges with distance hide the discrete slices at grazing angles.
+  float soft = mix(0.14, 0.08, uCloudStratus) * (1.0 + smoothstep(2000.0, 40000.0, horizD) * 1.5);
   float dens = smoothstep(thr, thr + soft, cov);
   if (dens <= 0.003) discard;
   vec3 V = normalize(vWorld - cameraPosition);
-  float horiz = length(vWorld.xz - cameraPosition.xz);
+  float horiz = horizD;
   float fade = 1.0 - smoothstep(uRadius * 0.6, uRadius, horiz);
   // Avoid visible sheets when the eye is within a slice's thickness.
   float dy = abs(cameraPosition.y + dot(cameraPosition.xz, cameraPosition.xz) * 7.848e-8 - (uCloudBase + uSliceH * (uCloudTop - uCloudBase)));
@@ -61,7 +65,7 @@ void main() {
   float cosT = dot(V, uSunDir);
   float g = 0.6;
   float hg = (1.0 - g * g) / pow(1.0 + g * g - 2.0 * g * cosT, 1.5) * 0.0796;
-  float silver = hg * (1.0 - depthIn) * 2.5;
+  float silver = hg * (1.0 - depthIn) * 0.9 * smoothstep(0.3, 0.9, cosT);
   vec3 direct = uSunColor * 0.9 / 3.14159 * (lightH * selfShadow + silver) * sunUp;
   vec3 ambient = uAmbientSky * mix(0.55, 1.0, uSliceH) * 0.9;
   vec3 col = direct + ambient;
