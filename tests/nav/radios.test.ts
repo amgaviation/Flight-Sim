@@ -9,6 +9,8 @@ import {
   slantRangeNm,
   inMarkerCone,
   isLocalizerFrequency,
+  glidePathAbeamAlongNm,
+  glidePathAzimuthDeg,
   FT_PER_NM,
   type VorCdi,
   type LocDeviation,
@@ -133,6 +135,31 @@ describe('radio geometry', () => {
     expect(inMarkerCone(0, 0, 0, 90, across.lat, across.lon, 1000)).toBe(false);
     expect(inMarkerCone(0, 0, 0, 90, across.lat, across.lon, 1000, 1.6)).toBe(true);
     expect(inMarkerCone(0, 0, 0, 90, 0, 0, -10)).toBe(false);
+  });
+
+  it('glide path coverage azimuth is measured about the centre line, not from the offset GS antenna', () => {
+    // LOC antenna at the origin, course 090 (approach from the west); GS antenna 1.6 nm west, 450 ft south.
+    const course = 90;
+    const gs = destinationPoint(0, 0, 270, 1.6);
+    const gsOff = destinationPoint(gs.lat, gs.lon, 180, 450 / FT_PER_NM);
+    const abeam = glidePathAbeamAlongNm(0, 0, course, gsOff.lat, gsOff.lon);
+    expect(abeam).toBeCloseTo(1.6, 3);
+    // On the centre line 0.1 nm before the abeam point (~30 ft on a 3 deg path): 0 deg off the centre line.
+    const loc = locOut();
+    const p = destinationPoint(0, 0, 270, 1.7);
+    locDeviation(0, 0, course, p.lat, p.lon, loc);
+    expect(glidePathAzimuthDeg(loc.devDeg, loc.distNm, abeam)).toBeLessThan(0.01);
+    // Seen from the antenna itself the same point is ~37 deg off (the old coverage test flagged it).
+    const o = gsOut();
+    glideslope(gsOff.lat, gsOff.lon, 0, 3, course, p.lat, p.lon, 30, o);
+    expect(o.azimuthOffDeg).toBeGreaterThan(30);
+    // 8 deg sector: 0.5 nm before the abeam point, 0.07 nm (7.97 deg) vs 0.071 nm (8.1 deg) beside the course.
+    const q = destinationPoint(p.lat, p.lon, 0, 0);
+    void q;
+    expect(glidePathAzimuthDeg(Math.atan2(0.07, 2.1) * (180 / Math.PI), Math.hypot(0.07, 2.1), 1.6)).toBeLessThan(8);
+    expect(glidePathAzimuthDeg(Math.atan2(0.071, 2.1) * (180 / Math.PI), Math.hypot(0.071, 2.1), 1.6)).toBeGreaterThan(8);
+    // Past the abeam point (over the runway) there is no coverage.
+    expect(glidePathAzimuthDeg(0, 1.5, 1.6)).toBe(180);
   });
 
   it('ILS channel detection and morse idents', () => {
@@ -291,6 +318,74 @@ describe('Radios subsystem with the real database', () => {
     vars.set(FDM.lon, away.lon);
     run(radios, 0.2);
     expect(vars.get(NAV.markerOuter)).toBe(0);
+  });
+
+  /** Point `dNm` before the GS abeam point on the extended centre line, on the glide path (ft MSL). */
+  function onFinal(icao: string, rwy: string, dNm: number) {
+    const ils = db.runway(icao, rwy)!.ils!;
+    const abeam = glidePathAbeamAlongNm(ils.locLat, ils.locLon, ils.courseTrue, ils.gsLat!, ils.gsLon!);
+    const p = destinationPoint(ils.locLat, ils.locLon, ils.courseTrue + 180, abeam + dNm);
+    const dGs = distanceNm(ils.gsLat!, ils.gsLon!, p.lat, p.lon) * FT_PER_NM;
+    const alt = (ils.gsElevFt ?? 0) + Math.tan(((ils.gsAngleDeg ?? 3) * Math.PI) / 180) * dGs;
+    return { ils, lat: p.lat, lon: p.lon, alt };
+  }
+
+  it.each([
+    ['KSFO', '28R'],
+    ['EGLL', '27L'],
+    ['KDEN', '16R'],
+  ])('%s %s: glideslope stays valid on the centre line down to ~50 ft (antenna 400-480 ft beside the runway)', (icao, rwy) => {
+    const { vars, radios } = setup();
+    vars.set(NAV.powered(1), 1);
+    const f0 = onFinal(icao, rwy, 3);
+    vars.set(NAV.activeFreq(1), f0.ils.freqMhz);
+    vars.set(FDM.lat, f0.lat);
+    vars.set(FDM.lon, f0.lon);
+    vars.set(FDM.altMsl, f0.alt);
+    run(radios, 2);
+    for (const d of [2, 1, 0.5, 0.3, 0.2, 0.15]) {
+      const f = onFinal(icao, rwy, d);
+      vars.set(FDM.lat, f.lat);
+      vars.set(FDM.lon, f.lon);
+      vars.set(FDM.altMsl, f.alt);
+      run(radios, 0.2);
+      expect(vars.get(NAV.gsValid(1)), `${d} nm (${Math.round(f.alt - (f.ils.gsElevFt ?? 0))} ft)`).toBe(1);
+      expect(Math.abs(vars.get(NAV.gsDev(1)))).toBeLessThan(0.15);
+    }
+  });
+
+  it.each([
+    ['KJFK', '04R', '22R'], // IJFK / IJOC both 109.50
+    ['EGLL', '27L', '09R'], // ILL / IBB both 109.50, same runway
+    ['KDEN', '16R', '34L'], // IDQQ / IDXU both 111.90, same runway
+  ])('%s %s: stays on the front-course localizer, never the same-frequency %s localizer (AIM 1-1-9 interlock)', (icao, rwy, other) => {
+    const { vars, radios } = setup();
+    const opp = db.runway(icao, other)!.ils!;
+    vars.set(NAV.powered(1), 1);
+    const first = onFinal(icao, rwy, 10);
+    expect(opp.freqMhz).toBe(first.ils.freqMhz);
+    vars.set(NAV.activeFreq(1), first.ils.freqMhz);
+    for (const d of [10, 6, 3, 2, 1, 0.6, 0.3, 0.1]) {
+      const f = onFinal(icao, rwy, d);
+      vars.set(FDM.lat, f.lat);
+      vars.set(FDM.lon, f.lon);
+      vars.set(FDM.altMsl, f.alt);
+      run(radios, d === 10 ? 2 : 0.5);
+      expect(vars.getString(NAV.ident(1)), `${d} nm`).toBe(f.ils.ident);
+      expect(Math.abs(vars.get(NAV.cdi(1)))).toBeLessThan(0.05);
+    }
+    // A cold tune on short final (no hysteresis to help) also picks the front course.
+    const { vars: v2, radios: r2 } = setup();
+    const f = onFinal(icao, rwy, 0.3);
+    v2.set(NAV.powered(1), 1);
+    v2.set(FDM.lat, f.lat);
+    v2.set(FDM.lon, f.lon);
+    v2.set(FDM.altMsl, f.alt);
+    v2.set(NAV.activeFreq(1), f.ils.freqMhz);
+    run(r2, 2);
+    expect(v2.getString(NAV.ident(1))).toBe(f.ils.ident);
+    // The station declination the course is referenced to is published for the autopilot.
+    expect(v2.get(NAV.stationMagVar(1))).toBeCloseTo(f.ils.magVar ?? NaN, 6);
   });
 
   it('GPS acquires after the power-up delay', () => {
