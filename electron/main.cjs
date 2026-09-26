@@ -18,6 +18,7 @@ const { app, BrowserWindow, protocol, net, ipcMain, Menu, shell, session } = req
 const path = require('node:path');
 const fs = require('node:fs');
 const { pathToFileURL } = require('node:url');
+const { isTrustedSenderUrl, isAllowedHttpsUrl } = require('./guards.cjs');
 
 const DEV_URL = process.env.VITE_DEV_SERVER_URL || '';
 const DIST = path.resolve(__dirname, '..', 'dist');
@@ -116,6 +117,11 @@ function registerProtocol() {
   });
 }
 
+/** True when an IPC message comes from the app's own page (app://app/ or the dev server). */
+function trustedSender(event) {
+  return isTrustedSenderUrl(event.senderFrame && event.senderFrame.url, `${SCHEME}://${HOST}`, DEV_URL);
+}
+
 function registerIpc() {
   ipcMain.on('app:info', (event) => {
     event.returnValue = {
@@ -124,9 +130,11 @@ function registerIpc() {
     };
   });
 
-  ipcMain.handle('http:get', async (_event, rawUrl, opts) => {
+  ipcMain.handle('http:get', async (event, rawUrl, opts) => {
+    // Electron security checklist: validate the sender of IPC messages (only the app's own page).
+    if (!trustedSender(event)) throw new Error('untrusted sender');
+    if (!isAllowedHttpsUrl(rawUrl, HTTP_ALLOW)) throw new Error(`host not allowed: ${String(rawUrl)}`);
     const u = new URL(String(rawUrl));
-    if (u.protocol !== 'https:' || !HTTP_ALLOW.has(u.hostname)) throw new Error(`host not allowed: ${u.hostname}`);
     const timeoutMs = Math.min(30_000, Math.max(1000, Number(opts && opts.timeoutMs) || 12_000));
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), timeoutMs);
@@ -136,6 +144,8 @@ function registerIpc() {
         // aviationweather.gov asks clients to identify themselves with a custom User-Agent.
         headers: { 'User-Agent': `AMGFlightSimulator/${app.getVersion()} (desktop)`, Accept: 'application/json, text/plain, */*' },
       });
+      // Redirects are followed: the final URL must still be an allow-listed https host.
+      if (res.url && !isAllowedHttpsUrl(res.url, HTTP_ALLOW)) throw new Error(`redirected to a host that is not allowed: ${res.url}`);
       const body = await res.text();
       return { ok: res.ok, status: res.status, statusText: res.statusText, contentType: res.headers.get('content-type') || '', body };
     } finally {

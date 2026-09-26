@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  createVisibilityScratch,
+  resolveVisibility,
   lodScreenFactor,
   rootTiles,
   screenSpaceErrorPx,
@@ -181,5 +183,45 @@ describe('selectTiles', () => {
     // Crosses the antimeridian: tiles on both sides.
     const xs = roots.map(keyX);
     expect(xs.includes(0) && xs.includes((1 << 6) - 1)).toBe(true);
+  });
+});
+
+describe('resolveVisibility (terrain fallback coverage)', () => {
+  const k = tileKey;
+  it('shows every loaded candidate and the nearest ancestor for a missing leaf elsewhere', () => {
+    // Candidates: two z11 tiles under z9 (300,383); fallback for a missing leaf in another z9 tile.
+    const shown = new Set<number>();
+    resolveVisibility([k(11, 1200, 1532), k(11, 1201, 1532)], [k(9, 301, 383)], shown, createVisibilityScratch());
+    expect([...shown].sort()).toEqual([k(11, 1200, 1532), k(11, 1201, 1532), k(9, 301, 383)].sort());
+  });
+
+  it('never lets a coarse ancestor hide finer tiles that are already shown (airport regression)', () => {
+    // z11 airport tiles are loaded; a distant z10 leaf is missing and its nearest loaded ancestor is the z6 root
+    // containing the airport. Drawing the root would cover the flattened runway tiles: it must be skipped.
+    const airport = [k(11, 601, 768), k(11, 602, 768)];
+    const root6 = k(6, 18, 24); // contains z11 x 576..607, y 768..799
+    const shown = resolveVisibility(airport, [root6], new Set<number>(), createVisibilityScratch());
+    expect(shown.has(root6)).toBe(false);
+    for (const t of airport) expect(shown.has(t)).toBe(true);
+  });
+
+  it('prefers the finest fallback and skips coarser nested fallbacks', () => {
+    const fine = k(9, 150, 192); // inside z7 (37, 48)
+    const coarse = k(7, 37, 48);
+    const shown = resolveVisibility([], [coarse, fine], new Set<number>(), createVisibilityScratch());
+    expect(shown.has(fine)).toBe(true);
+    expect(shown.has(coarse)).toBe(false);
+  });
+
+  it('never shows overlapping tiles', () => {
+    const cands = [k(12, 2404, 3072), k(12, 2405, 3072), k(13, 4812, 6146)];
+    const fbs = [k(11, 1202, 1536), k(10, 601, 768), k(8, 150, 192), k(7, 75, 96), k(11, 1203, 1537)];
+    const shown = [...resolveVisibility(cands, fbs, new Set<number>(), createVisibilityScratch())];
+    const isAncestor = (a: number, b: number) => {
+      const dz = keyZ(b) - keyZ(a);
+      return dz > 0 && keyX(b) >> dz === keyX(a) && keyY(b) >> dz === keyY(a);
+    };
+    for (const a of shown) for (const b of shown) expect(isAncestor(a, b)).toBe(false);
+    for (const c of cands) expect(shown).toContain(c);
   });
 });

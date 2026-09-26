@@ -10,7 +10,7 @@
  * around the cockpit never triggers reloads.
  */
 import { EARTH_MEAN_RADIUS_M, haversineM, horizonDistanceM, lonDelta } from '../geo';
-import { keyX, keyY, tileKey, tileSizeM, tileXToLon, tileYToLat, wrapTileX, latToTileY, lonToTileX } from './tileMath';
+import { keyX, keyY, keyZ, parentKey, tileKey, tileSizeM, tileXToLon, tileYToLat, wrapTileX, latToTileY, lonToTileX } from './tileMath';
 
 export interface LodParams {
   /** Zoom of the root tiles that cover the view disc. */
@@ -195,4 +195,72 @@ export function selectTiles(cam: LodCamera, p: LodParams, elevRange: ElevRangeFn
     threshold *= 1.35;
   }
   return threshold;
+}
+
+/** Reusable scratch for `resolveVisibility` (avoids per-frame allocation). */
+export interface VisibilityScratch {
+  /** Every ancestor of a tile already chosen for display. */
+  covered: Set<number>;
+  /** Fallback keys in processing order (finest first). */
+  order: number[];
+}
+
+export function createVisibilityScratch(): VisibilityScratch {
+  return { covered: new Set<number>(), order: [] };
+}
+
+const byZoomDesc = (a: number, b: number): number => keyZ(b) - keyZ(a);
+
+function markAncestors(key: number, covered: Set<number>): void {
+  let k = key;
+  while (keyZ(k) > 0) {
+    k = parentKey(k);
+    if (covered.has(k)) return; // its ancestors are already marked
+    covered.add(k);
+  }
+}
+
+/**
+ * Chooses which loaded tiles to draw (fills `shown`), never overlapping:
+ *
+ *  - every candidate (a desired leaf with its own mesh, or the loaded
+ *    children standing in for a missing coarse leaf) is shown;
+ *  - a fallback (the nearest loaded ancestor of a missing leaf) is shown only
+ *    when no finer tile already shown lies inside it. Fallbacks are taken
+ *    finest first, so the smallest available ancestor fills each gap.
+ *
+ * A coarse ancestor therefore never replaces finer terrain that is already
+ * loaded (for example the flattened tiles under an airport) just because
+ * some other leaf inside it is still streaming; that leaf's area stays
+ * empty (the world's base ground shows) until it or a finer ancestor loads.
+ * Candidates are disjoint by construction (they come from one quadtree cut).
+ */
+export function resolveVisibility(candidates: Iterable<number>, fallbacks: Iterable<number>, shown: Set<number>, scratch: VisibilityScratch): Set<number> {
+  shown.clear();
+  const covered = scratch.covered;
+  covered.clear();
+  for (const key of candidates) {
+    shown.add(key);
+    markAncestors(key, covered);
+  }
+  const order = scratch.order;
+  order.length = 0;
+  for (const key of fallbacks) order.push(key);
+  order.sort(byZoomDesc);
+  for (let i = 0; i < order.length; i++) {
+    const key = order[i];
+    if (shown.has(key) || covered.has(key) || hasAncestorIn(key, shown)) continue;
+    shown.add(key);
+    markAncestors(key, covered);
+  }
+  return shown;
+}
+
+function hasAncestorIn(key: number, set: Set<number>): boolean {
+  let k = key;
+  while (keyZ(k) > 0) {
+    k = parentKey(k);
+    if (set.has(k)) return true;
+  }
+  return false;
 }

@@ -17,6 +17,7 @@ import * as THREE from 'three';
 import { SimVars } from './core/SimVars';
 import { EventBus } from './core/EventBus';
 import { SimLoop, type FrameInfo } from './core/SimLoop';
+import { FrameProfiler, type ProfileReport } from './core/FrameProfiler';
 import { decimalYear } from './core/wmm';
 import type { SimContext } from './core/SimContext';
 import { ENV, FDM, FUEL, GPS, NAV, SIM } from './core/vars';
@@ -31,6 +32,7 @@ import { Apu } from './systems/apu/Apu';
 import { AudioEngine, DEFAULT_VOLUMES, profileFromFdm, type AudioVolumes, type ListenerPose } from './audio/AudioEngine';
 import { InputManager } from './input/InputManager';
 import { APP_EVENTS, INPUT_EVENTS } from './input/actions';
+import { ScriptedPilot, type ScriptedPilotPhase, type TakeoffLog, type TakeoffScript } from './input/ScriptedPilot';
 import { RenderSystem, sanitizeGraphics, type GraphicsSettings } from './render/RenderSystem';
 import { VehicleNode } from './render/VehicleNode';
 import { CameraSystem, type CameraMode } from './render/CameraSystem';
@@ -84,7 +86,28 @@ export interface SimDebugApi {
   zoom(notches: number): void;
   stats(): Record<string, unknown>;
   launch(cfg: Partial<LaunchConfig>): Promise<void>;
+  /**
+   * Per-frame JS time by stage since the last reset (performance.now()
+   * counters, see core/FrameProfiler). `reset` starts a new window after
+   * reading.
+   */
+  profile(reset?: boolean): ProfileReport;
+  /** Scripted test pilot (input/ScriptedPilot) flying through the normal pilot inputs. */
+  pilot: {
+    /**
+     * Starts a hands-off takeoff from the current position. Defaults: VR =
+     * aircraft `typical.rotateKias`, course and centre line = the start
+     * runway (else the current heading and position). Returns the phase.
+     */
+    takeoff(opts?: Partial<TakeoffScript>): ScriptedPilotPhase;
+    stop(): void;
+    state(): { phase: ScriptedPilotPhase; log: TakeoffLog };
+  };
 }
+
+/** Frame stages measured by the profiler (App.frame order; `total` spans input poll to UI). */
+const PROFILE_SECTIONS = ['total', 'input', 'systems', 'physics', 'nav', 'vehicle', 'cockpit', 'camera', 'world', 'shadows', 'render', 'audio', 'ui'] as const;
+type ProfileSectionName = (typeof PROFILE_SECTIONS)[number];
 
 declare global {
   interface Window {
@@ -101,11 +124,29 @@ export class App {
   readonly settings: KeyValueStore = createStorage('settings');
   readonly overlays = new Overlays();
   readonly vehicle = new VehicleNode();
+  readonly profiler = new FrameProfiler<ProfileSectionName>(PROFILE_SECTIONS);
+  private readonly P = {
+    total: this.profiler.id('total'),
+    input: this.profiler.id('input'),
+    systems: this.profiler.id('systems'),
+    physics: this.profiler.id('physics'),
+    nav: this.profiler.id('nav'),
+    vehicle: this.profiler.id('vehicle'),
+    cockpit: this.profiler.id('cockpit'),
+    camera: this.profiler.id('camera'),
+    world: this.profiler.id('world'),
+    shadows: this.profiler.id('shadows'),
+    render: this.profiler.id('render'),
+    audio: this.profiler.id('audio'),
+    ui: this.profiler.id('ui'),
+  };
   render!: RenderSystem;
   world!: World;
   nav!: NavDatabaseImpl;
   audio!: AudioEngine;
   input!: InputManager;
+  /** Scripted test pilot (smoke test, `window.__sim.pilot`); idle unless started. */
+  pilot!: ScriptedPilot;
   loop!: SimLoop;
   camera!: CameraSystem;
   shadows!: CockpitShadows;
@@ -201,10 +242,17 @@ export class App {
       this.overlays.caption(t);
     };
     this.input = new InputManager({ vars: this.vars, events: this.events, viewElement: this.render.canvas, storage: createStorage('input'), audio: this.audio });
+    this.pilot = new ScriptedPilot(this.vars, this.events);
     this.loop = new SimLoop(
       this.vars,
       {
-        input: (dt) => this.input.poll(dt),
+        input: (dt) => {
+          // First callback of every frame: the 'total' section runs from here to the end of frame().
+          this.profiler.begin(this.P.total);
+          this.profiler.begin(this.P.input);
+          this.input.poll(dt);
+          this.profiler.end(this.P.input);
+        },
         systems: (dt) => this.stepSystems(dt),
         physics: (dt) => this.stepPhysics(dt),
         nav: (dt) => this.stepNav(dt),
@@ -563,6 +611,7 @@ export class App {
 
   /** Reposition + initial state + radio resets (used by launch and in-flight reposition). */
   private placeAndApply(fdm: FlightModel, instance: AircraftInstance, radios: Radios | null, navSystems: Subsystem[], p: StartPlacement, state: InitialState, airport: Airport): void {
+    this.pilot.stop();
     fdm.reposition({ lat: p.lat, lon: p.lon, onGround: p.onGround, altFtMsl: p.onGround ? undefined : p.altFtMsl, headingTrue: p.headingTrue, iasKt: p.iasKt });
     instance.applyState(state);
     if (p.ils) {
@@ -601,6 +650,7 @@ export class App {
     const s = this.session;
     if (!s) return;
     this.session = null;
+    this.pilot.stop();
     this.checklist?.dispose();
     this.checklist = null;
     this.input.router.setMap(null);
@@ -634,6 +684,9 @@ export class App {
   private stepSystems(dt: number): void {
     const s = this.session;
     if (!s) return;
+    this.profiler.begin(this.P.systems);
+    // The scripted pilot (when active) overrides the frame's input.* values before the systems read them.
+    this.pilot.update(dt);
     const list = s.systems;
     for (let i = 0; i < list.length; i++) {
       try {
@@ -642,11 +695,13 @@ export class App {
         this.reportError(`system ${list[i].name}`, e);
       }
     }
+    this.profiler.end(this.P.systems);
   }
 
   private stepPhysics(dt: number): void {
     const s = this.session;
     if (!s) return;
+    this.profiler.begin(this.P.physics);
     try {
       // Pre-step pose for render interpolation (VehicleNode: frames fall between 120 Hz steps).
       this.vehicle.capture(s.fdm);
@@ -654,11 +709,13 @@ export class App {
     } catch (e) {
       this.reportError('flight model', e);
     }
+    this.profiler.end(this.P.physics);
   }
 
   private stepNav(dt: number): void {
     const s = this.session;
     if (!s) return;
+    this.profiler.begin(this.P.nav);
     for (const n of s.navSystems) {
       try {
         n.update(dt);
@@ -666,11 +723,17 @@ export class App {
         this.reportError(`nav ${n.name}`, e);
       }
     }
+    this.profiler.end(this.P.nav);
   }
 
   private frame(f: FrameInfo): void {
     const s = this.session;
-    if (!s) return;
+    const prof = this.profiler;
+    const P = this.P;
+    if (!s) {
+      prof.end(P.total);
+      return;
+    }
     const dt = f.realDt;
     const v = this.vars;
     this.debug.frames++;
@@ -685,12 +748,17 @@ export class App {
       v.set(ENV.timeUtcHours, t);
     }
     try {
+      prof.begin(P.vehicle);
       // Draw between the last two physics states (the latest one while paused).
       const geo = this.vehicle.readSource(s.fdm, f.paused ? 1 : f.alpha);
       this.world.frame.maybeRecenter(geo.lat, geo.lon);
       this.vehicle.place(s.fdm, this.world.frame);
       s.instance.updateExterior?.(dt);
+      prof.end(P.vehicle);
+      prof.begin(P.cockpit);
       s.runtime.update(dt);
+      prof.end(P.cockpit);
+      prof.begin(P.camera);
       this.camera.update(
         dt,
         { lookX: this.input.lookX, lookY: this.input.lookY, zoomRate: this.input.zoomRate },
@@ -707,17 +775,30 @@ export class App {
         },
         geo,
       );
+      prof.end(P.camera);
+      prof.begin(P.world);
       this.world.update(dt, this.camera.camera, geo);
+      prof.end(P.world);
+      prof.begin(P.shadows);
       this.camera.camera.getWorldPosition(_camWorld);
       this.shadows.update(this.camera.inCockpit, _camWorld);
+      prof.end(P.shadows);
+      prof.begin(P.render);
       this.render.render(this.camera.camera);
+      prof.end(P.render);
+      prof.begin(P.audio);
       this.camera.listenerPose(LISTENER);
       this.audio.update(dt, { view: this.camera.mode, listener: LISTENER, paused: f.paused, closingSpeed_ms: this.camera.closingSpeed_ms });
+      prof.end(P.audio);
     } catch (e) {
       this.reportError('frame', e);
     }
+    prof.begin(P.ui);
     this.overlays.update(dt);
     this.updateStatus(dt);
+    prof.end(P.ui);
+    prof.end(P.total);
+    prof.frame();
   }
 
   private updateStatus(dt: number): void {
@@ -800,6 +881,31 @@ export class App {
           : null,
       }),
       launch: (partial) => app.launch({ ...app.cfg, ...partial }),
+      profile(reset = false): ProfileReport {
+        const r = app.profiler.report();
+        if (reset) app.profiler.reset();
+        return r;
+      },
+      pilot: {
+        takeoff(opts: Partial<TakeoffScript> = {}): ScriptedPilotPhase {
+          const s = app.session;
+          if (!s) throw new Error('no aircraft loaded');
+          const p = s.placement;
+          const onRunway = !!p.runway && p.onGround;
+          app.pilot.startTakeoff({
+            vrKt: opts.vrKt ?? s.module.meta.typical.rotateKias,
+            courseTrueDeg: opts.courseTrueDeg ?? (onRunway ? p.headingTrue : app.vars.get(FDM.headingTrue)),
+            lat: opts.lat ?? (onRunway ? p.lat : undefined),
+            lon: opts.lon ?? (onRunway ? p.lon : undefined),
+            pitchDeg: opts.pitchDeg,
+            rotateRateDegS: opts.rotateRateDegS,
+            gearUp: opts.gearUp,
+          });
+          return app.pilot.phase;
+        },
+        stop: () => app.pilot.stop(),
+        state: () => ({ phase: app.pilot.phase, log: { ...app.pilot.log } }),
+      },
     };
   }
 }

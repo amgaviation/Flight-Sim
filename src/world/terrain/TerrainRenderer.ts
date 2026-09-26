@@ -4,9 +4,11 @@
  * Each frame:
  *  1. `selectTiles` picks the desired leaves (screen-space error, distance based).
  *  2. Missing leaves are requested; while they load, their nearest ancestor
- *     with a mesh is drawn instead and every descendant of that ancestor is
- *     hidden, so coverage never overlaps and never has holes once the roots
- *     are in.
+ *     with a mesh is drawn instead, unless that ancestor would cover finer
+ *     tiles that are already shown (lod.ts `resolveVisibility`): coverage
+ *     never overlaps, and loaded detail (flattened airport tiles) is never
+ *     replaced by a coarse, unflattened ancestor while distant leaves stream.
+ *     Finished meshes are uploaded coarse-first so coverage arrives top-down.
  *  3. Tile meshes are placed in the floating-origin frame from their own
  *     centre (see tileMesh.ts); a recenter only re-places objects.
  *  4. Hidden meshes are kept for a few seconds (hysteresis), then disposed.
@@ -19,7 +21,7 @@ import type { ReferenceFrame } from '../ReferenceFrame';
 import type { QualitySettings } from '../quality';
 import { ElevationStore } from './ElevationStore';
 import { TileLoader, type LoadedTile } from './TileLoader';
-import { selectTiles, tileDistanceM, viewRadiusForAltitude, type LodParams } from './lod';
+import { createVisibilityScratch, resolveVisibility, selectTiles, tileDistanceM, viewRadiusForAltitude, type LodParams } from './lod';
 import { keyX, keyY, keyZ, parentKey, tileBounds, tileKey, tileSizeM, tileYToLat, type TileBounds } from './tileMath';
 import type { TileMeshData, TileMeshParams } from './tileMesh';
 import { TERRAIN_NOISE_PERIOD_M } from './TerrainMaterial';
@@ -63,6 +65,7 @@ export interface TerrainStats {
 }
 
 const _bounds: TileBounds = { west: 0, east: 0, north: 0, south: 0 };
+const byPendingZoom = (a: { mesh: TileMeshData }, b: { mesh: TileMeshData }): number => a.mesh.z - b.mesh.z;
 
 function surfSignature(list: readonly FlattenSurface[]): string {
   if (list.length === 0) return '';
@@ -83,6 +86,7 @@ export class TerrainRenderer {
   private readonly shown = new Set<number>();
   private readonly fallbacks = new Set<number>();
   private readonly candidates: number[] = [];
+  private readonly visScratch = createVisibilityScratch();
   private lastSurfaceVersion = -1;
   private candidatesOwn = 0;
   private readonly hiddenScratch: TileRecord[] = [];
@@ -200,6 +204,9 @@ export class TerrainRenderer {
   }
 
   private upload(maxCount: number): void {
+    // Coarse first (stable within a zoom, i.e. in build order, which follows the loader's
+    // distance priority): parents give coverage for everything below them.
+    if (this.pendingMeshes.length > maxCount) this.pendingMeshes.sort(byPendingZoom);
     let n = 0;
     while (this.pendingMeshes.length > 0 && n < maxCount) {
       const { key, mesh: m, sig } = this.pendingMeshes.shift()!;
@@ -267,15 +274,6 @@ export class TerrainRenderer {
     }
     return false;
   };
-
-  private hasFallbackAncestor(key: number): boolean {
-    let k = key;
-    while (keyZ(k) > 0) {
-      k = parentKey(k);
-      if (this.fallbacks.has(k)) return true;
-    }
-    return false;
-  }
 
   /**
    * Updates LOD, requests and visibility. Call between loader.beginFrame()
@@ -345,10 +343,8 @@ export class TerrainRenderer {
       }
     }
 
-    // Visibility: candidates unless covered by a fallback ancestor; fallbacks unless nested.
-    this.shown.clear();
-    for (const key of this.candidates) if (!this.hasFallbackAncestor(key)) this.shown.add(key);
-    for (const key of this.fallbacks) if (!this.hasFallbackAncestor(key)) this.shown.add(key);
+    // Visibility: all candidates; fallbacks only where they cover no finer shown tile.
+    resolveVisibility(this.candidates, this.fallbacks, this.shown, this.visScratch);
 
     let triangles = 0;
     for (const r of this.records.values()) {

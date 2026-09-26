@@ -12,3 +12,5 @@ app.start(window.location.search).catch((e: unknown) => {
   console.error('[AMG] start failed', e);
   root.textContent = `AMG Flight Simulator failed to start: ${e instanceof Error ? e.message : String(e)}`;
 });
+// QA-TEMP
+(window as unknown as { __app: App }).__app = app;

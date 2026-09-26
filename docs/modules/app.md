@@ -440,8 +440,9 @@ listener follows the camera, with Doppler from the camera's closing speed.
 ## 8. Platform (`src/platform`)
 
 - **`http()` / `fetchText(url)` / `fetchJson(url)`.** Try routes in order:
-  `electron` (IPC `http:get` in the main process, allow-listed hosts only,
-  currently `aviationweather.gov`), then `proxy` (dev server only:
+  `electron` (IPC `http:get` in the main process, allow-listed https hosts only,
+  currently `aviationweather.gov`, re-checked on the final URL after redirects;
+  only the app's own page may call it — `electron/guards.cjs`), then `proxy` (dev server only:
   `https://aviationweather.gov/...` becomes `/proxy/awc/...`), then
   `direct` (CORS). Each response carries `route`.
 - **`createStorage(namespace)`.** localStorage under `amgsim.<ns>.<key>`

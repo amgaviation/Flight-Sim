@@ -58,6 +58,10 @@ export interface DeviceStatus {
   profile: DeviceProfile;
 }
 
+/** Hardware lever var names, built once (poll runs every frame and must not build strings). */
+const THROTTLE_VARS = [1, 2, 3, 4].map((i) => INPUT.throttle(i));
+const MIXTURE_VARS = [1, 2].map((i) => INPUT.mixture(i));
+
 /** Actions still accepted while a menu has keyboard focus (`enabled = false`). */
 const ALWAYS_ALLOWED = new Set<ActionId>(['ui.menu', 'ui.fullscreen', 'ui.debug']);
 
@@ -473,7 +477,7 @@ export class InputManager {
       const t = Number.isFinite(hw.throttle[i]) ? hw.throttle[i] : hw.throttleAll;
       this.router.hwThrottle[i] = t;
       if (Number.isFinite(t)) {
-        v.set(INPUT.throttle(i + 1), t);
+        v.set(THROTTLE_VARS[i], t);
         tBound = true;
       }
     }
@@ -483,7 +487,7 @@ export class InputManager {
       const m = Number.isFinite(hw.mixture[i]) ? hw.mixture[i] : hw.mixtureAll;
       this.router.hwMixture[i] = m;
       if (Number.isFinite(m)) {
-        v.set(INPUT.mixture(i + 1), m);
+        v.set(MIXTURE_VARS[i], m);
         mBound = true;
       }
     }
