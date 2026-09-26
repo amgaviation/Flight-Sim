@@ -572,6 +572,7 @@ export class App {
     for (const s of navSystems) if (s !== radios) s.reset?.();
     if (state !== 'cold_dark') radios?.gps?.forceAcquired();
     this.loop.resetAccumulator();
+    this.vehicle.resetInterpolation();
   }
 
   /** In-flight reposition with the loaded aircraft. */
@@ -644,6 +645,8 @@ export class App {
     const s = this.session;
     if (!s) return;
     try {
+      // Pre-step pose for render interpolation (VehicleNode: frames fall between 120 Hz steps).
+      this.vehicle.capture(s.fdm);
       s.fdm.step(dt);
     } catch (e) {
       this.reportError('flight model', e);
@@ -678,7 +681,8 @@ export class App {
       v.set(ENV.timeUtcHours, t);
     }
     try {
-      const geo = this.vehicle.readSource(s.fdm);
+      // Draw between the last two physics states (the latest one while paused).
+      const geo = this.vehicle.readSource(s.fdm, f.paused ? 1 : f.alpha);
       this.world.frame.maybeRecenter(geo.lat, geo.lon);
       this.vehicle.place(s.fdm, this.world.frame);
       s.instance.updateExterior?.(dt);
