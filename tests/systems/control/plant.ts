@@ -105,7 +105,8 @@ export class TestPlant {
     let elev: number;
     let ail: number;
     if (this.opts.controls === 'surface') {
-      elev = v.get(SURF.elevator);
+      // Stabilizer/trim tab adds to the elevator effectiveness (0.5 per unit of normalized trim).
+      elev = v.get(SURF.elevator) + 0.5 * v.get(SURF.pitchTrim);
       ail = v.get(SURF.aileron);
     } else {
       elev = v.get('ap.servo_pitch') + v.get('input.pitch');
