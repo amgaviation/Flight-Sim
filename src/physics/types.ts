@@ -304,6 +304,13 @@ export interface TurbofanConfigExtras {
   ittStartLimit_c?: number;
   /** N1 (%) vs N2 (%) mapping exponent above idle (default 1.3). */
   n1MapExponent?: number;
+  /**
+   * (Appended by the citation-m2 aircraft.) Mach coefficient k of the installed TSFC
+   * factor (1 + k * M) (default 0.6). Small low-bypass engines (FJ44 class, BPR ~2.6)
+   * burn relatively more at cruise Mach than the default fits; the aircraft calibrates
+   * k against its published cruise fuel flows.
+   */
+  tsfcMachFactor?: number;
 }
 
 // Declaration merging: the optional extras become part of the config

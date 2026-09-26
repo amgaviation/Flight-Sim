@@ -9,7 +9,8 @@
  * magnitudes are fitted to published pilot-training values for the type
  * (e.g. take-off speeds around 140/142/148 kt at 65 t flaps 5, VREF30 about
  * 145 kt at 60 t), which is the level of accuracy a line pilot would check
- * against. The aircraft may replace any function through `B737Config.perf`.
+ * against. SCOPE: the functions are fixed for the 737-800W / CFM56-7B26; another
+ * variant needs its own tables here.
  */
 import { B738_WEIGHTS, B738_WING_AREA_M2 } from './b738';
 

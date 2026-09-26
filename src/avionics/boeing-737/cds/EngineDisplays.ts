@@ -360,7 +360,6 @@ export class EngPrimary implements CdsFormatRenderer {
     const h = 46;
     for (let i = 0; i < 2; i++) {
       const x = xs[i];
-      text(ctx, 'ENG ' + (i + 1), x + w / 2, 22, 20, CDS.cyan, 'center');
       const rows = [
         d.startValve[i] ? 'START VALVE|OPEN' : '',
         d.filterBypass[i] ? 'OIL FILTER|BYPASS' : '',
@@ -368,10 +367,8 @@ export class EngPrimary implements CdsFormatRenderer {
       ];
       for (let k = 0; k < 3; k++) {
         const y = 40 + k * h;
-        ctx.strokeStyle = CDS.darkGrey;
-        ctx.lineWidth = 2.5;
-        ctx.strokeRect(x, y, w, h);
         const s = rows[k];
+        // The alert boxes are only drawn while the condition exists (FCOM 7.10 "Engine Display Alerts").
         if (s) {
           ctx.fillStyle = CDS.amber;
           ctx.fillRect(x + 3, y + 3, w - 6, h - 6);

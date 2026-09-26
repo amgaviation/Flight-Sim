@@ -13,7 +13,8 @@ page.on('console', (m) => {
   if (m.type() === 'error' || m.type() === 'warning') console.log('[console]', m.type(), m.text());
 });
 page.on('pageerror', (e) => console.log('[pageerror]', e.message));
-await page.goto(`http://localhost:5199/src/avionics/boeing-737/dev/preview.html?${query}`);
+const pageName = process.env.PAGE ?? "preview";
+await page.goto(`http://localhost:5199/src/avionics/boeing-737/dev/${pageName}.html?${query}`);
 await page.waitForFunction(() => window.__ready === true, null, { timeout: 60000 });
 await page.waitForTimeout(200);
 if (selector) await page.locator(selector).first().screenshot({ path: out });

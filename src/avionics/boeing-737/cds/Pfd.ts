@@ -426,6 +426,32 @@ export class Pfd implements CdsFormatRenderer {
     if (v.get(AP.fdOn(this.side)) === 0) return;
     const pv = v.get(AFCS_VARS.fdPitchValid) !== 0;
     const rv = v.get(AFCS_VARS.fdRollValid) !== 0;
+    if (this.env.cfg.fdDisplay === 'single-cue') {
+      // Single cue (integrated cue option): a magenta V-bar displaced by the pitch command error and
+      // rotated by the bank command error. EST: shape and gains from single-cue PFD photographs.
+      // SCOPE: the airplane symbol keeps the split-axis shape instead of changing to the delta symbol.
+      if (!pv && !rv) return;
+      const dy = pv ? Math.max(-130, Math.min(130, (v.get(AP.fdPitch) - this.pitch) * PX_PER_DEG)) : 0;
+      const rot = rv ? (Math.max(-35, Math.min(35, v.get(AP.fdBank) - this.bank)) * Math.PI) / 180 : 0;
+      ctx.save();
+      ctx.translate(CX, CY - dy);
+      ctx.rotate(rot);
+      ctx.fillStyle = CDS.magenta;
+      ctx.strokeStyle = CDS.black;
+      ctx.lineWidth = 1.5;
+      for (const sgn of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(0, 2);
+        ctx.lineTo(sgn * 120, 34);
+        ctx.lineTo(sgn * 120, 46);
+        ctx.lineTo(0, 16);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+      ctx.restore();
+      return;
+    }
     ctx.strokeStyle = CDS.magenta;
     ctx.lineWidth = 5;
     ctx.lineCap = 'butt';

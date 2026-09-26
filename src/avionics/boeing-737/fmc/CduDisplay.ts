@@ -40,14 +40,17 @@ const CRT_GREEN = '#3cff6e';
 export interface CduDisplayOptions {
   canvas?: 'dom' | 'offscreen' | HTMLCanvasElement | OffscreenCanvas;
   pixelRatio?: number;
+  /** Run `cdu.update(dt)` from the display refresh (default true; the suite updates its CDUs itself and passes false). */
+  driveCdu?: boolean;
 }
 
 export class CduDisplay extends CanvasDisplay {
   readonly cdu: Cdu;
   private readonly green: boolean;
+  private readonly driveCdu: boolean;
   private lastHash = -1;
   private readonly largeFont = fontString(30, FONT_STACKS.mono, 'bold');
-  private readonly smallFont = fontString(22, FONT_STACKS.mono, 'bold');
+  private readonly smallFont = fontString(20, FONT_STACKS.mono, 'bold');
 
   constructor(cdu: Cdu, opts: CduDisplayOptions = {}) {
     super({
@@ -63,10 +66,11 @@ export class CduDisplay extends CanvasDisplay {
     });
     this.cdu = cdu;
     this.green = cdu.fmc.cfg.cduScreen === 'green';
+    this.driveCdu = opts.driveCdu ?? true;
   }
 
   protected override update(dt: number): void {
-    this.cdu.update(dt);
+    if (this.driveCdu) this.cdu.update(dt);
     const h = this.cdu.render().hash();
     if (h !== this.lastHash) {
       this.lastHash = h;

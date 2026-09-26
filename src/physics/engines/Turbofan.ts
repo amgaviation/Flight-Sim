@@ -330,7 +330,7 @@ export class Turbofan implements EngineModel {
     // ---- fuel flow and ITT when running
     if (this.lit && this.startComplete) {
       const nfrac = n1 / c.n1Max_pct;
-      const tsfc = interp1(c.tsfc, nfrac) * (1 + 0.6 * env.mach) * Math.sqrt(thetaAmb); // kg/(N h)
+      const tsfc = interp1(c.tsfc, nfrac) * (1 + (c.tsfcMachFactor ?? 0.6) * env.mach) * Math.sqrt(thetaAmb); // kg/(N h)
       const idleFloor = (c.idleFuelFlow_pph / KGS_TO_PPH) * (0.35 + 0.65 * Math.min(1, delta));
       ff_kgs = Math.max(idleFloor, (tsfc * gross) / 3600);
       ittTarget = this.runningItt(n1, env, bleed, antiIce, inletIce);

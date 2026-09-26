@@ -142,6 +142,11 @@ export interface B737Config {
   oilQtyUnit?: 'qt' | 'pct';
   /** Optional angle-of-attack gauge on the PFD (customer option). */
   pfdAoaGauge?: boolean;
+  /**
+   * PFD flight director presentation: 'split-axis' crossbars (default) or the 'single-cue'
+   * customer option (integrated V-bar command cue; FCOM 10.10 "Flight Director Display").
+   */
+  fdDisplay?: 'split-axis' | 'single-cue';
   power?: B737PowerConfig;
   vars?: Partial<B737DisplayVars>;
   /** Use existing radios / FMS instead of creating them. */
@@ -226,6 +231,7 @@ export function resolveB737Config(cfg: B737Config = {}): ResolvedB737Config {
     cduScreen: cfg.cduScreen ?? 'color',
     oilQtyUnit: cfg.oilQtyUnit ?? 'qt',
     pfdAoaGauge: cfg.pfdAoaGauge ?? false,
+    fdDisplay: cfg.fdDisplay ?? 'split-axis',
     power: cfg.power ?? {},
     vars: { ...DEFAULT_DISPLAY_VARS, ...(cfg.vars ?? {}) },
     radios: cfg.radios ?? null,

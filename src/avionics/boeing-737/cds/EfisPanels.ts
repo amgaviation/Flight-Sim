@@ -22,7 +22,7 @@
 import type { SimVars } from '../../../core/SimVars';
 import type { EventBus } from '../../../core/EventBus';
 import { ADC, AP } from '../../../core/vars';
-import { listen, payloadNumber } from '../../../systems/autopilot/lib';
+import { payloadNumber } from '../../../systems/autopilot/lib';
 import { B737_EVENTS, B737_VARS, EFIS_MAP_BUTTONS, ND_RANGES_NM, NdMode, type EfisMapButton, type Side } from '../vars';
 
 /** Radio minimums: 0-999 ft (EST limit of the selector), 10 ft per click (EST). */
@@ -43,7 +43,11 @@ export class EfisPanels {
   /** Minimums RST requests consumed by the PFDs (count per side). */
   readonly minsReset: [number, number] = [0, 0];
 
-  constructor(env: { vars: SimVars; events?: EventBus }, adcIndex: [number, number]) {
+  /**
+   * @param powered optional EFIS control panel power per side (config `power.efis1/2`): an
+   *   unpowered panel ignores its knobs and buttons (the selections are kept).
+   */
+  constructor(env: { vars: SimVars; events?: EventBus }, adcIndex: [number, number], powered?: (s: Side) => boolean) {
     this.vars = env.vars;
     this.adcIndex = adcIndex;
     const v = env.vars;
@@ -65,18 +69,26 @@ export class EfisPanels {
       init(B737_VARS.efisVorAdf(s, 1), 0);
       init(B737_VARS.efisVorAdf(s, 2), 0);
       for (const b of EFIS_MAP_BUTTONS) init(B737_VARS.efisMapButton(s, b), 0);
-      const e = env.events;
-      listen(e, this.offs, B737_EVENTS.efisMinsInc(s), (p) => this.mins(s, payloadNumber(p, 1)));
-      listen(e, this.offs, B737_EVENTS.efisMinsDec(s), (p) => this.mins(s, -payloadNumber(p, 1)));
-      listen(e, this.offs, B737_EVENTS.efisMinsRst(s), () => this.minsRst(s));
-      listen(e, this.offs, B737_EVENTS.efisBaroInc(s), (p) => this.baro(s, payloadNumber(p, 1)));
-      listen(e, this.offs, B737_EVENTS.efisBaroDec(s), (p) => this.baro(s, -payloadNumber(p, 1)));
-      listen(e, this.offs, B737_EVENTS.efisBaroStd(s), () => this.std(s));
-      listen(e, this.offs, B737_EVENTS.efisCtr(s), () => this.toggle(B737_VARS.efisCtr(s)));
-      listen(e, this.offs, B737_EVENTS.efisTfc(s), () => this.toggle(B737_VARS.efisTfc(s)));
-      listen(e, this.offs, B737_EVENTS.efisFpv(s), () => this.toggle(B737_VARS.efisFpv(s)));
-      listen(e, this.offs, B737_EVENTS.efisMtrs(s), () => this.toggle(B737_VARS.efisMtrs(s)));
-      for (const b of EFIS_MAP_BUTTONS) listen(e, this.offs, B737_EVENTS.efisMapButton(s, b), () => this.mapButton(s, b));
+      const ev = env.events;
+      const on = (name: string, fn: (p: unknown) => void): void => {
+        if (ev)
+          this.offs.push(
+            ev.on(name, (p: unknown) => {
+              if (!powered || powered(s)) fn(p);
+            }),
+          );
+      };
+      on(B737_EVENTS.efisMinsInc(s), (p) => this.mins(s, payloadNumber(p, 1)));
+      on(B737_EVENTS.efisMinsDec(s), (p) => this.mins(s, -payloadNumber(p, 1)));
+      on(B737_EVENTS.efisMinsRst(s), () => this.minsRst(s));
+      on(B737_EVENTS.efisBaroInc(s), (p) => this.baro(s, payloadNumber(p, 1)));
+      on(B737_EVENTS.efisBaroDec(s), (p) => this.baro(s, -payloadNumber(p, 1)));
+      on(B737_EVENTS.efisBaroStd(s), () => this.std(s));
+      on(B737_EVENTS.efisCtr(s), () => this.toggle(B737_VARS.efisCtr(s)));
+      on(B737_EVENTS.efisTfc(s), () => this.toggle(B737_VARS.efisTfc(s)));
+      on(B737_EVENTS.efisFpv(s), () => this.toggle(B737_VARS.efisFpv(s)));
+      on(B737_EVENTS.efisMtrs(s), () => this.toggle(B737_VARS.efisMtrs(s)));
+      for (const b of EFIS_MAP_BUTTONS) on(B737_EVENTS.efisMapButton(s, b), () => this.mapButton(s, b));
     }
   }
 

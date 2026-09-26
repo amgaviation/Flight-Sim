@@ -138,7 +138,7 @@ export class B737Afds implements Subsystem {
         ...AFCS_B737_AFDS,
         power: a.power,
         // Servo power: A/P A on hydraulic system A, A/P B on system B (FCOM 4.20); missing vars = powered.
-        servoPower: a.servoPower ?? [`${hydA} > 1000 || !has(${hydA})`, `${hydB} > 1000 || !has(${hydB})`],
+        servoPower: a.servoPower ?? [`${hydA} ?? 3000 > 1000`, `${hydB} ?? 3000 > 1000`],
         gains: a.gains,
         disconnect: {
           ...AFCS_B737_AFDS.disconnect,
@@ -496,6 +496,13 @@ export class B737Afds implements Subsystem {
       else if (isMach && this.prevAlt > CHANGEOVER_FT && alt <= CHANGEOVER_FT) this.events.emit('ap.spd_mach');
     }
     if (!this.fms) return;
+    // FMC failed / unpowered: no LNAV / VNAV guidance for the AFDS (the nav FMS keeps computing).
+    if (this.fmc && !this.fmc.powered) {
+      v.set(FMS.lnavValid, 0);
+      v.set(FMS.vnavValid, 0);
+      v.setString(FMS.vnavPhase, '');
+      return;
+    }
     // VNAV target speed: take-off V2+20 below the acceleration height, flap placard - 5 kt, speed intervention.
     let kt = v.get(FMS.vnavTargetSpeedKt);
     let mach = v.get(FMS.vnavTargetMach);

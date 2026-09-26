@@ -44,6 +44,8 @@ export class Cdu {
   sub = 0;
   /** Per-page transient state (selection lists, pending VIA entries...). */
   readonly state = new Map<string, unknown>();
+  /** CDU power (config `power.cdu1/2`, set by the suite): an unpowered CDU ignores its keys. */
+  powerCheck: () => boolean = () => true;
   private readonly pages: Map<PageId, CduPage>;
   private readonly offs: (() => void)[] = [];
   private typedOverMsg = false;
@@ -124,7 +126,7 @@ export class Cdu {
   // ------------------------------------------------------------ keys
 
   key(id: string): void {
-    if (!this.fmc.powered) return;
+    if (!this.fmc.powered || !this.powerCheck()) return;
     const k = id.toUpperCase();
     const lsk = /^([LR])([1-6])$/.exec(k);
     if (lsk) {

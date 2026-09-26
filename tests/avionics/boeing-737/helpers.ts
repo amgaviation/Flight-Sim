@@ -94,3 +94,78 @@ export async function rig(cfg: B737Config = {}, pos = { lat: 40.8501, lon: -74.0
   step(0.1);
   return { vars, events, fms, fmc, cdu, cdu2, press, type, enter, step, screen, text: () => screen().join('\n') };
 }
+
+// ---------------------------------------------------------------- suite helpers
+
+import type { DisplayCanvas } from '../../../src/avionics/common/CanvasDisplay';
+import { createB737Suite, type B737Suite } from '../../../src/avionics/boeing-737/suite';
+
+/** Records draw calls so tests can assert that a display drew something. */
+export const drawStats = { fillText: 0, stroke: 0, fill: 0 };
+
+function fakeContext(canvas: unknown): unknown {
+  const grad = { addColorStop() {} };
+  const state: Record<string | symbol, unknown> = {
+    canvas,
+    font: '10px sans-serif',
+    fillStyle: '#000',
+    strokeStyle: '#000',
+    lineWidth: 1,
+    globalAlpha: 1,
+    textAlign: 'left',
+    textBaseline: 'alphabetic',
+    measureText: (s: string) => ({ width: String(s).length * 8, actualBoundingBoxAscent: 8, actualBoundingBoxDescent: 2, fontBoundingBoxAscent: 9, fontBoundingBoxDescent: 3 }),
+    createLinearGradient: () => grad,
+    createRadialGradient: () => grad,
+    createConicGradient: () => grad,
+    createPattern: () => ({}),
+    getImageData: (_x: number, _y: number, w: number, h: number) => ({ width: w, height: h, data: new Uint8ClampedArray(Math.max(1, w * h * 4)) }),
+    createImageData: (w: number, h: number) => ({ width: w, height: h, data: new Uint8ClampedArray(Math.max(1, w * h * 4)) }),
+    getLineDash: () => [],
+    getTransform: () => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }),
+    isPointInPath: () => false,
+    fillText: () => void drawStats.fillText++,
+    stroke: () => void drawStats.stroke++,
+    fill: () => void drawStats.fill++,
+  };
+  return new Proxy(state, {
+    get(t, p) {
+      if (p in t) return t[p];
+      return () => undefined;
+    },
+    set(t, p, v) {
+      t[p] = v;
+      return true;
+    },
+  });
+}
+
+/** A canvas stand-in with a no-op 2D context (displays can be built and drawn in Node). */
+export function fakeCanvas(): DisplayCanvas {
+  const c: Record<string, unknown> = { width: 1, height: 1 };
+  const ctx = fakeContext(c);
+  c.getContext = () => ctx;
+  c.toDataURL = () => '';
+  return c as unknown as DisplayCanvas;
+}
+
+export interface SuiteRig {
+  vars: SimVars;
+  events: EventBus;
+  suite: B737Suite;
+  /** Runs the suite subsystems for `seconds` at 60 Hz. */
+  run: (seconds: number) => void;
+}
+
+/** A full suite (with or without the nav database) on fake canvases. */
+export async function makeSuite(cfg: B737Config = {}, withNav = false): Promise<SuiteRig> {
+  const vars = new SimVars();
+  const events = new EventBus();
+  const nav = withNav ? await navDb() : null;
+  const suite = createB737Suite({ vars, events, nav, world: null, canvas: fakeCanvas }, cfg);
+  const run = (seconds: number): void => {
+    const n = Math.max(1, Math.round(seconds * 60));
+    for (let i = 0; i < n; i++) for (const s of suite.systems) s.update(1 / 60);
+  };
+  return { vars, events, suite, run };
+}
