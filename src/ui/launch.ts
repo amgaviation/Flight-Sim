@@ -105,6 +105,11 @@ export function launchFromQuery(search: string, base: LaunchConfig): (LaunchConf
 }
 
 /** Day of year (1..366) and UTC hours for a time config. */
+/** 365 or 366 days (Gregorian leap-year rule), for the UTC clock's day-of-year wrap. */
+export function daysInYear(year: number): number {
+  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0 ? 366 : 365;
+}
+
 export function resolveTime(t: TimeConfig, now = new Date()): { year: number; dayOfYear: number; utcHours: number } {
   const d = t.mode === 'now' ? now : new Date(`${t.date}T00:00:00Z`);
   const year = d.getUTCFullYear();

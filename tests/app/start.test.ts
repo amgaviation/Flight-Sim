@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Airport, Runway } from '../../src/nav/types';
 import type { AircraftMeta } from '../../src/aircraft/types';
 import { bestRunway, destination, FINAL_NM, findRunway, LINEUP_M, normalizeRunwayIdent, planStart, TCH_FT } from '../../src/ui/startPosition';
-import { defaultLaunch, launchFromQuery, resolveTime, sanitizeLaunch } from '../../src/ui/launch';
+import { daysInYear, defaultLaunch, launchFromQuery, resolveTime, sanitizeLaunch } from '../../src/ui/launch';
 
 const NM_M = 1852;
 
@@ -142,6 +142,12 @@ describe('launch config', () => {
 
   it('resolves day of year and UTC hours', () => {
     expect(resolveTime({ mode: 'custom', date: '2026-03-01', utcHours: 12 })).toEqual({ year: 2026, dayOfYear: 60, utcHours: 12 });
+    // The UTC clock wraps day 365 (366 in leap years) to day 1.
+    expect(daysInYear(2026)).toBe(365);
+    expect(daysInYear(2028)).toBe(366);
+    expect(daysInYear(2100)).toBe(365);
+    expect(daysInYear(2000)).toBe(366);
+    expect(resolveTime({ mode: 'custom', date: '2026-12-31', utcHours: 23 }).dayOfYear).toBe(daysInYear(2026));
     const now = new Date(Date.UTC(2024, 11, 31, 6, 30, 0));
     expect(resolveTime({ mode: 'now', date: '2000-01-01', utcHours: 0 }, now)).toEqual({ year: 2024, dayOfYear: 366, utcHours: 6.5 });
   });

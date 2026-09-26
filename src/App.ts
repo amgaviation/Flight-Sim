@@ -42,7 +42,7 @@ import { injectStyles } from './ui/styles';
 import { MainMenu } from './ui/MainMenu';
 import { PauseMenu, settingsModal } from './ui/PauseMenu';
 import { ChecklistViewer, LoadingScreen, Overlays, helpPanel, modal, type FuelPayloadHost } from './ui/panels';
-import { launchFromQuery, resolveTime, sanitizeLaunch, type LaunchConfig, type TimeConfig } from './ui/launch';
+import { daysInYear, launchFromQuery, resolveTime, sanitizeLaunch, type LaunchConfig, type TimeConfig } from './ui/launch';
 import { findAircraft, defaultAircraftId, type MenuAircraft } from './ui/catalog';
 import { planStart, type StartPlacement, type StartSpot } from './ui/startPosition';
 import { applyWeather, presetWeather, metarToWeather, type WeatherState } from './ui/weather/weather';
@@ -125,6 +125,8 @@ export class App {
   private loading: LoadingScreen | null = null;
   private autotest = false;
   private hudTimer = 0;
+  /** Days in the simulated year (for the UTC clock's day-of-year wrap). */
+  private daysInYear = 365;
   private crashedShown = false;
   private readonly errorsSeen = new Set<string>();
   readonly debug: SimDebugApi;
@@ -447,6 +449,7 @@ export class App {
     const r = resolveTime(t);
     this.vars.set(ENV.timeUtcHours, r.utcHours);
     this.vars.set(ENV.dayOfYear, r.dayOfYear);
+    this.daysInYear = daysInYear(r.year);
     this.cfg = { ...this.cfg, time: t };
     this.settings.set('launch', this.cfg);
   }
@@ -676,7 +679,8 @@ export class App {
       let t = v.get(ENV.timeUtcHours) + f.simDt / 3600;
       if (t >= 24) {
         t -= 24;
-        v.set(ENV.dayOfYear, (v.get(ENV.dayOfYear) % 366) + 1);
+        // Day 365 (366 in a leap year) is followed by day 1.
+        v.set(ENV.dayOfYear, (v.get(ENV.dayOfYear) % this.daysInYear) + 1);
       }
       v.set(ENV.timeUtcHours, t);
     }

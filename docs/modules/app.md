@@ -68,7 +68,7 @@ SimLoop callbacks (fixed step, see physics.md 1.1):
 |---|---|---|
 | `input(realDt)` | per frame | `InputManager.poll` (keyboard, gamepads, mouse yoke), then `CommandRouter.update` |
 | `systems(dt)` | 60 Hz, before FDM | `instance.systems[i].update(dt)` in array order (each in try/catch, errors reported once) |
-| `physics(dt)` | 120 Hz | `fdm.step(dt)` |
+| `physics(dt)` | 120 Hz | `vehicle.capture(fdm)` (pre-step pose for render interpolation), then `fdm.step(dt)` |
 | `nav(dt)` | 20 Hz, after FDM | Radios/FMS the app added (aircraft-owned radios stay in `systems`) |
 | `frame(info)` | per frame | UTC clock advance; floating-origin recenter + place aircraft; `instance.updateExterior(dt)`; `CockpitRuntime.update`; camera (head motion, look, zoom); `world.update`; cockpit shadows; render; audio; overlays/HUD |
 
@@ -389,6 +389,19 @@ are stored under `settings.graphics`.
 calls `world.frame.maybeRecenter`, and places the aircraft group with
 `frame.toLocal` and `frame.nedQuaternionToLocal`. At launch and on
 reposition it pre-recenters, so the first frame never jumps.
+
+**Render interpolation** (`VehicleNode`, `src/render/VehicleNode.ts`). Physics
+steps at a fixed 120 Hz, so on a 75/90/144/165 Hz display a frame advances
+by 0, 1 or 2 steps; drawing the latest step would make the aircraft and
+the cockpit camera judder. `vehicle.capture(fdm)` runs before every physics
+step, and `vehicle.readSource(fdm, frameInfo.alpha)` draws
+`prev + (latest − prev)·alpha` (normalised quaternion lerp for the
+attitude), i.e. up to one step (8.3 ms) behind the physics. Paused frames
+draw the latest state; moves of more than 200 m or 10 deg between captures
+(reposition, slew, state presets) snap, and `vehicle.resetInterpolation()`
+is called after every reposition. `vehicle.geo` / `vehicle.attitude` hold
+the drawn pose (cameras use `geo`). Cockpit instruments keep reading the
+latest SimVars.
 
 **Camera modes** (`CameraSystem`):
 
