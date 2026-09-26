@@ -88,7 +88,7 @@ export class GearHandle extends ControlBase {
     } else if (p.button === 2) this.request(-1);
   }
 
-  onDrag(_dx: number, dy: number): void {
+  onDrag(_dx: number, dy: number, _p?: ControlPointer): void {
     this.dragAcc -= dy;
     if (Math.abs(this.dragAcc) > 20) {
       this.request(this.dragAcc > 0 ? 1 : -1);
@@ -96,12 +96,12 @@ export class GearHandle extends ControlBase {
     }
   }
 
-  onWheel(delta: number): void {
+  onWheel(delta: number, _p?: ControlPointer): void {
     if (!this.enabled || delta === 0) return;
     this.request(delta > 0 ? 1 : -1);
   }
 
-  cursor(): string {
+  cursor(_p?: ControlPointer): string {
     return 'ns-resize';
   }
 

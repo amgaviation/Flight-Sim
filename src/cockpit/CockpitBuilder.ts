@@ -379,7 +379,8 @@ export class Panel {
     grp.add(ring);
     const face = new THREE.Mesh(env.geometry.get(`face.${d}`, () => glassDiscGeometry(d * 0.95)), env.materials.get('lcdOff'));
     face.name = `display:${display.id}`;
-    face.position.z = -0.002;
+    // Just above the flange, inside the bezel ring (no panel cutout needed).
+    face.position.z = 0.0017;
     grp.add(face);
     this.builder.addDisplay(display, face, { glass: true, ...opts.display });
     return face;
@@ -543,6 +544,14 @@ export class CockpitBuilder {
     if (this.built) throw new Error('CockpitBuilder: build() called twice');
     this.built = true;
     this.env.labels.flush();
+    // Interior occlusion for every lit material in the cockpit, including
+    // materials created by other modules (analog gauges, aircraft parts).
+    this.root.traverse((o) => {
+      const m = (o as THREE.Mesh).material;
+      if (!m) return;
+      if (Array.isArray(m)) for (const x of m) this.env.materials.patchInterior(x);
+      else this.env.materials.patchInterior(m);
+    });
     let mergeStats: MergeStats | null = null;
     const merged: THREE.Mesh[] = [];
     if (this.o.mergeStatic !== false) {

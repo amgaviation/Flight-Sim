@@ -6,8 +6,11 @@
  * an unlit material on the display mesh, and each frame:
  *  - reads `display.<id>.power` (missing = powered): unpowered screens are
  *    black and are not rendered;
- *  - reads `display.<id>.brt` (0..1, missing = 1): scales the screen colour
- *    and calls `display.setBrightness` when it changes;
+ *  - reads `display.<id>.brt` (0..1, missing = 1) and calls
+ *    `display.setBrightness` when it changes; the screen material is dimmed
+ *    only when the display does not implement setBrightness (displays that
+ *    dim their own drawing, e.g. avionics CanvasDisplay, are not dimmed
+ *    twice) unless `dimMaterial` says otherwise;
  *  - after a power-up, optionally shows a boot splash for N seconds before
  *    the display's own rendering starts, then writes `display.<id>.ready` = 1;
  *  - throttles `display.render(dt)` to `refreshHz` (dt = time since that
@@ -131,6 +134,11 @@ export interface DisplayOptions {
   glass?: boolean;
   /** Colour multiplier at full brightness (default 1). */
   gain?: number;
+  /**
+   * Scale the screen material by the brightness var. Default: true only when
+   * the display has no `setBrightness` (otherwise the display dims itself).
+   */
+  dimMaterial?: boolean;
   /** Generate mipmaps on upload (default true; better minification). */
   mipmaps?: boolean;
   anisotropy?: number;
@@ -350,7 +358,8 @@ export class DisplayManager {
   }
 
   private applyColor(e: Entry): void {
-    const k = e.powered ? e.brightness * (e.options.gain ?? 1) : 0;
+    const dim = e.options.dimMaterial ?? !e.display.setBrightness;
+    const k = e.powered ? (dim ? e.brightness : 1) * (e.options.gain ?? 1) : 0;
     e.material.color.setScalar(k);
   }
 

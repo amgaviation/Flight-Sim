@@ -8,11 +8,12 @@
  *    "Vertical Speed Indicator" (jets: labels at 2000/4000 fpm, minor 1000;
  *    the 172 G1000 scale is +/-2000 with labels at 1000/2000).
  *  - 'needle' (Boeing 737NG / Honeywell / Collins): non-linear fixed scale,
- *    needle radiating from a pivot to the right of the scale, digital
- *    readout above (climb) or below (descent) the scale beyond a threshold,
- *    TCAS RA green "fly-to" and red "avoid" bands (737NG FCOM 10.10
- *    "Vertical Speed Indicator": pointer 0 to 6000 fpm, TCAS corrective /
- *    preventative advisory bands).
+ *    needle radiating from a pivot to the right of the scale, magenta
+ *    selected-V/S bug, digital readout above (climb) or below (descent) the
+ *    scale when |VS| > 400 fpm, TCAS RA green "fly-to" and red "avoid"
+ *    bands (737NG FCOM 10.10 "PFD - Vertical Speed Indications": pointer 0 to
+ *    6000 fpm, "Displays vertical speed when greater than 400 feet per
+ *    minute ... above ... when climbing and below when descending").
  */
 import { clamp } from '../../../core/math';
 import { fmtInt } from '../format';
@@ -67,7 +68,7 @@ export const VSI_GARMIN_4000: VerticalSpeedStyle = {
   labels: [2000, 4000],
 };
 
-/** 737NG: 0-6000 fpm non-linear (1, 2, 6 labels). EST scale positions and the 400 fpm readout threshold. */
+/** 737NG: 0-6000 fpm non-linear (1, 2, 6 labels); readout above 400 fpm (FCOM). EST scale positions. */
 export const VSI_BOEING: VerticalSpeedStyle = {
   palette: BOEING_PALETTE,
   typeface: BOEING_TYPEFACE,

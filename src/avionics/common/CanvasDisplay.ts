@@ -163,7 +163,7 @@ export abstract class CanvasDisplay implements CockpitDisplay {
 
   /** True while the boot screen is showing. */
   get booting(): boolean {
-    return this.bootLeft > 0;
+    return this.bootLeft > 1e-6;
   }
 
   /** Overrides the power var (true/false) or returns control to it (null). */
@@ -227,7 +227,7 @@ export abstract class CanvasDisplay implements CockpitDisplay {
     this.timeS += dt;
     this.update(dt);
     const b = this.brightness;
-    if (this.bootLeft > 0) {
+    if (this.bootLeft > 1e-6) {
       this.bootLeft -= dt;
       this.begin();
       this.drawBoot(this.ctx, this.bootTimeS > 0 ? 1 - Math.max(0, this.bootLeft) / this.bootTimeS : 1);

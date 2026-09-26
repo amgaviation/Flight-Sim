@@ -123,11 +123,11 @@ export const GARMIN_PALETTE: AvionicsPalette = {
   readoutBackground: '#000000',
   readoutBorder: WHITE,
   warning: RED,
-  caution: '#ffff00', // G1000 CAS caution is yellow
-  advisory: '#00ffff',
+  caution: '#ffff00', // G1000 PG 190-00494-04 §3.2: caution yellow
+  advisory: WHITE, // G1000 PG §3.2: advisory white
   status: WHITE,
   softKeyText: WHITE,
-  softKeyActive: '#00ffff',
+  softKeyActive: '#b4b8bc', // G1000 PG §1 "Softkey Function": selected = black text on gray
   softKeyDisabled: '#6b6f73',
   mapWater: '#0a2a6b',
   mapRoute: WHITE,

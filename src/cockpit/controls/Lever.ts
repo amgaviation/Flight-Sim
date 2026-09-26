@@ -7,7 +7,8 @@
  *    toward `max` (use `dragInvert` to flip). Soft detents are magnetic;
  *    gates stop the lever - release and drag again to lift it over.
  *  - click (press + release without dragging): left = next detent toward
- *    max, right = toward min. A click deliberately lifts over a gate.
+ *    max, right = toward min (or one `step` when there is no detent that
+ *    way). A click deliberately lifts over a gate.
  *  - wheel: one detent (or `step`) per notch; stops at gates, a pause and
  *    another notch passes.
  * Hardware axis: when `axis.boundVar` (default input.throttle_axis_bound) is
@@ -148,7 +149,7 @@ export class Lever extends ControlBase {
     if (this.dragMoved < 3) {
       // A click: deliberate one-detent step.
       L.endMotion();
-      this.handleMove(L.stepDetent(p.button === 2 ? -1 : 1, nowS(), true));
+      this.handleMove(L.stepDetent(p.button === 2 ? -1 : 1, nowS(), true, true));
     } else {
       const before = L.output;
       L.endMotion();
@@ -163,13 +164,13 @@ export class Lever extends ControlBase {
     this.publish();
   }
 
-  onWheel(delta: number): void {
+  onWheel(delta: number, _p?: ControlPointer): void {
     if (!this.enabled || this.axisBound() || delta === 0) return;
     this.blockedSounded = false;
     this.handleMove(this.logic.stepDetent(delta > 0 ? 1 : -1, nowS(), false));
   }
 
-  cursor(): string {
+  cursor(_p?: ControlPointer): string {
     return this.axisBound() ? 'not-allowed' : 'grab';
   }
 

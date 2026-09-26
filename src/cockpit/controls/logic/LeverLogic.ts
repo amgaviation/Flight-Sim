@@ -194,18 +194,20 @@ export class LeverLogic {
   }
 
   /**
-   * One wheel notch / click: moves to the next detent in `dir` (discrete
-   * levers or levers with detents within reach) or by `step`. `deliberate`
+   * One wheel notch or click. Moves to the next detent in `dir` when
+   * `toNextDetent` (default for discrete levers; clicks use it too) or when
+   * that detent is within one `step`; otherwise by `step`. `deliberate`
    * (clicks) passes a gate the lever rests on without the pause rule.
    */
-  stepDetent(dir: 1 | -1, nowS: number, deliberate = false): LeverMove {
+  stepDetent(dir: 1 | -1, nowS: number, deliberate = false, toNextDetent = this.discrete): LeverMove {
     this.beginMotion(nowS, deliberate);
     let target: number;
     const next = this.nextDetent(dir);
     if (this.discrete) target = next ? next.value : this.value;
     else {
       const stepTarget = this.value + dir * this.step;
-      target = next && (dir > 0 ? next.value <= stepTarget + EPS : next.value >= stepTarget - EPS) ? next.value : stepTarget;
+      const within = next && (dir > 0 ? next.value <= stepTarget + EPS : next.value >= stepTarget - EPS);
+      target = next && (toNextDetent || within) ? next.value : stepTarget;
     }
     const r = this.moveTo(target, nowS);
     this.endMotion();

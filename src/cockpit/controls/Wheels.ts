@@ -113,7 +113,7 @@ export class Thumbwheel extends ControlBase {
     else if (p.button === 2) this.roll(-1, true);
   }
 
-  onDrag(dx: number, dy: number): void {
+  onDrag(dx: number, dy: number, _p?: ControlPointer): void {
     const vertical = (this.o.orientation ?? 'vertical') === 'vertical';
     this.dragAcc += vertical ? -dy : dx;
     while (Math.abs(this.dragAcc) >= 10) {
@@ -123,7 +123,7 @@ export class Thumbwheel extends ControlBase {
     }
   }
 
-  onWheel(delta: number): void {
+  onWheel(delta: number, _p?: ControlPointer): void {
     if (!this.enabled || delta === 0) return;
     this.roll(delta > 0 ? 1 : -1, false);
   }
@@ -317,7 +317,7 @@ export class TrimWheel extends ControlBase {
     else if (p.button === 2) this.hold = -1;
   }
 
-  onPointerUp(): void {
+  onPointerUp(_p?: ControlPointer): void {
     this.hold = 0;
   }
 
@@ -325,7 +325,7 @@ export class TrimWheel extends ControlBase {
     this.hold = 0;
   }
 
-  onDrag(_dx: number, dy: number): void {
+  onDrag(_dx: number, dy: number, _p?: ControlPointer): void {
     this.dragged += Math.abs(dy);
     if (this.dragged > 4) this.hold = 0;
     // Drag down (dy > 0) pulls the top of the rim toward the pilot (-forward).
@@ -334,12 +334,12 @@ export class TrimWheel extends ControlBase {
     this.manual(revs);
   }
 
-  onWheel(delta: number): void {
+  onWheel(delta: number, _p?: ControlPointer): void {
     if (!this.enabled || delta === 0) return;
     this.manual(delta / 24);
   }
 
-  cursor(): string {
+  cursor(_p?: ControlPointer): string {
     return 'ns-resize';
   }
 

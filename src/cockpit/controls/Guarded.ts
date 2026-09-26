@@ -232,7 +232,7 @@ export class GuardedButton extends ControlBase {
     this.inner.onPointerDown(p);
   }
 
-  onPointerUp(): void {
+  onPointerUp(_p?: ControlPointer): void {
     if (this.active === 'button') this.inner.onPointerUp();
     this.active = null;
   }

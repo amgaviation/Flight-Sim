@@ -126,7 +126,7 @@ export class CircuitBreaker extends ControlBase {
     this.playSound(r === 'pulled' ? COCKPIT_SOUNDS.cbPull : COCKPIT_SOUNDS.cbPush);
   }
 
-  onWheel(delta: number): void {
+  onWheel(delta: number, _p?: ControlPointer): void {
     // Wheel up pushes in, down pulls out.
     if (!this.enabled || delta === 0) return;
     if ((delta > 0) === this.logic.closed) return;

@@ -128,7 +128,7 @@ export class PushButton extends ControlBase {
     this.doPress();
   }
 
-  onPointerUp(): void {
+  onPointerUp(_p?: ControlPointer): void {
     this.doRelease();
   }
 

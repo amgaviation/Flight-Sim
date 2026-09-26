@@ -450,6 +450,7 @@ export class LabelFactory {
         polygonOffsetUnits: -4,
       });
       m.name = `cockpit.label.${key}`;
+      this.materials.patchInterior(m);
       this.matCache.set(key, m);
       if (zone) this.lighting.registerBacklight(m, zone);
     }

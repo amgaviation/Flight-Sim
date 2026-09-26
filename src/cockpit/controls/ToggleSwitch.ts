@@ -153,7 +153,7 @@ export class ToggleSwitch extends ControlBase {
     this.request(delta > 0 ? 1 : -1, false);
   }
 
-  cursor(): string {
+  cursor(_p?: ControlPointer): string {
     return this.vertical ? 'ns-resize' : 'ew-resize';
   }
 

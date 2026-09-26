@@ -133,7 +133,7 @@ export class TBarHandle extends ControlBase {
     this.push();
   }
 
-  onPointerUp(): void {
+  onPointerUp(_p?: ControlPointer): void {
     if (this.logic.release()) {
       this.playSound(COCKPIT_SOUNDS.handlePush, 0.6);
       this.publish();
@@ -144,7 +144,7 @@ export class TBarHandle extends ControlBase {
     this.onPointerUp();
   }
 
-  onWheel(delta: number): void {
+  onWheel(delta: number, _p?: ControlPointer): void {
     if (!this.enabled || delta === 0) return;
     if (delta < 0 && !this.logic.pulled) {
       if (this.logic.pull() === 'pulled') {
@@ -386,7 +386,7 @@ export class PushPullKnob extends ControlBase {
     this.logic.beginMotion(nowS());
   }
 
-  onDrag(dx: number, dy: number): void {
+  onDrag(dx: number, dy: number, _p?: ControlPointer): void {
     if (!this.dragging) return;
     this.moved += Math.abs(dx) + Math.abs(dy);
     this.buttonAnim = 1;
@@ -418,7 +418,7 @@ export class PushPullKnob extends ControlBase {
     this.publish();
   }
 
-  onWheel(delta: number): void {
+  onWheel(delta: number, _p?: ControlPointer): void {
     if (!this.enabled || this.axisBound() || delta === 0) return;
     const step = this.o.vernierStep ?? 0.01;
     this.logic.beginMotion(nowS());
@@ -429,7 +429,7 @@ export class PushPullKnob extends ControlBase {
     this.publish();
   }
 
-  cursor(): string {
+  cursor(_p?: ControlPointer): string {
     return this.axisBound() ? 'not-allowed' : 'ns-resize';
   }
 
@@ -495,9 +495,12 @@ export interface FuelSelectorOptions extends Omit<SelectorKnobOptions, 'cap'> {
 export class FuelSelector extends SelectorKnob {
   constructor(env: CockpitEnv, o: FuelSelectorOptions) {
     const pd = o.placardDiameter ?? 0.12;
+    const subs = o.sublabels;
     super(env, {
       sound: COCKPIT_SOUNDS.fuelSelector,
       ...o,
+      // Sub-labels (tank capacities) are engraved under each position name.
+      positions: o.positions.map((p, i) => (subs?.[i] ? { ...p, display: `${p.display ?? p.label}\n${subs[i]}` } : p)),
       cap: 'wing',
       diameter: o.diameter ?? 0.05,
       height: o.height ?? 0.018,
@@ -508,26 +511,23 @@ export class FuelSelector extends SelectorKnob {
       pointer: o.pointer ?? 'line',
     });
     // Placard disc (static) under the handle.
-    const plate = this.mesh(this.geo(`fuelsel.plate.${pd}`, () => revolve(
-      [
-        [0, 0.0015],
-        [pd / 2 - 0.002, 0.0015],
-        [pd / 2, 0.0008],
-        [pd / 2, 0],
-      ],
-      64,
-    )), 'paintBlack', this.object, true);
+    const plate = this.mesh(
+      this.geo(`fuelsel.plate.${pd}`, () =>
+        revolve(
+          [
+            [0, 0.0015],
+            [pd / 2 - 0.002, 0.0015],
+            [pd / 2, 0.0008],
+            [pd / 2, 0],
+          ],
+          64,
+        ),
+      ),
+      'paintBlack',
+      this.object,
+      true,
+    );
     plate.position.z = -0.0001;
-    const subs = o.sublabels;
-    if (subs) {
-      o.positions.forEach((p, i) => {
-        const text = subs[i];
-        if (!text) return;
-        const a = THREE.MathUtils.degToRad(p.angle ?? (i - (o.positions.length - 1) / 2) * 30);
-        const r = (o.labelRadius ?? pd * 0.36) + (o.labelHeight ?? 0.0055) * 2.6;
-        this.engrave(text, Math.sin(a) * r, Math.cos(a) * r, { height: (o.labelHeight ?? 0.0055) * 0.55, zone: null });
-      });
-    }
     // Keep all labels above the placard.
     this.object.traverse((c) => {
       if ((c as THREE.Mesh).isMesh && c.name.startsWith('label:')) c.position.z = Math.max(c.position.z, 0.0017);

@@ -45,6 +45,8 @@ export interface TerrainRasterOptions {
   coverage?: number;
   /** Elevation samples per update (default 900). */
   samplesPerUpdate?: number;
+  /** Raster pixels per cell side (default 2): EGPWS dot densities dither at pixel level, finer than the elevation grid. */
+  pixelsPerCell?: number;
 }
 
 const M_TO_FT = 1 / 0.3048;
@@ -69,6 +71,8 @@ const TOPO_RGB = [
 
 export class TerrainRaster {
   readonly size: number;
+  /** Raster pixels per cell side. */
+  readonly ppc: number;
   readonly canvas: DisplayCanvas;
   mode: TerrainMode = 'off';
   /** 0 none, 1 caution (yellow), 2 warning (red) forward-sector overlay. */
@@ -103,12 +107,14 @@ export class TerrainRaster {
     this.size = opts.size ?? 128;
     this.coverage = opts.coverage ?? 1.45;
     this.budget = opts.samplesPerUpdate ?? 900;
+    this.ppc = Math.max(1, Math.round(opts.pixelsPerCell ?? 2));
     const n = this.size;
-    this.canvas = createDisplayCanvas(n, n);
+    const px = n * this.ppc;
+    this.canvas = createDisplayCanvas(px, px);
     const ctx = this.canvas.getContext('2d') as Ctx2D | null;
     if (!ctx) throw new Error('TerrainRaster: 2D context unavailable');
     this.ctx = ctx;
-    this.image = ctx.createImageData(n, n);
+    this.image = ctx.createImageData(px, px);
     this.elevFt = new Float32Array(n * n);
     this.sampled = new Uint8Array(n * n);
     // Sampling order: nearest to the centre first.
@@ -211,8 +217,8 @@ export class TerrainRaster {
    */
   draw(ctx: Ctx2D, centerX: number, centerY: number, pxPerNm: number, upDeg: number): void {
     if (this.mode === 'off' || !Number.isFinite(this.centerLat)) return;
-    const n = this.size;
-    const scale = this.cellNm * pxPerNm;
+    const n = this.size * this.ppc;
+    const scale = (this.cellNm * pxPerNm) / this.ppc;
     ctx.save();
     ctx.translate(centerX, centerY);
     ctx.rotate((-upDeg * Math.PI) / 180);
@@ -272,6 +278,8 @@ export class TerrainRaster {
 
   private colorize(lat: number, lon: number, altFt: number, trackDeg: number): void {
     const n = this.size;
+    const ppc = this.ppc;
+    const W = n * ppc;
     const data = this.image.data;
     const e = this.elevFt;
     const s = this.sampled;
@@ -289,80 +297,79 @@ export class TerrainRaster {
     for (let i = 0; i < n; i++) {
       for (let j = 0; j < n; j++) {
         const k = i * n + j;
-        const o = k * 4;
-        if (!s[k]) {
-          data[o + 3] = 0;
-          continue;
-        }
-        const el = e[k];
         let r = 0;
         let g = 0;
         let b = 0;
-        let a = 0;
-        if (mode === 'topo') {
-          if (el < 0) {
-            r = 10;
-            g = 36;
-            b = 96;
+        let density = 0; // 0 = transparent, 1 = solid, else dithered
+        if (s[k]) {
+          const el = e[k];
+          if (mode === 'topo') {
+            if (el < 0) {
+              r = 10;
+              g = 36;
+              b = 96;
+            } else {
+              this.topo(el);
+              r = TMP[0];
+              g = TMP[1];
+              b = TMP[2];
+            }
+            density = 1;
           } else {
-            this.topo(el);
-            r = TMP[0];
-            g = TMP[1];
-            b = TMP[2];
-          }
-          a = 255;
-        } else {
-          const d = el - altFt;
-          const bayer = BAYER4[(i & 3) * 4 + (j & 3)];
-          let band = 0; // 0 none, 1 yellow, 2 red, 3 green
-          let density = 1;
-          if (mode === 'relative') {
-            if (d > -100) band = 2;
-            else if (d > -1000) band = 1;
-          } else {
-            if (d > 2000) {
+            const d = el - altFt;
+            let band = 0; // 0 none, 1 yellow, 2 red, 3 green
+            let dens = 1;
+            if (mode === 'relative') {
+              if (d > -100) band = 2;
+              else if (d > -1000) band = 1;
+            } else if (d > 2000) {
               band = 2;
-              density = 0.5;
+              dens = 0.5;
             } else if (d > 1000) {
               band = 1;
-              density = 0.5;
+              dens = 0.5;
             } else if (d > lowYellow) {
               band = 1;
-              density = 0.25;
+              dens = 0.25;
             } else if (d > -1000) {
               band = 3;
-              density = 0.5;
+              dens = 0.5;
             } else if (d > -2000) {
               band = 3;
-              density = 0.25;
+              dens = 0.25;
             }
-          }
-          // Solid alert painting in the forward sector.
-          if (alert > 0 && (band === 1 || band === 2)) {
-            const vx = j + 0.5 - ax;
-            const vy = i + 0.5 - ay;
-            const dist = Math.hypot(vx, vy);
-            if (dist <= lookCells && (dist < 1 || (vx * tx + vy * ty) / dist >= cosSector)) {
-              band = alert === 2 ? 2 : 1;
-              density = 1;
+            // Solid alert painting in the forward sector.
+            if (alert > 0 && (band === 1 || band === 2)) {
+              const vx = j + 0.5 - ax;
+              const vy = i + 0.5 - ay;
+              const dist = Math.hypot(vx, vy);
+              if (dist <= lookCells && (dist < 1 || (vx * tx + vy * ty) / dist >= cosSector)) {
+                band = alert === 2 ? 2 : 1;
+                dens = 1;
+              }
             }
-          }
-          if (band !== 0 && bayer < density) {
-            a = 255;
-            if (band === 2) {
-              r = 255;
-            } else if (band === 1) {
-              r = 255;
-              g = 255;
-            } else {
-              g = 200;
+            if (band !== 0) {
+              density = dens;
+              if (band === 2) r = 255;
+              else if (band === 1) {
+                r = 255;
+                g = 255;
+              } else g = 200;
             }
           }
         }
-        data[o] = r;
-        data[o + 1] = g;
-        data[o + 2] = b;
-        data[o + 3] = a;
+        for (let pi = 0; pi < ppc; pi++) {
+          const py = i * ppc + pi;
+          for (let pj = 0; pj < ppc; pj++) {
+            const pxl = j * ppc + pj;
+            const o = (py * W + pxl) * 4;
+            const on = density >= 1 || (density > 0 && BAYER4[(py & 3) * 4 + (pxl & 3)] < density);
+            data[o] = r;
+            data[o + 1] = g;
+            data[o + 2] = b;
+            data[o + 3] = on ? 255 : 0;
+          }
+        }
       }
     }
     this.ctx.putImageData(this.image, 0, 0);

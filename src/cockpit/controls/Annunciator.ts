@@ -184,7 +184,7 @@ export class AnnunciatorLight extends ControlBase {
     this.playSound(COCKPIT_SOUNDS.buttonPress, 0.6);
   }
 
-  onPointerUp(): void {
+  onPointerUp(_p?: ControlPointer): void {
     if (this.testing) this.playSound(COCKPIT_SOUNDS.buttonRelease, 0.5);
     this.testing = false;
   }

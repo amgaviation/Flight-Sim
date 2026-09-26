@@ -266,12 +266,14 @@ export class SpeedTape {
   h: number;
   centerY: number;
   style: SpeedTapeStyle;
-  ranges: readonly SpeedRange[];
+  readonly ranges: readonly SpeedRange[];
+  private readonly sortedRanges: readonly SpeedRange[];
   private readonly rate = new RateEstimator(1);
   private time = 0;
   private amberLeft = 0;
   private wasInAmber = false;
   private machShown = false;
+  private digitW = 0;
 
   constructor(opts: SpeedTapeOptions) {
     this.x = opts.x;
@@ -281,6 +283,7 @@ export class SpeedTape {
     this.centerY = opts.centerY ?? opts.y + opts.h / 2;
     this.style = opts.style;
     this.ranges = opts.ranges ?? [];
+    this.sortedRanges = [...this.ranges].sort((a, b) => (b.widthFrac ?? 1) - (a.widthFrac ?? 1));
     this.state = createSpeedTapeState(opts.bugCount ?? 8);
   }
 
@@ -327,9 +330,10 @@ export class SpeedTape {
     const stripX = right - st.stripW;
     clipRect(ctx, x, y, w, h);
 
-    // Static ranges on the strip.
-    for (let i = 0; i < this.ranges.length; i++) {
-      const r = this.ranges[i];
+    // Static ranges on the strip (wide bands first, narrow ones on top: the white flap arc over the green).
+    const ranges = this.sortedRanges;
+    for (let i = 0; i < ranges.length; i++) {
+      const r = ranges[i];
       const y0 = tapeY(r.toKt, v, cy, k);
       const y1 = tapeY(Math.max(r.fromKt, st.minSpeedKt), v, cy, k);
       if (y1 < y || y0 > y + h) continue;
@@ -394,9 +398,6 @@ export class SpeedTape {
       fillStroke(ctx, st.bugStyle === 'boeing' ? p.green : '', p.green, 2);
     }
 
-    // Reference bugs on the tape.
-    this.drawBugs(ctx, v, false);
-
     // Selected speed bug.
     const sel = s.selectedIsMach && Number.isFinite(s.selectedMach) && s.mach > 0.05 ? s.ias * (s.selectedMach / s.mach) : s.selectedKt;
     if (Number.isFinite(sel)) {
@@ -443,6 +444,10 @@ export class SpeedTape {
     }
     ctx.restore(); // tape clip
 
+    // Reference bugs (flags/labels extend beyond the tape, so clip vertically only).
+    clipRect(ctx, x - 4, y, w + 120, h);
+    this.drawBugs(ctx, v, false);
+    ctx.restore();
     this.drawReadout(ctx);
     if (st.selectedBox && Number.isFinite(sel)) this.drawSelectedBox(ctx, s.selectedIsMach);
     if (this.machShown) {
@@ -510,18 +515,23 @@ export class SpeedTape {
       if (this.amberLeft > 0 && !blinkOn(this.time)) border = p.readoutBorder;
     }
     const wy = st.rollWindowH;
+    // Digit metrics (measured once per typeface/size): the ones drum sits in a taller window at the right end.
+    if (this.digitW <= 0) this.digitW = st.typeface.width(ctx, '00', st.readoutSize) - st.typeface.width(ctx, '0', st.readoutSize); // digit advance
+    const cw = this.digitW;
+    const winW = cw + 8;
+    const wx = rx + rw - winW;
     // Box with a pointer notch toward the tape scale.
     ctx.beginPath();
     ctx.moveTo(rx, cy - rh / 2);
-    ctx.lineTo(rx + rw - 22, cy - rh / 2);
-    ctx.lineTo(rx + rw - 22, cy - wy / 2);
+    ctx.lineTo(wx, cy - rh / 2);
+    ctx.lineTo(wx, cy - wy / 2);
     ctx.lineTo(rx + rw, cy - wy / 2);
     ctx.lineTo(rx + rw, cy - 8);
     ctx.lineTo(rx + rw + 10, cy);
     ctx.lineTo(rx + rw, cy + 8);
     ctx.lineTo(rx + rw, cy + wy / 2);
-    ctx.lineTo(rx + rw - 22, cy + wy / 2);
-    ctx.lineTo(rx + rw - 22, cy + rh / 2);
+    ctx.lineTo(wx, cy + wy / 2);
+    ctx.lineTo(wx, cy + rh / 2);
     ctx.lineTo(rx, cy + rh / 2);
     ctx.closePath();
     fillStroke(ctx, fill, border, 2);
@@ -530,22 +540,21 @@ export class SpeedTape {
       return;
     }
     const v = Math.max(0, s.ias);
-    const dh = st.readoutSize * 1.05;
+    // Ones drum rolls continuously (neighbours visible above/below in the tall window).
     ctx.save();
     ctx.beginPath();
-    ctx.rect(rx + 1, cy - wy / 2 + 1, rw - 2, wy - 2);
+    ctx.rect(wx + 1, cy - wy / 2 + 1, winW - 2, wy - 2);
     ctx.clip();
-    // Ones drum (continuous) in the tall window, tens and hundreds roll on carry.
-    const onesX = rx + rw - 11;
-    this.drum(ctx, drumPosition(v, 1, 1), onesX, cy, dh, textColor, 10);
+    this.drum(ctx, drumPosition(v, 1, 1), wx + winW / 2, cy, st.readoutSize * 1.05, textColor, 10);
     ctx.restore();
+    // Tens and hundreds roll only on carry; a full box height apart so idle neighbours stay hidden.
     ctx.save();
     ctx.beginPath();
-    ctx.rect(rx + 1, cy - rh / 2 + 1, rw - 24, rh - 2);
+    ctx.rect(rx + 1, cy - rh / 2 + 1, wx - rx - 1, rh - 2);
     ctx.clip();
-    const cw = st.readoutSize * 0.55;
-    this.drum(ctx, drumPosition(v, 10, 1), onesX - cw, cy, dh, textColor, 10, true);
-    if (v >= 99) this.drum(ctx, drumPosition(v, 100, 1), onesX - 2 * cw, cy, dh, textColor, 10, true);
+    const tensX = wx - cw * 0.5 - 2;
+    this.drum(ctx, drumPosition(v, 10, 1), tensX, cy, rh, textColor, 10, true);
+    if (v >= 99) this.drum(ctx, drumPosition(v, 100, 1), tensX - cw, cy, rh, textColor, 10, true);
     ctx.restore();
   }
 

@@ -18,8 +18,10 @@ export interface AltitudeAlertConfig {
   captureFt: number;
   /** Deviation from a captured altitude that raises the deviation alert. */
   deviationFt: number;
-  /** Flash duration (s) for each cue; 0 = steady. */
-  flashS: number;
+  /** Flash duration (s) of the approach cue (and the near cue when `flashNear`); 0 = steady. */
+  approachFlashS: number;
+  /** Flash duration (s) of the deviation cue; Infinity = until back within the band. */
+  deviationFlashS: number;
   /** Also flash (not only change colour) on the near cue. */
   flashNear: boolean;
 }
@@ -35,22 +37,25 @@ export const ALT_ALERT_GARMIN: AltitudeAlertConfig = {
   nearFt: 200,
   captureFt: 50, // EST: "after reaching the Selected Altitude"
   deviationFt: 200,
-  flashS: 5,
+  approachFlashS: 5,
+  deviationFlashS: 5,
   flashNear: true,
 };
 
 /**
- * Boeing 737NG: white box 900..300 ft before the MCP altitude, amber
- * flashing box on a deviation of more than 300 ft (EST: 737NG FCOM 10.10
- * "Altitude Alert" as commonly described; the FCOM extract available states
- * only "appears steady for altitude acquisition, flashes during deviation").
+ * Boeing 737NG (FCOM 10.10 "PFD - Altitude Indications"): "the selected
+ * altitude box appears in white during an altitude alert"; the current
+ * altitude readout box "is highlighted in amber and flashes to denote
+ * altitude deviation". Thresholds EST: 900 ft before / 300 ft band (the
+ * 737 altitude alert window as commonly trained; not in the FCOM extract).
  */
 export const ALT_ALERT_BOEING: AltitudeAlertConfig = {
   approachFt: 900,
   nearFt: 300,
   captureFt: 300,
   deviationFt: 300,
-  flashS: 0,
+  approachFlashS: 0,
+  deviationFlashS: Infinity,
   flashNear: false,
 };
 
@@ -65,7 +70,8 @@ export const ALT_ALERT_HONEYWELL: AltitudeAlertConfig = {
   nearFt: 250,
   captureFt: 50,
   deviationFt: 200,
-  flashS: 5,
+  approachFlashS: 5,
+  deviationFlashS: 5,
   flashNear: false,
 };
 
@@ -106,25 +112,25 @@ export class AltitudeAlerter {
     }
     switch (this.phase) {
       case 'idle':
-        if (err <= c.captureFt) this.enter('captured', false, false);
-        else if (err < c.nearFt) this.enter('near', c.flashNear, false);
-        else if (err < c.approachFt) this.enter('approaching', true, true);
+        if (err <= c.captureFt) this.enter('captured', 0, false);
+        else if (err < c.nearFt) this.enter('near', c.flashNear ? c.approachFlashS : 0, false);
+        else if (err < c.approachFt) this.enter('approaching', c.approachFlashS, true);
         break;
       case 'approaching':
-        if (err <= c.captureFt) this.enter('captured', false, false);
-        else if (err < c.nearFt) this.enter('near', c.flashNear, false);
+        if (err <= c.captureFt) this.enter('captured', 0, false);
+        else if (err < c.nearFt) this.enter('near', c.flashNear ? c.approachFlashS : 0, false);
         else if (err >= c.approachFt) this.phase = 'idle';
         break;
       case 'near':
-        if (err <= c.captureFt) this.enter('captured', false, false);
+        if (err <= c.captureFt) this.enter('captured', 0, false);
         else if (err >= c.approachFt) this.phase = 'idle';
         else if (err >= c.nearFt) this.phase = 'approaching';
         break;
       case 'captured':
-        if (err > c.deviationFt) this.enter('deviation', true, true);
+        if (err > c.deviationFt) this.enter('deviation', c.deviationFlashS, true);
         break;
       case 'deviation':
-        if (err <= c.deviationFt) this.enter('captured', false, false);
+        if (err <= c.deviationFt) this.enter('captured', 0, false);
         break;
     }
   }
@@ -153,9 +159,9 @@ export class AltitudeAlerter {
     this.aural = false;
   }
 
-  private enter(p: AltitudeAlertPhase, flash: boolean, aural: boolean): void {
+  private enter(p: AltitudeAlertPhase, flashS: number, aural: boolean): void {
     this.phase = p;
-    this.flashLeft = flash ? this.cfg.flashS : 0;
+    this.flashLeft = flashS;
     if (aural) this.aural = true;
   }
 }

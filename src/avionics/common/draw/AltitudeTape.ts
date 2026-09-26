@@ -190,6 +190,7 @@ export class AltitudeTape {
   style: AltitudeTapeStyle;
   private readonly rate = new RateEstimator(1);
   private time = 0;
+  private digitW = 0;
 
   constructor(opts: AltitudeTapeOptions) {
     this.x = opts.x;
@@ -328,10 +329,14 @@ export class AltitudeTape {
     ctx.lineTo(rx, cy + rh / 2);
     ctx.lineTo(rx, cy + 8);
     ctx.closePath();
-    fillStroke(ctx, p.readoutBackground, p.readoutBorder, 2);
+    // Boeing: current-altitude box amber and flashing during an altitude deviation (FCOM 10.10).
+    const devBox = st.alertStyle === 'boeing' && s.alertPhase === 'deviation';
+    fillStroke(ctx, p.readoutBackground, devBox && s.alertVisible ? p.amber : p.readoutBorder, devBox ? 3 : 2);
     const neg = s.altFt < 0;
     const a = Math.abs(s.altFt);
+    // Continuous 20s drum: neighbours visible; carry drums: a full box apart so idle neighbours stay hidden.
     const dh = st.readoutSize * 1.0;
+    const dhCarry = rh;
     // Twenty-foot drum.
     ctx.save();
     ctx.beginPath();
@@ -350,14 +355,15 @@ export class AltitudeTape {
     ctx.beginPath();
     ctx.rect(rx + 1, cy - rh / 2 + 1, rw - tw - 1, rh - 2);
     ctx.clip();
-    const cw = st.readoutSize * 0.56;
-    let dx = rx + rw - tw - cw * 0.55;
-    this.digitDrum(ctx, drumPosition(a, 100, 20), dx, cy, dh, false, st.readoutSize * 0.85);
-    dx -= cw * 1.05;
+    if (this.digitW <= 0) this.digitW = st.typeface.width(ctx, '00', st.readoutSize) - st.typeface.width(ctx, '0', st.readoutSize); // digit advance
+    const cw = this.digitW;
+    let dx = rx + rw - tw - cw * 0.5 - 2;
+    this.digitDrum(ctx, drumPosition(a, 100, 20), dx, cy, dhCarry, false, st.readoutSize * 0.85);
+    dx -= cw * 0.95;
     const big = st.readoutSize;
-    this.digitDrum(ctx, drumPosition(a, 1000, 20), dx, cy, dh, a < 1000, big);
+    this.digitDrum(ctx, drumPosition(a, 1000, 20), dx, cy, dhCarry, a < 1000, big);
     dx -= cw * 1.05;
-    if (a >= 9980) this.digitDrum(ctx, drumPosition(a, 10000, 20), dx, cy, dh, a < 10000, big);
+    if (a >= 9980) this.digitDrum(ctx, drumPosition(a, 10000, 20), dx, cy, dhCarry, a < 10000, big);
     else if (st.crosshatchBelow10k && !neg) this.crosshatch(ctx, dx, cy, cw * 0.9, dh * 0.8);
     if (neg) st.typeface.draw(ctx, '-', dx - (a >= 9980 ? cw : 0), cy, big, p.white, 'center', 'middle');
     ctx.restore();
@@ -376,7 +382,7 @@ export class AltitudeTape {
     for (let j = -1; j <= 2; j++) {
       const n = base + j;
       if (n < 0) continue;
-      if (blankZero && n % 10 === 0 && n === 0) continue;
+      if (blankZero && n === 0) continue;
       st.typeface.draw(ctx, DIGITS[n % 10], x, cy + (frac - j) * dh, size, st.palette.white, 'center', 'middle');
     }
   }
@@ -416,8 +422,8 @@ export class AltitudeTape {
         else if (s.alertPhase === 'near' && !vis) text = p.black;
         break;
       case 'boeing':
+        // "The selected altitude box appears in white during an altitude alert" (FCOM 10.10).
         if (s.alertPhase === 'approaching' || s.alertPhase === 'near') border = p.white;
-        else if (s.alertPhase === 'deviation') border = vis ? p.amber : '';
         break;
       case 'honeywell':
         if (s.alertPhase === 'approaching' || s.alertPhase === 'near') border = vis ? p.white : '';

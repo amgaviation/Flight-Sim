@@ -476,14 +476,15 @@ export class AttitudeIndicator {
     ctx.translate(0, hy);
     if (st.gradient) {
       this.ensureGradients(ctx);
+      // Solid areas overlap the gradients by 2 px so no anti-aliasing seam shows when rotated.
       ctx.fillStyle = p.sky;
-      ctx.fillRect(-R, -2 * R, 2 * R, 2 * R - st.gradientPx);
+      ctx.fillRect(-R, -2 * R, 2 * R, 2 * R - st.gradientPx + 2);
       ctx.fillStyle = this.skyGrad!;
-      ctx.fillRect(-R, -st.gradientPx, 2 * R, st.gradientPx);
+      ctx.fillRect(-R, -st.gradientPx, 2 * R, st.gradientPx + 1);
       ctx.fillStyle = this.groundGrad!;
-      ctx.fillRect(-R, 0, 2 * R, st.gradientPx);
+      ctx.fillRect(-R, -1, 2 * R, st.gradientPx + 1);
       ctx.fillStyle = p.ground;
-      ctx.fillRect(-R, st.gradientPx, 2 * R, 2 * R);
+      ctx.fillRect(-R, st.gradientPx - 2, 2 * R, 2 * R);
     } else {
       ctx.fillStyle = p.sky;
       ctx.fillRect(-R, -2 * R, 2 * R, 2 * R);

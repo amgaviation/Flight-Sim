@@ -270,6 +270,15 @@ export class CockpitMaterials {
   private readonly textures = new Map<string, THREE.Texture>();
   private envMap: THREE.Texture | null = null;
   private envScale = 1;
+  /**
+   * Interior occlusion (shared uniforms): a cockpit interior sees only part
+   * of the sky through its windows, and the renderer has no ambient
+   * occlusion, so the indirect (hemisphere/environment) light reaching
+   * cockpit surfaces is scaled down. Direct light (sun through the windows,
+   * flood lights) is unaffected. EST: ~40 % of the hemisphere is visible
+   * from a panel through a typical windshield + side windows.
+   */
+  readonly interior = { diffuse: { value: 0.4 }, specular: { value: 0.7 } };
 
   constructor(palette: PaletteId | PaletteDef) {
     this.palette = typeof palette === 'string' ? PALETTES[palette] : palette;
@@ -283,6 +292,7 @@ export class CockpitMaterials {
       m = this.make(name);
       m.name = `cockpit.${name}`;
       this.cache.set(name, m);
+      this.patchInterior(m);
       this.applyEnv(m);
     }
     return m;
@@ -301,6 +311,7 @@ export class CockpitMaterials {
       m = std({ color, roughness: roughness ?? r, metalness: met });
       m.name = key;
       this.cache.set(key, m);
+      this.patchInterior(m);
       this.applyEnv(m);
     }
     return m;
@@ -364,8 +375,9 @@ export class CockpitMaterials {
         envMapIntensity: 0.5,
       });
       m.name = 'cockpit.displayGlass';
-      m.userData.envBase = 0.5;
+      m.userData.envBase = 0.8;
       this.cache.set('displayGlass', m);
+      this.patchInterior(m);
       this.applyEnv(m);
     }
     return m;
@@ -374,8 +386,43 @@ export class CockpitMaterials {
   /** Registers an externally created material so dispose() frees it. */
   track<T extends THREE.Material>(m: T): T {
     this.owned.add(m);
+    this.patchInterior(m);
     this.applyEnv(m);
     return m;
+  }
+
+  /** Sets the interior occlusion factors (indirect diffuse and specular multipliers, 0..1). */
+  setInteriorOcclusion(diffuse: number, specular = this.interior.specular.value): void {
+    this.interior.diffuse.value = diffuse;
+    this.interior.specular.value = specular;
+  }
+
+  /**
+   * Applies the interior-occlusion shader patch to a MeshStandard/Physical
+   * material (idempotent). Called for every material created here; call it
+   * for materials created elsewhere that live in the cockpit.
+   */
+  patchInterior(m: THREE.Material): void {
+    const s = m as THREE.MeshStandardMaterial;
+    if (!s.isMeshStandardMaterial || s.userData.cockpitInterior) return;
+    s.userData.cockpitInterior = true;
+    const u = this.interior;
+    // Chain any existing hook (materials from other modules may have their own).
+    const prevCompile = s.onBeforeCompile;
+    const prevKey = s.customProgramCacheKey;
+    s.onBeforeCompile = (shader, renderer) => {
+      prevCompile.call(s, shader, renderer);
+      shader.uniforms.cockpitAoDiffuse = u.diffuse;
+      shader.uniforms.cockpitAoSpecular = u.specular;
+      shader.fragmentShader =
+        'uniform float cockpitAoDiffuse;\nuniform float cockpitAoSpecular;\n' +
+        shader.fragmentShader.replace(
+          '#include <aomap_fragment>',
+          '#include <aomap_fragment>\n\treflectedLight.indirectDiffuse *= cockpitAoDiffuse;\n\treflectedLight.indirectSpecular *= cockpitAoSpecular;',
+        );
+    };
+    s.customProgramCacheKey = () => `${prevKey.call(s)}|cockpitInterior`;
+    s.needsUpdate = true;
   }
 
   /** Stops tracking and disposes a per-instance material. */
@@ -447,7 +494,8 @@ export class CockpitMaterials {
   private applyEnv(m: THREE.Material): void {
     const s = m as THREE.MeshStandardMaterial;
     if (!('envMapIntensity' in s)) return;
-    if (s.userData.envBase === undefined) s.userData.envBase = s.envMapIntensity;
+    // Dielectrics get weaker interior reflections than metals (EST).
+    if (s.userData.envBase === undefined) s.userData.envBase = s.envMapIntensity * ((s.metalness ?? 0) >= 0.5 ? 1 : 0.5);
     s.envMap = this.envMap;
     s.envMapIntensity = s.userData.envBase * this.envScale;
     s.needsUpdate = true;
@@ -491,7 +539,8 @@ export class CockpitMaterials {
       case 'panelEdge':
         return std({ color: new THREE.Color(p.panel).multiplyScalar(0.85), roughness: p.panelRoughness, metalness: 0 });
       case 'glareshield':
-        return std({ color: p.glareshield, roughness: 0.88, metalness: 0, normalMap: this.tiled('crackle', 5), normalScale: 0.9 });
+        // ~2.5 mm wrinkle cells (22 cells per tile, 16 tiles per metre).
+        return std({ color: p.glareshield, roughness: 0.88, metalness: 0, normalMap: this.tiled('crackle', 16), normalScale: 0.7 });
       case 'bezel':
         return std({ color: p.bezel, roughness: 0.5, metalness: 0.05, normalMap: this.tiled('paint', 20), normalScale: 0.15 });
       case 'bezelGloss':

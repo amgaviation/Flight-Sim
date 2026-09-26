@@ -15,9 +15,11 @@
  * toggling them never triggers shader recompilation.
  *
  * Photometry: Three.js r155+ uses physical units (point/spot intensity in
- * candela, irradiance = I / d^2). The defaults below are EST: tuned so a
- * flood-lit panel 0.5 m away reaches ~0.3 linear radiance, matching the world
- * module's night exposure (docs/modules/world.md, section 8).
+ * candela, irradiance = I / d^2). The defaults below are EST, tuned in
+ * headless renders so that at full dimmer a flood-lit white label/knob 0.5 m
+ * away reads clearly at the world module's night exposure (docs/modules/
+ * world.md, section 8) while dark panel paint stays dark, as in real
+ * cockpits.
  */
 import * as THREE from 'three';
 import type { SimVars } from '../core/SimVars';
@@ -90,6 +92,17 @@ export class CockpitLighting {
   private envScale = -1;
   /** Var read for display/reflection scaling at night (0..1). */
   ambientVar: string = ENV.ambientLight;
+  /**
+   * Daylight wash-out of panel backlighting and cockpit lights (0 = none).
+   * Rendering is "pre-adapted": the world module brightens night scenes for
+   * the dark-adapted eye, so backlighting and floods are drawn at their
+   * night-adapted brightness and faded in daylight, where real backlit
+   * legends (~10 cd/m2) are invisible against sunlit surfaces. Annunciators
+   * and displays are sunlight-readable and are not washed out. EST curve:
+   * factor = 1 - washout * smoothstep(0.45, 0.9, env.ambient_light).
+   */
+  daylightWashout = 0.85;
+  private wash = 1;
   /** Lamp-test var (ALERT.annunTest). */
   lampTestVar: string = ALERT.annunTest;
 
@@ -132,7 +145,7 @@ export class CockpitLighting {
     const z = this.zone(zoneId);
     m.emissive.copy(z.color);
     z.materials.push({ m, gain });
-    m.emissiveIntensity = z.level * z.gain * gain;
+    m.emissiveIntensity = z.level * this.wash * z.gain * gain;
   }
 
   /** Removes a material from every zone. */
@@ -173,17 +186,17 @@ export class CockpitLighting {
   }
 
   /** Convenience presets (EST candela values, see header). */
-  addDomeLight(id: string, zone: string, position_m: BodyVec, parent: THREE.Object3D, candela = 1.2): THREE.PointLight {
+  addDomeLight(id: string, zone: string, position_m: BodyVec, parent: THREE.Object3D, candela = 3): THREE.PointLight {
     return this.addLight({ id, kind: 'point', zone, position_m, candela, distance: 3 }, parent) as THREE.PointLight;
   }
-  addFloodLight(id: string, zone: string, position_m: BodyVec, target_m: BodyVec, parent: THREE.Object3D, candela = 0.8, angleDeg = 50): THREE.SpotLight {
+  addFloodLight(id: string, zone: string, position_m: BodyVec, target_m: BodyVec, parent: THREE.Object3D, candela = 2, angleDeg = 50): THREE.SpotLight {
     return this.addLight({ id, kind: 'spot', zone, position_m, target_m, candela, angleDeg, penumbra: 0.8, distance: 2.5 }, parent) as THREE.SpotLight;
   }
   /** Storm lights: bright white floods used against lightning flash blindness. */
-  addStormLight(id: string, zone: string, position_m: BodyVec, target_m: BodyVec, parent: THREE.Object3D, candela = 3): THREE.SpotLight {
+  addStormLight(id: string, zone: string, position_m: BodyVec, target_m: BodyVec, parent: THREE.Object3D, candela = 8): THREE.SpotLight {
     return this.addLight({ id, kind: 'spot', zone, position_m, target_m, candela, angleDeg: 60, penumbra: 0.9, distance: 3, color: '#ffffff' }, parent) as THREE.SpotLight;
   }
-  addMapLight(id: string, zone: string, position_m: BodyVec, target_m: BodyVec, parent: THREE.Object3D, candela = 1.5): THREE.SpotLight {
+  addMapLight(id: string, zone: string, position_m: BodyVec, target_m: BodyVec, parent: THREE.Object3D, candela = 3): THREE.SpotLight {
     return this.addLight({ id, kind: 'spot', zone, position_m, target_m, candela, angleDeg: 22, penumbra: 0.5, distance: 1.8 }, parent) as THREE.SpotLight;
   }
 
@@ -215,6 +228,11 @@ export class CockpitLighting {
   /** Per-frame update. Allocation-free. */
   update(dt: number): void {
     const v = this.vars;
+    const amb = v.has(this.ambientVar) ? Math.min(1, Math.max(0, v.get(this.ambientVar))) : 1;
+    const t = Math.min(1, Math.max(0, (amb - 0.45) / 0.45));
+    const wash = 1 - this.daylightWashout * t * t * (3 - 2 * t);
+    const washChanged = Math.abs(wash - this.wash) > 1e-3;
+    if (washChanged) this.wash = wash;
     for (let i = 0; i < this.zoneList.length; i++) {
       const z = this.zoneList[i];
       let target = Math.min(1, Math.max(0, v.get(z.intensityVar)));
@@ -223,15 +241,15 @@ export class CockpitLighting {
       if (z.lagS > 0 && dt > 0) z.level += (target - z.level) * (1 - Math.exp(-dt / z.lagS));
       else z.level = target;
       if (Math.abs(z.level - target) < 1e-4) z.level = target;
-      if (Math.abs(z.level - z.applied) > 1e-4) {
+      if (washChanged || Math.abs(z.level - z.applied) > 1e-4) {
         z.applied = z.level;
-        const lg = z.level * z.gain;
+        const lvl = z.level * this.wash;
+        const lg = lvl * z.gain;
         for (let k = 0; k < z.materials.length; k++) z.materials[k].m.emissiveIntensity = lg * z.materials[k].gain;
-        for (let k = 0; k < z.lights.length; k++) z.lights[k].light.intensity = z.level * z.lights[k].candela;
+        for (let k = 0; k < z.lights.length; k++) z.lights[k].light.intensity = lvl * z.lights[k].candela;
       }
     }
     // Reflections: interior env map dims with ambient light (EST curve).
-    const amb = v.has(this.ambientVar) ? Math.min(1, Math.max(0, v.get(this.ambientVar))) : 1;
     const s = 0.08 + 0.92 * amb * amb * (3 - 2 * amb);
     if (Math.abs(s - this.envScale) > 0.01) {
       this.envScale = s;

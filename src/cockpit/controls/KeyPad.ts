@@ -65,6 +65,7 @@ export class KeyPad extends ControlBase {
   readonly logic: KeyPadLogic;
   private readonly o: KeyPadOptions;
   private readonly keys = new Map<string, KeyState>();
+  private readonly keyList: KeyState[] = [];
   private readonly byHit = new Map<THREE.Object3D, KeyState>();
   private readonly faces: LegendFace[] = [];
   private active: KeyState | null = null;
@@ -118,7 +119,7 @@ export class KeyPad extends ControlBase {
     this.pressKey(k);
   }
 
-  onPointerUp(): void {
+  onPointerUp(_p?: ControlPointer): void {
     if (this.active) this.releaseKey(this.active);
     this.active = null;
   }
@@ -137,7 +138,7 @@ export class KeyPad extends ControlBase {
     if (!h) this.hovered = null;
   }
 
-  onKey(key: string, _code: string, down: boolean): boolean {
+  onKey(key: string, _code: string, down: boolean, _shift?: boolean): boolean {
     if (!this.o.keyboard) return false;
     if (key === 'Escape' && down && !this.logic.has('CLR')) {
       this.focused = false;
@@ -166,7 +167,8 @@ export class KeyPad extends ControlBase {
   override update(dt: number): void {
     const test = this.env.lighting.lampTest();
     const lvl = this.env.lighting.annunciatorLevel();
-    for (const k of this.keys.values()) {
+    for (let i = 0; i < this.keyList.length; i++) {
+      const k = this.keyList[i];
       k.press = smoothTo(k.press, k.down ? 1 : 0, dt, 0.012, 1e-4);
       k.group.position.z = -k.press * 0.0014;
       if (k.bar && k.def.lightVar) {
@@ -175,7 +177,7 @@ export class KeyPad extends ControlBase {
         k.bar.mat.emissiveIntensity = k.bar.level;
       }
     }
-    for (const f of this.faces) f.update(dt);
+    for (let i = 0; i < this.faces.length; i++) this.faces[i].update(dt);
   }
 
   override dispose(): void {
@@ -230,6 +232,7 @@ export class KeyPad extends ControlBase {
     const hit = this.addHitBox(w + 0.0005, h + 0.0005, depth + 0.003, 0, 0, depth / 2, group);
     const st: KeyState = { def: k, group, hit, press: 0, down: false, bar };
     this.keys.set(k.id, st);
+    this.keyList.push(st);
     this.byHit.set(hit, st);
   }
 }

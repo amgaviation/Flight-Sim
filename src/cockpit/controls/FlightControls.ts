@@ -81,6 +81,7 @@ export class Yoke extends ControlBase implements CompositeControl {
   private readonly o: YokeOptions;
   private readonly columnPivot = new THREE.Group();
   private readonly rollRad: number;
+  private readonly col: NonNullable<YokeOptions['column']>;
   private dragging = false;
   private dragPitch = 0;
   private dragRoll = 0;
@@ -90,9 +91,12 @@ export class Yoke extends ControlBase implements CompositeControl {
   constructor(env: CockpitEnv, o: YokeOptions) {
     super(env, o);
     this.o = o;
+    // Moves as a whole: keep its parts (and sub-controls' static parts) out of static consolidation.
+    this.object.userData.cockpitDynamic = true;
     const s = o.scale ?? 1;
     this.rollRad = THREE.MathUtils.degToRad(o.rollDeg ?? (o.style === 'cessna' ? 45 : 90));
     const col = o.column ?? { kind: o.style === 'cessna' ? 'translate' : 'pivot' };
+    this.col = col;
     const colLen = col.length ?? (col.kind === 'translate' ? 0.25 : 0.55);
     const colR = col.radius ?? (col.kind === 'translate' ? 0.014 : 0.022);
     // Hierarchy: object -> columnPivot -> offset -> [column, wheel].
@@ -176,7 +180,7 @@ export class Yoke extends ControlBase implements CompositeControl {
     this.publishDrag();
   }
 
-  onDrag(dx: number, dy: number): void {
+  onDrag(dx: number, dy: number, _p?: ControlPointer): void {
     if (!this.dragging) return;
     const px = this.o.dragPxFull ?? 220;
     this.dragRoll = Math.max(-1, Math.min(1, this.dragRoll + dx / px));
@@ -184,7 +188,7 @@ export class Yoke extends ControlBase implements CompositeControl {
     this.publishDrag();
   }
 
-  onPointerUp(): void {
+  onPointerUp(_p?: ControlPointer): void {
     this.endDrag();
   }
 
@@ -192,7 +196,7 @@ export class Yoke extends ControlBase implements CompositeControl {
     this.endDrag();
   }
 
-  cursor(): string {
+  cursor(_p?: ControlPointer): string {
     return 'move';
   }
 
@@ -202,7 +206,7 @@ export class Yoke extends ControlBase implements CompositeControl {
     const tr = this.dragging ? this.dragRoll : v.get(this.o.rollVar ?? INPUT.roll);
     this.pitch = smoothTo(this.pitch, Math.max(-1, Math.min(1, tp)), dt, 0.04, 1e-5);
     this.roll = smoothTo(this.roll, Math.max(-1, Math.min(1, tr)), dt, 0.04, 1e-5);
-    const col = this.o.column ?? { kind: this.o.style === 'cessna' ? 'translate' : 'pivot' };
+    const col = this.col;
     if (col.kind === 'translate') {
       const travel = this.pitch >= 0 ? (col.travelAft ?? 0.1) : (col.travelFwd ?? 0.08);
       this.columnPivot.position.z = this.pitch * travel;
@@ -278,6 +282,7 @@ export class RudderPedals extends ControlBase {
   constructor(env: CockpitEnv, o: RudderPedalsOptions) {
     super(env, o);
     this.o = o;
+    this.object.userData.cockpitDynamic = true;
     const w = o.padWidth ?? 0.085;
     const h = o.padHeight ?? 0.16;
     const parts = this.geoCached(o.style, w, h);
@@ -324,7 +329,7 @@ export class RudderPedals extends ControlBase {
     }
   }
 
-  onDrag(dx: number, dy: number): void {
+  onDrag(dx: number, dy: number, _p?: ControlPointer): void {
     if (!this.dragging) return;
     this.moved += Math.abs(dx) + Math.abs(dy);
     if (this.moved < 4) return;
@@ -333,7 +338,7 @@ export class RudderPedals extends ControlBase {
     this.env.vars.set(COCKPIT_VARS.pedalsYaw, this.dragYaw);
   }
 
-  onPointerUp(): void {
+  onPointerUp(_p?: ControlPointer): void {
     this.end();
   }
 

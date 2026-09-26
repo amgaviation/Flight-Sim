@@ -22,7 +22,7 @@ import type { CockpitEnv } from '../env';
 import type { MaterialName } from '../materials';
 import { ControlBase, type ControlOptions } from './ControlBase';
 import { KnobLogic, type KnobAccel, type KnobPosition } from './logic/KnobLogic';
-import { knobGeometry, type KnobCap } from '../geometry/knobs';
+import { escutcheon, knobGeometry, type KnobCap } from '../geometry/knobs';
 import { nowS, smoothTo } from '../anim';
 
 export interface KnobChannelOptions {
@@ -105,6 +105,7 @@ export class RotaryKnob extends ControlBase {
   private dragAcc = 0;
   private dragChannel: Channel | null = null;
   private held: Channel | null = null;
+  private readonly chList: Channel[];
 
   constructor(env: CockpitEnv, o: RotaryKnobOptions) {
     super(env, o);
@@ -115,13 +116,19 @@ export class RotaryKnob extends ControlBase {
     const outerCap: KnobCap = o.cap ?? (concentric ? 'ring' : 'fluted');
     const outerGroup = new THREE.Group();
     this.object.add(outerGroup);
-    const outerMat = this.matOf(o.material ?? (outerCap === 'knurled' ? 'knobKnurled' : 'knob'));
+    const outerMat = this.matOf(o.material ?? (outerCap === 'knurled' ? 'knobKnurled' : outerCap === 'key' ? 'steel' : 'knob'));
+    if (outerCap === 'key') {
+      // Lock cylinder: escutcheon ring and keyway face (static).
+      this.mesh(this.geo(`knob.keyesc.${d}`, () => escutcheon(d * 0.62, d * 0.3, 0.004)), 'chrome', this.object, true);
+      this.mesh(this.geo(`knob.keyface.${d}`, () => knobGeometry({ style: 'smooth', diameter: d * 0.62, height: 0.0035 })), 'steel', this.object, true);
+    }
     const innerD = o.innerDiameter ?? d * 0.6;
-    this.mesh(
+    const outerMesh = this.mesh(
       this.geo(`knob.${outerCap}.${d}.${h}.${concentric ? innerD : 0}`, () => knobGeometry({ style: outerCap, diameter: d, height: h, innerRadius: innerD / 2 + 0.0008 })),
       outerMat,
       outerGroup,
     );
+    if (outerCap === 'key') outerMesh.position.z = 0.0035;
     this.outer = this.makeChannel(o.outer, outerGroup);
     let innerCh: Channel | null = null;
     if (o.inner) {
@@ -141,6 +148,7 @@ export class RotaryKnob extends ControlBase {
       this.addPointer(o, this.outer, d, h * 1.02, long);
     }
     this.inner = innerCh;
+    this.chList = innerCh ? [this.outer, innerCh] : [this.outer];
     // Outer hit box (below the inner one when concentric).
     const span = outerCap === 'chicken-head' ? d * 2.4 : outerCap === 'wing' ? d * 2.6 : outerCap === 'pointer' ? d * 1.6 : d;
     this.outer.hit = this.addHitBox(span + 0.002, span + 0.002, h + 0.003, 0, 0, h / 2);
@@ -169,7 +177,7 @@ export class RotaryKnob extends ControlBase {
     this.held = ch;
   }
 
-  onPointerUp(): void {
+  onPointerUp(_p?: ControlPointer): void {
     this.endPress();
   }
 
@@ -192,7 +200,7 @@ export class RotaryKnob extends ControlBase {
   onWheel(delta: number, p: ControlPointer): void {
     if (!this.enabled || delta === 0) return;
     const ch = this.channelFor(p);
-    this.turn(ch, delta > 0 ? 1 : -1, false, false);
+    this.turn(ch, Math.round(delta) || Math.sign(delta), false, false);
   }
 
   cursor(p: ControlPointer): string {
@@ -206,7 +214,9 @@ export class RotaryKnob extends ControlBase {
   }
 
   override update(dt: number): void {
-    for (const ch of this.channels()) {
+    const list = this.chList;
+    for (let i = 0; i < list.length; i++) {
+      const ch = list[i];
       if (ch.logic.tick(dt)) this.publish(ch, 0);
       // Follow external var writes.
       if (ch.o.var) {
@@ -224,8 +234,9 @@ export class RotaryKnob extends ControlBase {
 
   // ---------------------------------------------------------------------------
 
-  protected channels(): Channel[] {
-    return this.inner ? [this.outer, this.inner] : [this.outer];
+  /** Outer (and inner) channel states. */
+  channels(): readonly Channel[] {
+    return this.chList;
   }
 
   private matOf(m: MaterialName | THREE.Material): THREE.Material {
@@ -364,8 +375,11 @@ function formatStep(v: number, step: number): string {
 
 export interface SelectorKnobOptions extends Omit<RotaryKnobOptions, 'outer' | 'inner'> {
   var?: string;
-  /** Positions clockwise with labels; angles default to 30 deg spacing centred on 12 o'clock. */
-  positions: (KnobPosition & { label: string; angle?: number })[];
+  /**
+   * Positions clockwise with labels; angles default to 30 deg spacing centred
+   * on 12 o'clock. `display` overrides the engraved text (may contain '\n').
+   */
+  positions: (KnobPosition & { label: string; angle?: number; display?: string })[];
   initial?: number;
   wrap?: boolean;
   /** Label ring radius (m). Default diameter * 0.95. */
@@ -406,7 +420,7 @@ export class SelectorKnob extends RotaryKnob {
     const th = o.labelHeight ?? 0.0024;
     const zone = o.labelZone === undefined ? 'panel' : o.labelZone;
     const ring = env.labels.arc(
-      o.positions.map((p, i) => ({ text: p.label, angleDeg: angles[i] })),
+      o.positions.map((p, i) => ({ text: p.display ?? p.label, angleDeg: angles[i] })),
       radius + th * 0.4,
       { height: th, zone },
       o.ticks === false ? undefined : { inner: d * 0.62, outer: radius - th * 0.2, width: th * 0.16 },

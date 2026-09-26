@@ -134,7 +134,7 @@ export class RockerSwitch extends ControlBase {
     if (r.moved) this.moved(r);
   }
 
-  onPointerUp(): void {
+  onPointerUp(_p?: ControlPointer): void {
     this.release();
   }
 
@@ -142,7 +142,7 @@ export class RockerSwitch extends ControlBase {
     this.release();
   }
 
-  onDrag(dx: number, dy: number): void {
+  onDrag(dx: number, dy: number, _p?: ControlPointer): void {
     if (!this.enabled) return;
     this.dragAcc += this.vertical ? -dy : dx;
     if (Math.abs(this.dragAcc) > 14) {
@@ -152,7 +152,7 @@ export class RockerSwitch extends ControlBase {
     }
   }
 
-  onWheel(delta: number): void {
+  onWheel(delta: number, _p?: ControlPointer): void {
     if (!this.enabled || delta === 0) return;
     const r = this.logic.step(delta > 0 ? 1 : -1, false);
     if (r.moved) this.moved(r);
