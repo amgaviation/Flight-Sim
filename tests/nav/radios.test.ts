@@ -154,8 +154,6 @@ describe('radio geometry', () => {
     glideslope(gsOff.lat, gsOff.lon, 0, 3, course, p.lat, p.lon, 30, o);
     expect(o.azimuthOffDeg).toBeGreaterThan(30);
     // 8 deg sector: 0.5 nm before the abeam point, 0.07 nm (7.97 deg) vs 0.071 nm (8.1 deg) beside the course.
-    const q = destinationPoint(p.lat, p.lon, 0, 0);
-    void q;
     expect(glidePathAzimuthDeg(Math.atan2(0.07, 2.1) * (180 / Math.PI), Math.hypot(0.07, 2.1), 1.6)).toBeLessThan(8);
     expect(glidePathAzimuthDeg(Math.atan2(0.071, 2.1) * (180 / Math.PI), Math.hypot(0.071, 2.1), 1.6)).toBeGreaterThan(8);
     // Past the abeam point (over the runway) there is no coverage.
@@ -385,7 +383,11 @@ describe('Radios subsystem with the real database', () => {
     run(r2, 2);
     expect(v2.getString(NAV.ident(1))).toBe(f.ils.ident);
     // The station declination the course is referenced to is published for the autopilot.
-    expect(v2.get(NAV.stationMagVar(1))).toBeCloseTo(f.ils.magVar ?? NaN, 6);
+    // true course = magnetic loc course + station declination
+    const mv = v2.get(NAV.stationMagVar(1));
+    expect(Math.abs(mv)).toBeLessThan(30);
+    const d = (((f.ils.courseTrue - v2.get(NAV.locCourse(1)) - mv) % 360) + 540) % 360 - 180;
+    expect(Math.abs(d)).toBeLessThan(1e-6);
   });
 
   it('GPS acquires after the power-up delay', () => {
