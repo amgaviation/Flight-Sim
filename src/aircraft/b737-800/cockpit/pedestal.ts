@@ -29,7 +29,7 @@ import { STAB } from '../data';
 import type { B738CockpitContext } from './context';
 import { seg } from './context';
 import { annunciator } from './common';
-import { P9, STAND } from './layout';
+import { P9, STAND, standTopZ } from './layout';
 
 /** Stabilizer units per trim wheel revolution (see header). */
 export const STAB_UNITS_PER_REV = (16.9 - 0.2) / 162;
@@ -42,11 +42,13 @@ export function buildPedestal(c: B738CockpitContext): void {
   addCdu(b, p9, 0.076, 0, sys.suite, 2);
 
   // ---------------------------------------------------------------- control stand top
-  const len = STAND.xFwd - STAND.xAft;
+  // Slant length of the sloping top (forward end lower, layout.ts STAND).
+  const len = Math.hypot(STAND.xFwd - STAND.xAft, STAND.fwdZ - STAND.aftZ);
   const st = b.panel({
     name: 'b738.stand',
     center_m: [(STAND.xFwd + STAND.xAft) / 2, 0, STAND.topZ],
     facing: 'up',
+    tiltDeg: STAND.tiltDeg,
     width: STAND.width,
     height: len,
     origin: 'center',
@@ -237,7 +239,7 @@ export function buildPedestal(c: B738CockpitContext): void {
   // ---------------------------------------------------------------- stabilizer trim wheels either side of the stand
   for (const s of [1, 2] as const) {
     const sg = s === 1 ? -1 : 1;
-    const mount = b.panel({ name: `b738.stab_wheel${s}`, center_m: [(STAND.xFwd + STAND.xAft) / 2 - 0.02, sg * (STAND.width / 2 + 0.022), STAND.topZ + 0.002], facing: 'up', width: 0.04, height: 0.36, invisible: true });
+    const mount = b.panel({ name: `b738.stab_wheel${s}`, center_m: [(STAND.xFwd + STAND.xAft) / 2 - 0.02, sg * (STAND.width / 2 + 0.022), standTopZ((STAND.xFwd + STAND.xAft) / 2 - 0.02) + 0.002], facing: 'up', width: 0.04, height: 0.36, invisible: true });
     mount.add(
       new TrimWheel(env, {
         id: `b738.ped.stab_wheel${s}`,

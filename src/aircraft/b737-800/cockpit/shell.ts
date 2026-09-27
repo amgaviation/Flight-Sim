@@ -248,7 +248,7 @@ export function buildShell(b: CockpitBuilder): void {
     const xA = 14.2;
     add(pedestalGeometry(P9.width, xF - xA, FLOOR_Z - 0.4, FLOOR_Z - 0.2, 0.01), pedMat, 'p9_body', [(xF + xA) / 2, 0, FLOOR_Z]);
   }
-  add(pedestalGeometry(STAND.width, STAND.xFwd - STAND.xAft, FLOOR_Z - STAND.topZ - 0.004, FLOOR_Z - STAND.topZ - 0.004, 0.012), pedMat, 'control_stand', [(STAND.xFwd + STAND.xAft) / 2, 0, FLOOR_Z]);
+  add(pedestalGeometry(STAND.width, STAND.xFwd - STAND.xAft, FLOOR_Z - STAND.aftZ - 0.004, FLOOR_Z - STAND.fwdZ - 0.004, 0.012), pedMat, 'control_stand', [(STAND.xFwd + STAND.xAft) / 2, 0, FLOOR_Z]);
   add(pedestalGeometry(AFT_PED.width, AFT_PED.xFwd - AFT_PED.xAft, FLOOR_Z - AFT_PED.topZ - 0.004, FLOOR_Z - AFT_PED.topZ - 0.004, 0.012), pedMat, 'aft_pedestal', [(AFT_PED.xFwd + AFT_PED.xAft) / 2, 0, FLOOR_Z]);
 
   // ---- sidewall shelves (left: tiller; right: F/O console front), EST.

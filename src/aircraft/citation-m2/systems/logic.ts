@@ -13,6 +13,8 @@ import { M2, TEST_SEL } from '../vars';
 
 const DISPLAY_IDS = ['pfd1', 'mfd', 'pfd2', 'gtc1', 'gtc2'] as const;
 const DISPLAY_BRT = DISPLAY_IDS.map((d) => `display.${d}.brt`);
+/** GDU poor-cooling state (systems/avionicsHealth.ts): the GDU reduces power usage (dims). */
+const DISPLAY_HOT = DISPLAY_IDS.map((d) => `ac.m2.gdu_hot_${d}`);
 /** ESI-1000 internal battery endurance (s). EST: typical 1 h standby battery. */
 export const ESI_BATTERY_S = 3600;
 
@@ -118,7 +120,7 @@ export class M2LogicLate implements Subsystem {
     const knob = v.get(M2.displayDim);
     const auto = 0.35 + 0.65 * Math.max(0, Math.min(1, v.get(ENV.ambientLight, 1)));
     const brt = knob > 0.02 ? Math.max(0.1, knob) : auto;
-    for (let k = 0; k < DISPLAY_BRT.length; k++) v.set(DISPLAY_BRT[k], brt);
+    for (let k = 0; k < DISPLAY_BRT.length; k++) v.set(DISPLAY_BRT[k], v.get(DISPLAY_HOT[k]) !== 0 ? brt * 0.6 : brt); // EST 60 % when hot
     // Minor tilt-panel indications.
     v.set('ac.m2.cvr_test_lt', v.get(M2.cvrTest) !== 0 && annun ? 1 : 0);
     v.set('ac.m2.elt_active', v.get(M2.eltSw) === 1 ? 1 : 0);

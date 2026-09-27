@@ -36,6 +36,7 @@ import { createFlightControls, type FlightControlBlocks } from './systems/flight
 import { createAvionics, type AvionicsBlocks, type AvionicsOptions } from './systems/avionics';
 import { M2_CAS } from './systems/cas';
 import { M2Logic, M2LogicLate } from './systems/logic';
+import { M2AvionicsHealth } from './systems/avionicsHealth';
 import { M2, TEST_SEL } from './vars';
 
 export interface M2Systems extends EngineControls, FlightControlBlocks, AvionicsBlocks {
@@ -44,6 +45,7 @@ export interface M2Systems extends EngineControls, FlightControlBlocks, Avionics
   failures: FailureManager;
   logic: M2Logic;
   logicLate: M2LogicLate;
+  avnHealth: M2AvionicsHealth;
   elec: ElectricalNetwork;
   fuel: FuelSystem;
   hyd: HydraulicSystem;
@@ -84,6 +86,8 @@ export function createSystems(ctx: SimContext, opts: CreateSystemsOptions = {}):
   });
   const lights = createLighting(ctx);
   const logicLate = new M2LogicLate(ctx);
+  // Power-loss consequences of LRUs without a power input in the shared models (GMA, XPDR, radar, GDU cooling).
+  const avnHealth = new M2AvionicsHealth(ctx, av.suite);
 
   const list: Subsystem[] = [
     failures,
@@ -102,6 +106,7 @@ export function createSystems(ctx: SimContext, opts: CreateSystemsOptions = {}):
     fc.gear,
     eng.ratings,
     ...av.suite.systems,
+    avnHealth,
     av.afcs,
     eng.fadec,
     ...eng.starts,
@@ -130,5 +135,5 @@ export function createSystems(ctx: SimContext, opts: CreateSystemsOptions = {}):
     const f = (s as { failures?: () => FailureDef[] }).failures;
     if (typeof f === 'function') failures.register(f.call(s));
   }
-  return { list, failures, logic, logicLate, elec, fuel, hyd, pneu, press, ice, fire, oxy, lights, cas, ...eng, ...fc, ...av };
+  return { list, failures, logic, logicLate, avnHealth, elec, fuel, hyd, pneu, press, ice, fire, oxy, lights, cas, ...eng, ...fc, ...av };
 }

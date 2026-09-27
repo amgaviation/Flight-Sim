@@ -90,8 +90,10 @@ export function createPneumatics(ctx: Pick<SimContext, 'vars'>): PneumaticSystem
         // AUTO needs the temperature controller (TEMP CONT breaker, L XFEED); unpowered, the mixing valve holds (manual target).
         target: `${M2.tempMode} == 0 && elec.temp_ctl_powered ? 16 + 12 * ${M2.tempSel} : ac.m2.temp_man_target`,
         volumeM3: 7.5,
-        // People + avionics minus the vapor-cycle A/C (~3.5 kW cooling, EST).
-        heatLoadW: `900 - elec.air_cond_powered * elec.air_cond_amps / 75 * 3500`,
+        // People + avionics minus the vapor-cycle A/C (~3.5 kW cooling, EST). The evaporator air is moved by
+        // the CABIN FAN blower (OFF / LOW / HIGH, R XFEED `cb.cabin_fan`); EST: with the blower off only the
+        // cockpit evaporator's own flow remains (40 %), LOW 70 %, HIGH 100 % of the cooling.
+        heatLoadW: `900 - elec.air_cond_powered * elec.air_cond_amps / 75 * 3500 * (0.4 + elec.cabin_fan_powered * min(${M2.cabinFan}, 2) * 0.3)`,
       },
     ],
   });

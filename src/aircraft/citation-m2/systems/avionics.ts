@@ -77,7 +77,7 @@ export function createAvionics(ctx: SimContext, opts: AvionicsOptions = {}): Avi
       gtc2: 'elec.gtc2_powered',
     },
     gmcPower: 'elec.gmc_powered',
-    radioPower: { nav1: 'elec.gia1_powered', nav2: 'elec.gia2_powered', gps: 'elec.gia1_powered || elec.gia2_powered', marker: 'elec.audio1_powered' },
+    radioPower: { nav1: 'elec.gia1_powered', nav2: 'elec.gia2_powered', gps: 'elec.gia1_powered || elec.gia2_powered', marker: 'elec.audio1_powered || elec.audio2_powered' }, // marker receiver in each GMA 36 (S&D15 §10.3.H)
     fmsOptions: { speeds: { climbKt: 240, cruiseKt: 263, cruiseMach: 0.7, descentKt: 250, approachKt: 130 } }, // EST: FPG cruise-climb / high-speed descent
   };
   const suite = new G3000Suite(ctx, suiteCfg, { noDisplays: opts.noDisplays });

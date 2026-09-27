@@ -73,10 +73,30 @@ export const P9: PanelPlacement & { width: number; height: number } = {
   height: 0.27,
 };
 
-/** Control stand (throttle quadrant) top surface: x range and height (EST). */
-export const STAND = { xFwd: 14.23, xAft: 13.5, topZ: 0.3, width: 0.32 };
-/** Aft electronic pedestal (P8): x range, top height (EST ~0.36 m wide, ~0.75 m long). */
-export const AFT_PED = { xFwd: 13.5, xAft: 12.78, topZ: 0.37, width: 0.36 };
+/**
+ * Control stand (throttle quadrant) top surface (EST from 737NG photographs): its forward edge meets the bottom
+ * edge of the CDU panel (P9: x 14.24, z 0.40) and it rises aft to the start levers, so the CDU keyboards stay in
+ * view above the stand (a flat top at z 0.30 hid the lower half of both CDUs behind the stand block). `fwdZ` /
+ * `aftZ` are the top heights at the two ends; `topZ` is the height at the centre; `tiltDeg` the slope of the top
+ * (panel tilt: forward end lower).
+ */
+export const STAND = (() => {
+  const xFwd = 14.235;
+  const xAft = 13.5;
+  const fwdZ = 0.4;
+  const aftZ = 0.22;
+  return { xFwd, xAft, fwdZ, aftZ, topZ: (fwdZ + aftZ) / 2, width: 0.32, tiltDeg: (Math.atan2(fwdZ - aftZ, xFwd - xAft) * 180) / Math.PI };
+})();
+/** Height (body z) of the control stand top at body x. */
+export function standTopZ(x: number): number {
+  return STAND.aftZ + ((STAND.fwdZ - STAND.aftZ) * (x - STAND.xAft)) / (STAND.xFwd - STAND.xAft);
+}
+/**
+ * Aft electronic pedestal (P8): x range, top height (EST ~0.36 m wide, ~0.75 m long). The top sits just below the
+ * aft end of the control stand, about level with the crew seat cushions (seat pan top z ~0.23), with the inboard
+ * armrests ~0.2 m higher (EST from NG photographs; the first estimate, z 0.37, put it 0.14 m below the cushions).
+ */
+export const AFT_PED = { xFwd: 13.5, xAft: 12.78, topZ: 0.245, width: 0.36 };
 
 /** Control wheel hubs (dossier §10.0: ~0.45 m ahead, ~0.35 m below the eye, directly ahead of each pilot). */
 export const YOKE_HUB_L: [number, number, number] = [14.2, -0.53, -0.065];
