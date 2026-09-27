@@ -72,13 +72,13 @@ describe('Citation M2 breaker consumers', () => {
     r.vars.set(NAV.xpdrMode, 3);
     r.step(1);
     expect(r.vars.get(M2_AVN_HEALTH_VARS.xpdrReply)).toBe(1);
-    click(r.control('m2.cb.xpdr'));
+    click(r.control('m2.cb.xpdr1'));
     r.vars.set(NAV.xpdrIdent, 1);
     r.step(0.5);
     expect(r.vars.get(M2_AVN_HEALTH_VARS.xpdrReply)).toBe(0);
     expect(r.vars.get(NAV.xpdrIdent)).toBe(0);
     expect(msgActive(r, 'm2.xpdr1')).toBe(true);
-    click(r.control('m2.cb.xpdr'));
+    click(r.control('m2.cb.xpdr1'));
     r.step(0.5);
     expect(msgActive(r, 'm2.xpdr1')).toBe(false);
 

@@ -15,7 +15,8 @@
  *
  * EST (the M2 AFM / maintenance manual panel drawings are not public):
  *   - Which bus sits on which panel follows the pilot-side / copilot-side
- *     split of docs/aircraft/citation-m2.md §6.1 (EMER, AVN 1, L MAIN, L XFEED
+ *     split of docs/aircraft/citation-m2.md §6.1 (EMER incl. the M2 flows
+ *     "EMER BUS ITEMS", AVN 1, L MAIN, L XFEED
  *     on the left; AVN 2, R MAIN, R XFEED on the right).
  *   - Engraved names use Citation-family abbreviations.
  *   - Every breaker is a `cb.<name>` of systems/electrical.ts (the network
@@ -42,11 +43,25 @@ export const M2_LEFT_CB: M2CbGroup[] = [
   {
     title: 'EMERGENCY BUS',
     items: [
+      // M2 flows EMER BUS ITEMS / CAE p.5-25 (see systems/electrical.ts).
+      ['pfd1', 'PFD 1'],
+      ['gtc1', 'GTC 1'],
+      ['gia1', 'GIA 1'],
+      ['adc2', 'ADC 2'],
+      ['ahrs2', 'AHRS 2'],
+      ['audio1', 'AUDIO 1'],
+      ['audio2', 'AUDIO 2'],
+      ['xpdr1', 'XPDR 1'],
+      ['gmc', 'AFCS CONT'],
+      ['flood_lts', 'FLOOD LTS'],
+      ['pitot_r', 'R P/S HTR'],
+      ['dispatch', 'DISPATCH'],
       ['esi', 'STBY INST'],
       ['gea', 'ENG INST'],
       ['fire_det', 'FIRE DET'],
       ['gear_ctl', 'GEAR CONT'],
       ['flap_ctl', 'FLAP CONT'],
+      ['spd_brk', 'SPD BRK'],
       ['ign1', 'L IGN'], // CAE: IGNITION breakers on the left CB panel
       ['ign2', 'R IGN'],
       ['fadec1_bkp', 'L FADEC'],
@@ -58,14 +73,9 @@ export const M2_LEFT_CB: M2CbGroup[] = [
     title: 'AVIONICS 1',
     items: [
       ['avn1', 'AVN 1 FEED'],
-      ['pfd1', 'PFD 1'],
-      ['gtc1', 'GTC 1'],
-      ['gia1', 'GIA 1'],
       ['adc1', 'ADC 1'],
       ['ahrs1', 'AHRS 1'],
-      ['gmc', 'AFCS CONT'],
       ['ap_servos', 'AP SERVOS'],
-      ['audio1', 'AUDIO 1'],
     ],
   },
   {
@@ -88,7 +98,6 @@ export const M2_LEFT_CB: M2CbGroup[] = [
     items: [
       ['l_xfeed', 'L XFEED'],
       ['panel_lts', 'PANEL LTS'],
-      ['flood_lts', 'FLOOD LTS'],
       ['cockpit_fans', 'AVN FANS'],
       ['temp_ctl', 'TEMP CONT'],
     ],
@@ -105,10 +114,7 @@ export const M2_RIGHT_CB: M2CbGroup[] = [
       ['pfd2', 'PFD 2'],
       ['gtc2', 'GTC 2'],
       ['gia2', 'GIA 2'],
-      ['adc2', 'ADC 2'],
-      ['ahrs2', 'AHRS 2'],
-      ['audio2', 'AUDIO 2'],
-      ['xpdr', 'XPDR'],
+      ['xpdr2', 'XPDR 2'],
       ['tcas', 'TCAS'],
       ['dme', 'DME'],
       ['ra', 'RAD ALT'],
@@ -118,7 +124,6 @@ export const M2_RIGHT_CB: M2CbGroup[] = [
   {
     title: 'RIGHT MAIN',
     items: [
-      ['pitot_r', 'R P/S HTR'],
       ['aoa_heat', 'AOA HTR'],
       ['boost_r', 'R BOOST'],
       ['bleed_ctl_r', 'R BLEED'],

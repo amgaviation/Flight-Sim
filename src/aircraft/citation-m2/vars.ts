@@ -13,12 +13,25 @@ const P = 'ac.m2.';
 
 export const M2 = {
   // ---------------------------------------------------------------- LH instrument panel: ELECTRICAL POWER panel
-  /** BATTERY: EMER (-1) / OFF (0) / BATT (1). EMER feeds only the emergency bus from the battery. */
+  /**
+   * BATTERY: EMER (-1) / OFF (0) / BATT (1), red lever-lock cap. The M2 has no avionics master: "there is no avionics
+   * switch; a single battery switch controls both of the batteries and the avionics master" (AOPA Pilot, Mar 2014).
+   * BATT closes the battery relay and the avionics relays; EMER feeds only the emergency bus from the battery
+   * (525AFM-06 p.3-26: FLIGHT GUIDANCE SYSTEM INOPERATIVE on EMER).
+   */
   battSw: `${P}batt_sw`,
   /** L / R GENERATOR: RESET (-1, spring-loaded to OFF) / OFF (0) / GEN (1). */
   genSw: (i: number) => `${P}gen${i}_sw`,
-  /** AVIONICS: DISPATCH (-1) / OFF (0) / ON (1). DISPATCH powers PFD1, GTC1, GIA1 (COM1/GPS1) from the emergency bus. */
-  avionicsSw: `${P}avionics_sw`,
+  /**
+   * DISPATCH (ELECTRICAL POWER panel, second row, amber LED): OFF (0) / DISPATCH (1). "There is a dispatch switch that
+   * powers GTC number 1 and the multifunction display" for ground communication and flight planning (AOPA Mar 2014),
+   * from the auxiliary battery in the nose (AOPA: "activates an auxiliary battery in the nose which powers one radio,
+   * one display and one GTC 570"). Model: aux battery -> MFD, GTC 1, GIA 1 (COM 1 / GPS 1) and audio 1 (EST: the
+   * radio needs the audio panel); PFD 1 stays off (systems/electrical.ts). Light: dispatchLight.
+   */
+  dispatchSw: `${P}dispatch_sw`,
+  /** Amber LED beside the DISPATCH switch: lit while the dispatch relay is closed (written by the logic). */
+  dispatchLight: `${P}dispatch_lt`,
   /**
    * STBY FLT DISPLAY switch (ELECTRICAL POWER panel): OFF (0) / ON (1) / TEST (2, spring-loaded to ON).
    * M2 flows cockpit prep "STBY FLT DISPLAY SWITCH - TEST/ON", shutdown "- OFF"; CJ-family AFM 4-5 "Standby Gyro
@@ -57,7 +70,13 @@ export const M2 = {
    * no automatic operation). NORM = automatic on start, low fuel pressure and transfer.
    */
   boostSw: (i: number) => `${P}boost${i}_sw`,
-  /** FUEL TRANSFER selector: L TANK (-1) / OFF (0) / R TANK (1): transfer from the selected tank to the other. */
+  /** Latched low-fuel-pressure boost activation (NORM; reset by OFF or ON and back to NORM, 525AFM-06 p.3-115). Logic output. */
+  boostLatch: (i: number) => `${P}boost${i}_latch`,
+  /**
+   * FUEL TRANSFER selector: L TANK (-1) / OFF (0) / R TANK (1). "Fuel is transferred in the direction of the arrow
+   * on the FUEL TRANSFER selector (i.e. if the selector is turned clockwise, the arrow points to R TANK and fuel is
+   * transferred from the left tank)" (525AFM-06 p.3-113): R TANK runs the LEFT boost pump and moves fuel left -> right.
+   */
   fuelXfer: `${P}fuel_xfer`,
 
   // ---------------------------------------------------------------- Glareshield: ENG FIRE / BOTTLE ARMED
@@ -72,16 +91,23 @@ export const M2 = {
   // ---------------------------------------------------------------- Tilt panel: ICE PROTECTION
   /** PITOT & STATIC heat (L, R pitot-static and AOA vane): OFF (0) / ON (1). */
   pitotStaticSw: `${P}pitot_static_sw`,
-  /** L / R ENGINE ANTI-ICE: OFF (0) / ON (1). */
+  /**
+   * L / R WING/ENG ANTI-ICE: OFF (0) / ENG ON (1) / WING/ENG (2) (525AFM-06 p.3-99: per-side switches; wing anti-ice
+   * only together with the engine inlet). Engine inlet heat for >= 1, the side's wing valve for 2.
+   */
   engAiSw: (i: number) => `${P}eng_ai${i}_sw`,
-  /** WING ANTI-ICE (L and R wing leading edges): OFF (0) / ON (1). */
+  /** Derived: either side's WING/ENG selected (1 / 0). Written by the logic (compatibility output). */
   wingAiSw: `${P}wing_ai_sw`,
+  /** Derived per side: wing A/I valve commanded open (switch WING/ENG and N2 >= 75 %, 525AFM-06 p.3-99). Logic output. */
+  wingAiValve: (i: number) => `${P}wai${i}_valve`,
   /** TAIL DE-ICE: MANUAL (-1, momentary) / OFF (0) / AUTO (1). */
   tailDeiceSw: `${P}tail_deice_sw`,
   /** L / R W/S BLEED (windshield anti-ice / rain): OFF (0) / LOW (1) / HI (2). */
   wsBleedSw: (i: number) => `${P}ws_bleed${i}_sw`,
   /** W/S ALCOHOL (pilot windshield backup anti-ice): OFF (0) / ON (1). */
   wsAlcoholSw: `${P}ws_alcohol_sw`,
+  /** Alcohol reservoir remaining, 0..1 ("sufficient alcohol is provided for ten minutes of operation", 525AFM-06 p.3-101). */
+  wsAlcoholRemaining: `${P}ws_alcohol_remaining`,
 
   // ---------------------------------------------------------------- Tilt panel: PRESSURIZATION / ENVIRONMENTAL
   /**
@@ -94,7 +120,8 @@ export const M2 = {
   /** PRESSURIZATION mode: AUTO (0) / MANUAL (2) (value matches Pressurization.mode). GTC ENVIRONMENTAL page. */
   pressMode: `${P}press_mode`,
   /**
-   * MANUAL cabin rate command -1 (DN, climb cabin) / 0 / +1 (UP, descend cabin); valve command -1 close .. +1 open.
+   * MANUAL cabin command: UP (+1) = outflow valve opens, cabin climbs; DN (-1) = valve closes, cabin descends
+   * (CJ family, 525AFM-06 p.3-118); 0 holds.
    * Driven by the GTC ENVIRONMENTAL page CABIN UP / CABIN DN buttons (events pressManUp / pressManDn, 1 s per press).
    */
   pressManual: `${P}press_manual`,
@@ -116,7 +143,7 @@ export const M2 = {
   airDistrib: `${P}air_distrib`,
 
   // ---------------------------------------------------------------- Oxygen
-  /** PASS OXY selector: CREW ONLY (0) / NORM (1, auto drop at 13,500 ft cabin) / MANUAL DROP (2). */
+  /** PASS OXY selector: CREW ONLY (0) / NORM (1, auto drop at 14,500 +/- 500 ft cabin, 525AFM-06 p.3-122) / MANUAL DROP (2). */
   paxOxy: `${P}pax_oxy`,
   /** Crew masks donned (quick-donning mask stowage doors open). */
   maskOn: (side: number) => `${P}mask${side}_on`,
@@ -144,9 +171,15 @@ export const M2 = {
   controlLock: `${P}control_lock`,
   /** Rain removal door levers L / R: 0 closed / 1 open. */
   rainDoor: (i: number) => `${P}rain_door${i}`,
+  /** Emergency brake pneumatic bottle pressure (psi, EST charge; depleted per application). Systems output. */
+  emerBrakeBottlePsi: `${P}emer_brk_psi`,
 
   // ---------------------------------------------------------------- Pedestal: flaps, speed brake, trims
-  /** Flap handle detents: 0 UP / 1 15 (T.O. & APPR) / 2 35 (LAND) / 3 60 (GND). */
+  /**
+   * Flap handle (continuous, S&D15 §9.1 "any intermediate position from zero to 35 degrees may be selected in
+   * flight"): 0 UP .. 1 15 (T.O. & APPR detent) .. 2 35 (LAND, push-down gate past T.O. & APPR) / 3 60 (GND, lift
+   * at the LAND gate; 525AFM-06 p.3-103). Values between detents select proportional flap angles.
+   */
   flapHandle: `${P}flap_handle`,
   /** SPEED BRAKE handle: RETRACT (0) / EXTEND (1). */
   speedbrake: `${P}speedbrake`,
@@ -156,9 +189,19 @@ export const M2 = {
   aileronTrim: `${P}ail_trim`,
   /** Rudder trim knob position (-1 nose left .. +1 nose right). */
   rudderTrim: `${P}rud_trim`,
-  /** Control-wheel pitch trim switches (pilot / copilot): -1 nose down / 0 / +1 nose up. */
+  /**
+   * Control-wheel split pitch trim switch (pilot / copilot), direction half: -1 nose down / 0 / +1 nose up. The trim
+   * runs only with both halves (yokeTrimArm) moved the same way; the pilot's switch overrides the copilot's
+   * (525AFM-06 p.3-89.1). The result is yokeTrimCmd (logic output, TrimAxis / AFCS input).
+   */
   yokeTrim: (side: number) => `${P}yoke_trim${side}`,
-  // Control wheel AP/TRIM DISC button: input.ap_disc. CWS button: event ap.cws { pressed }.
+  /** Split pitch trim switch, arm half (pilot / copilot): -1 / 0 / +1. */
+  yokeTrimArm: (side: number) => `${P}yoke_trim_arm${side}`,
+  /** Effective yoke trim command after the split-switch and pilot-priority logic (-1 / 0 / +1). Logic output. */
+  yokeTrimCmd: `${P}yoke_trim_cmd`,
+  /** AP/TRIM DISC button held (pilot / copilot): disconnects the AP (event ap.disc) and interrupts electric / AP trim. */
+  apTrimDisc: (side: number) => `${P}ap_trim_disc${side}`,
+  // CWS button: event ap.cws { pressed }.
 
   // ---------------------------------------------------------------- Tilt panel: LIGHTS
   /** NAV lights: OFF (0) / ON (1). */

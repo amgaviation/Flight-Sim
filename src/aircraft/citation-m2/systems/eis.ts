@@ -17,7 +17,16 @@ import { M2, M2_EVENTS, PRESS_SRC, TEST_SEL } from '../vars';
 import { LOW_FUEL_LB } from './fuel';
 
 const n1 = M2_EIS.sections.find((s) => s.kind === 'n1') as EisSection;
-const itt = M2_EIS.sections.find((s) => s.kind === 'itt') as EisSection;
+// Green IGN legend "adjacent to the upper center of the applicable analog ITT scale when the respective engine's
+// ignition discrete is received" (525AFM-06 p.3-117, CJ-family G3000-class EIS; EST for the M2).
+const itt = { ...(M2_EIS.sections.find((s) => s.kind === 'itt') as EisSection), ignVar: (e: number) => `eng${e}.ignition` } as EisSection;
+
+/**
+ * Generator load limit markings (A), scheduled by M2LogicLate (the EIS reads the object every frame). CJ1+ values
+ * (CAE p.5-21): ground 210 A; in flight 300 A below FL350, 250 A above (M2 values not public, EST same generators).
+ */
+export const GEN_AMPS_LIMIT = { cautionHigh: 300 };
+export const GEN_AMPS_SCHEDULE = { groundA: 210, airA: 300, airHighA: 250, highAltFt: 35000 } as const;
 
 export const M2_EIS_CONFIG: EisConfig = {
   engines: 2,
@@ -38,12 +47,12 @@ export const M2_EIS_CONFIG: EisConfig = {
     {
       kind: 'elec',
       rows: [
-        { label: 'GEN AMPS', vars: ['elec.sg1_amps', 'elec.sg2_amps'], decimals: 0, limits: { cautionHigh: 300 } }, // 300 A rating (S&D15)
+        { label: 'GEN AMPS', vars: ['elec.sg1_amps', 'elec.sg2_amps'], decimals: 0, limits: GEN_AMPS_LIMIT }, // scheduled, see GEN_AMPS_SCHEDULE
         { label: 'VOLTS', vars: ['elec.l_main_v', 'elec.r_main_v'], decimals: 1, limits: { cautionLow: 24, cautionHigh: 30.5 } }, // EST
         { label: 'BATT A / V', vars: ['elec.batt_amps', 'elec.batt_v'], decimals: 0 },
       ],
     },
-    { kind: 'cabin', altVar: 'press.cabin_alt_ft', rateVar: 'press.cabin_rate_fpm', diffVar: 'press.diff_psi', ldgElevVar: 'press.ldg_elev_ft', oxygenVar: 'oxy.main_psi', altWarnFt: 10000, diffMaxPsi: M2_LIMITS.cabinDiffPsi },
+    { kind: 'cabin', altVar: 'press.cabin_alt_ft', rateVar: 'press.cabin_rate_fpm', diffVar: 'press.diff_psi', ldgElevVar: 'press.ldg_elev_ft', oxygenVar: 'oxy.main_psi', altWarnFt: 9500, diffMaxPsi: M2_LIMITS.cabinDiffPsi },
     { kind: 'trim', pitch: { var: 'surf.pitch_trim', min: -1, max: 1, takeoffBand: [0.05, 0.55], label: 'PITCH' }, roll: { var: 'surf.aileron_trim', min: -1, max: 1 }, yaw: { var: 'surf.rudder_trim', min: -1, max: 1 } },
     {
       kind: 'flaps',
@@ -79,7 +88,9 @@ export const M2_SYNOPTICS: SynopticPageDef[] = [
       { type: 'valve', x: 380, y: 460, open: 'fuel.fw_r_open', orientation: 'v', label: 'FW SOV' },
       { type: 'line', points: [120, 320, 120, 600], active: 'fuel.eng1_on' },
       { type: 'line', points: [380, 320, 380, 600], active: 'fuel.eng2_on' },
-      { type: 'line', points: [120, 420, 380, 420], active: `${M2.fuelXfer} != 0`, arrow: true },
+      // Transfer arrow in the selector's direction (R TANK: left -> right; 525AFM-06 p.3-113).
+      { type: 'line', points: [120, 420, 380, 420], active: `${M2.fuelXfer} == 1`, arrow: true },
+      { type: 'line', points: [380, 432, 120, 432], active: `${M2.fuelXfer} == -1`, arrow: true },
       { type: 'engine', x: 120, y: 630, label: 'L ENG', running: 'eng1.running' },
       { type: 'engine', x: 380, y: 630, label: 'R ENG', running: 'eng2.running' },
       { type: 'readout', x: 120, y: 560, label: 'PSI', value: PSI('fuel.eng1_psi'), decimals: 0, limits: { cautionLow: 5 } },
@@ -110,8 +121,8 @@ export const M2_SYNOPTICS: SynopticPageDef[] = [
       { type: 'bus', x: 330, y: 320, w: 150, label: 'R XFEED', powered: 'elec.r_xfeed_powered' },
       { type: 'bus', x: 180, y: 420, w: 140, label: 'AVN 1', powered: 'elec.avn1_powered' },
       { type: 'bus', x: 330, y: 420, w: 150, label: 'AVN 2', powered: 'elec.avn2_powered' },
-      { type: 'readout', x: 70, y: 170, label: 'A', value: 'elec.sg1_amps', decimals: 0, limits: { cautionHigh: 300 } },
-      { type: 'readout', x: 430, y: 170, label: 'A', value: 'elec.sg2_amps', decimals: 0, limits: { cautionHigh: 300 } },
+      { type: 'readout', x: 70, y: 170, label: 'A', value: 'elec.sg1_amps', decimals: 0, limits: GEN_AMPS_LIMIT },
+      { type: 'readout', x: 430, y: 170, label: 'A', value: 'elec.sg2_amps', decimals: 0, limits: GEN_AMPS_LIMIT },
       { type: 'readout', x: 70, y: 280, label: 'V', value: 'elec.l_main_v', decimals: 1, limits: { cautionLow: 24 } },
       { type: 'readout', x: 430, y: 280, label: 'V', value: 'elec.r_main_v', decimals: 1, limits: { cautionLow: 24 } },
       { type: 'readout', x: 250, y: 170, label: 'BATT A', value: 'elec.batt_amps', decimals: 0 },
@@ -123,7 +134,7 @@ export const M2_SYNOPTICS: SynopticPageDef[] = [
     id: 'ecs',
     title: 'PRESSURIZATION / ECS',
     elements: [
-      { type: 'readout', x: 120, y: 120, label: 'CAB ALT FT', value: 'press.cabin_alt_ft', decimals: 0, limits: { cautionHigh: 8500, warnHigh: 10000 } },
+      { type: 'readout', x: 120, y: 120, label: 'CAB ALT FT', value: 'press.cabin_alt_ft', decimals: 0, limits: { cautionHigh: 8500, warnHigh: 9500 } },
       { type: 'readout', x: 380, y: 120, label: 'RATE FPM', value: 'press.cabin_rate_fpm', decimals: 0 },
       { type: 'readout', x: 120, y: 200, label: 'DIFF PSI', value: 'press.diff_psi', decimals: 1, limits: { warnHigh: 8.8 } },
       { type: 'readout', x: 380, y: 200, label: 'LDG ELEV FT', value: 'press.ldg_elev_ft', decimals: 0 },
@@ -220,12 +231,14 @@ export const M2_SYNOPTICS: SynopticPageDef[] = [
     id: 'anti_ice',
     title: 'ANTI-ICE',
     elements: [
-      { type: 'indicator', x: 100, y: 120, label: 'L ENG A/I', on: 'pneu.eai1_ok > 0.8 && ac.m2.eng_ai1_sw', color: 'green' },
-      { type: 'indicator', x: 400, y: 120, label: 'R ENG A/I', on: 'pneu.eai2_ok > 0.8 && ac.m2.eng_ai2_sw', color: 'green' },
-      { type: 'indicator', x: 250, y: 200, label: 'WING A/I', on: `pneu.wai_ok > 0.8 && ${M2.wingAiSw}`, color: 'green' },
-      { type: 'indicator', x: 250, y: 280, label: 'TAIL BOOTS', on: 'ice.tail_boots', color: 'green' },
-      { type: 'indicator', x: 100, y: 360, label: 'W/S BLEED L', on: `${M2.wsBleedSw(1)} > 0`, color: 'green' },
-      { type: 'indicator', x: 400, y: 360, label: 'W/S BLEED R', on: `${M2.wsBleedSw(2)} > 0`, color: 'green' },
+      { type: 'indicator', x: 100, y: 120, label: 'L ENG A/I', on: 'ac.m2.eai1_warm >= 0.8 && ac.m2.eng_ai1_sw >= 1', color: 'green' },
+      { type: 'indicator', x: 400, y: 120, label: 'R ENG A/I', on: 'ac.m2.eai2_warm >= 0.8 && ac.m2.eng_ai2_sw >= 1', color: 'green' },
+      { type: 'indicator', x: 100, y: 200, label: 'L WING A/I', on: `ac.m2.wai1_warm >= 0.8 && ${M2.wingAiValve(1)}`, color: 'green' },
+      { type: 'indicator', x: 400, y: 200, label: 'R WING A/I', on: `ac.m2.wai2_warm >= 0.8 && ${M2.wingAiValve(2)}`, color: 'green' },
+      { type: 'indicator', x: 100, y: 280, label: 'L TAIL BOOT', on: 'ac.m2.boot1_press', color: 'green' },
+      { type: 'indicator', x: 400, y: 280, label: 'R TAIL BOOT', on: 'ac.m2.boot2_press', color: 'green' },
+      { type: 'indicator', x: 100, y: 360, label: 'W/S BLEED L', on: `${M2.wsBleedSw(1)} > 0 && ac.m2.ws_valve1`, color: 'green' },
+      { type: 'indicator', x: 400, y: 360, label: 'W/S BLEED R', on: `${M2.wsBleedSw(2)} > 0 && ac.m2.ws_valve2`, color: 'green' },
       { type: 'indicator', x: 250, y: 440, label: 'P/S HEAT', on: 'elec.pitot_l_powered && elec.pitot_r_powered', color: 'green' },
       { type: 'readout', x: 250, y: 520, label: 'BLEED PSI', value: 'pneu.bleed_psi', decimals: 0 },
       { type: 'readout', x: 250, y: 580, label: 'TAT °C', value: 'adc1.tat_c', decimals: 0 },

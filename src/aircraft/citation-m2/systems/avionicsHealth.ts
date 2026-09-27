@@ -10,12 +10,13 @@
  * (EST: identical wording on the M2's G3000). "GWX FAIL" follows the same
  * "<LRU> FAIL - <LRU> is inoperative." pattern (EST).
  *
- *  - GMA 36 audio processors (`cb.audio1` / `cb.audio2`, AVN 1 / AVN 2): each
+ *  - GMA 36 audio processors (`cb.audio1` / `cb.audio2`, both on the EMER bus): each
  *    has a marker-beacon receiver (dual GMA 36, S&D15 §10.3.H); the marker
  *    receiver power is `audio1 || audio2` (systems/avionics.ts). A GMA with
  *    its bus up but no power -> "GMAn FAIL".
- *  - GTX 3000 transponders (`cb.xpdr`, AVN 2): no replies (IDENT dropped),
- *    "XPDR1 FAIL". Output `ac.m2.xpdr_reply` (1 = replying: powered and mode
+ *  - GTX 3000 transponders (`cb.xpdr1` EMER, `cb.xpdr2` AVN 2; the active unit is
+ *    the selected unit, `g3k.xpdr.active`): no replies (IDENT dropped) with the
+ *    selected unit unpowered, "XPDRn FAIL" per unit. Output `ac.m2.xpdr_reply` (1 = replying: powered and mode
  *    ON/ALT or TCAS modes). SCOPE: there is no ATC / other-traffic consumer of
  *    the reply; the transponder mode stays selectable on the GTC.
  *  - GWX 70 radar (`cb.radar`, AVN 2): the G3000 radar state is forced to
@@ -73,18 +74,22 @@ export class M2AvionicsHealth implements Subsystem {
   update(dt: number): void {
     const v = this.ctx.vars;
     const msg = this.suite.system.messages;
-    const avn1 = v.get('elec.avn1_powered') !== 0;
+    const emer = v.get('elec.emer_powered') !== 0;
     const avn2 = v.get('elec.avn2_powered') !== 0;
 
-    // ---- GMA 36 audio processors.
-    msg.set('m2.gma1', 'GMA1 FAIL - GMA1 is inoperative.', avn1 && v.get('elec.audio1_powered') === 0);
-    msg.set('m2.gma2', 'GMA2 FAIL - GMA2 is inoperative.', avn2 && v.get('elec.audio2_powered') === 0);
+    // ---- GMA 36 audio processors (emergency bus).
+    msg.set('m2.gma1', 'GMA1 FAIL - GMA1 is inoperative.', emer && v.get('elec.audio1_powered') === 0);
+    msg.set('m2.gma2', 'GMA2 FAIL - GMA2 is inoperative.', emer && v.get('elec.audio2_powered') === 0);
 
-    // ---- GTX 3000 transponder.
-    const xpdrPwr = v.get('elec.xpdr_powered') !== 0;
+    // ---- GTX 3000 transponders.
+    const x1 = v.get('elec.xpdr1_powered') !== 0;
+    const x2 = v.get('elec.xpdr2_powered') !== 0;
+    // The active unit (G3000 XPDR1 / XPDR2 selection, g3k.xpdr.active) replies.
+    const xpdrPwr = v.get('g3k.xpdr.active', 1) === 2 ? x2 : x1;
     if (!xpdrPwr) v.set(NAV.xpdrIdent, 0);
     v.set(M2_AVN_HEALTH_VARS.xpdrReply, xpdrPwr && v.get(NAV.xpdrMode) >= 2 ? 1 : 0);
-    msg.set('m2.xpdr1', 'XPDR1 FAIL - XPDR1 is inoperative.', avn2 && !xpdrPwr);
+    msg.set('m2.xpdr1', 'XPDR1 FAIL - XPDR1 is inoperative.', emer && !x1);
+    msg.set('m2.xpdr2', 'XPDR2 FAIL - XPDR2 is inoperative.', avn2 && !x2);
 
     // ---- GWX 70 weather radar.
     const radarPwr = v.get('elec.radar_powered') !== 0;
