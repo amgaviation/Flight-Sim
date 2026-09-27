@@ -136,12 +136,18 @@ export class UnitManager {
 
   /** Skips every boot timer (state presets / tests). */
   forceBooted(): void {
+    const v = this.vars;
     for (const u of this.list) {
       u.left = 0;
       u.supplied = u.power() >= 0.5;
-      u.powered = u.supplied && this.vars.get(u.failVar) < 0.5;
+      u.powered = u.supplied && v.get(u.failVar) < 0.5;
       u.up = u.powered;
       u.upS = u.up ? 60 : 0;
+      // Publish at once so systems updated before the suite (radio power) see the units up.
+      v.set(u.poweredVar, u.powered ? 1 : 0);
+      v.set(u.bootingVar, 0);
+      v.set(u.upVar, u.up ? 1 : 0);
+      if (u.displayPowerVar) v.set(u.displayPowerVar, u.powered ? 1 : 0);
     }
   }
 }

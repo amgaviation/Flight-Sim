@@ -679,7 +679,8 @@ export class NearestAirportsPage extends Page {
     }
     const mv = this.sys.magVar();
     // PG: up to 25 airports within 200 nm (runway length filter: Aux System Setup, EST none).
-    const apts = this.sys.nav.airportsNear(p.lat, p.lon, 200, 40).filter((a) => a.type !== 'heliport' && a.type !== 'closed' && a.type !== 'seaplane_base');
+    // Heliports / seaplane bases / closed fields are not listed (EST: the NXi nearest list shows airports with runways).
+    const apts = this.sys.nav.airportsNear(p.lat, p.lon, 200, 400).filter((a) => a.type !== 'heliport' && a.type !== 'closed' && a.type !== 'seaplane_base' && a.runways.length > 0);
     this.list = apts.slice(0, 25).map((a) => {
       const bd = brgDist(p, a.lat, a.lon, mv);
       return { apt: a, brg: bd.brg, dist: bd.dist, appr: approachClass(a), rwyFt: longestRunwayFt(a), com: primaryCom(a) };

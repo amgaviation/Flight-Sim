@@ -265,7 +265,8 @@ export class Form {
           this.textPos = 0;
         }
         const cur = this.text[this.textPos] ?? '';
-        let ci = cs.indexOf(cur);
+        // A blank position starts before the first character (first clockwise click = 'A').
+        let ci = cur && cur !== ' ' ? cs.indexOf(cur) : -1;
         if (ci < 0) ci = clicks > 0 ? -1 : 0;
         ci = (((ci + clicks) % cs.length) + cs.length) % cs.length;
         this.text = (this.text.slice(0, this.textPos) + cs[ci]).slice(0, f.maxLen);

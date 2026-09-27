@@ -69,6 +69,19 @@ describe('Cessna 172S fuel system', () => {
     expect(v.get(ENG.running(1))).toBe(1);
   });
 
+  it('engine-driven fuel pump failure: the engine quits, FUEL PUMP ON restores it (POH Sec 3)', () => {
+    const r = make172({ variant: 'steam', state: 'cruise', grossLb: 2400, air: { altFtMsl: 6000, iasKt: 100 } });
+    const v = r.vars;
+    r.run(2);
+    r.core.failures.trigger(C172_FAIL.edpFuelPump);
+    r.run(30, () => v.get(ENG.running(1)) < 0.5);
+    expect(v.get(ENG.running(1))).toBe(0);
+    v.set(C172.fuelPump, 1);
+    r.run(20, () => v.get(ENG.running(1)) > 0.5 && v.get(ENG.rpm(1)) > 2000);
+    expect(v.get(ENG.running(1))).toBe(1);
+    expect(v.get('elec.fuel_pump_powered')).toBe(1);
+  });
+
   for (const variant of ['steam', 'g1000'] as const) {
     it(`${variant}: LOW FUEL L below ~5 gal after the 60 s delay`, () => {
       const r = make172({ variant, state: 'ready_to_taxi', fuelGalPerTank: 20 });

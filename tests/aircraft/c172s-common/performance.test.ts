@@ -14,7 +14,7 @@
 import { describe, expect, it } from 'vitest';
 import { ENG, FDM, INPUT } from '../../../src/core/vars';
 import { C172 } from '../../../src/aircraft/c172s-common/vars';
-import { CLIMB_STD_2550, CRUISE_STD, KG_PER_GAL, MAX_ROC_2550, PERF_SPEC, STALL_KCAS, TAKEOFF_2550 } from '../../../src/aircraft/c172s-common/data';
+import { CLIMB_STD_2550, CRUISE_STD, KG_PER_GAL, LIMITS, MAX_ROC_2550, PERF_SPEC, STALL_KCAS, TAKEOFF_2550 } from '../../../src/aircraft/c172s-common/data';
 import { C172S_FDM } from '../../../src/aircraft/c172s-common/fdm';
 import { bestPowerMixture, recommendedLeanMixture } from '../../../src/aircraft/c172s-common/states';
 import { isaTemperature } from '../../../src/physics/atmosphere';
@@ -89,9 +89,9 @@ describe('Cessna 172S performance vs POH Section 5 (2550 lb, standard day)', () 
     const poh50 = grid(TAKEOFF_2550.pressAltFt, TAKEOFF_2550.tempC, TAKEOFF_2550.total50ftFt, 0, 15);
     expect(pohRoll).toBeCloseTo(PERF_SPEC.takeoffGroundRollFt, -1);
     console.log(`takeoff: static ${staticRpm.toFixed(0)} rpm, roll ${roll.toFixed(0)} ft (POH ${pohRoll}), lift-off ${liftIas.toFixed(1)} KIAS, 50 ft at ${d50.toFixed(0)} ft (POH ${poh50}) ${v50.toFixed(1)} KIAS`);
-    // POH Sec 4 full-throttle static rpm: 2300-2420 (EST from the "full throttle run-up" note).
-    expect(staticRpm).toBeGreaterThan(2250);
-    expect(staticRpm).toBeLessThan(2450);
+    // TCDS 3A12 / POH: full-throttle static rpm 2300-2400.
+    expect(staticRpm).toBeGreaterThanOrEqual(LIMITS.staticRpm[0]);
+    expect(staticRpm).toBeLessThanOrEqual(LIMITS.staticRpm[1]);
     expect(roll).toBeGreaterThan(0.85 * pohRoll);
     expect(roll).toBeLessThan(1.15 * pohRoll);
     expect(d50).toBeGreaterThan(0.85 * poh50);

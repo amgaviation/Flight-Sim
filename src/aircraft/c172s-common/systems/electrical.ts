@@ -10,7 +10,7 @@
  *
  * Steam (POH 172SPHUS Rev 5 Fig 7-7A, serials 172S8704 and on): breakers per the schematic.
  * G1000 (POH 172SPHAUS-03 Fig 7-7 and UND C172S Electrical System trainer, G1000 NXi):
- * adds the ESSENTIAL bus (diode-fed from both primary buses) with the standby battery
+ * adds the ESSENTIAL bus (diode-fed from the primary buses; see `ess_d`) with the standby battery
  * (STBY BATT ARM/OFF/TEST) and dual-fed PFD, ADC/AHRS and NAV1/ENG units (identical breakers
  * on AVN BUS 1 and the ESS bus, diode-ORed at the unit).
  *

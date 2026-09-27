@@ -125,6 +125,8 @@ export class G1000Suite {
 
   applyState(state: 'cold_dark' | 'ready_to_taxi' | 'takeoff' | 'cruise' | 'approach'): void {
     this.system.applyState(state);
+    // Presets other than cold & dark start with a GPS fix (no 45 s acquisition).
+    if (state !== 'cold_dark') this.radios?.gps?.forceAcquired();
   }
 
   dispose(): void {

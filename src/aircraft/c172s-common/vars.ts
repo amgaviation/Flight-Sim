@@ -175,8 +175,11 @@ export const ANN = {
 
 /** Failure ids registered by the c172s-common systems (besides the building blocks' own). */
 export const C172_FAIL = {
-  /** Engine-driven fuel pump inoperative (POH Sec 3 "Engine-driven fuel pump failure"). */
-  edpFuelPump: 'c172.edp_fuel_pump',
+  /**
+   * Engine-driven fuel pump inoperative (POH Sec 3 "Engine-driven fuel pump failure": FUEL PUMP
+   * switch ON). Registered by the FuelSystem (pump id `edp` in systems/fuel.ts).
+   */
+  edpFuelPump: 'fuel.edp',
   /** Induction air filter blocked: the spring-loaded alternate air door opens (~10 % power loss). */
   airFilter: 'c172.air_filter',
   /** Alternator drive belt broken. */
