@@ -10,8 +10,9 @@
  *    (NOSE DN -1 / NOSE UP +1), read by the stabilizer TrimAxis.
  *  - A/P disengage switch on the outboard horn: event `ap.disc` (AFDS
  *    disconnect; a second push silences the warning).
- *  SCOPE: the push-to-talk / interphone switch on the inboard horn is not
- *  built (no radio transmission model).
+ *  - Microphone switch on the inboard horn: MIC / OFF / INT (`yoke_mic{1,2}`),
+ *    spring-loaded to OFF; the ACP logic publishes the keyed transmitter
+ *    (SCOPE: no radio transmission / audio model).
  *
  * The wheels and columns are animated from the surface positions
  * (`surf.elevator` / `surf.aileron`): the 737 columns are back-driven by the
@@ -28,6 +29,7 @@ export function buildFlightControls(c: B738CockpitContext): void {
   for (const s of [1, 2] as const) {
     const L = s === 1;
     const outboard = L ? 'left' : 'right';
+    const inboard = L ? 'right' : 'left';
     const name = L ? 'CAPT' : 'F/O';
     const hub = L ? YOKE_HUB_L : YOKE_HUB_R;
     b.place(
@@ -49,6 +51,21 @@ export function buildFlightControls(c: B738CockpitContext): void {
               label: `${name} STAB TRIM`,
               var: B738.yokeTrim(s),
               positions: ['NOSE UP', 'OFF', 'NOSE DN'],
+              values: [1, 0, -1],
+              initial: 1,
+              springs: { 0: 1, 2: 1 },
+            },
+          },
+          {
+            // Microphone switch on the inboard horn (FCOM 5.10): MIC keys the ACP-selected transmitter, INT the
+            // flight interphone; spring-loaded to OFF.
+            anchor: `${inboard}Top`,
+            kind: 'rocker',
+            options: {
+              id: `b738.fc.mic${s}`,
+              label: `${name} MIC / INT`,
+              var: B738.yokeMic(s),
+              positions: ['MIC', 'OFF', 'INT'],
               values: [1, 0, -1],
               initial: 1,
               springs: { 0: 1, 2: 1 },

@@ -20,14 +20,15 @@
  *   Trim panel: AILERON trim (two switches), RUDDER trim knob and indicator,
  *     STAB TRIM OVERRIDE | flight-deck door lock, pedestal PANEL / FLOOD
  *
- * SCOPE: the ACP receiver volume knobs other than MKR, HF radios, SELCAL and
- * the cabin interphone are not built (no audio routing or HF model: they
- * would be decorative). Module sizes EST (Boeing 146 mm-wide DZUS modules).
+ * SCOPE: the ACP receiver controls, push-to-talk and MASK-BOOM switches
+ * publish mixer levels / keying state only (no audio routing). HF radio
+ * control panels, SELCAL and the cabin interphone handset are not built (no
+ * HF model: they would be decorative). Module sizes EST (Boeing 146 mm-wide DZUS modules).
  */
 import { GuardedButton, GuardedSwitch, PushButton, RotaryKnob, SelectorKnob, TBarHandle } from '../../../cockpit/controls';
 import type { Panel } from '../../../cockpit/CockpitBuilder';
 import { NAV } from '../../../core/vars';
-import { B738, XPDR_SEL } from '../vars';
+import { B738, XPDR_SEL, type AcpReceiver } from '../vars';
 import type { B738CockpitContext } from './context';
 import { CK, seg } from './context';
 import { annunciator, dimmer, toggle } from './common';
@@ -97,46 +98,79 @@ export function buildAftPedestal(c: B738CockpitContext): void {
     knob2(p, `b738.aft.com${n}_freq`, `VHF ${n} FREQUENCY`, 'com', n, 0.05, -0.022);
   }
   // ---------------------------------------------------------------- audio control panels
+  // FCOM 5.10 (737NG ACP): transmitter selectors (MIC lights) across the top, the receiver switch / volume
+  // controls under them (push on / off, rotate for volume, lit when on), NAV / ADF / MKR receivers and the
+  // SPKR volume, then the V-B-R filter, ALT-NORM, R/T - I/C push-to-talk and MASK - BOOM switches.
+  // SCOPE: no audio routing; the logic publishes the mixer levels and the keyed transmitter (systems/logic.ts).
   const MICS = ['VHF 1', 'VHF 2', 'VHF 3', 'HF 1', 'HF 2', 'FLT', 'SERV', 'PA'];
+  const RX_ROW1: AcpReceiver[] = ['vhf1', 'vhf2', 'vhf3', 'hf1', 'hf2', 'flt', 'svc', 'pa'];
+  const RX_ROW2: [AcpReceiver, string][] = [
+    ['nav1', 'NAV 1'],
+    ['nav2', 'NAV 2'],
+    ['adf1', 'ADF 1'],
+    ['adf2', 'ADF 2'],
+    ['mkr', 'MKR'],
+    ['spkr', 'SPKR'],
+  ];
+  const pitch = 0.0168;
+  const col0 = -3.5 * pitch;
   for (const s of [1, 2] as const) {
     const p = mod(`acp${s}`, s === 1 ? UL : UR, 0.14, W2, 0.115);
-    p.label(s === 1 ? 'AUDIO CONTROL - CAPT' : 'AUDIO CONTROL - F/O', 0, 0.05, { height: 0.0022 });
+    p.label(s === 1 ? 'AUDIO CONTROL - CAPT' : 'AUDIO CONTROL - F/O', 0, 0.052, { height: 0.0019 });
     MICS.forEach((m, k) => {
-      const col = k % 4;
-      const row = Math.floor(k / 4);
       p.add(
         new PushButton(env, {
           id: `b738.aft.acp${s}_mic${k}`,
           label: `ACP ${s} MIC ${m}`,
           style: 'korry',
-          width: 0.024,
-          height: 0.014,
+          width: 0.0148,
+          height: 0.0125,
           mode: 'momentary',
           var: `ac.b738.ck.acp${s}_mic_btn${k}`,
           onChange: (x) => {
             if (x !== 0) vars.set(B738.acpMic(s), k);
           },
           // Transmitter selector: the MIC legend lights on the selected transmitter (FCOM 5.10).
-          segments: [{ text: [m, 'MIC'], color: 'white', var: B738.acpMic(s), test: (x) => x === k, style: 'legend' }],
+          segments: [{ text: ['MIC', m], color: 'white', var: B738.acpMic(s), test: (x) => x === k, style: 'legend' }],
         }),
-        -0.051 + col * 0.034,
-        0.03 - row * 0.022,
+        col0 + k * pitch,
+        0.037,
       );
     });
-    p.add(
-      new RotaryKnob(env, {
-        id: `b738.aft.acp${s}_mkr`,
-        label: `ACP ${s} MKR VOLUME`,
-        cap: 'fluted',
-        diameter: 0.011,
-        outer: { var: B738.acpMkrVol(s), min: 0, max: 1, step: 0.05, initial: 0.6, angleRange: [-140, 140], label: 'MKR', format: (x) => `${Math.round(x * 100)} %` },
-      }),
-      -0.04,
-      -0.028,
-    );
-    p.label('MKR', -0.04, -0.014, { height: 0.0019 });
-    toggle(env, p, { id: `b738.aft.acp${s}_alt`, label: `ACP ${s} ALT-NORM`, var: B738.acpAltNorm(s), positions: ['NORM', 'ALT'], values: [0, 1], initial: 0, scale: 0.7 }, 0.0, -0.03, 'ALT-NORM');
-    toggle(env, p, { id: `b738.aft.acp${s}_filter`, label: `ACP ${s} FILTER`, var: B738.acpFilter(s), positions: ['V', 'B', 'R'], values: [-1, 0, 1], initial: 1, scale: 0.7 }, 0.042, -0.03, 'FILTER');
+    const rxKnob = (rx: AcpReceiver, name: string, x: number, y: number) => {
+      const on = rx === 'spkr' ? null : B738.acpRxOn(s, rx);
+      p.add(
+        new RotaryKnob(env, {
+          id: `b738.aft.acp${s}_rx_${rx}`,
+          label: `ACP ${s} ${name} RECEIVER${on ? ' (push on / off, turn volume)' : ' VOLUME'}`,
+          cap: 'fluted',
+          diameter: 0.0092,
+          height: 0.008,
+          pointer: 'line',
+          outer: { var: B738.acpRxVol(s, rx), min: 0, max: 1, step: 0.05, angleRange: [-140, 140], label: `${name} VOL`, format: (x) => `${Math.round(x * 100)} %` },
+          push: on ? { var: on, mode: 'toggle', label: `${name} ON/OFF` } : undefined,
+        }),
+        x,
+        y,
+      );
+      // Receiver-on light (white segment above the control).
+      if (on) annunciator(env, p, `b738.aft.acp${s}_rxlt_${rx}`, `ACP ${s} ${name} receiver on`, [seg.on('', 'white', on)], x, y + 0.0078, 0.009, 0.0024);
+    };
+    RX_ROW1.forEach((rx, k) => rxKnob(rx, MICS[k], col0 + k * pitch, 0.016));
+    RX_ROW2.forEach(([rx, name], k) => {
+      const x = col0 + k * pitch;
+      rxKnob(rx, name, x, -0.012);
+      p.label(name, x, -0.0215, { height: 0.0015 });
+    });
+    toggle(env, p, { id: `b738.aft.acp${s}_filter`, label: `ACP ${s} FILTER`, var: B738.acpFilter(s), positions: ['V', 'B', 'R'], values: [-1, 0, 1], initial: 1, orientation: 'horizontal', scale: 0.55, labels: { name: false, positions: true, height: 0.0015 } }, -0.05, -0.04);
+    p.label('FILTER', -0.05, -0.029, { height: 0.0015 });
+    toggle(env, p, { id: `b738.aft.acp${s}_alt`, label: `ACP ${s} ALT-NORM`, var: B738.acpAltNorm(s), positions: ['NORM', 'ALT'], values: [0, 1], initial: 0, scale: 0.55, labels: { name: false, positions: true, height: 0.0015 } }, -0.017, -0.04);
+    p.label('ALT-NORM', -0.017, -0.029, { height: 0.0015 });
+    // Push-to-talk: R/T spring-loaded (keys the selected transmitter), I/C latched (flight interphone). EST: I/C latch per FCOM 5.10 description.
+    toggle(env, p, { id: `b738.aft.acp${s}_ptt`, label: `ACP ${s} PUSH TO TALK R/T - I/C`, var: B738.acpPtt(s), positions: ['I/C', 'OFF', 'R/T'], values: [-1, 0, 1], initial: 1, springs: { 2: 1 }, scale: 0.55, labels: { name: false, positions: true, height: 0.0015 } }, 0.017, -0.04);
+    p.label('R/T - I/C', 0.017, -0.029, { height: 0.0015 });
+    toggle(env, p, { id: `b738.aft.acp${s}_mask`, label: `ACP ${s} MASK-BOOM`, var: B738.acpMaskBoom(s), positions: ['BOOM', 'MASK'], values: [0, 1], initial: 0, scale: 0.55, labels: { name: false, positions: true, height: 0.0015 } }, 0.05, -0.04);
+    p.label('MASK-BOOM', 0.05, -0.029, { height: 0.0015 });
   }
   // ---------------------------------------------------------------- fire protection panel
   {

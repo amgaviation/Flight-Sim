@@ -44,7 +44,7 @@ import { M2CabinServices, M2_SIDE_VARS } from './services';
 /** Circuit-breaker panel frame (EST). */
 export const CB_PANEL = { x: 3.27, z: 0.05, inboard: 0.03, width: 0.36, tiltDeg: 0 };
 /** Breaker layout: columns per row, pitch (m), row pitch (breaker + its engraved name), group title height. */
-const CB = { cols: 13, pitch: 0.026, rowPitch: 0.03, titleH: 0.014, diameter: 0.0095 };
+const CB = { cols: 13, pitch: 0.026, rowPitch: 0.031, titleH: 0.015, diameter: 0.0095, nameH: 0.0027, titleTextH: 0.0031 };
 
 /** Every network breaker (name, rating) from a throw-away instance of the M2 network (setup only). */
 function networkBreakers(): { name: string; ratingA: number }[] {
@@ -87,7 +87,7 @@ function buildSide(b: CockpitBuilder, side: 'left' | 'right', network: { name: s
     radius: 0.006,
     screws: { kind: 'dzus', diameter: 0.0065, inset: 0.008, pitch: 0.18 },
   });
-  p.label(side === 'left' ? 'LH CIRCUIT BREAKERS' : 'RH CIRCUIT BREAKERS', C.width / 2, 0.012, { height: 0.0032 });
+  p.label(side === 'left' ? 'LH CIRCUIT BREAKERS' : 'RH CIRCUIT BREAKERS', C.width / 2, 0.012, { height: 0.004 });
   buildBreakers(b, p, side, groups, 0.03);
 
   buildCupholders(b, side);
@@ -100,7 +100,7 @@ function buildBreakers(b: CockpitBuilder, p: Panel, side: string, groups: Return
   const W = CB_PANEL.width;
   for (const g of groups) {
     const n = Math.min(CB.cols, g.items.length);
-    p.bracket(g.title, W / 2, yy, (n - 1) * CB.pitch + 0.02, { height: 0.0024 });
+    p.bracket(g.title, W / 2, yy, (n - 1) * CB.pitch + 0.02, { height: CB.titleTextH });
     yy += CB.titleH;
     g.items.forEach((it, i) => {
       const col = i % CB.cols;
@@ -114,12 +114,13 @@ function buildBreakers(b: CockpitBuilder, p: Panel, side: string, groups: Return
           var: `cb.${it.name}`,
           trippedVar: `cb.${it.name}_tripped`,
           rating: ratingText(it.ratingA),
-          name: it.label,
+          name: false, // engraved below by the panel (larger than the control's 2.1 mm default, EST ~2.7 mm)
           diameter: CB.diameter,
         }),
         xs + col * CB.pitch,
         yy + 0.004 + row * CB.rowPitch,
       );
+      p.label(it.label, xs + col * CB.pitch, yy + 0.004 + row * CB.rowPitch + CB.diameter * 0.75 + 0.0055, { height: CB.nameH });
       // Draw-call saving (63 breakers): the white band is only visible with the breaker out, so it is
       // hidden (not drawn) while the breaker is in.
       const band = cb.object.getObjectByName('cbWhiteBand');

@@ -133,7 +133,7 @@ export default function buildOverhead(b: CockpitBuilder, c: M2CockpitContext): v
     // Mask container on the outboard half of the plate (panel +u is toward the aircraft's left for a down-facing plate).
     const ub = 0.055 * s; // outboard
     p.add(new M2MaskStowage(env, { id: `m2.ovhd.mask${n}`, label: `${who} O2 MASK`, var: M2.maskOn(n), toward: s > 0 ? 1 : -1 }), ub, 0.0);
-    p.label(`${who} OXYGEN`, ub, 0.062, { height: 0.003 });
+    p.label(`${who} OXYGEN`, ub, 0.064, { height: 0.0045 });
     // Regulator selector N / 100% / EMER (OxygenSystem crew mask mode; EST legends, EROS-class regulator).
     const uc = -0.06 * s; // inboard column
     p.add(
@@ -147,15 +147,15 @@ export default function buildOverhead(b: CockpitBuilder, c: M2CockpitContext): v
           { value: 2, label: 'EMER', angle: 45 },
         ],
         diameter: 0.016,
-        labelRadius: 0.019,
-        labelHeight: 0.0024,
+        labelRadius: 0.021,
+        labelHeight: 0.0034,
         cap: 'bar',
       }),
       uc,
       0.022,
     );
     p.add(new PushButton(env, { id: `m2.ovhd.mask${n}_test`, label: `${who} O2 PRESS TO TEST`, var: M2_SIDE_VARS.maskTest(n), mode: 'momentary', style: 'round', width: 0.011 }), uc - 0.02, -0.035);
-    p.label('PRESS TO TEST', uc - 0.02, -0.052, { height: 0.0019 });
+    p.label('PRESS TO TEST', uc - 0.02, -0.053, { height: 0.0028 });
     p.add(
       new AnnunciatorLight(env, {
         id: `m2.ovhd.mask${n}_flow`,
@@ -167,7 +167,7 @@ export default function buildOverhead(b: CockpitBuilder, c: M2CockpitContext): v
       uc + 0.02,
       -0.035,
     );
-    p.label('FLOW', uc + 0.02, -0.052, { height: 0.0019 });
+    p.label('FLOW', uc + 0.02, -0.053, { height: 0.0028 });
   }
   void c;
 }

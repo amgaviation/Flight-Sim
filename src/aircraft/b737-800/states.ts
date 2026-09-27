@@ -14,7 +14,7 @@ import type { FlightModel } from '../../physics/FlightModel';
 import type { Turbofan } from '../../physics/engines/Turbofan';
 import type { B738Systems } from './createSystems';
 import { B738_FLAP_DETENTS, FLAP_LEVER, STAB } from './data';
-import { B738, APU_SW, ENG_START, GEAR_LEVER, SPEEDBRAKE, XPDR_SEL, FUEL_PUMPS, HYD_PUMP_SWITCHES, WINDOW_HEATS, DOORS } from './vars';
+import { B738, APU_SW, ENG_START, GEAR_LEVER, SPEEDBRAKE, XPDR_SEL, FUEL_PUMPS, HYD_PUMP_SWITCHES, WINDOW_HEATS, DOORS, ACP_RECEIVERS } from './vars';
 
 /** Normal take-off stabilizer setting (units): EST mid green band for a mid CG (perf.ts takeoffTrimUnits ~5 at 22 % MAC). */
 export const TAKEOFF_TRIM_UNITS = 5.0;
@@ -213,7 +213,15 @@ export function setB738Switches(ctx: Pick<SimContext, 'vars'>, s: InitialState):
     v.set(B738.acpMkrVol(acp), acp < 3 ? 0.5 : 0);
     v.set(B738.acpAltNorm(acp), 0);
     v.set(B738.acpFilter(acp), 0);
+    // Receivers: VHF 1 / VHF 2, flight interphone and MKR on at mid volume on the crew panels (EST line practice).
+    for (const rx of ACP_RECEIVERS) {
+      if (rx !== 'spkr') v.set(B738.acpRxOn(acp, rx), acp < 3 && (rx === 'vhf1' || rx === 'vhf2' || rx === 'flt' || rx === 'mkr') ? 1 : 0);
+      if (rx !== 'mkr') v.set(B738.acpRxVol(acp, rx), 0.5);
+    }
+    v.set(B738.acpPtt(acp), 0);
+    v.set(B738.acpMaskBoom(acp), 0);
   }
+  for (const s of [1, 2] as const) v.set(B738.yokeMic(s), 0);
   v.set(B738.xpdrModeSel, !powered ? XPDR_SEL.stby : moving ? XPDR_SEL.taRa : XPDR_SEL.xpndr);
   v.set(B738.xpdrAtc, 1);
   v.set(B738.xpdrAltSrc, 1);

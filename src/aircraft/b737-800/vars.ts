@@ -46,6 +46,10 @@ export const APU_SW = { off: 0, on: 1, start: 2 } as const;
 /** Transponder mode selector (ATC/TCAS panel). */
 export const XPDR_SEL = { test: -1, stby: 0, altOff: 1, xpndr: 2, taOnly: 3, taRa: 4 } as const;
 
+/** ACP receivers (FCOM 5.10, 737NG audio control panel): the transmitter row, then NAV / ADF / MKR / SPKR. */
+export const ACP_RECEIVERS = ['vhf1', 'vhf2', 'vhf3', 'hf1', 'hf2', 'flt', 'svc', 'pa', 'nav1', 'nav2', 'adf1', 'adf2', 'mkr', 'spkr'] as const;
+export type AcpReceiver = (typeof ACP_RECEIVERS)[number];
+
 export const B738 = {
   // ================================================================ FORWARD OVERHEAD (P5)
   // ---------------------------------------------------------------- FLIGHT CONTROL panel
@@ -342,6 +346,20 @@ export const B738 = {
   acpMkrVol: (s: 1 | 2 | 3) => `${P}acp${s}_mkr_vol`,
   acpAltNorm: (s: 1 | 2 | 3) => `${P}acp${s}_alt`,
   acpFilter: (s: 1 | 2 | 3) => `${P}acp${s}_filter`,
+  /**
+   * ACP receiver switch / volume controls (FCOM 5.10 "Audio control panel": push on / push off, rotate for
+   * volume, the switch lights when on). Receivers: ACP_RECEIVERS. MKR keeps its original volume var
+   * (`acpMkrVol`); SPKR is a volume control only (no on/off). SCOPE: no audio routing; the logic publishes each
+   * receiver's mixer level as `ac.b738.acp{s}.lvl_<rx>` and the MKR level drives the marker tones.
+   */
+  acpRxOn: (s: 1 | 2 | 3, rx: AcpReceiver) => `${P}acp${s}_rxon_${rx}`,
+  acpRxVol: (s: 1 | 2 | 3, rx: AcpReceiver) => (rx === 'mkr' ? `${P}acp${s}_mkr_vol` : `${P}acp${s}_rxvol_${rx}`),
+  /** ACP push-to-talk switch: R/T (1, spring-loaded: keys the selected transmitter) / OFF (0) / I/C (-1, latched: flight interphone). */
+  acpPtt: (s: 1 | 2 | 3) => `${P}acp${s}_ptt`,
+  /** ACP MASK / BOOM microphone selector (0 BOOM / 1 MASK). */
+  acpMaskBoom: (s: 1 | 2 | 3) => `${P}acp${s}_mask`,
+  /** Control wheel microphone switch (FCOM 5.10): MIC (1, keys the ACP-selected transmitter) / OFF (0) / INT (-1, flight interphone); spring-loaded to OFF. */
+  yokeMic: (s: Side) => `${P}yoke_mic${s}`,
   /** ATC / TCAS panel: mode selector (XPDR_SEL), ATC 1/2 (1 / 2), ALT SOURCE 1/2, ABOVE/NORM/BELOW (1 / 0 / -1), IDENT (momentary). */
   xpdrModeSel: `${P}xpdr_mode_sel`,
   xpdrAtc: `${P}xpdr_atc`,
@@ -528,7 +546,7 @@ export const B738_DISPLAY_IDS = { isfd: 'b738_isfd', isdu: 'b738_isdu' } as cons
 export function b738ControlVars(): string[] {
   const out: string[] = [];
   const sides: Side[] = [1, 2];
-  const skip = new Set(['lt', 'fadecTla', 'xfrSrc', 'stbyOnBatt', 'stbyPumpCmd', 'stbyRudder', 'ptuCmd', 'gearXferUnit', 'recallActive', 'wingAiValveCmd', 'engValveOpen', 'tillerCmd']);
+  const skip = new Set(['acpRxOn', 'acpRxVol', 'lt', 'fadecTla', 'xfrSrc', 'stbyOnBatt', 'stbyPumpCmd', 'stbyRudder', 'ptuCmd', 'gearXferUnit', 'recallActive', 'wingAiValveCmd', 'engValveOpen', 'tillerCmd']);
   const args: Record<string, readonly unknown[]> = {
     fltCtl: ['a', 'b'],
     spoilerSw: ['a', 'b'],
@@ -545,6 +563,8 @@ export function b738ControlVars(): string[] {
     acpMkrVol: [1, 2, 3],
     acpAltNorm: [1, 2, 3],
     acpFilter: [1, 2, 3],
+    acpPtt: [1, 2, 3],
+    acpMaskBoom: [1, 2, 3],
   };
   for (const [key, val] of Object.entries(B738)) {
     if (skip.has(key)) continue;
@@ -554,5 +574,11 @@ export function b738ControlVars(): string[] {
       for (const a of list) out.push((val as (x: unknown) => string)(a));
     }
   }
+  // ACP receiver switches / volumes (two arguments). MKR volume is `acpMkrVol` (already listed); SPKR has no switch.
+  for (const s of [1, 2, 3] as const)
+    for (const rx of ACP_RECEIVERS) {
+      if (rx !== 'spkr') out.push(B738.acpRxOn(s, rx));
+      if (rx !== 'mkr') out.push(B738.acpRxVol(s, rx));
+    }
   return out;
 }

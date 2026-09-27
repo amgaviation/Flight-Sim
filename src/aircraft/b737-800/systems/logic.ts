@@ -13,8 +13,22 @@ import type { FailureDef } from '../../../systems/failures';
 import type { CasManager } from '../../../systems/warning';
 import { NAV } from '../../../core/vars';
 import { EdgeDetector, compileCondition, compileBinding, type Evaluator } from '../../../systems/util';
-import { B738, SIX_PACK_GROUPS, FUEL_PUMPS, HYD_PUMP_SWITCHES, WINDOW_HEATS, XPDR_SEL, type SixPackGroup, type Side } from '../vars';
+import { B738, ACP_RECEIVERS, SIX_PACK_GROUPS, FUEL_PUMPS, HYD_PUMP_SWITCHES, WINDOW_HEATS, XPDR_SEL, type SixPackGroup, type Side } from '../vars';
 import { B738_ANNUNCIATORS } from './cas';
+
+/** Audio control panel var names, precomputed (the logic runs at 60 Hz and must not allocate). */
+const ACP_TABLE = ([1, 2, 3] as const).map((a) => ({
+  mic: B738.acpMic(a),
+  ptt: B738.acpPtt(a),
+  mask: B738.acpMaskBoom(a),
+  yoke: a < 3 ? B738.yokeMic(a as Side) : null,
+  keyedTx: `ac.b738.acp${a}.keyed_tx`,
+  keyedInt: `ac.b738.acp${a}.keyed_int`,
+  micSrc: `ac.b738.acp${a}.mic_mask`,
+  rx: ACP_RECEIVERS.map((rx) => ({ on: rx === 'spkr' ? null : B738.acpRxOn(a, rx), vol: B738.acpRxVol(a, rx), lvl: `ac.b738.acp${a}.lvl_${rx}`, isMkr: rx === 'mkr' })),
+}));
+const COM_TX = ['ac.b738.com1.transmitting', 'ac.b738.com2.transmitting'] as const;
+const COM_POWERED = ['com1.powered', 'com2.powered'] as const;
 
 const SIDES: readonly Side[] = [1, 2];
 
@@ -255,8 +269,33 @@ export class B738Logic implements Subsystem {
       v.set(`ac.b738.acp${a}.degraded`, v.get(B738.acpAltNorm(a)));
       v.set(`ac.b738.acp${a}.filter`, v.get(B738.acpFilter(a)));
     }
-    // Marker beacon audio volume: the louder of the two pilots' MKR receiver knobs (used by the marker tones).
-    v.set('nav.marker_volume', Math.max(v.get(B738.acpMkrVol(1)), v.get(B738.acpMkrVol(2)), v.get(B738.acpMkrVol(3))));
+    // Receiver mixer levels (switch on x volume; SPKR has no switch) and push-to-talk keying (FCOM 5.10).
+    // SCOPE: no audio routing or radio transmission model; levels and keying are published as state.
+    let mkr = 0;
+    for (const t of ACP_TABLE) {
+      for (const r of t.rx) {
+        const lvl = (r.on ? (v.get(r.on) !== 0 ? 1 : 0) : 1) * v.get(r.vol);
+        v.set(r.lvl, lvl);
+        if (r.isMkr && lvl > mkr) mkr = lvl;
+      }
+      // R/T on the ACP or MIC on the control wheel keys the selected transmitter; I/C or INT keys the flight interphone.
+      const ptt = v.get(t.ptt);
+      const wheel = t.yoke ? v.get(t.yoke) : 0;
+      const txKey = ptt > 0.5 || wheel > 0.5;
+      const icKey = ptt < -0.5 || wheel < -0.5;
+      const sel = v.get(t.mic);
+      v.set(t.keyedTx, txKey ? sel + 1 : 0);
+      v.set(t.keyedInt, icKey || (txKey && sel === 5) ? 1 : 0);
+      v.set(t.micSrc, v.get(t.mask));
+    }
+    // VHF 1 / 2 transmitting: keyed from any ACP with that transmitter selected and the radio powered.
+    for (const r of SIDES) {
+      let tx = 0;
+      for (const t of ACP_TABLE) if (v.get(t.keyedTx) === r) tx = 1;
+      v.set(COM_TX[r - 1], tx && v.get(COM_POWERED[r - 1]) !== 0 ? 1 : 0);
+    }
+    // Marker beacon audio volume: the loudest MKR receiver level of the three ACPs (used by the marker tones).
+    v.set('nav.marker_volume', mkr);
     // ---- ATC panel: transponder 1 / 2 and altitude source 1 / 2 (the TCAS own altitude follows the selection).
     const atc2 = v.get(B738.xpdrAtc) >= 1.5;
     v.set('xpdr.unit', atc2 ? 2 : 1);

@@ -199,6 +199,53 @@ describe('Boeing 737-800 main cockpit: functions', () => {
     expect(r.vars.get(B738.tillerCmd)).toBeCloseTo(0.5, 3);
     expect(r.vars.get('gear.steer_deg')).toBeGreaterThan(30);
   });
+
+  it('audio control panel: receiver push on / off and volume, MKR level, push-to-talk and the wheel MIC switch', () => {
+    const { r, get, tick, click } = setup();
+    r.run(0.5);
+    const v = r.vars;
+    // VHF 1 receiver is on at mid volume in the preset; middle-click (push) turns it off, wheel turns the volume.
+    expect(v.get(B738.acpRxOn(1, 'vhf1'))).toBe(1);
+    const vhf1 = get('b738.aft.acp1_rx_vhf1') as CockpitControl & { onWheel(d: number, p: ControlPointer): void };
+    click(vhf1, 1);
+    r.run(0.1);
+    expect(v.get(B738.acpRxOn(1, 'vhf1'))).toBe(0);
+    expect(v.get('ac.b738.acp1.lvl_vhf1')).toBe(0);
+    click(vhf1, 1);
+    vhf1.onWheel(2, P(vhf1.hitTargets[0]));
+    tick(vhf1, 0.2);
+    r.run(0.1);
+    expect(v.get(B738.acpRxVol(1, 'vhf1'))).toBeCloseTo(0.6, 5);
+    expect(v.get('ac.b738.acp1.lvl_vhf1')).toBeCloseTo(0.6, 5);
+    // MKR receiver off on both crew panels silences the marker tones.
+    for (const s of [1, 2] as const) click(get(`b738.aft.acp${s}_rx_mkr`), 1);
+    r.run(0.1);
+    expect(v.get('nav.marker_volume')).toBe(0);
+    // Wheel MIC keys the selected transmitter (VHF 1): COM 1 transmits while held; INT keys the flight interphone.
+    const mic = get('b738.fc.mic1');
+    const t = mic.hitTargets[0];
+    mic.onPointerDown?.(P(t, 2));
+    tick(mic, 0.1);
+    r.run(0.1);
+    expect(v.get(B738.yokeMic(1))).toBe(1);
+    expect(v.get('ac.b738.acp1.keyed_tx')).toBe(1);
+    expect(v.get('ac.b738.com1.transmitting')).toBe(1);
+    mic.onPointerUp?.(P(t, 2));
+    tick(mic, 0.3);
+    r.run(0.1);
+    expect(v.get(B738.yokeMic(1))).toBe(0);
+    expect(v.get('ac.b738.com1.transmitting')).toBe(0);
+    mic.onPointerDown?.(P(t, 0));
+    tick(mic, 0.1);
+    r.run(0.1);
+    expect(v.get('ac.b738.acp1.keyed_int')).toBe(1);
+    mic.onPointerUp?.(P(t, 0));
+    // ACP R/T is spring-loaded back to OFF; I/C latches.
+    v.set(B738.acpPtt(2), -1);
+    r.run(0.1);
+    expect(v.get('ac.b738.acp2.keyed_int')).toBe(1);
+    expect(v.get('ac.b738.acp2.keyed_tx')).toBe(0);
+  });
 });
 
 export type { Rig };
