@@ -87,9 +87,25 @@ export function buildCabin(b: CockpitBuilder, ctx: SimContext): CabinParts {
     wall(12, DOOR_GEO.fwdFsBottom, FLOOR_H, 1.46, lining);
     wall(DOOR_GEO.fwdFsBottom, DOOR_GEO.aftFs, FLOOR_H, 1.46, upholstery, 0.01);
     wall(DOOR_GEO.aftFs, 100, FLOOR_H, 1.46, lining);
-    // Window line: forward door-post strip, door window, door post, rear window, aft strip.
-    wall(14, DOOR_WINDOW.fs0, 1.46, 1.79, lining);
-    wall(DOOR_WINDOW.fs0, DOOR_WINDOW.fs1, 1.46, 1.79, glass as THREE.Material);
+    // Window line. The door's forward edge runs from FS 26 at the sill to FS 30 at the top (DOOR);
+    // the windshield wraps round to it above the glareshield and the door window starts a frame
+    // width (EST 1.5 in) aft of it, so the pilot looks out of the door window just aft of the
+    // A-pillar (Fig 6-4 and cabin photographs), not at a solid door post.
+    const quadSide = (a: [number, number], bq: [number, number], c: [number, number], d: [number, number], mat: THREE.Material): void => {
+      b.structureMesh(quad([sta(a[0]), y(a[0]), hz(a[1])], [sta(bq[0]), y(bq[0]), hz(bq[1])], [sta(c[0]), y(c[0]), hz(c[1])], [sta(d[0]), y(d[0]), hz(d[1])]), mat, undefined, undefined, false);
+    };
+    const doorEdge = (h: number): number => DOOR_GEO.fwdFsBottom + ((DOOR_GEO.fwdFsTop - DOOR_GEO.fwdFsBottom) * (h - DOOR_GEO.sillH)) / (DOOR_GEO.topH - DOOR_GEO.sillH);
+    const frame = 1.5; // EST door-frame width, in
+    const wsH = WINDSHIELD.baseH;
+    const [h0, h1] = [DOOR_WINDOW.h0, DOOR_WINDOW.h1];
+    // Cabin side next to the instrument panel, below the windshield base.
+    quadSide([14, h0], [doorEdge(h0) + frame, h0], [doorEdge(wsH) + frame, wsH], [14, wsH], lining);
+    // Windshield side wrap forward of the door edge (above the glareshield).
+    quadSide([14, wsH], [doorEdge(wsH), wsH], [doorEdge(h1), h1], [14, h1], glass as THREE.Material);
+    // Door frame strip.
+    quadSide([doorEdge(wsH), wsH], [doorEdge(wsH) + frame, wsH], [doorEdge(h1) + frame, h1], [doorEdge(h1), h1], lining);
+    // Door window (DOOR_WINDOW.fs1 aft edge).
+    quadSide([doorEdge(h0) + frame, h0], [DOOR_WINDOW.fs1, h0], [DOOR_WINDOW.fs1, h1], [doorEdge(h1) + frame, h1], glass as THREE.Material);
     wall(DOOR_WINDOW.fs1, REAR_WINDOW.fs0, 1.46, 1.79, lining);
     wall(REAR_WINDOW.fs0, REAR_WINDOW.fs1, 1.46, 1.79, glass as THREE.Material);
     wall(REAR_WINDOW.fs1, 110, 1.46, 1.79, lining);

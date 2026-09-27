@@ -5,7 +5,8 @@
  *  - motive-flow ejector pump in each tank sump (high-pressure fuel from the
  *    engine FDU returns to drive it), plus a motive-flow scavenge pump;
  *  - one electric boost pump per tank "during engine start, fuel transfer, and
- *    as activated by low fuel pressure";
+ *    as activated by low fuel pressure"; switch OFF / NORM / ON (CAE CJ-family
+ *    differences p.5-30: OFF de-energizes the pump, no automatic operation);
  *  - tank-to-tank transfer; vented surge tank near each tip; fuel heated by the
  *    oil heat exchanger (no anti-ice additive needed).
  *
@@ -30,7 +31,8 @@ export function createFuel(ctx: Pick<SimContext, 'vars'>): FuelSystem {
     const side = i === 1 ? 'l' : 'r';
     const xferFrom = i === 1 ? -1 : 1;
     return (
-      `elec.boost_${side}_powered && (${M2.boostSw(i)} == 1 || ${M2.fuelXfer} == ${xferFrom} ||` +
+      // OFF (-1) de-energizes the pump: no automatic start / transfer / low-pressure operation (CAE differences p.5-30).
+      `elec.boost_${side}_powered && ${M2.boostSw(i)} != -1 && (${M2.boostSw(i)} == 1 || ${M2.fuelXfer} == ${xferFrom} ||` +
       ` (fadec.eng${i}.start_state > 0 && fadec.eng${i}.start_state < 4) || fuel.ejector_${side}_lowpress)`
     );
   };

@@ -227,7 +227,24 @@ export const G3K = {
   gmcLight: (key: string) => `g3k.gmc.lt_${key.toLowerCase()}`,
   /** 1 while the GMC 710 is powered. */
   gmcPowered: 'g3k.gmc.powered',
+
+  // ---------------------------------------------------------------- GCU 275 PFD controller (optional, state/Gcu.ts)
+  /** PFD window opened from the GCU 275 keys: GCU_WINDOW code (0 none). */
+  gcuWindow: (s: number) => pfd(s, 'gcu_win'),
+  /** Window cursor: plan leg index (FPL / DTO) or item index (PROC); -1 none. */
+  gcuCursor: (s: number) => pfd(s, 'gcu_cur'),
+  /** 1 while the GCU FMS knob drives COM / NAV tuning (COM/NAV key) instead of the FMS windows. */
+  gcuComNav: (s: number) => pfd(s, 'gcu_comnav'),
+  /** 1 while the PFD inset map pointer (pan) is active (GCU RANGE knob push / joystick). */
+  insetPan: (s: number) => pfd(s, 'inset_pan'),
+  /** 1 while this side's crew member keys the microphone (push-to-talk; COM field shows TX). */
+  comTx: (side: number) => `g3k.audio${side}.tx`,
 } as const;
+
+/** GCU 275 PFD windows (G3K.gcuWindow). */
+export const GCU_WINDOW = { none: 0, fpl: 1, proc: 2, dto: 3 } as const;
+/** GCU 275 keys (G3K_EVENTS.gcuKey). */
+export type GcuKeyName = 'CLR' | 'ENT' | 'DTO' | 'FPL' | 'PROC' | 'COMNAV';
 
 /** EventBus command names the suite listens to (hardware controls in the cockpit emit these). */
 export const G3K_EVENTS = {
@@ -270,6 +287,17 @@ export const G3K_EVENTS = {
   casAck: 'g3k.cas.ack',
   /** GMC 710 keys (payload ignored): `g3k.gmc.key_hdg`, `key_nav`, `key_apr`, ... (see gmc/Gmc710.ts GMC_KEYS). */
   gmcKey: (key: string) => `g3k.gmc.key_${key.toLowerCase()}`,
+  // GCU 275 PFD controller (optional hardware, handled by state/Gcu.ts when an aircraft creates a GcuController).
+  /** GCU keys: `g3k.gcu<s>.key_clr`, `key_ent`, `key_dto`, `key_fpl`, `key_proc`, `key_comnav`. */
+  gcuKey: (s: number, key: GcuKeyName) => `g3k.gcu${s}.key_${key.toLowerCase()}`,
+  /** GCU dual FMS knob (clicks, `_inc` / `_dec` convention) and its push. */
+  gcuFmsOuter: (s: number) => `g3k.gcu${s}.fms_outer`,
+  gcuFmsInner: (s: number) => `g3k.gcu${s}.fms_inner`,
+  gcuFmsPush: (s: number) => `g3k.gcu${s}.fms_push`,
+  /** GCU RANGE knob push (inset map pointer on / off); the turn is `rangeTurn(s)`. */
+  rangePush: (s: number) => `g3k.range${s}.push`,
+  /** GCU RANGE knob joystick: payload { x, y } in -1..1 (pans the inset map pointer). */
+  gcuJoystick: (s: number) => `g3k.gcu${s}.joystick`,
 } as const;
 
 // ------------------------------------------------------------------ allocation-free var names

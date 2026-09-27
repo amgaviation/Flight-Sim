@@ -51,9 +51,12 @@ export function createHydraulics(ctx: Pick<SimContext, 'vars'>): HydraulicSystem
  * S&D15 §9.5 / §9.7: engine bleed air pressurizes and heats the cabin, defogs
  * the windows and anti-ices the engine inlets, pylon inlet ducts, wings and
  * windshields; the horizontal stabilizer boots use regulated 23 psi service
- * air. The vapor-cycle A/C (electric) cools. PRESS SOURCE selects which
- * engine(s) supply the cabin; EMER brings unconditioned bleed air directly
- * into the cabin (CJ family, EST).
+ * air. The vapor-cycle A/C (electric) cools. AIR SOURCE SELECT chooses which
+ * engine(s) supply the cabin (BOTH normally); EMER brings unconditioned bleed
+ * air directly into the cabin; FRESH AIR shuts both bleeds off the cabin and
+ * admits unpressurized ram air ("cabin will depressurize", CJ-family AFM smoke
+ * procedure). EST: FRESH AIR modelled as no pack inflow (the cabin leaks down to
+ * ambient); the ram-air ventilation itself is SCOPE.
  * Flows EST: M2 cabin ~ 7.5 m^3, total conditioned air 0.14 kg/s (18 lb/min).
  */
 export function createPneumatics(ctx: Pick<SimContext, 'vars'>): PneumaticSystem {
@@ -216,13 +219,15 @@ export function createLighting(ctx: Pick<SimContext, 'vars'>): LightingSystem {
     ],
     dimmers: [
       { id: 'panel', knob: M2.panelLt, power: 'elec.panel_lts_powered || elec.stby_lts_powered', test: `${M2.testSel} == ${TEST_SEL.annu}`, min: 0.05 },
-      { id: 'pedestal', knob: M2.pedestalLt, power: 'elec.panel_lts_powered', min: 0.05 },
+      // EST: the glareshield DIMMING group has no pedestal knob (photos): pedestal / tilt-panel backlighting follows PANELS.
+      { id: 'pedestal', knob: M2.panelLt, power: 'elec.panel_lts_powered', min: 0.05 },
       { id: 'flood', knob: M2.floodLt, power: 'elec.flood_lts_powered' },
       { id: 'map_l', knob: M2.mapLt(1), power: 'elec.flood_lts_powered' },
       { id: 'map_r', knob: M2.mapLt(2), power: 'elec.flood_lts_powered' },
       { id: 'cabin', knob: M2.cabinLt, power: 'elec.cabin_lts_powered' },
       // Annunciators (master caution/warning, korry lights) full bright by day, dimmed with the panel lights on (EST).
-      { id: 'annun', knob: `${M2.panelLt} > 0.02 ? 0.45 : 1`, power: 'elec.emer_powered', test: `${M2.testSel} == ${TEST_SEL.annu}` },
+      // PANELS DAY detent (knob at its stop, >= 0.98) restores full-bright annunciators (EST, glareshield DAY mark).
+      { id: 'annun', knob: `${M2.panelLt} > 0.02 && ${M2.panelLt} < 0.98 ? 0.45 : 1`, power: 'elec.emer_powered', test: `${M2.testSel} == ${TEST_SEL.annu}` },
     ],
   });
 }

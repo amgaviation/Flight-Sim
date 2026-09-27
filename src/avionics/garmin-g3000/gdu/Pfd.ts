@@ -32,7 +32,9 @@ import { MovingMap, MAP_GARMIN } from '../../common/draw/MovingMap';
 import { CasWindow, type CasStyle } from '../../common/draw/CasWindow';
 import { box, circle, clipRect, line, triangle, type Ctx2D } from '../../common/draw/context';
 import type { G3000System } from '../state/System';
-import { AOA_MODE, BRG_SOURCE, G3K, MINS_MODE, NAV_SOURCE, PFD_MAP, WIND_OPTION, vn } from '../vars';
+import { AOA_MODE, BRG_SOURCE, G3K, GCU_WINDOW, MINS_MODE, NAV_SOURCE, PFD_MAP, WIND_OPTION, vn } from '../vars';
+import { legIdent } from '../state/FplEditor';
+import { GCU_PROC_ITEMS } from '../state/Gcu';
 import { fmtClockHms, fmtCom, fmtDeg, fmtDist, fmtHms, fmtNav, fmtAdf, fmtSigned, fmtSquawk, join2 } from '../format';
 import { G3K_COLORS, G3K_PALETTE, GDU_H, PFD_DATABAR_H, SOFTKEY_H, TF, annunciation, dataBox, valueUnit } from './style';
 import { MapPane } from './panes/MapPane';
@@ -521,9 +523,73 @@ export class PfdRenderer {
     this.drawSensorWindows(ctx);
     this.drawDmeWindow(ctx);
     if (this.inset.visible) this.inset.draw(ctx);
+    this.drawGcuWindow(ctx);
     if (this.cas) this.cas.draw(ctx);
     this.drawDataBar(ctx);
     ctx.restore();
+  }
+
+  /**
+   * GCU 275 windows over the inset area (state/Gcu.ts; only aircraft with a GCU open them): active flight
+   * plan with cursor, Direct-To, procedures, and the COM tuning prompt (EST layout after the G1000-family
+   * PFD inset windows).
+   */
+  private drawGcuWindow(ctx: Ctx2D): void {
+    const v = this.v;
+    const s = this.side;
+    const win = v.get(vn(G3K.gcuWindow, s));
+    const comnav = v.get(vn(G3K.gcuComNav, s)) >= 0.5;
+    if ((win === GCU_WINDOW.none && !comnav) || this.L.rev) return;
+    const L = this.L;
+    const x = L.x0 + 2;
+    const w = 282;
+    const y = 402;
+    const bottom = L.bottom;
+    if (comnav) {
+      const r = v.get(vn(G3K.micSelect, s), s) >= 1.5 ? 2 : 1;
+      dataBox(ctx, x, bottom - 44, w, 40, 'rgba(10,12,14,0.92)');
+      TF.draw(ctx, r === 1 ? 'COM1 STBY' : 'COM2 STBY', x + 10, bottom - 24, 15, P.white, 'left', 'middle');
+      TF.draw(ctx, fmtCom(v.get(vn(NAV.comStandby, r)), v.get(G3K.comSpacing833) >= 0.5), x + w - 10, bottom - 24, 20, P.cyan, 'right', 'middle');
+    }
+    if (win === GCU_WINDOW.none) return;
+    const h = bottom - y - (comnav ? 48 : 4);
+    dataBox(ctx, x, y, w, h, 'rgba(10,12,14,0.92)');
+    const cur = v.get(vn(G3K.gcuCursor, s), -1);
+    const fms = this.sys.fms;
+    const legs = fms ? fms.plans.active.legs : null;
+    const active = fms ? fms.plans.active.activeLegIndex : -1;
+    const rowH = 24;
+    if (win === GCU_WINDOW.proc) {
+      TF.draw(ctx, 'PROCEDURES', x + w / 2, y + 16, 16, P.white, 'center', 'middle');
+      const ok = !!this.sys.fpl?.plan.approachProcedure;
+      for (let i = 0; i < GCU_PROC_ITEMS.length; i++) {
+        const ry = y + 44 + i * rowH;
+        if (i === cur) box(ctx, x + 6, ry - rowH / 2 + 2, w - 12, rowH - 4, P.cyan, '');
+        TF.draw(ctx, GCU_PROC_ITEMS[i], x + 12, ry, 13, i === cur ? '#000000' : ok ? P.white : P.grey, 'left', 'middle');
+      }
+      return;
+    }
+    TF.draw(ctx, win === GCU_WINDOW.dto ? 'DIRECT TO' : 'ACTIVE FLIGHT PLAN', x + w / 2, y + 16, 16, P.white, 'center', 'middle');
+    if (!legs || legs.length === 0) {
+      TF.draw(ctx, '_____', x + w / 2, y + 50, 18, P.cyan, 'center', 'middle');
+      return;
+    }
+    if (win === GCU_WINDOW.dto) {
+      const i = cur >= 0 && cur < legs.length ? cur : Math.max(0, active);
+      box(ctx, x + 60, y + 38, w - 120, 28, P.cyan, '');
+      TF.draw(ctx, legIdent(legs[i]), x + w / 2, y + 52, 20, '#000000', 'center', 'middle');
+      TF.draw(ctx, 'ENT: ACTIVATE', x + w / 2, y + 88, 13, P.white, 'center', 'middle');
+      return;
+    }
+    const rows = Math.max(1, Math.floor((h - 36) / rowH));
+    const anchor = cur >= 0 ? cur : Math.max(0, active);
+    const first = Math.max(0, Math.min(legs.length - rows, anchor - (rows >> 1)));
+    for (let k = 0; k < rows && first + k < legs.length; k++) {
+      const i = first + k;
+      const ry = y + 44 + k * rowH;
+      if (i === cur) box(ctx, x + 6, ry - rowH / 2 + 2, w - 12, rowH - 4, P.cyan, '');
+      TF.draw(ctx, legIdent(legs[i]), x + 14, ry, 16, i === cur ? '#000000' : i === active ? P.magenta : P.white, 'left', 'middle');
+    }
   }
 
   private drawFailBox(ctx: Ctx2D, x: number, y: number, text: string): void {
@@ -705,6 +771,8 @@ export class PfdRenderer {
     dataBox(ctx, x, 3, w, 48, 'rgba(10,12,14,0.85)');
     const r = mic >= 1 && mic <= 2 ? mic : 1;
     TF.draw(ctx, r === 1 ? 'COM1' : 'COM2', x + 10, 18, 16, P.white, 'left', 'middle');
+    // Transmitting (push-to-talk keyed on this side): TX beside the COM label (optional var, aircraft with PTT modelling).
+    if (v.get(vn(G3K.comTx, this.side)) >= 0.5) TF.draw(ctx, 'TX', x + 62, 18, 14, P.green, 'left', 'middle');
     TF.draw(ctx, fmtCom(v.get(vn(NAV.comActive, r)), v.get(G3K.comSpacing833) >= 0.5), x + w - 10, 18, 22, P.green, 'right', 'middle');
     const other = r === 1 ? 2 : 1;
     TF.draw(ctx, other === 1 ? 'COM1' : 'COM2', x + 10, 38, 14, P.grey, 'left', 'middle');

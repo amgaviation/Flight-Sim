@@ -9,14 +9,21 @@ import type { SimContext } from '../../../core/SimContext';
 import type { Subsystem } from '../../types';
 import { ENV, FDM, ICE, NAV } from '../../../core/vars';
 import { EdgeDetector, OffDelay } from '../../../systems/util';
-import { M2, TEST_SEL } from '../vars';
+import { G3K, vn } from '../../../avionics/garmin-g3000/vars';
+import { M2, M2_EVENTS, TEST_SEL } from '../vars';
 
 const DISPLAY_IDS = ['pfd1', 'mfd', 'pfd2', 'gtc1', 'gtc2'] as const;
+/** GDUs on the DISPLAYS dimmer; the GTCs (indices 3, 4) follow TOUCH CONTROLS. */
+const GTC_FIRST = 3;
 const DISPLAY_BRT = DISPLAY_IDS.map((d) => `display.${d}.brt`);
 /** GDU poor-cooling state (systems/avionicsHealth.ts): the GDU reduces power usage (dims). */
 const DISPLAY_HOT = DISPLAY_IDS.map((d) => `ac.m2.gdu_hot_${d}`);
 /** ESI-1000 internal battery endurance (s). EST: typical 1 h standby battery. */
 export const ESI_BATTERY_S = 3600;
+/** GTC SYSTEM TESTS selection returns to OFF after this time (s). EST: G3000 tests are timed, not held. */
+export const TEST_AUTO_OFF_S = 10;
+/** Cabin altitude valve drive per GTC CABIN UP / DN press (s). EST. */
+export const PRESS_MAN_PULSE_S = 1;
 
 export class M2Logic implements Subsystem {
   readonly name = 'm2.logic';
@@ -27,8 +34,20 @@ export class M2Logic implements Subsystem {
   private esiBattS = ESI_BATTERY_S;
   private tempManTarget = 22;
   private savedCom1 = 0;
+  private testS = 0;
+  private pressManS = 0;
+  private pressManDir = 0;
 
-  constructor(private readonly ctx: Pick<SimContext, 'vars' | 'events'>) {}
+  constructor(private readonly ctx: Pick<SimContext, 'vars' | 'events'>) {
+    // GTC ENVIRONMENTAL page manual cabin altitude buttons: each press drives the outflow valve for PRESS_MAN_PULSE_S.
+    ctx.events.on(M2_EVENTS.pressManUp, () => this.pressPulse(1));
+    ctx.events.on(M2_EVENTS.pressManDn, () => this.pressPulse(-1));
+  }
+
+  private pressPulse(dir: number): void {
+    this.pressManDir = dir;
+    this.pressManS = PRESS_MAN_PULSE_S;
+  }
 
   update(dt: number): void {
     const v = this.ctx.vars;
@@ -72,20 +91,49 @@ export class M2Logic implements Subsystem {
       v.set(NAV.comActive(1), 121.5);
     } else if (ec < 0 && this.savedCom1 > 0) v.set(NAV.comActive(1), this.savedCom1);
 
-    // ---- TAWS self test from the SYSTEM TEST knob.
-    if (this.tawsTestEdge.rising(v.get(M2.testSel) === TEST_SEL.taws)) this.ctx.events.emit('taws.test');
+    // ---- GTC SYSTEM TESTS: TAWS self test; the selection returns to OFF after TEST_AUTO_OFF_S (EST).
+    const testSel = v.get(M2.testSel);
+    if (this.tawsTestEdge.rising(testSel === TEST_SEL.taws)) this.ctx.events.emit('taws.test');
+    if (testSel !== TEST_SEL.off) {
+      this.testS += dt;
+      if (this.testS >= TEST_AUTO_OFF_S) {
+        v.set(M2.testSel, TEST_SEL.off);
+        this.testS = 0;
+      }
+    } else this.testS = 0;
+
+    // ---- Manual cabin altitude (GTC CABIN UP / DN buttons, MAN mode): timed valve drive pulses.
+    if (this.pressManS > 0) {
+      this.pressManS -= dt;
+      v.set(M2.pressManual, this.pressManS > 0 ? this.pressManDir : 0);
+    }
+
+    // ---- Push-to-talk (armrest switches): transmit on the side's selected mic COM (G3000 COM field shows TX).
+    //      SCOPE: no radio transmission / ATC model; the keyed state is published for the displays and audio.
+    for (const s of [1, 2]) v.set(vn(G3K.comTx, s), v.get(M2.ptt(s)) !== 0 && v.get(s === 1 ? 'elec.audio1_powered' : 'elec.audio2_powered') !== 0 ? 1 : 0);
+
+    // ---- DISPLAY REV PILOT: reverts PFD1 (PFD + EIS); with PFD1 failed the MFD takes the pilot's PFD instead.
+    //      SCOPE / EST: the M2 has no MFD reversion switch (two NORM / REV rotaries, photos); the MFD reversion
+    //      is selected through the pilot's switch when PFD1 is not available.
+    v.set(G3K.reversionSwitch('mfd'), v.get(G3K.reversionSwitch('pfd1')) >= 0.5 && v.get(vn(G3K.unitPowered, 'pfd1')) < 0.5 ? 1 : 0);
 
     // ---- Manual cabin temperature (MANUAL mode: spring-loaded COLD / HOT moves the mixing valve, EST 0.5 degC/s).
     if (v.get(M2.tempMode) === 1) this.tempManTarget = Math.max(5, Math.min(35, this.tempManTarget + v.get(M2.tempManual) * 0.5 * dt));
     v.set('ac.m2.temp_man_target', this.tempManTarget);
 
-    // ---- ESI-1000: main bus with its own backup battery (S&D21 §10.3.19).
-    const esiMain = v.get('elec.esi_powered') !== 0;
-    const esiWasOn = v.get(M2.esiPowered) !== 0;
-    if (esiMain) this.esiBattS = Math.min(ESI_BATTERY_S, this.esiBattS + dt * 0.5);
-    else if (esiWasOn) this.esiBattS = Math.max(0, this.esiBattS - dt);
-    v.set(M2.esiPowered, esiMain || (esiWasOn && this.esiBattS > 0) ? 1 : 0);
-    v.set('ac.m2.esi_on_batt', !esiMain && esiWasOn && this.esiBattS > 0 ? 1 : 0);
+    // ---- ESI-1000: main bus with its own backup battery (S&D21 §10.3.19), through the STBY FLT DISPLAY switch
+    //      (M2 flows: TEST / ON before flight, OFF at shutdown). ON: bus power, battery when the bus fails; TEST:
+    //      runs from the battery and lights the STBY BATT test light; OFF: the instrument and its battery are off.
+    const sw = v.get(M2.stbyDispSw);
+    const bus = v.get('elec.esi_powered') !== 0;
+    const test = sw >= 1.5;
+    const esiMain = sw >= 0.5 && bus && !test;
+    const onBatt = sw >= 0.5 && (!bus || test) && this.esiBattS > 0;
+    if (onBatt) this.esiBattS = Math.max(0, this.esiBattS - dt);
+    else if (bus && sw >= 0.5) this.esiBattS = Math.min(ESI_BATTERY_S, this.esiBattS + dt * 0.5);
+    v.set(M2.esiPowered, esiMain || onBatt ? 1 : 0);
+    v.set('ac.m2.esi_on_batt', onBatt ? 1 : 0);
+    v.set(M2.stbyBattLight, onBatt ? 1 : 0);
   }
 
   reset(): void {
@@ -96,6 +144,8 @@ export class M2Logic implements Subsystem {
     this.emerCommEdge.reset(v.get(M2.emerComm) !== 0);
     this.tawsTestEdge.reset(v.get(M2.testSel) === TEST_SEL.taws);
     this.tempManTarget = 22;
+    this.testS = 0;
+    this.pressManS = 0;
   }
 }
 
@@ -118,15 +168,31 @@ export class M2LogicLate implements Subsystem {
     }
     // Airframe ice for the FDM: wing ice, plus tail ice at reduced weight (the FDM has one airframe ice value).
     v.set(ICE.airframe, Math.max(v.get(M2.iceWing), 0.7 * v.get(M2.iceTail)));
-    // Display brightness: DIM knob 0 = automatic (photocell on ambient light), else manual.
-    const knob = v.get(M2.displayDim);
+    // Display brightness (glareshield DIMMING group): DISPLAYS for the GDUs, TOUCH CONTROLS for the GTCs; each knob
+    // at 0 = automatic from the glareshield photocell (ambient light), else manual.
     const auto = 0.35 + 0.65 * Math.max(0, Math.min(1, v.get(ENV.ambientLight, 1)));
-    const brt = knob > 0.02 ? Math.max(0.1, knob) : auto;
-    for (let k = 0; k < DISPLAY_BRT.length; k++) v.set(DISPLAY_BRT[k], v.get(DISPLAY_HOT[k]) !== 0 ? brt * 0.6 : brt); // EST 60 % when hot
+    const gdu = v.get(M2.displayDim);
+    const gtc = v.get(M2.gtcDim);
+    const brtGdu = gdu > 0.02 ? Math.max(0.1, gdu) : auto;
+    const brtGtc = gtc > 0.02 ? Math.max(0.1, gtc) : auto;
+    for (let k = 0; k < DISPLAY_BRT.length; k++) {
+      const brt = k >= GTC_FIRST ? brtGtc : brtGdu;
+      v.set(DISPLAY_BRT[k], v.get(DISPLAY_HOT[k]) !== 0 ? brt * 0.6 : brt); // EST 60 % when hot
+    }
+    // Tilt-panel green status lights (EST mapping, labels not legible in the photos): valve open with adequate flow.
+    v.set('ac.m2.eai1_lt', annun && v.get(M2.engAiSw(1)) !== 0 && v.get('pneu.eai1_ok') > 0.8 ? 1 : 0);
+    v.set('ac.m2.eai2_lt', annun && v.get(M2.engAiSw(2)) !== 0 && v.get('pneu.eai2_ok') > 0.8 ? 1 : 0);
+    v.set('ac.m2.wai_lt', annun && v.get(M2.wingAiSw) !== 0 && v.get('pneu.wai_ok') > 0.8 ? 1 : 0);
+    v.set('ac.m2.ps_heat_lt', annun && v.get('elec.pitot_l_powered') !== 0 && v.get('elec.pitot_r_powered') !== 0 ? 1 : 0);
+    for (const i of [1, 2]) v.set(`ac.m2.ws_bleed${i}_lt`, annun && v.get(M2.wsBleedSw(i)) > 0 && v.get(`pneu.ws_${i === 1 ? 'l' : 'r'}_ok`) > 0.8 ? 1 : 0);
+    v.set('ac.m2.emer_comm_lt', annun && v.get(M2.emerComm) !== 0 ? 1 : 0);
+    v.set('ac.m2.elt_lt', annun && v.get(M2.eltSw) === 1 ? 1 : 0);
     // Minor tilt-panel indications.
     v.set('ac.m2.cvr_test_lt', v.get(M2.cvrTest) !== 0 && annun ? 1 : 0);
     v.set('ac.m2.elt_active', v.get(M2.eltSw) === 1 ? 1 : 0);
     v.set(M2.gearHornActive, v.get('gear.horn'));
+    // Gear handle knob lamp (red while any leg is in transit / unsafe; gear.red* include the gear lights test).
+    v.set('ac.m2.gear_unsafe_lt', v.get('gear.red0') + v.get('gear.red1') + v.get('gear.red2') > 0 ? 1 : 0);
     // Event marker (FDR/AReS event, S&D15 tilt panel): lamp while pressed. SCOPE: no recorder data is kept.
     v.set('ac.m2.event_marker_lt', v.get(M2.eventMarker) !== 0 && annun ? 1 : 0);
     // Windshield rain removal (S&D15 §9.7: W/S bleed air normally, mechanical rain doors in heavy rain).

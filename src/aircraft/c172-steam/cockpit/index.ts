@@ -134,6 +134,6 @@ export function buildSteamCockpit(ctx: SimContext, sys: C172SteamSystems, opts: 
 
   const build = b.build();
   // The six-pack sits low in the panel: look down a little more than the generic -8 deg.
-  build.eyePitchDeg = -11;
+  build.eyePitchDeg = -13; // whole six-pack plus the tach / ADF row on screen at 16:9
   return { build, systems: [] };
 }

@@ -185,22 +185,53 @@ describe('Citation M2 main flight deck controls', () => {
     onTick = null;
     rig.vars.set = set;
     // Inventory vars owned by the main deck (overhead / sidewall items: crew masks, CB panels; ground-menu items: doors, GPU).
+    // Hardware inventory (dossier §9). Functions the G3000 runs (ignition, system tests, pressurization mode / manual,
+    // A/C, cabin fan, temp select, defog, pax oxygen, pass safety, cabin lights, fuel transfer) are GTC controls:
+    // checked by the next test against the synoptic page definitions.
     const inventory = [
-      M2.battSw, M2.genSw(1), M2.genSw(2), M2.avionicsSw,
-      M2.startBtn(1), M2.startBtn(2), M2.startDiseng, M2.ignSw(1), M2.ignSw(2), M2.tla(1), M2.tla(2),
-      M2.boostSw(1), M2.boostSw(2), M2.fuelXfer,
+      M2.battSw, M2.genSw(1), M2.genSw(2), M2.avionicsSw, M2.stbyDispSw,
+      M2.startBtn(1), M2.startBtn(2), M2.startDiseng, M2.tla(1), M2.tla(2),
+      M2.boostSw(1), M2.boostSw(2),
       M2.engFireBtn(1), M2.engFireBtn(2), M2.bottleBtn(1), M2.bottleBtn(2),
       M2.pitotStaticSw, M2.engAiSw(1), M2.engAiSw(2), M2.wingAiSw, M2.tailDeiceSw, M2.wsBleedSw(1), M2.wsBleedSw(2), M2.wsAlcoholSw,
-      M2.pressSource, M2.cabinDump, M2.pressMode, M2.pressManual, M2.airCondSw, M2.cabinFan, M2.tempMode, M2.tempSel, M2.tempManual, M2.airDistrib,
-      M2.paxOxy, M2.gearHandle, M2.gearHornSilence, M2.gearEmerRelease, M2.gearBlowdown, M2.antiskidSw,
+      M2.pressSource, M2.cabinDump, M2.tempMode, M2.tempManual,
+      M2.gearHandle, M2.gearHornSilence, M2.gearEmerRelease, M2.gearBlowdown, M2.antiskidSw,
       M2.parkBrake, M2.emerBrake, M2.controlLock, M2.rainDoor(1), M2.rainDoor(2),
       M2.flapHandle, M2.speedbrake, M2.pitchTrim, M2.aileronTrim, M2.rudderTrim, M2.yokeTrim(1), M2.yokeTrim(2),
-      M2.navLt, M2.antiColl, M2.landingLt, M2.taxiLt, M2.logoLt, M2.wingInspLt, M2.panelLt, M2.pedestalLt, M2.floodLt, M2.mapLt(1), M2.mapLt(2),
-      M2.displayDim, M2.paxSafety, M2.cabinLt, M2.emerComm, M2.eventMarker, M2.cvrTest, M2.eltSw, M2.testSel,
-      'g3k.rev_sw.pfd1', 'g3k.rev_sw.mfd', 'g3k.rev_sw.pfd2', 'adc3.baro_inhg', 'adc3.baro_std',
+      M2.navLt, M2.antiColl, M2.landingLt, M2.taxiLt, M2.logoLt, M2.wingInspLt, M2.panelLt, M2.floodLt,
+      M2.displayDim, M2.gtcDim, M2.emerComm, M2.eventMarker, M2.cvrTest, M2.eltSw, M2.emerLtsSw,
+      'g3k.rev_sw.pfd1', 'g3k.rev_sw.pfd2', 'adc3.baro_inhg', 'adc3.baro_std',
     ];
     const missing = inventory.filter((v) => !written.has(v));
     expect(missing).toEqual([]);
+  });
+
+  it('G3000-run functions are GTC Aircraft Systems controls, not hardware (M2-L17/L18/L19/L26, F26, F57)', () => {
+    const rig = makeM2({ state: 'ready_to_taxi' });
+    const ck = buildM2Cockpit(rig.ctx);
+    const gtcVars = new Set(rig.sys.suite.cfg.synoptics.flatMap((p) => (p.controls ?? []).map((c) => c.var)).filter((x): x is string => !!x));
+    const gtcEvents = new Set(rig.sys.suite.cfg.synoptics.flatMap((p) => (p.controls ?? []).map((c) => c.event)).filter((x): x is string => !!x));
+    for (const v of [M2.ignSw(1), M2.ignSw(2), M2.testSel, M2.pressMode, M2.airCondSw, M2.cabinFan, M2.tempSel, M2.airDistrib, M2.paxOxy, M2.paxSafety, M2.cabinLt, M2.fuelXfer]) {
+      expect(gtcVars.has(v), v).toBe(true);
+    }
+    expect(gtcEvents.has('ac.m2.press_man_up') && gtcEvents.has('ac.m2.press_man_dn')).toBe(true);
+    // No hardware control writes them any more.
+    const ids = ck.build.controls.map((c) => c.id);
+    for (const gone of ['m2.test_sel', 'm2.ign1', 'm2.ign2', 'm2.air_cond', 'm2.temp_sel', 'm2.cabin_fan', 'm2.air_distrib', 'm2.pax_oxy', 'm2.pax_safety', 'm2.cabin_lt', 'm2.press_mode', 'm2.press_manual', 'm2.fuel_xfer', 'm2.rev.mfd', 'm2.pedestal_lt', 'm2.gear.unlocked', 'm2.knee.l']) {
+      expect(ids.includes(gone), gone).toBe(false);
+    }
+    // GTC manual cabin altitude: one press drives the outflow valve for ~1 s.
+    rig.events.emit('ac.m2.press_man_up');
+    rig.run(0.5);
+    expect(rig.vars.get(M2.pressManual)).toBe(1);
+    rig.run(1);
+    expect(rig.vars.get(M2.pressManual)).toBe(0);
+    // SYSTEM TESTS selection returns to OFF by itself.
+    rig.vars.set(M2.testSel, 2);
+    rig.run(3);
+    expect(rig.vars.get('ac.m2.bottle1_lt')).toBe(1);
+    rig.run(9);
+    expect(rig.vars.get(M2.testSel)).toBe(0);
   });
 
   it('throttles: CUTOFF only through the IDLE gate, detents IDLE/CRU/CLB/TO, locked by the control lock', () => {
@@ -246,11 +277,29 @@ describe('Citation M2 main flight deck controls', () => {
     const ck = buildM2Cockpit(rig.ctx);
     rig.run(1);
     const b0 = rig.vars.get('adc3.baro_inhg', 29.92);
-    rig.vars.set('ac.m2.esi_b2', 1);
-    for (const s of ck.systems) s.update(1 / 60);
-    rig.vars.set('ac.m2.esi_b2', 0);
-    for (const s of ck.systems) s.update(1 / 60);
+    // '+' key (4th bezel key) steps the standby baro setting; 'S' toggles STD; 'M' opens / steps the menu.
+    const press = (i: number) => {
+      rig.vars.set(`ac.m2.esi_b${i}`, 1);
+      for (const s of ck.systems) s.update(1 / 60);
+      rig.vars.set(`ac.m2.esi_b${i}`, 0);
+      for (const s of ck.systems) s.update(1 / 60);
+    };
+    press(4);
     expect(rig.vars.get('adc3.baro_inhg')).toBeCloseTo(b0 + 0.01, 5);
+    press(2);
+    expect(rig.vars.get('adc3.baro_std')).toBe(1);
+    press(2);
+    expect(rig.vars.get('adc3.baro_std')).toBe(0);
+    press(1); // menu: BRIGHTNESS
+    expect(rig.vars.get('ac.m2.esi_menu')).toBe(1);
+    press(4);
+    expect(rig.vars.get('ac.m2.esi_brt_ofs')).toBeCloseTo(0.05, 5);
+    expect(rig.vars.get('adc3.baro_inhg')).toBeCloseTo(b0 + 0.01, 5); // +/- act on the menu item, not the baro
+    press(1); // BARO UNIT
+    press(4);
+    expect(rig.vars.get('ac.m2.esi_hpa')).toBe(1);
+    press(2); // S exits the menu
+    expect(rig.vars.get('ac.m2.esi_menu')).toBe(0);
     const seen: string[] = [];
     rig.events.on('g3k.gtc1.upper_push', () => seen.push('push'));
     rig.events.on('g3k.gtc1.upper_hold', () => seen.push('hold'));

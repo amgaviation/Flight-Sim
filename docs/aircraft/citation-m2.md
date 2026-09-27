@@ -357,12 +357,13 @@ photos). Vars: `src/aircraft/citation-m2/vars.ts` (`M2.*`), plus standard vars w
 - Design eye (pilot): FS 130 → body x ≈ +3.05 m, y −0.33 m, z −0.30 m (≈0.85 m above the cockpit
   floor); copilot mirrored. Seats adjustable; crew seat reference FS 135 (fdm payload station).
 - Main panel row (left→right): **Electrical power panel** (LH edge, ~140×220 mm) — **PFD1** (GDU 1400W
-  354×237 mm bezel, centre y −0.38 m) — **MFD** (centre) — **PFD2** (y +0.38 m); displays ~20 mm apart;
+  362×248 mm bezel, centre y −0.369 m) — **MFD** (centre) — **PFD2** (y +0.369 m); bezels ~7 mm apart
+  (fix round 1; earlier EST 354×237 mm / 20 mm);
   display centres ~0.12 m below the glareshield lip.
 - Glareshield (full width): LH/RH MASTER WARNING/CAUTION + ENG FIRE clusters outboard of the GMC,
-  **GMC 710** (330×70 mm) centred, **ESI-1000** (3.7 in, ~90×90 mm) left of the GMC above PFD1's inboard
-  edge (flyradius: "pilot's upper left side"), display control units (DCU: BARO, MINS, map RANGE knobs)
-  above each PFD, reversion and dimming controls centre, ice-detection lights at the windshield base.
+  **GMC 710** (241×42 mm) centred with the DIMMING / reversion panel above it, **ESI-1000** (landscape,
+  ~102×86 mm) left of the GMC above PFD1's inboard edge (flyradius: "pilot's upper left side"), GCU 275
+  display controllers above each PFD; ice-detection lights at the centre-post base (fix round 1, §9.2).
 - **Tilt panels** (S&D21 items 7/8): angled ~35° back below the display row; LH tilt panel below PFD1
   (~420×120 mm), RH tilt panel below PFD2 (~420×120 mm); landing-gear control module between them at the
   lower centre left of the pedestal top (~110×150 mm).
@@ -379,133 +380,143 @@ photos). Vars: `src/aircraft/citation-m2/vars.ts` (`M2.*`), plus standard vars w
 - Windshield: two-piece bird-resistant acrylic, bleed-air heated/defogged; centre post; lower edge
   ~FS 100 (x ≈ 3.8 m), upper edge ~FS 125, rake ~30° from horizontal (EST); side windows L/R.
 
-### 9.1 LH instrument panel — ELECTRICAL POWER panel (S&D15 §9.4 "LH power switch panel")
-| Control | Type | Positions / values | Var | Notes / position |
+### 9.1 LH instrument panel — registration plate, limitations placard, ELECTRICAL POWER panel
+Photos (pin1, listing 9525 #24, Jetcraft 525-0851): registration plate, black limitations placard, then the
+~100 × 110 mm ELECTRICAL POWER panel on the lower LH edge. RH edge: registration plate only (EST "N0000").
+| Control | Type | Positions / values | Var | Notes |
 |---|---|---|---|---|
-| BATTERY | 3-pos toggle (lever-lock out of BATT) | EMER −1 / OFF 0 / BATT 1 | `ac.m2.batt_sw` | top-left (20, 30) |
-| L GEN, R GEN | 3-pos toggle | RESET −1 (spring to OFF) / OFF 0 / GEN 1 | `ac.m2.gen1_sw`, `gen2_sw` | (60, 30), (100, 30) |
-| AVIONICS | 3-pos toggle | DISPATCH −1 / OFF 0 / ON 1 | `ac.m2.avionics_sw` | (20, 90) |
-| CB panels (sidewalls) | pull breakers | in 1 / out 0 | `cb.<load>` for every load in §6.1 | LH/RH sidewall |
+| BATTERY | 3-pos toggle (lever-lock out of BATT) | EMER −1 / OFF 0 / BATT 1 | `ac.m2.batt_sw` | |
+| AVIONICS | 3-pos toggle | DISPATCH −1 / OFF 0 / ON 1 | `ac.m2.avionics_sw` | |
+| STBY FLT DISPLAY | 3-pos toggle (TEST spring to ON) | OFF 0 / ON 1 / TEST 2 | `ac.m2.stby_disp_sw` | M2 flows prep "TEST/ON", shutdown "OFF"; ESI powered (bus, then its battery) only ON/TEST |
+| STBY BATT light | amber indicator | ESI running on its battery (TEST or bus loss) | `ac.m2.stby_batt_lt` | EST legend |
+| L GEN, R GEN | 3-pos toggle | RESET −1 (spring to OFF) / OFF 0 / GEN 1 | `ac.m2.gen1_sw`, `gen2_sw` | |
+| BATTERY DISCONNECT (LH sidewall above the armrest) | guarded 2-pos toggle | NORMAL 0 / DISC 1 | `ac.m2.batt_disc` | CAE differences p.5-23; relay NiCd ↔ HOT BATT, coil drains the battery in DISC |
+| CB panels (side consoles) | pull breakers | in 1 / out 0 | `cb.<load>` for every load in §6.1 | inclined 45° console tops, coloured collars (EST) |
 EIS shows VOLTS L/R, GEN AMPS, BATT A/V (no separate meters).
 
-### 9.2 Glareshield
-| Control | Type | Var / event | Position |
+### 9.2 Glareshield (fix round 1 layout; photos pin1 / Skies 2017 / S&D21 Fig 3; Garmin unit images)
+Left → right: MASTER WARNING (outboard) + MASTER CAUTION (inboard) at |y| 0.50 / 0.46 (mirror-symmetric,
+18 mm lenses); GCU 275 (LH); ESI-1000; ENG FIRE L over BOTTLE 1 ARMED; upper centre DIMMING / reversion panel
+over the GMC 710; ENG FIRE R over BOTTLE 2 ARMED; GCU 275 (RH); MC / MW. Brow lip centre: blue-ringed photocell
+fitting (EST display auto-dimming source).
+| Control | Type | Var / event | Notes |
 |---|---|---|---|
-| MASTER WARNING (L, R) | red lighted push button | emits `cas.ack_warning`; light `alert.master_warning` | outboard of each ENG FIRE |
-| MASTER CAUTION (L, R) | amber lighted push button | emits `cas.ack_caution`; light `alert.master_caution` | next to MASTER WARNING |
-| ENG FIRE L / R | red lighted alternate-action push button (guard EST) | `ac.m2.eng_fire1/2` (1 = pushed); light `ac.m2.eng_fire1_lt/_2` | inboard of the master lights |
-| BOTTLE 1 ARMED / BOTTLE 2 ARMED | white/amber lighted push buttons (momentary) | `ac.m2.bottle1/2`; light `ac.m2.bottle1_lt/_2` | beside the ENG FIRE buttons |
-| GMC 710 | keys HDG, NAV, APR, BC, AP, YD, FD, XFR, BANK, VS, FLC, ALT, VNAV, SPD; knobs HDG (push sync), CRS1/CRS2 (push centre), ALT (dual, push sync), SPD (push); NOSE UP/DN wheel | events per `g3000Controls()` (`g3k.gmc.*`), lights `g3k.gmc.lt_*` | centre |
-| DCU (L/R) | BARO knob (push STD), MINS knob (push mode), RANGE knob | `g3k.baro<s>.*`, `g3k.mins<s>.*`, `g3k.range<s>.turn` | above each PFD |
-| DISPLAY REVERSION (PFD1 / MFD / PFD2) | push buttons / switches | `g3k.rev_sw.pfd1/mfd/pfd2` | centre, below the GMC |
-| DIM (display dimming) | knob 0 = AUTO (photocell) … 1 | `ac.m2.display_dim` → `display.<id>.brt` | centre |
-| ESI-1000 | 4 softkeys + knob (baro, brightness, menu) | self-contained (ADC/AHRS index 3, `ac.m2.esi_powered`) | left of GMC |
-| Ice detection lights | (lit by WING INSP switch) | `light.wing` | windshield base |
+| MASTER WARNING (L, R) | red lighted push button | emits `cas.ack_warning`; light `alert.master_warning` | outboard |
+| MASTER CAUTION (L, R) | amber lighted push button | emits `cas.ack_caution`; light `alert.master_caution` | inboard |
+| ENG FIRE L / R | red lighted alternate-action push button under a clear hinged cover ("LIFT COVER and PUSH", 525AFM-06 p.3-9) | `ac.m2.eng_fire1/2`; light `ac.m2.eng_fire1_lt/_2` | 32 × 27 mm, large L / R over ENG FIRE |
+| BOTTLE 1 / 2 ARMED | lighted push buttons (momentary) | `ac.m2.bottle1/2`; light `ac.m2.bottle1_lt/_2` | directly below each ENG FIRE |
+| GCU 275 (L / R) | RANGE knob + joystick (push PAN), CLR, ENT, dual FMS knob (push ENT), D→, COM/NAV, FPL, PROC keys, BARO knob (push STD) | `g3k.range<s>.turn/push`, `g3k.gcu<s>.joystick`, `g3k.gcu<s>.key_*`, `g3k.gcu<s>.fms_*`, `g3k.baro<s>.*` | 140 × 51 mm; logic `avionics/garmin-g3000/state/Gcu.ts` (PFD windows `g3k.pfd<s>.gcu_win`) |
+| DISPLAY REV PILOT / COPILOT | 2-pos pointer rotaries | NORM 0 / REV 1 → `g3k.rev_sw.pfd1` / `pfd2` | no MFD switch: with PFD1 failed the pilot's REV reverts the MFD (SCOPE/EST, systems/logic.ts) |
+| FLOOD LTS | dimmer | `ac.m2.flood_lt` | DIMMING group |
+| PANELS (DAY at the stop) | dimmer | `ac.m2.panel_lt` (pedestal / tilt backlighting follows, EST); ≥ 0.98 = DAY → annunciators full bright | |
+| DISPLAYS | dimmer, 0 = AUTO (photocell) | `ac.m2.display_dim` → `display.pfd1/mfd/pfd2.brt` | |
+| TOUCH CONTROLS | dimmer, 0 = AUTO | `ac.m2.gtc_dim` → `display.gtc1/gtc2.brt` | |
+| GMC 710 | 241 × 42 mm, six sections: HDG/APR/NAV keys, HDG knob (PUSH SYNC), BC, CRS1 (PUSH CTR) · FD / BANK · XFR (arrows) / AP, YD · ALT, VS, ALT SEL knob, VNV · NOSE DN/UP wheel, FLC / SPD · CRS2 | events per `g3000Controls()` (`g3k.gmc.*`), lights `g3k.gmc.lt_*` | |
+| ESI-1000 | landscape 3.7 in (320 × 240), bezel ~102 × 86 mm, keys M / S / − / + on the bezel, light sensor | `ac.m2.esi_b1..4`; menu `ac.m2.esi_menu` (BRIGHTNESS, BARO UNIT); S = STD / exit; −/+ = baro (EST mapping) | `displays.ts` |
+| Compass / eye reference / ice-detection lights | on the windshield centre post base (compass on the glareshield top, eye-reference T above it flanked by two orange ice-detection lights lit by WING INSP `light.wing`) | | EST positions (S&D15 Fig III) |
 
 ### 9.3 Displays (GDU 1400W ×3)
-12 bezel softkeys each (`g3k.<gdu>.sk1..12`), SD card slots (no function). Map onto meshes from
-`sys.suite.displayList()` (ids `pfd1`, `mfd`, `pfd2`, `gtc1`, `gtc2`).
+362 × 248 mm bezels (SE Aerospace), centres 0.369 m apart. 12 bezel softkeys each (`g3k.<gdu>.sk1..12`), SD
+card slots (no function). Displays from `sys.suite.displayList()` (`pfd1`, `mfd`, `pfd2`, `gtc1`, `gtc2`).
 
-### 9.4 LH tilt panel (EST layout; items per S&D15 §10.2.C)
+### 9.4 LH tilt panel (one plane with the gear module, ~30° × 110 mm; names EST)
 | Group | Control | Type | Positions / values | Var |
 |---|---|---|---|---|
-| ICE PROTECTION | PITOT & STATIC | toggle | OFF 0 / ON 1 | `ac.m2.pitot_static_sw` |
-| | ENG ANTI-ICE L, R | toggles | OFF 0 / ON 1 | `ac.m2.eng_ai1_sw`, `eng_ai2_sw` |
-| | WING ANTI-ICE | toggle | OFF 0 / ON 1 | `ac.m2.wing_ai_sw` |
-| | TAIL DE-ICE | 3-pos (MANUAL spring) | MANUAL −1 / OFF 0 / AUTO 1 | `ac.m2.tail_deice_sw` |
-| W/S ANTI-ICE | W/S BLEED L, R | 3-pos toggles | OFF 0 / LOW 1 / HI 2 | `ac.m2.ws_bleed1_sw`, `ws_bleed2_sw` |
-| | W/S ALCOHOL | toggle (guarded EST) | OFF 0 / ON 1 | `ac.m2.ws_alcohol_sw` |
-| FUEL | BOOST L, R | toggles | NORM 0 / ON 1 | `ac.m2.boost1_sw`, `boost2_sw` |
-| | FUEL TRANSFER | rotary | L TANK −1 / OFF 0 / R TANK 1 | `ac.m2.fuel_xfer` |
-| LIGHTS | NAV | toggle | OFF / ON | `ac.m2.nav_lt` |
-| | ANTI-COLL | 3-pos | OFF 0 / BEACON 1 / ALL 2 | `ac.m2.anti_coll` |
-| | LANDING / RECOG | 3-pos | OFF 0 / PULSE 1 / ON 2 | `ac.m2.landing_lt` |
-| | TAXI | toggle | OFF / ON | `ac.m2.taxi_lt` |
-| | TAIL (logo) | toggle | OFF / ON | `ac.m2.logo_lt` |
-| | WING INSP | toggle | OFF / ON | `ac.m2.wing_insp_lt` |
-| | PANEL, PEDESTAL, FLOOD | rotary dimmers (OFF detent) | 0..1 | `ac.m2.panel_lt`, `pedestal_lt`, `flood_lt` |
-| | PASS SAFETY | 3-pos | OFF 0 / BELT 1 / BELT & NO SMOKE 2 | `ac.m2.pax_safety` |
-| TEST | SYSTEM TEST rotary (EST, CJ1+ "rotary test switch") | OFF 0 / FIRE WARN 1 / ANNU 2 / STALL WARN 3 / O'SPEED 4 / LDG GEAR 5 / TAWS 6 | `ac.m2.test_sel` |
+| PRESSURIZATION | CABIN DUMP | red-guarded toggle | NORM 0 / DUMP 1 | `ac.m2.cabin_dump` |
+| | AIR SOURCE SELECT | rotary | OFF 0 / L 1 / BOTH 3 / R 2 / EMER 4 / FRESH AIR 5 (EST) | `ac.m2.press_source` |
+| WINDSHIELD | W/S BLEED L, R | pointer rotaries (white arc) + green flow lights | OFF 0 / LOW 1 / HI 2 | `ac.m2.ws_bleed1_sw`, `ws_bleed2_sw`; lights `ac.m2.ws_bleed1_lt/2` |
+| | W/S ALCOHOL | guarded toggle | OFF 0 / ON 1 | `ac.m2.ws_alcohol_sw` |
+| ICE PROTECTION | P/S HEAT, ENG L, ENG R, WING | toggles + green lights | OFF 0 / ON 1 | `ac.m2.pitot_static_sw`, `eng_ai1/2_sw`, `wing_ai_sw`; lights `ac.m2.ps_heat_lt`, `eai1/2_lt`, `wai_lt` (EST mapping) |
+| | TAIL (de-ice) | 3-pos (MAN spring) | MAN −1 / OFF 0 / AUTO 1 | `ac.m2.tail_deice_sw` |
+| FUEL BOOST | L, R | 3-pos toggles | OFF −1 / NORM 0 / ON 1 (CAE p.5-30) | `ac.m2.boost1_sw`, `boost2_sw` |
+| TEMP (next to the gear module) | CONTROL | toggle | AUTO 0 / MAN 1 | `ac.m2.temp_mode` |
+| | MANUAL | 3-pos spring-centre (position dots) | COLD −1 / • 0 / HOT 1 | `ac.m2.temp_man` |
 
-### 9.5 Centre — LANDING GEAR control module
+### 9.5 LANDING GEAR control module (inboard end of the LH tilt face)
 | Control | Type | Values | Var |
 |---|---|---|---|
-| Gear handle (wheel knob) | 2-pos lever, locked DN on the ground (`gear.handle_lock`) | UP 0 / DN 1 | `ac.m2.gear_handle` |
-| 3 green / red UNLOCKED lights | indicators | — | `gear.green0..2`, `gear.red0..2` |
-| HORN SILENCE | push button (momentary) | — | `ac.m2.gear_horn_sil` (→ event `gear.horn_silence`) |
-| ANTISKID | toggle | OFF 0 / ON 1 | `ac.m2.antiskid_sw` |
+| Gear handle (translucent knob, lit red while in transit / unsafe, EST CJ family) | 2-pos lever, locked DN on the ground (`gear.handle_lock`) | UP 0 / DN 1 | `ac.m2.gear_handle`; lamp `ac.m2.gear_unsafe_lt` |
+| 3 green lights (triangle) | indicators | — | `gear.green0..2` |
+| ANTI-SKID | toggle (right edge) | OFF 0 / ON 1 | `ac.m2.antiskid_sw` |
+| HORN SIL | push button (momentary; location EST, not confirmed) | — | `ac.m2.gear_horn_sil` |
+| AUX GEAR CONTROL placard | static (EST wording) | — | — |
 
-### 9.6 RH tilt panel (EST layout)
+### 9.6 RH tilt panel (two rows; photos)
 | Group | Control | Type | Values | Var |
 |---|---|---|---|---|
-| PRESSURIZATION | PRESS SOURCE | rotary | OFF 0 / L 1 / R 2 / NORM 3 / EMER 4 | `ac.m2.press_source` |
-| | PRESS MODE | toggle | AUTO 0 / MAN 2 | `ac.m2.press_mode` |
-| | MANUAL (cabin UP/DN) | 3-pos spring-centre | DN −1 / 0 / UP 1 | `ac.m2.press_manual` |
-| | CABIN DUMP | guarded toggle | NORM 0 / DUMP 1 | `ac.m2.cabin_dump` |
-| ENVIRONMENTAL | AIR COND | toggle | OFF / ON | `ac.m2.air_cond_sw` |
-| | CABIN FAN | 3-pos | OFF 0 / LOW 1 / HIGH 2 | `ac.m2.cabin_fan` |
-| | TEMP CONTROL | toggle | AUTO 0 / MANUAL 1 | `ac.m2.temp_mode` |
-| | TEMP SELECT | rotary 0 COLD … 1 HOT | continuous | `ac.m2.temp_sel` |
-| | MANUAL TEMP | 3-pos spring-centre | COLD −1 / 0 / HOT 1 | `ac.m2.temp_man` |
-| | AIR DISTRIBUTION (defog diverter) | rotary 0 cabin … 1 defog | continuous | `ac.m2.air_distrib` |
-| OXYGEN | PASS OXY | rotary | CREW ONLY 0 / NORM 1 / MANUAL DROP 2 | `ac.m2.pax_oxy` |
-| MISC | EMER COMM | guarded toggle | NORM 0 / EMER 1 (COM1 121.5) | `ac.m2.emer_comm` |
-| | EVENT | push button | momentary | `ac.m2.event_marker` |
-| | CVR (TEST / light) | push button | momentary | `ac.m2.cvr_test` (light `ac.m2.cvr_test_lt`) |
-| | ELT | 3-pos (RESET spring) | RESET/TEST −1 / ARM 0 / ON 1 | `ac.m2.elt_sw` |
-| | HOURS | flight hour meter (display) | — | — |
-| | CABIN LIGHTS master | toggle | OFF / ON | `ac.m2.cabin_lt` |
-| | MAP L / R | rotary dimmers | 0..1 | `ac.m2.map_lt1`, `map_lt2` |
+| LIGHTS | NAV | toggle | OFF / ON | `ac.m2.nav_lt` |
+| | ANTI-COLL | 3-pos | OFF 0 / BCN 1 / ALL 2 | `ac.m2.anti_coll` |
+| | LDG / RECOG | 3-pos | OFF 0 / PULSE 1 / ON 2 | `ac.m2.landing_lt` |
+| | TAXI, TAIL, WING INSP | toggles | OFF / ON | `ac.m2.taxi_lt`, `logo_lt`, `wing_insp_lt` |
+| | EMER LTS | 3-pos | OFF 0 / ARMED 1 / ON 2 | `ac.m2.emer_lts_sw` (M2 flows; EST location) |
+| COMM / RECORDERS | EMER COMM | guarded toggle + green light | NORM 0 / EMER 1 (COM1 121.5) | `ac.m2.emer_comm`; light `ac.m2.emer_comm_lt` |
+| | ELT | 3-pos (RESET spring) + green light | RESET −1 / ARM 0 / ON 1 | `ac.m2.elt_sw`; light `ac.m2.elt_lt` |
+| | EVENT | round push button | momentary | `ac.m2.event_marker` |
+| | CVR TEST | push button | momentary | `ac.m2.cvr_test` |
+| | HOURS | flight hour meter | — | — |
+Map lights: a dimmer on each overhead reading-light fixture (`ac.m2.map_lt1/2`, EST).
 
-### 9.7 Pedestal
+### 9.7 Pedestal (silver shroud, black lower pedestal)
 | Control | Type | Values | Var |
 |---|---|---|---|
-| GTC 570 ×2 | touch screen + dual concentric knob, center knob, map knob/joystick | events per `g3000Controls()` | `g3k.gtc1.*`, `g3k.gtc2.*` |
-| ENGINE START L, R | lighted push buttons (momentary) | — | `ac.m2.start1`, `start2`; light `ac.m2.start1_lt/_2` |
-| START DISENGAGE | push button | momentary | `ac.m2.start_diseng` |
-| IGNITION L, R | toggles | NORM 0 / ON 1 | `ac.m2.ign1_sw`, `ign2_sw` |
-| Throttles L, R | levers with detents, CUTOFF gate (finger lift) | CUTOFF −0.1 / IDLE 0 / CRU 0.62 / CLB 0.82 / TO 1.0 | `ac.m2.tla1`, `tla2` |
-| TO/GA | button on the LH throttle | momentary | `input.toga` |
-| FLAPS handle | lever, detents | UP 0 / 15 1 / 35 2 / 60 GND 3 | `ac.m2.flap_handle` |
-| SPEED BRAKE handle | 2-pos lever | RETRACT 0 / EXTEND 1 | `ac.m2.speedbrake` |
-| Elevator trim wheel + indicator | wheel | units −1 ND … +1 NU (take-off band 0.05–0.55) | `ac.m2.pitch_trim` |
-| Rudder trim knob | rotary | −1 NL … +1 NR | `ac.m2.rud_trim` |
-| Aileron trim knob | rotary | −1 LWD … +1 RWD | `ac.m2.ail_trim` |
+| GTC 570 ×2 (115 × 181 mm) | touch screen; map knob/joystick, centre knob, dual knob on one line | events per `g3000Controls()` | `g3k.gtc1.*`, `g3k.gtc2.*` |
+| Phone tray with USB outlets | static | — | — |
+| ENGINE START L / DISENGAGE / R | three abutting square buttons on the sloped aft face of the shroud, legends above | momentary | `ac.m2.start1`, `start2` (lit `ac.m2.start1_lt/_2`), `start_diseng` |
+| Throttles L, R | short levers, horizontal grips; slots TO / CLB / CRU / IDLE / OFF | OFF −0.1 / IDLE 0 / CRU 0.62 / CLB 0.82 / TO 1.0 | `ac.m2.tla1`, `tla2` |
+| TO/GA | button on the LH throttle | momentary | `ap.toga` |
+| FLAPS handle | lever, gates 0° / T.O. & APPR 15° / LAND 35° / GROUND FLAPS 60° – GROUND USE ONLY | 0 / 1 / 2 / 3 | `ac.m2.flap_handle` |
+| SPEED BRAKE | small lever in a fore-aft slot, LH lower quadrant face | RETRACT 0 / EXTEND 1 | `ac.m2.speedbrake` |
+| Elevator trim wheel + indicator | wheel | −1 ND … +1 NU | `ac.m2.pitch_trim` |
+| Rudder trim knob, aileron trim knob | pointer knobs on the aft face of the black lower pedestal (rudder above aileron, EST) | −1 … +1 | `ac.m2.rud_trim`, `ail_trim` |
+No ignition switches on the pedestal (S&D15 §10.2.D; AOPA Mar 2014): see §9.10.
 
-### 9.8 Control wheels (both), pedals
+### 9.8 Control wheels (both), pedals, armrests
 | Control | Var / event |
 |---|---|
-| Pitch trim switch (split rocker) | `ac.m2.yoke_trim1/2` (−1 / 0 / +1); keyboard `input.pitch_trim_rate` |
-| AP/TRIM DISC | `input.ap_disc` |
-| CWS | event `ap.cws` { pressed } |
-| PTT / map light | audio (SCOPE) |
+| Pitch trim switch (outboard horn top) | `ac.m2.yoke_trim1/2` (−1 / 0 / +1); keyboard `input.pitch_trim_rate` |
+| AP/TRIM DISC (red, outboard horn) | event `ap.disc` |
+| CWS (white-ringed button on top of the inboard horn) | event `ap.cws` { pressed } |
+| Hub shroud with CITATION M2 plaque; hand microphone on each column | static (SCOPE: hand-mic key not modelled) |
+| PTT under each armrest | `ac.m2.ptt1/2` → `g3k.audio<n>.tx` (COM field shows TX; SCOPE: no transmission model) |
 | Rudder pedals + toe brakes | `input.yaw`, `input.brake_left/right` (nose steering ±20°) |
 
 ### 9.9 Below the panel / misc
+Handles on a narrow lip under the LH tilt panel (no knee panel; photos pin1 / S&D21 Fig 3 / Jetcraft).
 | Control | Type | Values | Var |
 |---|---|---|---|
+| AUX GEAR T-handle (red) | T-handle below the gear module | 0 / 1 | `ac.m2.gear_emer` |
+| GEAR BLOW DOWN (red) | pull knob | 0 / 1 | `ac.m2.gear_blowdown` |
 | PARKING BRAKE | pull handle | 0 / 1 | `ac.m2.park_brake` |
 | EMERGENCY BRAKE | pull handle (proportional) | 0..1 | `ac.m2.emer_brake` |
-| EMER GEAR RELEASE | T-handle | 0 / 1 | `ac.m2.gear_emer` |
-| GEAR BLOW DOWN | pull knob | 0 / 1 | `ac.m2.gear_blowdown` |
-| CONTROL LOCK | handle | 0 stowed / 1 engaged | `ac.m2.control_lock` |
+| CONTROL LOCK | handle below the pilot's panel | 0 stowed / 1 engaged | `ac.m2.control_lock` |
 | RAIN DOORS L / R | levers | 0 / 1 | `ac.m2.rain_door1/2` |
 | Crew O₂ masks | stowage doors / regulator | on 0/1; NORMAL 0 / 100 % 1 / EMER 2 | `ac.m2.mask1_on`, `mask1_mode` (…2) |
 | Doors (ground menu/exterior) | cabin, emergency exit, nose baggage L/R, tail baggage | 0 closed / 1 open | `ac.m2.door_<id>` |
 | GPU | ground-services menu | 0 / 1 | `ac.m2.gpu_connected` |
 
+### 9.10 GTC Aircraft Systems controls (G3000-run functions; AOPA Mar 2014, Twin & Turbine, S&D21 §10.3.2)
+| Page | Control | Values | Var / event |
+|---|---|---|---|
+| FUEL | L / R BOOST (mirror of the tilt switches), TRANSFER | OFF/NORM/ON; L TANK / OFF / R TANK | `ac.m2.boost1/2_sw`, `ac.m2.fuel_xfer` |
+| PRESSURIZATION / ECS | LDG ELEV, CABIN TEMP, TEMP MODE, A/C, CABIN FAN, DEFOG, PRESS MODE, CABIN UP / DN | … | `ac.m2.ldg_elev_ft`, `temp_sel`, `temp_mode`, `air_cond_sw`, `cabin_fan`, `air_distrib`, `press_mode`; events `ac.m2.press_man_up/dn` (1 s valve drive each) |
+| CABIN | PASS SAFETY, CABIN LTS, PASS OXY | OFF/BELT/BELT & NS; on/off; CREW ONLY/NORM/MAN DROP | `ac.m2.pax_safety`, `cabin_lt`, `pax_oxy` |
+| ENGINE | L / R IGNITION | NORM 0 / ON 1 | `ac.m2.ign1_sw`, `ign2_sw` (SCOPE: page layout EST) |
+| SYSTEM TESTS | TEST (cycle), FIRE WARN, ANNU, TAWS | OFF 0 / FIRE WARN 1 / ANNU 2 / STALL 3 / O'SPEED 4 / LDG GEAR 5 / TAWS 6; returns to OFF after 10 s (EST) | `ac.m2.test_sel` |
+
 ## 10. Normal procedures (abbreviated flow; `checklists.ts`)
 EST (CJ-family single-pilot flow; AFM Vol. 2 525NPD not public).
-1. **Preflight / cockpit preparation**: control lock off, parking brake set, throttles CUTOFF, gear
-   DN, CBs in, emergency gear/brake stowed, oxygen checked, PASS OXY NORM, BATTERY BATT (≥ 24 V),
-   SYSTEM TEST: FIRE WARN, ANNU (lamps), STALL, O'SPEED, TAWS; fuel quantity.
+1. **Preflight / cockpit preparation**: control lock off, parking brake set, throttles OFF, gear
+   DN, CBs in, emergency gear/brake stowed, oxygen checked, PASS OXY NORM (GTC), BATTERY DISCONNECT
+   BATT DISC → BATTERY BATT (no voltage) → BATTERY DISCONNECT NORM (≥ 24 V) (AFM cockpit inspection 6-8),
+   STBY FLT DISPLAY TEST/ON, EMER LIGHTS ARMED, system tests on the GTC (FIRE WARN, ANNU, STALL, O'SPEED,
+   TAWS); fuel quantity.
 2. **Before start**: doors closed, AVIONICS ON (or DISPATCH for planning), GEN switches GEN, boost NORM,
-   ignition NORM, beacon ON, PASS SAFETY BELT & NO SMOKE, flight plan/TOLD on the GTC.
+   ignition NORM (GTC ENGINE page), beacon ON, PASS SAFETY BELT & NO SMOKE, flight plan/TOLD on the GTC.
 3. **Engine start** (right first, EST): ENGINE START R → START R advisory, N2 rises on the starter;
    at 8–10 % N2 throttle IDLE → FADEC light-off (ITT rise within 10 s), starter cut-out ~45 % N2,
    stabilized idle ~52 % N2 / 25 % N1 (EST) in ~30 s; GEN OFF R clears. Repeat left (generator-assisted).
    Abort: START DISENGAGE / throttle CUTOFF (FADEC auto-aborts HOT/HUNG/NO LIGHT).
-4. **Before taxi**: flaps 15, trim T/O, PRESS SOURCE NORM, anti-skid ON, A/C as required, lights.
+4. **Before taxi**: flaps 15, trim T/O, AIR SOURCE SELECT BOTH, anti-skid ON, A/C as required, lights.
 5. **Taxi**: brakes, steering (pedals ±20°), instruments.
 6. **Before takeoff**: flaps 15 (or 0), speed brakes retracted, trims set, P/S heat ON, anti-ice as
    required (≤ 10 °C in visible moisture), XPDR ALT, landing lights ON, anti-coll ALL, CAS clear.
@@ -518,11 +529,13 @@ EST (CJ-family single-pilot flow; AFM Vol. 2 525NPD not public).
 12. **Landing**: AP off by DA/MDA (not an autoland system), throttles IDLE, ground flaps 60 (speed
     brakes deploy), brakes/anti-skid.
 13. **After landing / shutdown**: flaps up, speed brakes retract, P/S heat off, lights; AVIONICS OFF,
-    throttles CUTOFF, lights OFF, BATTERY OFF, control lock ON.
+    throttles OFF, lights OFF, STBY FLT DISPLAY OFF, EMERGENCY LIGHTS OFF, BATTERY OFF, control lock ON.
 
 ### 10.1 Key abnormal procedures (EST, CJ family)
-- **Engine fire**: throttle CUTOFF, ENG FIRE push, BOTTLE (lit) push; second bottle after 30 s if the
-  warning persists; single-engine procedures (tested).
+- **Engine fire**: throttle OFF, ENG FIRE lift cover and push, BOTTLE (lit) push, FUEL BOOST (affected)
+  OFF then NORM; second bottle after 30 s if the warning persists; single-engine procedures (tested).
+- **Environmental smoke**: masks 100 %, AIR SOURCE SELECT L, R, then FRESH AIR (cabin depressurizes).
+- **Fuel transfer**: FUEL BOOST OFF on the receiving side (525FM-15 p.2-11), TRANSFER from the heavy tank (GTC).
 - **Generator failure**: GEN RESET then GEN; if off line: single-generator, loads shed (tested).
 - **Dual generator failure**: shed loads, BATTERY EMER → emergency bus (PFD1, GTC1, COM/NAV 1, ESI).
 - **Hydraulic failure**: gear by emergency release + blow-down, flaps/speed brakes inoperative (tested).
@@ -611,9 +624,10 @@ compass, eye position reference indicator, two ventilation air outlets, oxygen
 system control, two oxygen masks, two reading lights, a floodlight; §11.1:
 reading lights, air outlets, sidewall map pockets, dual cupholders per crew
 seat, a 110 V outlet in the copilot sidewall; §14: cockpit fire extinguisher,
-emergency lighting battery pack. Not fitted, so not built: wipers (rain doors),
-electric windshield heat (bleed air), dome / storm lights, emergency-lighting
-switch (CAE CJ-family differences p. 5-17: none on the CJ/CJ1/CJ2), cockpit
+emergency lighting battery pack (EMER LTS switch OFF / ARMED / ON added in fix round 1: the M2 flows list
+"EMER LIGHTS SWITCH - ARMED / OFF"; CAE CJ-family differences p. 5-17 says the CJ/CJ1/CJ2 have none; the
+M2-specific source is followed). Not fitted, so not built: wipers (rain doors),
+electric windshield heat (bleed air), dome / storm lights, cockpit
 door, audio control panel (GMA 36 run from the GTCs, S&D15 §10.3.H).
 
 **Circuit breakers.** LH / RH sidewall panels (S&D15 §9.4) carry one
@@ -743,3 +757,27 @@ speed brakes on the ground only, GROUND FLAPS caution in flight; night detection
 - Panel legends in the glareshield's shadow remain dim by day (shared renderer fill light, §15).
 - The HF-leg nav-library gap in §15 is unchanged (the check ride still removes the hold-in-lieu).
 
+## 17. Fix round 1 — layout lens (M2-L01 … L44, F26/F47/F52/F57/F60, PROC-05/11/12/15/16)
+- **Glareshield**: GCU 275 ×2 replace the 3-knob DCUs (MINS knob removed; minimums on the GTC PFD page);
+  upper centre DIMMING / reversion panel above the GMC 710 (two NORM/REV rotaries, FLOOD LTS / PANELS with DAY /
+  DISPLAYS / TOUCH CONTROLS); GMC 710 re-laid out in its six sections at 241 × 42 mm with PUSH SYNC / PUSH CTR;
+  ENG FIRE (32 × 27 mm, clear flip cover) stacked over BOTTLE ARMED; MW outboard / MC inboard on both sides;
+  landscape ESI-1000 with M / S / − / + bezel keys and a menu; photocell fitting at the brow centre.
+- **Centre post**: compass on the glareshield top at the post base, eye-reference T above it flanked by the
+  orange ice-detection lights; the "Overhead" view became "Compass / centre post".
+- **Shell**: hood lofted as a plan-view arc clamped to the lining; main, glare and tilt panel plates follow the
+  lining (fit.ts); light grey centre post / pillars / header, lighter headliner; four low-intensity brow floods.
+- **Instrument panel**: GDU bezels 362 × 248 mm at 0.369 m; ELECTRICAL POWER panel 100 × 110 mm (with STBY FLT
+  DISPLAY) under the registration plate and limitations placard; RH edge registration plate only.
+- **Tilt panels**: ~30° / 110 mm band, gear module coplanar with a seam; controls per §9.4–9.6 with green
+  status lights; hardware duplicates of G3000 functions moved to GTC pages (§9.10); handles on a lip under the
+  LH tilt panel (knee panel removed).
+- **Pedestal**: silver shroud / black lower pedestal, GTC 570 at 115 × 181 mm with a phone tray and USB,
+  ENGINE START row with engraved legends, OFF / flap / speed-brake legends per the quadrant photo, short levers
+  with horizontal grips, trim knobs on the lower pedestal aft face; no ignition switches.
+- **Systems**: STBY FLT DISPLAY OFF/ON/TEST, BATTERY DISCONNECT relay, FUEL BOOST OFF, AIR SOURCE BOTH /
+  FRESH AIR, EMER LTS OFF/ARMED/ON, TOUCH CONTROLS dimmer, PTT → COM TX, gear-handle lamp, GTC SYSTEM TESTS /
+  ENGINE / CABIN pages. Tests: `tests/aircraft/citation-m2/fixround1.test.ts`, `cockpit-main/controls.test.ts`.
+- **Open / EST**: exact M2 tilt-panel legends (no legible reference found); HORN SILENCE location; the
+  shared bizjet yoke geometry (horn height) and the seat's inboard armrests over the aft pedestal are shared-library
+  shapes, not changed; GCU 275 key logic follows G1000-family practice (pilot's guide not public).

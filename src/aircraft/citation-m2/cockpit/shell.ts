@@ -5,14 +5,16 @@
  * fuselage profile (exterior.ts M2_FUSELAGE) inset by the skin/lining
  * thickness, so the window openings coincide with the exterior glazing.
  *
- * Finish (S&D15 §14 / Figure III photograph): dark grey glareshield
- * (crackle), charcoal panel, light greige sidewall and headliner linings,
- * dark carpet, light leather crew seats.
+ * Finish (S&D15 §14 / Figure III and S&D21 Figure 3 photographs): black
+ * glareshield (crackle), charcoal panel, light greige sidewall and headliner
+ * linings; the windshield centre post, A-pillars and header trim are the same
+ * light grey / beige as the lining (only the glareshield and lower panels are
+ * black); dark carpet, light leather crew seats.
  */
 import * as THREE from 'three';
 import type { CockpitBuilder } from '../../../cockpit/CockpitBuilder';
 import { bl } from '../../../cockpit/frame';
-import { glareshieldGeometry, floorGeometry } from '../../../cockpit/geometry/structure';
+import { floorGeometry } from '../../../cockpit/geometry/structure';
 import { roundedBox, transform, merge } from '../../../cockpit/geometry/primitives';
 import {
   M2_FUSELAGE,
@@ -27,6 +29,7 @@ import {
   SIDE_WIN_SILL_T,
 } from '../exterior';
 import { FLOOR_AFT_X, FLOOR_Z, GLARE, SEAT } from './layout';
+import { hoodGeometry } from './fit';
 
 /** Lining inset from the outer skin (m): skin, frames and insulation (EST). */
 const INSET = 0.045;
@@ -36,8 +39,8 @@ export function buildShell(b: CockpitBuilder): void {
   const mats = b.env.materials;
   const P = M2_FUSELAGE;
   const wall = mats.custom('plastic', '#9d978c', 0.75); // EST: greige lining (photograph)
-  const head = mats.get('headliner');
-  const frame = mats.custom('plastic', '#2a2b2d', 0.6); // dark window frames / trim
+  const head = mats.custom('plastic', '#b3ada2', 0.8); // EST: light greige headliner (photographs; the stock tint read olive in shadow)
+  const frame = mats.custom('plastic', '#a9a397', 0.65); // light grey / beige post, pillar and header trim (M2-L38)
   const lower = mats.custom('plastic', '#3a3b3d', 0.7); // lower sidewall / kick panels
   const inward = { inset: INSET, inward: true };
   const add = (g: THREE.BufferGeometry, m: THREE.Material, name: string, occluder = true) => {
@@ -113,10 +116,9 @@ export function buildShell(b: CockpitBuilder): void {
     m.position.copy(bl(FLOOR_AFT_X + 0.02, 0, FLOOR_Z));
   }
 
-  // Glareshield hood (black crackle, S&D photograph): brow over the glareshield panel, drooping toward the windshield.
-  const gs = add(glareshieldGeometry(GLARE.width, GLARE.depth, 0.02, 0.035, 0.09), mats.get('glareshield'), 'glareshield');
-  gs.position.copy(bl(GLARE.browX, 0, GLARE.browZ));
-  gs.rotation.x = (GLARE.pitchDeg * Math.PI) / 180;
+  // Glareshield hood (black crackle): a plan-view arc, deepest at the centre, drooping forward to the windshield
+  // base and clamped to the lining so it runs into the side-window posts (fit.ts, M2-L12).
+  add(hoodGeometry({ browX: GLARE.browX, browZ: GLARE.browZ, halfSpan: GLARE.width / 2 + 0.05, arc: 0.07, lip: 0.014, slopeDeg: -GLARE.pitchDeg }), mats.get('glareshield'), 'glareshield');
 
   // Crew seats (bizjet style, sunk so the cushion is 0.36 m above the floor; EST photograph: light leather / sheepskin).
   for (const s of [-1, 1]) b.seat('bizjet', [SEAT.x, s * SEAT.y, SEAT.z]);

@@ -22,7 +22,7 @@
 import { describe, expect, it } from 'vitest';
 import { alongTrackNm, crossTrackNm, destinationPoint, distanceNm, initialBearing } from '../../../../src/core/geo';
 import { AP, ENG, FDM, INPUT, NAV, SURF } from '../../../../src/core/vars';
-import { C172, MAG } from '../../../../src/aircraft/c172s-common/vars';
+import { ANN, C172, MAG } from '../../../../src/aircraft/c172s-common/vars';
 import { EV, KAP, KLN, KMA, KT, KX, ST } from '../../../../src/aircraft/c172-steam/vars';
 import { CDI1_RECEIVER } from '../../../../src/aircraft/c172-steam/systems';
 import { NavDatabaseImpl } from '../../../../src/nav/NavDatabase';
@@ -181,7 +181,8 @@ describe.runIf(LONG)('Cessna 172S steam (NAV II, KAP 140) check ride (KICT 01L -
       v.set(C172.masterAlt, 1);
       v.set(C172.beacon, 1);
       r.run(1);
-      expect(v.get('ac.c172s.ann_low_vac')).toBeGreaterThan(0.5); // LOW VACUUM with the engine stopped
+      expect(v.get(ANN.vacL)).toBe(1); // L VAC R annunciator lit with the engine (pumps) stopped
+      expect(v.get(ANN.vacR)).toBe(1);
       v.set(C172.fuelPump, 1); // prime: pump ON, mixture rich 3-5 s, then cutoff, pump OFF
       v.set(C172.mixture, 1);
       r.run(4);
@@ -244,8 +245,8 @@ describe.runIf(LONG)('Cessna 172S steam (NAV II, KAP 140) check ride (KICT 01L -
       const locCrs = Math.round(rw19.ils!.courseTrue - magVar);
       v.set(NAV.obs(CDI1_RECEIVER), locCrs); // KI 209A OBS to the localizer course
       v.set(AP.selHeading, Math.round(rw01.headingTrue - magVar)); // heading bug to the runway heading
-      knobTo(r, EV.kapAltOuter, () => Math.round(v.get(AP.selAltitude) / 1000), 3, 1);
-      knobTo(r, EV.kapAltInner, () => Math.round((v.get(AP.selAltitude) % 1000) / 100), 5, 1);
+      knobTo(r, EV.kapAltOuter, () => Math.floor(v.get(AP.selAltitude) / 1000), 3, 1);
+      knobTo(r, EV.kapAltInner, () => v.get(AP.selAltitude), 3500, 100);
       expect(v.get(AP.selAltitude)).toBe(3500);
       squawk(r, '4521');
       expect(v.get(KT.display)).toBe(4521);
@@ -420,7 +421,8 @@ describe.runIf(LONG)('Cessna 172S steam (NAV II, KAP 140) check ride (KICT 01L -
       kap('apr');
       log(r, 'APR');
       expect(r.sys.afcs.lat).toBe('HDG'); // HDG flies the intercept while APR is armed
-      expect(v.getString(AP.lateralArmed)).toBe('LOC');
+      expect(r.sys.afcs.latArmed).toBe('LOC');
+      expect(v.getString(AP.lateralArmed)).toBe('APR ARM'); // KAP 140 display: APR with ARM (Supplement 15 Fig 1)
 
       // ================================================================ 9. coupled ILS: APR (LOC), GS; flaps 10, 90 KIAS
       let locT = NaN;
@@ -440,7 +442,7 @@ describe.runIf(LONG)('Cessna 172S steam (NAV II, KAP 140) check ride (KICT 01L -
         }
         if (isNaN(gsT) && vert === 'GS') {
           gsT = r.t();
-          knobTo(r, EV.kapAltOuter, () => Math.round(v.get(AP.selAltitude) / 1000), 3, 1); // missed approach altitude
+          knobTo(r, EV.kapAltOuter, () => Math.floor(v.get(AP.selAltitude) / 1000), 3, 1); // missed approach altitude
         }
         if (!isNaN(gsT) && agl() > 400 && r.t() > gsT + 30) {
           maxLoc = Math.max(maxLoc, Math.abs(v.get(NAV.cdi(1))));

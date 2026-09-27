@@ -1,76 +1,83 @@
 /**
- * Citation M2 tilt panels, landing gear control module and the controls
+ * Citation M2 tilt panels, landing gear control module and the handles
  * beneath the instrument panel.
  *
  * S&D15 §10.2.C "Installed on Tilt Panel (left to right)": pressurization
  * controls, ice protection controls, windshield anti-ice controls, fuel
  * controls, manual temp controls, landing gear control module, lighting
  * controls, emergency comm switch, event marker, cockpit voice recorder
- * controller, flight hour meter, ELT remote switch. The M2 documents do not
- * publish the switch faces; names, positions and values follow the dossier
- * inventory (docs/aircraft/citation-m2.md §9.4-9.6, EST CJ family). The
- * controls the S&D does not list on the tilt panel (SYSTEM TEST rotary,
- * cabin fan / air distribution, PASS OXY, cabin lights) are placed with the
- * nearest listed group (EST).
+ * controller, flight hour meter, ELT remote switch.
+ *
+ * Layout (M2-L17..L25, EST from photographs pin1, Skies 2017, Jetcraft
+ * 525-0851, listing 9525 #24 and S&D21 Fig 3; the M2 documents do not publish
+ * the switch faces, so names are EST until confirmed against a legible
+ * reference):
+ *  - LH tilt panel (one plane with the gear module, joined by a seam; ~30 deg,
+ *    ~110 mm band): outboard a red-guarded CABIN DUMP and the AIR SOURCE
+ *    SELECT rotary; the two W/S BLEED rotaries (white arc scales) with green
+ *    flow lights and the guarded W/S ALCOHOL; the ICE PROTECTION toggles with
+ *    green status lights; FUEL BOOST L / R (OFF / NORM / ON); next to the gear
+ *    module only the two manual-temperature switches (TEMP CONTROL AUTO / MAN
+ *    and the spring-loaded COLD / HOT with position dots).
+ *    Functions the G3000 runs (AOPA Mar 2014 / Twin & Turbine: pressurization,
+ *    air conditioning, system tests, ignition, interior lights) are on the GTC
+ *    Aircraft Systems pages (systems/eis.ts), not duplicated as hardware.
+ *  - Gear module: three green lights in a triangle beside the gear handle,
+ *    whose translucent knob lights red while the gear is in transit / unsafe
+ *    (EST CJ family), the ANTI-SKID switch at the right edge and the AUX GEAR
+ *    CONTROL placard.
+ *  - RH tilt panel: two rows of toggles (exterior lights, EMER LTS), EMER COMM
+ *    (guarded), ELT, EVENT push button, CVR TEST, flight hour meter, green
+ *    status lights. The dimmers are on the glareshield DIMMING group.
+ *
  * S&D15 §10.2.E "Installed beneath the instrument panel": emergency brake
  * handle, parking brake handle, emergency gear release, control locks, rain
- * removal levers.
+ * removal levers. Photos: the red handles protrude from just below the LH
+ * tilt panel / gear module lower edge (no separate knee panel).
  */
 import type { CockpitBuilder, Panel } from '../../../cockpit/CockpitBuilder';
-import { AnnunciatorLight, GearHandle, GuardedSwitch, PushButton, PushPullKnob, RotaryKnob, SelectorKnob, TBarHandle, ToggleSwitch } from '../../../cockpit/controls';
+import { AnnunciatorLight, GearHandle, GuardedSwitch, PushButton, PushPullKnob, SelectorKnob, TBarHandle, ToggleSwitch } from '../../../cockpit/controls';
 import type { CockpitDisplay } from '../../../cockpit/types';
-import { M2, TEST_SEL } from '../vars';
-import { GEAR_MODULE, MAIN, TILT, downFace } from './layout';
+import { M2, PRESS_SRC } from '../vars';
+import { TILT, downFace } from './layout';
 import { NullDisplay } from './panels';
+import { fittedPlate } from './fit';
 
 type Env = CockpitBuilder['env'];
 
+/** Tilt panel spanning body y0..y1 (invisible frame + plate clipped to the lining). */
 function tiltPanel(b: CockpitBuilder, name: string, y0: number, y1: number): Panel {
   const [cx, cz] = downFace(TILT.topX, TILT.topZ, TILT.tiltDeg, TILT.height / 2);
-  return b.panel({ name, center_m: [cx, (y0 + y1) / 2, cz], facing: 'aft', tiltDeg: TILT.tiltDeg, width: y1 - y0, height: TILT.height, origin: 'top-left', screws: { kind: 'dzus', diameter: 0.006, inset: 0.006, pitch: 0.3 }, material: 'panel' });
+  const cy = (y0 + y1) / 2;
+  const p = b.panel({ name, center_m: [cx, cy, cz], facing: 'aft', tiltDeg: TILT.tiltDeg, width: y1 - y0, height: TILT.height, origin: 'top-left', screws: false, invisible: true });
+  fittedPlate(b, p, { topX: TILT.topX, topZ: TILT.topZ, tiltDeg: TILT.tiltDeg, height: TILT.height, width: y1 - y0 }, { name, centerY: cy, y0, y1, material: 'panel' });
+  return p;
 }
 
 const tog = (env: Env, id: string, v: string, name: string, positions: string[], values?: number[], extra: Partial<ConstructorParameters<typeof ToggleSwitch>[1]> = {}) =>
-  new ToggleSwitch(env, { id, var: v, label: name, positions, values, labels: { name, positions: true, height: 0.0028 }, scale: 0.85, ...extra });
+  new ToggleSwitch(env, { id, var: v, label: name, positions, values, labels: { name, positions: true, height: 0.0021 }, scale: 0.75, ...extra });
 
-const dimmer = (env: Env, id: string, v: string, name: string) =>
-  new RotaryKnob(env, { id, label: name, cap: 'dimmer', diameter: 0.013, outer: { var: v, min: 0, max: 1, step: 0.05, angleRange: [-140, 140], format: (x) => (x <= 0.001 ? 'OFF' : `${Math.round(x * 100)} %`) } });
+/** Green status light (LED) beside a tilt-panel switch (M2-L20; EST mapping). */
+const green = (env: Env, id: string, label: string, v: string) =>
+  new AnnunciatorLight(env, { id, label, width: 0.0045, height: 0.0045, bezel: false, segments: [{ text: '', color: 'green', var: v }] });
 
 function bracket(p: Panel, title: string, x0: number, x1: number): void {
-  p.bracket(title, (x0 + x1) / 2, 0.011, x1 - x0, { height: 0.0028 });
+  p.bracket(title, (x0 + x1) / 2, 0.009, x1 - x0, { height: 0.0023 });
 }
+
+/** Tilt-panel face tilt/z helpers for the under-panel lip. */
+const TILT_BOTTOM = downFace(TILT.topX, TILT.topZ, TILT.tiltDeg, TILT.height);
 
 export function buildTiltPanels(b: CockpitBuilder, displays: Map<string, CockpitDisplay>): void {
   const env = b.env;
-  // ------------------------------------------------------------------ LH tilt panel
-  const L = tiltPanel(b, 'm2.tilt.l', TILT.left.y0, TILT.left.y1);
-  const r1 = 0.043;
-  const r2 = 0.106;
-  // PRESSURIZATION (S&D15 §9.5; CJ1+ S&D "air source selection, emergency cabin pressure dump, manual pressure control").
-  bracket(L, 'PRESSURIZATION', 0.006, 0.118);
-  L.add(
-    new SelectorKnob(env, {
-      id: 'm2.press_source',
-      var: M2.pressSource,
-      label: 'PRESS SOURCE',
-      cap: 'pointer',
-      diameter: 0.016,
-      labelHeight: 0.0022,
-      positions: [
-        { value: 0, label: 'OFF', angle: -80 },
-        { value: 1, label: 'L', angle: -40 },
-        { value: 2, label: 'R', angle: 0 },
-        { value: 3, label: 'NORM', angle: 40 },
-        { value: 4, label: 'EMER', angle: 80 },
-      ],
-      initial: 3,
-      title: 'SOURCE',
-    }),
-    0.033,
-    0.07,
-  );
-  L.add(tog(env, 'm2.press_mode', M2.pressMode, 'MODE', ['AUTO', 'MAN'], [0, 2]), 0.078, r1);
-  L.add(tog(env, 'm2.press_manual', M2.pressManual, 'MANUAL', ['DN', '', 'UP'], [-1, 0, 1], { initial: 1, springs: { 0: 1, 2: 1 } }), 0.104, r1);
+  // ------------------------------------------------------------------ LH tilt panel (with the gear module)
+  const LY0 = -0.74;
+  const LY1 = -0.165;
+  const L = tiltPanel(b, 'm2.tilt.l', LY0, LY1);
+  const r1 = 0.042;
+  const lt = 0.089; // green light row
+  // PRESSURIZATION: CABIN DUMP (red guard) and AIR SOURCE SELECT (CJ-family AFM: BOTH normally, FRESH AIR smoke).
+  bracket(L, 'PRESSURIZATION', 0.008, 0.08);
   L.add(
     new GuardedSwitch(env, {
       id: 'm2.cabin_dump',
@@ -78,112 +85,114 @@ export function buildTiltPanels(b: CockpitBuilder, displays: Map<string, Cockpit
       label: 'CABIN DUMP',
       positions: ['NORM', 'DUMP'],
       values: [0, 1],
-      scale: 0.85,
-      labels: { name: 'CABIN DUMP', positions: true, height: 0.0025 },
+      scale: 0.75,
+      labels: { name: 'DUMP', positions: true, height: 0.0021 },
       guard: { color: 'red', guardedPosition: 0, hinge: 'top' },
     }),
-    0.091,
-    r2 + 0.006,
+    0.022,
+    0.05,
   );
-  // ICE PROTECTION (S&D15 §9.7).
-  bracket(L, 'ICE PROTECTION', 0.124, 0.238);
-  L.add(tog(env, 'm2.pitot_static', M2.pitotStaticSw, 'PITOT & STATIC', ['OFF', 'ON']), 0.142, r1);
-  L.add(tog(env, 'm2.eng_ai1', M2.engAiSw(1), 'ENG L', ['OFF', 'ON']), 0.183, r1);
-  L.add(tog(env, 'm2.eng_ai2', M2.engAiSw(2), 'ENG R', ['OFF', 'ON']), 0.21, r1);
-  L.add(tog(env, 'm2.wing_ai', M2.wingAiSw, 'WING', ['OFF', 'ON']), 0.155, r2);
-  L.add(tog(env, 'm2.tail_deice', M2.tailDeiceSw, 'TAIL DE-ICE', ['MANUAL', 'OFF', 'AUTO'], [-1, 0, 1], { initial: 1, springs: { 0: 1 } }), 0.2, r2);
-  // WINDSHIELD ANTI-ICE: L / R bleed OFF / LOW / HI, pilot windshield alcohol back-up (guarded).
-  bracket(L, 'W/S ANTI-ICE', 0.244, 0.31);
-  L.add(tog(env, 'm2.ws_bleed1', M2.wsBleedSw(1), 'L', ['OFF', 'LOW', 'HI']), 0.26, r1);
-  L.add(tog(env, 'm2.ws_bleed2', M2.wsBleedSw(2), 'R', ['OFF', 'LOW', 'HI']), 0.292, r1);
+  L.add(
+    new SelectorKnob(env, {
+      id: 'm2.press_source',
+      var: M2.pressSource,
+      label: 'AIR SOURCE SELECT',
+      cap: 'pointer',
+      diameter: 0.014,
+      labelHeight: 0.0017,
+      labelRadius: 0.017,
+      positions: [
+        { value: PRESS_SRC.off, label: 'OFF', angle: -100 },
+        { value: PRESS_SRC.l, label: 'L', angle: -60 },
+        { value: PRESS_SRC.both, label: 'BOTH', angle: -20 },
+        { value: PRESS_SRC.r, label: 'R', angle: 20 },
+        { value: PRESS_SRC.emer, label: 'EMER', angle: 60 },
+        { value: PRESS_SRC.fresh, label: 'FRESH AIR', display: 'FRESH\nAIR', angle: 100 },
+      ],
+      initial: PRESS_SRC.both,
+    }),
+    0.056,
+    0.062,
+  );
+  L.label('AIR SOURCE', 0.056, 0.024, { height: 0.0018 });
+  // WINDSHIELD: L / R W/S BLEED rotary valves OFF / LOW / HI (white arc scales) with green flow lights; ALCOHOL (guarded).
+  bracket(L, 'WINDSHIELD', 0.086, 0.19);
+  for (const [i, x] of [
+    [1, 0.101],
+    [2, 0.135],
+  ] as const) {
+    L.add(
+      new SelectorKnob(env, {
+        id: `m2.ws_bleed${i}`,
+        var: M2.wsBleedSw(i),
+        label: `${i === 1 ? 'L' : 'R'} W/S BLEED`,
+        cap: 'pointer',
+        diameter: 0.013,
+        labelHeight: 0.0017,
+        labelRadius: 0.0155,
+        positions: [
+          { value: 0, label: 'OFF', angle: -60 },
+          { value: 1, label: 'LOW', angle: 0 },
+          { value: 2, label: 'HI', angle: 60 },
+        ],
+        initial: 0,
+      }),
+      x,
+      0.055,
+    );
+    L.label(i === 1 ? 'L' : 'R', x, 0.024, { height: 0.0021 });
+    L.add(green(env, `m2.ws_bleed${i}_lt`, `${i === 1 ? 'L' : 'R'} W/S BLEED FLOW`, `ac.m2.ws_bleed${i}_lt`), x, lt);
+  }
   L.add(
     new GuardedSwitch(env, {
       id: 'm2.ws_alcohol',
       var: M2.wsAlcoholSw,
       label: 'W/S ALCOHOL',
       positions: ['OFF', 'ON'],
-      scale: 0.85,
-      labels: { name: 'ALCOHOL', positions: true, height: 0.0025 },
+      scale: 0.75,
+      labels: { name: 'ALCOHOL', positions: true, height: 0.0021 },
       guard: { color: 'black', guardedPosition: 0 },
     }),
-    0.276,
-    r2 + 0.006,
+    0.171,
+    0.05,
   );
-  // FUEL (S&D15 §9.2): boost pumps NORM / ON, tank-to-tank transfer.
-  bracket(L, 'FUEL', 0.316, 0.378);
-  L.add(tog(env, 'm2.boost1', M2.boostSw(1), 'BOOST L', ['NORM', 'ON']), 0.33, r1);
-  L.add(tog(env, 'm2.boost2', M2.boostSw(2), 'BOOST R', ['NORM', 'ON']), 0.362, r1);
-  L.add(
-    new SelectorKnob(env, {
-      id: 'm2.fuel_xfer',
-      var: M2.fuelXfer,
-      label: 'FUEL TRANSFER',
-      cap: 'pointer',
-      diameter: 0.015,
-      labelHeight: 0.0022,
-      positions: [
-        { value: -1, label: 'L TANK', angle: -55 },
-        { value: 0, label: 'OFF', angle: 0 },
-        { value: 1, label: 'R TANK', angle: 55 },
-      ],
-      initial: 1,
-      title: 'TRANSFER',
-    }),
-    0.347,
-    r2 + 0.004,
-  );
-  // MANUAL TEMP (S&D15 §9.5 digital temperature control; manual back-up).
-  bracket(L, 'TEMP', 0.384, 0.449);
-  L.add(tog(env, 'm2.temp_mode', M2.tempMode, 'CONTROL', ['AUTO', 'MAN']), 0.397, r1);
-  L.add(tog(env, 'm2.air_cond', M2.airCondSw, 'AIR COND', ['OFF', 'ON']), 0.43, r1);
-  L.add(
-    new RotaryKnob(env, {
-      id: 'm2.temp_sel',
-      label: 'TEMP SELECT',
-      cap: 'pointer',
-      diameter: 0.015,
-      outer: { var: M2.tempSel, min: 0, max: 1, step: 0.05, initial: 0.5, angleRange: [-135, 135], format: (x) => `${Math.round(16 + 12 * x)} C` },
-    }),
-    0.399,
-    r2,
-  );
-  L.label('COLD  HOT', 0.399, r2 + 0.016, { height: 0.0018, weight: 600 });
-  L.add(tog(env, 'm2.temp_man', M2.tempManual, 'MANUAL', ['COLD', '', 'HOT'], [-1, 0, 1], { initial: 1, springs: { 0: 1, 2: 1 }, orientation: 'horizontal' }), 0.432, r2);
+  // ICE PROTECTION (S&D15 §9.7) with green status lights (valve open and flow adequate / heaters powered).
+  bracket(L, 'ICE PROTECTION', 0.196, 0.338);
+  const ice: [string, string, string, string[], number[] | undefined, Partial<ConstructorParameters<typeof ToggleSwitch>[1]>, string | null][] = [
+    ['m2.pitot_static', M2.pitotStaticSw, 'P/S HEAT', ['OFF', 'ON'], undefined, {}, 'ac.m2.ps_heat_lt'],
+    ['m2.eng_ai1', M2.engAiSw(1), 'ENG L', ['OFF', 'ON'], undefined, {}, 'ac.m2.eai1_lt'],
+    ['m2.eng_ai2', M2.engAiSw(2), 'ENG R', ['OFF', 'ON'], undefined, {}, 'ac.m2.eai2_lt'],
+    ['m2.wing_ai', M2.wingAiSw, 'WING', ['OFF', 'ON'], undefined, {}, 'ac.m2.wai_lt'],
+    ['m2.tail_deice', M2.tailDeiceSw, 'TAIL', ['MAN', 'OFF', 'AUTO'], [-1, 0, 1], { initial: 1, springs: { 0: 1 } }, null],
+  ];
+  ice.forEach(([id, v, name, pos, vals, extra, lamp], k) => {
+    const x = 0.21 + k * 0.0285;
+    L.add(tog(env, id, v, name, pos, vals, extra), x, r1);
+    if (lamp) L.add(green(env, `${id}_lt`, `${name} ON`, lamp), x, lt);
+  });
+  // FUEL BOOST L / R: OFF / NORM / ON (CAE differences p.5-30). Transfer: GTC FUEL page (systems/eis.ts).
+  bracket(L, 'FUEL BOOST', 0.344, 0.394);
+  L.add(tog(env, 'm2.boost1', M2.boostSw(1), 'L', ['OFF', 'NORM', 'ON'], [-1, 0, 1], { initial: 1 }), 0.357, r1);
+  L.add(tog(env, 'm2.boost2', M2.boostSw(2), 'R', ['OFF', 'NORM', 'ON'], [-1, 0, 1], { initial: 1 }), 0.382, r1);
+  // MANUAL TEMP (S&D15 §10.2.C "Manual Temp Controls"): AUTO / MAN and the spring-loaded COLD / HOT (position dots).
+  bracket(L, 'TEMP', 0.4, 0.456);
+  L.add(tog(env, 'm2.temp_mode', M2.tempMode, 'CONTROL', ['AUTO', 'MAN']), 0.413, r1);
+  L.add(tog(env, 'm2.temp_man', M2.tempManual, 'MANUAL', ['COLD', '•', 'HOT'], [-1, 0, 1], { initial: 1, springs: { 0: 1, 2: 1 } }), 0.442, r1);
 
-  // ------------------------------------------------------------------ Landing gear control module (S&D15 §7, §10.2.C)
+  // ------------------------------------------------------------------ Landing gear control module (inboard end of the LH tilt face)
   {
-    const [top0x, top0z] = [MAIN.center[0] - (MAIN.height / 2) * Math.sin((MAIN.tiltDeg * Math.PI) / 180), MAIN.center[2] + (MAIN.height / 2) * Math.cos((MAIN.tiltDeg * Math.PI) / 180)];
-    const [cx, cz] = downFace(top0x, top0z, GEAR_MODULE.tiltDeg, GEAR_MODULE.height / 2);
-    const G = b.panel({
-      name: 'm2.gear',
-      center_m: [cx, (GEAR_MODULE.y0 + GEAR_MODULE.y1) / 2, cz],
-      facing: 'aft',
-      tiltDeg: GEAR_MODULE.tiltDeg,
-      width: GEAR_MODULE.y1 - GEAR_MODULE.y0,
-      height: GEAR_MODULE.height,
-      origin: 'top-left',
-      screws: { kind: 'dzus', diameter: 0.006, positions: [[0.006, 0.006], [0.109, 0.006], [0.006, 0.134], [0.109, 0.134]] },
-    });
-    G.label('LANDING GEAR', 0.0575, 0.011, { height: 0.0024 });
-    const legs: [string, number][] = [
-      ['NOSE', 0.0575],
-      ['LH', 0.03],
-      ['RH', 0.085],
+    const gx0 = 0.46; // seam
+    L.line(gx0, 0.002, gx0, TILT.height - 0.002, 0.0008, null);
+    const G = L.subPanel({ name: 'm2.gear', x: gx0 + 0.0575, y: TILT.height / 2, width: 0.115, height: TILT.height, origin: 'top-left', material: 'panel', screws: false, z: 0.0004 });
+    G.label('LANDING GEAR', 0.0575, 0.008, { height: 0.0022 });
+    const legs: [string, number, number][] = [
+      ['NOSE', 0.026, 0.028],
+      ['LH', 0.014, 0.046],
+      ['RH', 0.038, 0.046],
     ];
-    legs.forEach(([lab, x], i) => {
-      G.add(new AnnunciatorLight(env, { id: `m2.gear.green${i}`, label: `${lab} GEAR DOWN`, width: 0.016, height: 0.011, segments: [{ text: lab, color: 'green', var: `gear.green${i}`, style: 'field' }] }), x, i === 0 ? 0.026 : 0.041);
+    legs.forEach(([lab, x, y], i) => {
+      G.add(new AnnunciatorLight(env, { id: `m2.gear.green${i}`, label: `${lab} GEAR DOWN`, width: 0.011, height: 0.011, segments: [{ text: lab, color: 'green', var: `gear.green${i}`, style: 'field' }] }), x, y);
     });
-    G.add(
-      new AnnunciatorLight(env, {
-        id: 'm2.gear.unlocked',
-        label: 'GEAR UNLOCKED',
-        width: 0.03,
-        height: 0.009,
-        segments: [{ text: 'UNLOCKED', color: 'red', var: 'gear.red0', test: () => env.vars.get('gear.red0') + env.vars.get('gear.red1') + env.vars.get('gear.red2') > 0, style: 'field' }],
-      }),
-      0.0575,
-      0.056,
-    );
     G.add(
       new GearHandle(env, {
         id: 'm2.gear.handle',
@@ -192,145 +201,90 @@ export function buildTiltPanels(b: CockpitBuilder, displays: Map<string, Cockpit
         positions: ['DN', 'UP'],
         values: [1, 0],
         initial: 0,
-        length: 0.06,
+        length: 0.05,
         swingDeg: 26,
+        knobScale: 0.85,
+        // Translucent knob lit red while the gear is in transit / unsafe (EST: CJ family; lamp test via the gear lights test).
+        lights: [{ var: 'ac.m2.gear_unsafe_lt', color: 'red' }],
         // Down-lock solenoid: the handle cannot be raised with weight on wheels (gear.handle_lock).
         inhibit: (to, _from, v) => !(to === 1 && v.get('gear.handle_lock') !== 0),
       }),
-      0.036,
-      0.1,
+      0.066,
+      0.05,
     );
-    G.add(new PushButton(env, { id: 'm2.gear.horn_sil', var: M2.gearHornSilence, label: 'GEAR HORN SILENCE', style: 'round', width: 0.009, mode: 'momentary', engraved: '', name: 'HORN SIL' }), 0.088, 0.083);
-    G.add(tog(env, 'm2.antiskid', M2.antiskidSw, 'ANTISKID', ['OFF', 'ON'], undefined, { initial: 1 }), 0.088, 0.117);
+    G.add(tog(env, 'm2.antiskid', M2.antiskidSw, 'ANTI-SKID', ['OFF', 'ON'], undefined, { initial: 1 }), 0.103, 0.05);
+    // AUX GEAR CONTROL placard (EST wording, CJ-family emergency extension: T-handle, then blow-down).
+    G.placard({ text: 'AUX GEAR CONTROL\n1. PULL T-HANDLE\n2. PULL BLOW DOWN\n   IF NOT 3 GREEN', height: 0.0014, style: 'plate', align: 'left' }, 0.078, 0.094);
+    // SCOPE / EST: HORN SILENCE location not confirmed by a source; a small push button beside the gear lights.
+    G.add(new PushButton(env, { id: 'm2.gear.horn_sil', var: M2.gearHornSilence, label: 'GEAR HORN SILENCE', style: 'round', width: 0.007, mode: 'momentary', engraved: '', name: 'HORN SIL' }), 0.026, 0.075);
   }
 
   // ------------------------------------------------------------------ RH tilt panel
-  const R = tiltPanel(b, 'm2.tilt.r', TILT.right.y0, TILT.right.y1);
-  // LIGHTING (S&D21 §9.4: position, anti-collision strobes + beacon, landing / recognition with Pulselite, taxi, logo, wing inspection).
-  bracket(R, 'LIGHTS', 0.006, 0.24);
-  R.add(tog(env, 'm2.nav_lt', M2.navLt, 'NAV', ['OFF', 'ON']), 0.022, r1);
-  R.add(tog(env, 'm2.anti_coll', M2.antiColl, 'ANTI-COLL', ['OFF', 'BCN', 'ALL']), 0.052, r1);
-  R.add(tog(env, 'm2.landing_lt', M2.landingLt, 'LDG/RECOG', ['OFF', 'PULSE', 'ON']), 0.086, r1);
-  R.add(tog(env, 'm2.taxi_lt', M2.taxiLt, 'TAXI', ['OFF', 'ON']), 0.118, r1);
-  R.add(tog(env, 'm2.logo_lt', M2.logoLt, 'TAIL', ['OFF', 'ON']), 0.145, r1);
-  R.add(tog(env, 'm2.wing_insp', M2.wingInspLt, 'WING INSP', ['OFF', 'ON']), 0.175, r1);
-  R.add(tog(env, 'm2.pax_safety', M2.paxSafety, 'PASS SAFETY', ['OFF', 'BELT', 'BELT & NS']), 0.214, r1);
-  const dims: [string, string, string][] = [
-    ['m2.panel_lt', M2.panelLt, 'PANEL'],
-    ['m2.pedestal_lt', M2.pedestalLt, 'PED'],
-    ['m2.flood_lt', M2.floodLt, 'FLOOD'],
-    ['m2.map_lt1', M2.mapLt(1), 'MAP L'],
-    ['m2.map_lt2', M2.mapLt(2), 'MAP R'],
-  ];
-  dims.forEach(([id, v, name], i) => {
-    const x = 0.022 + i * 0.031;
-    R.add(dimmer(env, id, v, `${name} LIGHTS`), x, r2);
-    R.label(name, x, r2 - 0.014, { height: 0.0025 });
-  });
-  R.add(tog(env, 'm2.cabin_lt', M2.cabinLt, 'CABIN', ['OFF', 'ON']), 0.2, r2);
-  // SYSTEM TEST rotary (CJ1+ S&D "rotary test switch"; positions EST).
-  bracket(R, 'SYSTEM TEST', 0.248, 0.338);
-  R.add(
-    new SelectorKnob(env, {
-      id: 'm2.test_sel',
-      var: M2.testSel,
-      label: 'SYSTEM TEST',
-      cap: 'bar',
-      diameter: 0.017,
-      labelHeight: 0.0018,
-      positions: [
-        { value: TEST_SEL.off, label: 'OFF', angle: -90 },
-        { value: TEST_SEL.fire, label: 'FIRE WARN', display: 'FIRE\nWARN', angle: -60 },
-        { value: TEST_SEL.annu, label: 'ANNU', angle: -30 },
-        { value: TEST_SEL.stall, label: 'STALL WARN', display: 'STALL\nWARN', angle: 0 },
-        { value: TEST_SEL.overspeed, label: "O'SPEED", angle: 30 },
-        { value: TEST_SEL.gear, label: 'LDG GEAR', display: 'LDG\nGEAR', angle: 60 },
-        { value: TEST_SEL.taws, label: 'TAWS', angle: 90 },
-      ],
-      initial: 0,
-    }),
-    0.293,
-    0.083,
-  );
-  // CABIN AIR / OXYGEN.
-  bracket(R, 'CABIN', 0.346, 0.44);
-  R.add(
-    new SelectorKnob(env, {
-      id: 'm2.pax_oxy',
-      var: M2.paxOxy,
-      label: 'PASS OXY',
-      cap: 'pointer',
-      diameter: 0.015,
-      labelHeight: 0.0018,
-      positions: [
-        { value: 0, label: 'CREW ONLY', display: 'CREW\nONLY', angle: -50 },
-        { value: 1, label: 'NORM', angle: 0 },
-        { value: 2, label: 'MANUAL DROP', display: 'MAN\nDROP', angle: 50 },
-      ],
-      initial: 1,
-      title: 'PASS OXY',
-    }),
-    0.37,
-    0.083,
-  );
-  R.add(tog(env, 'm2.cabin_fan', M2.cabinFan, 'CAB FAN', ['OFF', 'LOW', 'HIGH']), 0.418, r1);
-  R.add(
-    new RotaryKnob(env, {
-      id: 'm2.air_distrib',
-      label: 'AIR DISTRIBUTION',
-      cap: 'pointer',
-      diameter: 0.014,
-      outer: { var: M2.airDistrib, min: 0, max: 1, step: 0.05, initial: 0.3, angleRange: [-120, 120], format: (x) => (x < 0.1 ? 'CABIN' : x > 0.9 ? 'DEFOG' : `${Math.round(x * 100)} % DEFOG`) },
-    }),
-    0.418,
-    r2 + 0.004,
-  );
-  R.label('CAB   DEFOG', 0.418, r2 + 0.02, { height: 0.0018, weight: 600 });
-  // EMER COMM, EVENT marker, CVR controller, flight hour meter, ELT remote switch (S&D15 §10.2.C / §10.3.G / §10.3.V).
-  bracket(R, 'COMM / RECORDERS', 0.448, 0.572);
+  const R = tiltPanel(b, 'm2.tilt.r', 0.165, 0.74);
+  const rA = 0.04;
+  const rB = 0.085;
+  // LIGHTS (S&D21 §9.4: position, anti-collision strobes + beacon, landing / recognition with Pulselite, taxi, logo,
+  // wing inspection); EMER LTS OFF / ARMED / ON (M2 flows; EST location).
+  bracket(R, 'LIGHTS', 0.012, 0.13);
+  R.add(tog(env, 'm2.nav_lt', M2.navLt, 'NAV', ['OFF', 'ON']), 0.025, rA);
+  R.add(tog(env, 'm2.anti_coll', M2.antiColl, 'ANTI-COLL', ['OFF', 'BCN', 'ALL']), 0.054, rA);
+  R.add(tog(env, 'm2.landing_lt', M2.landingLt, 'LDG/RECOG', ['OFF', 'PULSE', 'ON']), 0.086, rA);
+  R.add(tog(env, 'm2.taxi_lt', M2.taxiLt, 'TAXI', ['OFF', 'ON']), 0.116, rA);
+  R.add(tog(env, 'm2.logo_lt', M2.logoLt, 'TAIL', ['OFF', 'ON']), 0.025, rB);
+  R.add(tog(env, 'm2.wing_insp', M2.wingInspLt, 'WING INSP', ['OFF', 'ON']), 0.054, rB);
+  R.add(tog(env, 'm2.emer_lts', M2.emerLtsSw, 'EMER LTS', ['OFF', 'ARMED', 'ON'], [0, 1, 2], { initial: 1 }), 0.086, rB);
+  // EMER COMM, ELT, EVENT marker, CVR controller, flight hour meter (S&D15 §10.2.C / §10.3.G / §10.3.V).
+  bracket(R, 'COMM / RECORDERS', 0.14, 0.29);
   R.add(
     new GuardedSwitch(env, {
       id: 'm2.emer_comm',
       var: M2.emerComm,
       label: 'EMER COMM (COM 1 121.5)',
       positions: ['NORM', 'EMER'],
-      scale: 0.85,
-      labels: { name: 'EMER COMM', positions: true, height: 0.0025 },
+      scale: 0.75,
+      labels: { name: 'EMER COMM', positions: true, height: 0.0021 },
       guard: { color: 'red', guardedPosition: 0 },
     }),
-    0.465,
-    r1 + 0.004,
+    0.156,
+    rA + 0.004,
   );
-  R.add(new PushButton(env, { id: 'm2.event', var: M2.eventMarker, label: 'EVENT MARKER', style: 'korry', width: 0.013, height: 0.011, mode: 'momentary', segments: [{ text: 'EVENT', color: 'white', var: 'ac.m2.event_marker_lt' }] }), 0.497, r1 - 0.004);
-  R.add(new PushButton(env, { id: 'm2.cvr_test', var: M2.cvrTest, label: 'CVR TEST', style: 'korry', width: 0.013, height: 0.011, mode: 'momentary', segments: [{ text: ['CVR', 'TEST'], color: 'green', var: 'ac.m2.cvr_test_lt' }] }), 0.52, r1 - 0.004);
-  R.add(tog(env, 'm2.elt', M2.eltSw, 'ELT', ['RESET', 'ARM', 'ON'], [-1, 0, 1], { initial: 1, springs: { 0: 1 } }), 0.553, r1);
-  R.label('ELT', 0.553, r1 + 0.02, { height: 0.0019 });
-  R.display(displays.get('hobbs') ?? new NullDisplay('hobbs'), 0.51, r2 + 0.004, 0.038, 0.0114, { bezel: { border: 0.003, depth: 0.004 }, display: { boot: false } });
-  R.label('HOURS', 0.51, r2 - 0.011, { height: 0.0021 });
+  R.add(green(env, 'm2.emer_comm_lt', 'EMER COMM SELECTED', 'ac.m2.emer_comm_lt'), 0.172, rA - 0.006);
+  R.add(tog(env, 'm2.elt', M2.eltSw, 'ELT', ['RESET', 'ARM', 'ON'], [-1, 0, 1], { initial: 1, springs: { 0: 1 } }), 0.156, rB);
+  R.add(green(env, 'm2.elt_lt', 'ELT ACTIVE', 'ac.m2.elt_lt'), 0.172, rB - 0.01);
+  R.add(new PushButton(env, { id: 'm2.event', var: M2.eventMarker, label: 'EVENT MARKER', style: 'round', width: 0.01, mode: 'momentary', engraved: '', name: 'EVENT' }), 0.2, rA);
+  R.add(green(env, 'm2.event_lt', 'EVENT MARKED', 'ac.m2.event_marker_lt'), 0.2, rA + 0.012);
+  R.add(new PushButton(env, { id: 'm2.cvr_test', var: M2.cvrTest, label: 'CVR TEST', style: 'korry', width: 0.013, height: 0.011, mode: 'momentary', segments: [{ text: ['CVR', 'TEST'], color: 'green', var: 'ac.m2.cvr_test_lt' }] }), 0.232, rA);
+  R.display(displays.get('hobbs') ?? new NullDisplay('hobbs'), 0.225, rB + 0.004, 0.038, 0.0114, { bezel: { border: 0.003, depth: 0.004 }, display: { boot: false } });
+  R.label('HOURS', 0.225, rB - 0.011, { height: 0.0019 });
 }
 
-/** Handles and levers beneath the instrument panel (S&D15 §10.2.E), plus the rain removal levers. */
+/**
+ * Handles beneath the instrument panel (S&D15 §10.2.E): on a narrow lip under the LH tilt panel / gear module
+ * (photos: red knob and red T-handle protrude from just below the gear module, open space to the pedals), the
+ * control lock below the pilot's panel (S&D15 §9.1), and the rain removal door levers outboard.
+ */
 export function buildUnderPanel(b: CockpitBuilder): void {
   const env = b.env;
-  // Knee panel under the LH tilt panel / gear module, left of the pedestal (photograph: red handles below the gear handle).
-  const K = b.panel({ name: 'm2.knee.l', center_m: [3.56, -0.32, 0.29], facing: 'aft', tiltDeg: -4, width: 0.3, height: 0.2, origin: 'top-left', screws: { kind: 'phillips', pitch: 0.15 }, material: 'panel' });
-  K.add(new TBarHandle(env, { id: 'm2.park_brake', var: M2.parkBrake, label: 'PARKING BRAKE', style: 'tbar', rotate: 'none', legend: 'PARK BRAKE', scale: 0.9 }), 0.225, 0.05);
-  K.label('PARKING BRAKE', 0.225, 0.017, { height: 0.0024 });
-  K.add(new PushPullKnob(env, { id: 'm2.emer_brake', var: M2.emerBrake, label: 'EMERGENCY BRAKE', style: 'plain', valueIn: 0, valueOut: 1, travel: 0.06, clickToggles: false, legend: 'EMER BRAKE' }), 0.275, 0.05);
-  K.label('EMER BRAKE', 0.275, 0.017, { height: 0.0024 });
-  K.add(new TBarHandle(env, { id: 'm2.gear_emer', var: M2.gearEmerRelease, label: 'EMERGENCY GEAR RELEASE', style: 'tbar', legend: 'GEAR', material: 'knobRed', scale: 0.9 }), 0.225, 0.13);
-  K.label('EMER GEAR RELEASE', 0.225, 0.1, { height: 0.0024 });
-  K.add(new TBarHandle(env, { id: 'm2.gear_blowdown', var: M2.gearBlowdown, label: 'GEAR BLOW DOWN', style: 'knob', material: 'knobRed', scale: 0.8 }), 0.275, 0.13);
-  K.label('BLOW DOWN', 0.275, 0.1, { height: 0.0024 });
+  const [bx, bz] = TILT_BOTTOM;
+  // Lip strip hanging from the LH tilt-panel lower edge (EST 40 mm, dark), y -0.62 .. -0.17.
+  const K = b.panel({ name: 'm2.lip.l', center_m: [bx + 0.004, -0.395, bz + 0.022], facing: 'aft', tiltDeg: -6, width: 0.45, height: 0.044, origin: 'top-left', screws: false, material: 'panel' });
+  // Emergency gear: red AUX GEAR T-handle and the red BLOW DOWN knob below the gear module (y -0.28 .. -0.165).
+  K.add(new TBarHandle(env, { id: 'm2.gear_emer', var: M2.gearEmerRelease, label: 'EMERGENCY GEAR RELEASE (AUX GEAR T-HANDLE)', style: 'tbar', legend: 'GEAR', material: 'knobRed', scale: 0.8 }), 0.365, 0.024);
+  K.add(new TBarHandle(env, { id: 'm2.gear_blowdown', var: M2.gearBlowdown, label: 'GEAR BLOW DOWN', style: 'knob', material: 'knobRed', scale: 0.75 }), 0.41, 0.024);
+  K.label('AUX GEAR', 0.387, 0.006, { height: 0.0019 });
+  // Parking and emergency brake handles (EST: left of the gear handles).
+  K.add(new TBarHandle(env, { id: 'm2.park_brake', var: M2.parkBrake, label: 'PARKING BRAKE', style: 'tbar', rotate: 'none', legend: 'PARK BRAKE', scale: 0.8 }), 0.29, 0.024);
+  K.add(new PushPullKnob(env, { id: 'm2.emer_brake', var: M2.emerBrake, label: 'EMERGENCY BRAKE', style: 'plain', valueIn: 0, valueOut: 1, travel: 0.06, clickToggles: false, legend: 'EMER BRAKE' }), 0.245, 0.024);
+  K.label('PARK BRAKE', 0.29, 0.006, { height: 0.0019 });
+  K.label('EMER BRAKE', 0.245, 0.006, { height: 0.0019 });
   // Integral control lock (S&D15 §9.1: "below the pilot's panel ... rudder, elevators, ailerons, and throttles").
-  K.add(new TBarHandle(env, { id: 'm2.control_lock', var: M2.controlLock, label: 'CONTROL LOCK', style: 'lever', rotate: 'lock', springIn: true, legend: 'CONTROL LOCK', scale: 0.9 }), 0.03, 0.1);
-  K.label('CONTROL LOCK', 0.03, 0.06, { height: 0.0024 });
-  K.label('PULL - TURN', 0.03, 0.145, { height: 0.002, weight: 600 });
+  K.add(new TBarHandle(env, { id: 'm2.control_lock', var: M2.controlLock, label: 'CONTROL LOCK', style: 'lever', rotate: 'lock', springIn: true, legend: 'CONTROL LOCK', scale: 0.8 }), 0.08, 0.024);
+  K.label('CONTROL LOCK  PULL - TURN', 0.08, 0.006, { height: 0.0019 });
   // Rain removal door levers L / R (outboard, beneath each side of the panel).
   for (const s of [1, 2] as const) {
-    const y = s === 1 ? -0.64 : 0.64;
-    const P = b.panel({ name: `m2.rain${s}`, center_m: [3.5, y, 0.24], facing: 'aft', tiltDeg: -4, width: 0.07, height: 0.07, origin: 'top-left', screws: false, material: 'panel' });
-    P.add(new TBarHandle(env, { id: `m2.rain_door${s}`, var: M2.rainDoor(s), label: `${s === 1 ? 'L' : 'R'} RAIN DOOR`, style: 'ring', scale: 0.8 }), 0.035, 0.04);
-    P.label('RAIN DOOR', 0.035, 0.01, { height: 0.0022 });
+    const y = s === 1 ? -0.66 : 0.66;
+    const P = b.panel({ name: `m2.rain${s}`, center_m: [bx + 0.004, y, bz + 0.04], facing: 'aft', tiltDeg: -4, width: 0.07, height: 0.06, origin: 'top-left', screws: false, material: 'panel' });
+    P.add(new TBarHandle(env, { id: `m2.rain_door${s}`, var: M2.rainDoor(s), label: `${s === 1 ? 'L' : 'R'} RAIN DOOR`, style: 'ring', scale: 0.8 }), 0.035, 0.036);
+    P.label('RAIN DOOR', 0.035, 0.009, { height: 0.0022 });
   }
 }

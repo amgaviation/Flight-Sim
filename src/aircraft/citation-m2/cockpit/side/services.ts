@@ -16,12 +16,16 @@
  *    position"). The plug var enables the inverter load (systems/electrical.ts);
  *    this block publishes the outlet voltage for the outlet's power LED.
  *  - Emergency lighting battery pack (S&D15 §14 "Emergency Lighting Battery
- *    Pack", "Exterior LED Emergency Exit Lighting"; CAE p. 5-24/5-27: no
- *    emergency-lighting switch on the CJ/CJ1/CJ2, "a small battery in the
- *    cabin headliner which will power the interior exit lights any time a
- *    sensor is exposed to a lateral force and aft force of 5 Gs or more").
- *    Output `ac.m2.emer_lts` (1 while lit). EST: 10 min pack endurance (the
- *    14 CFR 25.812(k) figure; the Part 23 M2 value is not public).
+ *    Pack", "Exterior LED Emergency Exit Lighting"; CAE p. 5-24/5-27: "a small
+ *    battery in the cabin headliner which will power the interior exit lights
+ *    any time a sensor is exposed to a lateral force and aft force of 5 Gs or
+ *    more"). Source conflict: CAE says the CJ/CJ1/CJ2 have no emergency-lighting
+ *    switch, while the M2 flows list "EMER LIGHTS SWITCH - ARMED" (cockpit
+ *    prep) and "- OFF" (shutdown). The M2-specific flows win: EMER LTS switch
+ *    OFF / ARMED / ON (`ac.m2.emer_lts_sw`, RH tilt panel, EST location).
+ *    OFF: never lit; ARMED: lit by the inertia switch or by loss of emergency-bus
+ *    power; ON: lit. Output `ac.m2.emer_lts` (1 while lit). EST: 10 min pack
+ *    endurance (the 14 CFR 25.812(k) figure; the Part 23 M2 value is not public).
  *  - Passenger signs (PASS SAFETY switch OFF / BELT / BELT & NO SMOKE on the
  *    tilt panel, `cb.pax_signs` on the R XFEED bus): the cabin FASTEN SEAT
  *    BELT / NO SMOKING signs (`ac.m2.pass_belt_lt`, `ac.m2.pass_nosmk_lt`)
@@ -89,13 +93,16 @@ export class M2CabinServices implements Subsystem {
     const inv = v.get('elec.inverter_powered') !== 0 && v.get(M2_SIDE_VARS.outletPlug) !== 0;
     v.set(M2_SIDE_VARS.outletV, inv ? 115 : 0); // EST 115 V nominal ("110 volt" outlets)
     // ---- Emergency lighting battery pack: 5 g inertia switch (lateral or aft/fore), latched until the pack is empty.
+    const sw = v.get(M2.emerLtsSw);
     const g = Math.max(Math.abs(v.get(FDM.nx)), Math.abs(v.get(FDM.ny)));
-    if (g >= INERTIA_G) this.latched = true;
-    if (this.latched) {
+    if (sw >= 1 && g >= INERTIA_G) this.latched = true;
+    if (sw < 1) this.latched = false;
+    const lit = this.pack > 0 && (sw >= 2 || (sw >= 1 && (this.latched || v.get('elec.emer_powered') === 0)));
+    if (lit) {
       this.pack = Math.max(0, this.pack - dt / PACK_S);
       if (this.pack <= 0) this.latched = false;
     } else if (v.get('elec.hot_batt_powered') !== 0) this.pack = Math.min(1, this.pack + dt / RECHARGE_S);
-    v.set(M2_SIDE_VARS.emerLights, this.latched ? 1 : 0);
+    v.set(M2_SIDE_VARS.emerLights, lit ? 1 : 0);
     v.set(M2_SIDE_VARS.emerPack, this.pack);
     // ---- Passenger signs + chime.
     const signPwr = v.get('elec.pax_signs_powered') !== 0;

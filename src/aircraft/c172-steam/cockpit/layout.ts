@@ -152,7 +152,7 @@ export const WINDSHIELD = { baseFs: 12.5, baseH: 1.605, topFs: 41, topH: 1.965, 
 /** Cabin doors (POH Fig 6-4): opening FS 26 (bottom) / 30 (top) to FS 65.3, sill 0.80 m, top 1.83 m. */
 export const DOOR = { fwdFsBottom: 26, fwdFsTop: 30, aftFs: 65.3, sillH: 0.8, topH: 1.83 };
 /** Door window (the openable storm window is its lower aft part), rear side window. */
-export const DOOR_WINDOW = { fs0: 33.4, fs1: 63.7, h0: 1.46, h1: 1.79 };
+export const DOOR_WINDOW = { fs0: 31.4, fs1: 63.7, h0: 1.46, h1: 1.79 }; // fs0: nominal; cabin.ts starts the glass 1.5 in aft of the slanted door edge
 export const REAR_WINDOW = { fs0: 68, fs1: 95, h0: 1.46, h1: 1.79 };
 
 /** Overhead console (flood lights, dome switch, vents): centre on the headliner, FS 36-48 (EST from photographs). */

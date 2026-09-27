@@ -19,6 +19,21 @@ export const M2 = {
   genSw: (i: number) => `${P}gen${i}_sw`,
   /** AVIONICS: DISPATCH (-1) / OFF (0) / ON (1). DISPATCH powers PFD1, GTC1, GIA1 (COM1/GPS1) from the emergency bus. */
   avionicsSw: `${P}avionics_sw`,
+  /**
+   * STBY FLT DISPLAY switch (ELECTRICAL POWER panel): OFF (0) / ON (1) / TEST (2, spring-loaded to ON).
+   * M2 flows cockpit prep "STBY FLT DISPLAY SWITCH - TEST/ON", shutdown "- OFF"; CJ-family AFM 4-5 "Standby Gyro
+   * Switch - TEST; ON". The ESI-1000 is powered (bus or its own battery) only with the switch ON / TEST; TEST
+   * runs it from its battery and lights the STBY BATT test light (systems/logic.ts).
+   */
+  stbyDispSw: `${P}stby_disp_sw`,
+  /** STBY BATT test light beside the switch (written by the logic). */
+  stbyBattLight: `${P}stby_batt_lt`,
+  /**
+   * BATTERY DISCONNECT (guarded, LH sidewall above the pilot's armrest; CAE CJ-family differences p.5-23):
+   * NORMAL (0) / DISC (1). DISC opens the battery disconnect relay between the NiCd and the HOT BATT bus; the
+   * relay coil drains the battery slowly while held (systems/electrical.ts).
+   */
+  battDisc: `${P}batt_disc`,
   /** Ground power unit plugged in and on (external receptacle under the LH pylon; set from the ground-services menu). */
   gpuConnected: `${P}gpu_connected`,
 
@@ -28,7 +43,7 @@ export const M2 = {
   startLight: (i: number) => `${P}start${i}_lt`,
   /** START DISENGAGE push button (momentary). */
   startDiseng: `${P}start_diseng`,
-  /** L / R IGNITION: NORM (0) / ON (1). */
+  /** L / R IGNITION: NORM (0) / ON (1). Set on the GTC ENGINE page (AOPA Mar 2014: ignition in the G3000; no pedestal switch). */
   ignSw: (i: number) => `${P}ign${i}_sw`,
   /** Throttle levers: CUTOFF (-0.1, gated, finger lift) / IDLE 0 / CRU 0.62 / CLB 0.82 / TO 1.0 (detents). */
   tla: (i: number) => `${P}tla${i}`,
@@ -37,7 +52,10 @@ export const M2 = {
   // TO/GA button on the LH throttle: writes input.toga (momentary).
 
   // ---------------------------------------------------------------- Tilt panel: FUEL
-  /** L / R FUEL BOOST: NORM (0) / ON (1). NORM = automatic on start, low fuel pressure and transfer. */
+  /**
+   * L / R FUEL BOOST: OFF (-1) / NORM (0) / ON (1) (CAE differences p.5-30: 3-position; OFF = pump de-energized,
+   * no automatic operation). NORM = automatic on start, low fuel pressure and transfer.
+   */
   boostSw: (i: number) => `${P}boost${i}_sw`,
   /** FUEL TRANSFER selector: L TANK (-1) / OFF (0) / R TANK (1): transfer from the selected tank to the other. */
   fuelXfer: `${P}fuel_xfer`,
@@ -66,13 +84,19 @@ export const M2 = {
   wsAlcoholSw: `${P}ws_alcohol_sw`,
 
   // ---------------------------------------------------------------- Tilt panel: PRESSURIZATION / ENVIRONMENTAL
-  /** PRESS SOURCE selector: OFF (0) / L (1) / R (2) / NORM (3) / EMER (4). */
+  /**
+   * AIR SOURCE SELECT: OFF (0) / L (1) / R (2) / BOTH (3) / EMER (4) / FRESH AIR (5) (CJ-family AFM: "Air Source
+   * Select - BOTH"; smoke procedure "... FRESH AIR (cabin will depressurize)"). Values: PRESS_SRC.
+   */
   pressSource: `${P}press_source`,
   /** CABIN DUMP (guarded): NORM (0) / DUMP (1). */
   cabinDump: `${P}cabin_dump`,
-  /** PRESSURIZATION mode: AUTO (0) / MANUAL (2) (value matches Pressurization.mode). */
+  /** PRESSURIZATION mode: AUTO (0) / MANUAL (2) (value matches Pressurization.mode). GTC ENVIRONMENTAL page. */
   pressMode: `${P}press_mode`,
-  /** MANUAL cabin rate: DN (-1, climb cabin) / center (0) / UP (1, descend cabin) spring-loaded; valve command -1 close .. +1 open. */
+  /**
+   * MANUAL cabin rate command -1 (DN, climb cabin) / 0 / +1 (UP, descend cabin); valve command -1 close .. +1 open.
+   * Driven by the GTC ENVIRONMENTAL page CABIN UP / CABIN DN buttons (events pressManUp / pressManDn, 1 s per press).
+   */
   pressManual: `${P}press_manual`,
   /** Landing field elevation (ft) entered on the GTC (S&D15 §9.5). */
   landingElevFt: `${P}ldg_elev_ft`,
@@ -157,8 +181,10 @@ export const M2 = {
   floodLt: `${P}flood_lt`,
   /** Overhead map lights L / R dimmer 0..1. */
   mapLt: (side: number) => `${P}map_lt${side}`,
-  /** Display dimming (glareshield DIM knob): 0 = automatic (photocell) .. 1 manual full bright. */
+  /** DISPLAYS dimmer (glareshield DIMMING group): 0 = automatic (photocell) .. 1 manual full bright (GDUs). */
   displayDim: `${P}display_dim`,
+  /** TOUCH CONTROLS dimmer (glareshield DIMMING group): 0 = automatic (photocell) .. 1 (GTC 570 brightness). */
+  gtcDim: `${P}gtc_dim`,
   /** PASS SAFETY: OFF (0) / BELT (1) / BELT & NO SMOKE (2). */
   paxSafety: `${P}pax_safety`,
   /** CABIN LIGHTS master: OFF (0) / ON (1). */
@@ -173,8 +199,17 @@ export const M2 = {
   cvrTest: `${P}cvr_test`,
   /** ELT remote switch: ARM (0) / ON (1) / RESET-TEST (-1, momentary). */
   eltSw: `${P}elt_sw`,
-  /** SYSTEM TEST rotary knob: OFF 0 / FIRE WARN 1 / ANNU (lamps) 2 / STALL WARN 3 / O'SPEED 4 / LDG GEAR 5 / TAWS 6. */
+  /**
+   * SYSTEM TESTS selection (GTC Aircraft Systems > SYSTEM TESTS page; no hardware rotary on the M2, AOPA Mar 2014):
+   * OFF 0 / FIRE WARN 1 / ANNU (lamps) 2 / STALL WARN 3 / O'SPEED 4 / LDG GEAR 5 / TAWS 6. Returns to OFF after
+   * TEST_AUTO_OFF_S (systems/logic.ts).
+   */
   testSel: `${P}test_sel`,
+
+  /** EMERGENCY LIGHTS switch: OFF (0) / ARMED (1) / ON (2) (M2 flows: prep ARMED, shutdown OFF; EST location RH tilt panel). */
+  emerLtsSw: `${P}emer_lts_sw`,
+  /** Push-to-talk switches under each armrest (AOPA Mar 2014: "yoke-free push-to-talk"), 1 while pressed. */
+  ptt: (side: number) => `${P}ptt${side}`,
 
   // ---------------------------------------------------------------- Doors (ground services menu / exterior)
   doorOpen: (door: 'cabin' | 'emer_exit' | 'nose_bag_l' | 'nose_bag_r' | 'tail_bag') => `${P}door_${door}`,
@@ -191,6 +226,12 @@ export const M2 = {
 
 /** Throttle detent lever values (FADEC detent law). */
 export const TLA = { cutoff: -0.1, idle: 0, cru: 0.62, clb: 0.82, to: 1.0 } as const;
+
+/** AIR SOURCE SELECT values. */
+export const PRESS_SRC = { off: 0, l: 1, r: 2, both: 3, emer: 4, fresh: 5 } as const;
+
+/** GTC ENVIRONMENTAL page manual cabin-altitude buttons (events). */
+export const M2_EVENTS = { pressManUp: 'ac.m2.press_man_up', pressManDn: 'ac.m2.press_man_dn' } as const;
 
 /** Values of the SYSTEM TEST selector. */
 export const TEST_SEL = { off: 0, fire: 1, annu: 2, stall: 3, overspeed: 4, gear: 5, taws: 6 } as const;

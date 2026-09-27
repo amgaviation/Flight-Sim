@@ -29,36 +29,41 @@ export const FLOOR_AFT_X = 2.3;
 export const MAIN = { center: [3.665, 0, -0.08] as [number, number, number], tiltDeg: 12, width: 1.36, height: 0.25 };
 /** Panel-local x of the display centres (top-left convention) and top edge of the bezels. */
 export const GDU = {
-  /** GDU 1400W bezel (EST from the Garmin preset UNIT_SIZE_MM) and 14.1 in 16:10 active area. */
-  bezelW: 0.354,
-  bezelH: 0.237,
+  /** GDU 1400W bezel 14.25 x 9.75 in = 362 x 248 mm (SE Aerospace unit data) and 14.1 in 16:10 active area. */
+  bezelW: 0.362,
+  bezelH: 0.248,
   screenW: 0.3037, // 14.1 in diagonal, 16:10 -> 303.7 x 189.8 mm
   screenH: 0.1898,
-  /** Bezel borders left, right, top, bottom (m): softkeys on the lower bezel (PG Figure 1-2). */
-  border: [0.0252, 0.0251, 0.0142, 0.033] as [number, number, number, number],
-  top: 0.008,
-  xPfd1: 0.307,
+  /** Bezel borders left, right, top, bottom (m): softkeys on the lower bezel (PG Figure 1-2); sums match 362 x 248. */
+  border: [0.02915, 0.02915, 0.0165, 0.0417] as [number, number, number, number],
+  top: 0.001,
+  /** Centres 0.369 m apart: bezels nearly abut (~7 mm gaps, photos). */
+  xPfd1: 0.311,
   xMfd: 0.68,
-  xPfd2: 1.053,
+  xPfd2: 1.049,
 };
 
-/** Glareshield face (GMC 710, ESI, DCUs, masters, fire switches) just below the brow (EST). */
+/** Glareshield face (GMC 710 with the DIMMING / reversion panel above it, ESI, GCU 275s, masters, fire switches) below the brow (EST). */
 export const GLARE_PANEL = { center: [3.662, 0, -0.243] as [number, number, number], tiltDeg: 10, width: 1.16, height: 0.095 };
 /** Glareshield hood: brow aft edge station/height, depth to the windshield, forward droop. */
-export const GLARE = { browX: 3.628, browZ: -0.297, width: 1.4, depth: 0.34, pitchDeg: -8 };
+export const GLARE = { browX: 3.628, browZ: -0.306, width: 1.4, depth: 0.34, pitchDeg: -8 };
 
-/** Tilt panels below the display row (S&D15 §10.2.C), EST 55 deg back from vertical. */
+/**
+ * Tilt panels below the display row (S&D15 §10.2.C). EST ~30 deg back from vertical and a ~110 mm band
+ * (scaled from the GCU 275 width in the pin1 / S&D21 Fig 3 photos); the landing gear module is part of the
+ * LH tilt-panel face (same plane, joined by a seam).
+ */
 export const TILT = {
-  tiltDeg: 55,
-  height: 0.15,
+  tiltDeg: 30,
+  height: 0.11,
   /** Top edge (meets the main panel's lower edge). */
   topX: 3.64,
   topZ: 0.043,
   left: { y0: -0.74, y1: -0.285 },
   right: { y0: 0.162, y1: 0.74 },
 };
-/** Landing gear control module between the LH tilt panel and the GTCs (photograph: below PFD1's inboard edge). */
-export const GEAR_MODULE = { y0: -0.28, y1: -0.165, tiltDeg: 22, height: 0.14 };
+/** Landing gear control module: inboard end of the LH tilt-panel face (photographs: below PFD1's inboard edge). */
+export const GEAR_MODULE = { y0: -0.28, y1: -0.165 };
 
 /** Pedestal: GTC tower (two GTC 570), throttle quadrant, aft console (EST). */
 export const PEDESTAL = {

@@ -13,7 +13,7 @@ import type { Turbofan } from '../../physics/engines/Turbofan';
 import type { M2Systems } from './createSystems';
 import { FLAP_DETENTS } from './data';
 import { CITATION_M2_FDM } from './fdm';
-import { M2, TLA } from './vars';
+import { M2, PRESS_SRC, TLA } from './vars';
 import { julianDayFromDayOfYear, sunPosition } from '../../world/sky/solar';
 
 /**
@@ -46,6 +46,8 @@ export function setM2Switches(ctx: Pick<SimContext, 'vars'>, s: InitialState): v
   v.set(M2.battSw, powered ? 1 : 0);
   for (const i of [1, 2]) v.set(M2.genSw(i), powered ? 1 : 0);
   v.set(M2.avionicsSw, powered ? 1 : 0);
+  v.set(M2.stbyDispSw, powered ? 1 : 0); // STBY FLT DISPLAY ON (prep TEST / ON; shutdown OFF)
+  v.set(M2.battDisc, 0); // NORMAL
   // Engine start / throttles
   for (const i of [1, 2]) {
     v.set(M2.startBtn(i), 0);
@@ -70,7 +72,7 @@ export function setM2Switches(ctx: Pick<SimContext, 'vars'>, s: InitialState): v
   v.set(M2.tailDeiceSw, 0);
   v.set(M2.wsAlcoholSw, 0);
   // Pressurization / ECS
-  v.set(M2.pressSource, 3); // NORM
+  v.set(M2.pressSource, PRESS_SRC.both);
   v.set(M2.cabinDump, 0);
   v.set(M2.pressMode, 0);
   v.set(M2.pressManual, 0);
@@ -110,6 +112,7 @@ export function setM2Switches(ctx: Pick<SimContext, 'vars'>, s: InitialState): v
   v.set(M2.pedestalLt, powered && night ? 0.5 : 0);
   v.set(M2.floodLt, powered && night ? 0.2 : 0);
   v.set(M2.displayDim, 0);
+  v.set(M2.gtcDim, 0);
   v.set(M2.paxSafety, !powered ? 0 : s === 'cruise' ? 1 : 2);
   v.set(M2.cabinLt, powered ? 1 : 0);
   // Misc
@@ -118,6 +121,8 @@ export function setM2Switches(ctx: Pick<SimContext, 'vars'>, s: InitialState): v
   v.set(M2.cvrTest, 0);
   v.set(M2.eltSw, 0);
   v.set(M2.testSel, 0);
+  v.set(M2.emerLtsSw, powered ? 1 : 0); // ARMED (prep), OFF at shutdown
+  for (const i of [1, 2]) v.set(M2.ptt(i), 0);
   for (const d of ['cabin', 'emer_exit', 'nose_bag_l', 'nose_bag_r', 'tail_bag'] as const) v.set(M2.doorOpen(d), 0);
   // AFCS references (FD on with power; AP off; YD off on the ground).
   v.set(AP.fdOn(1), powered ? 1 : 0);

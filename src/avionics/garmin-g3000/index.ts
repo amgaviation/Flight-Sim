@@ -20,3 +20,4 @@ export { GtcDisplay, type GtcDisplayOptions } from './gtc/GtcDisplay';
 export { GtcController } from './gtc/GtcController';
 export { GtcPage, type KnobId, type BarButton } from './gtc/GtcPage';
 export { Gmc710, GMC_KEYS, type GmcKey } from './gmc/Gmc710';
+export { GcuController, GCU_PROC_ITEMS } from './state/Gcu';

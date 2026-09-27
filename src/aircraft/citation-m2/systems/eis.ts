@@ -13,7 +13,7 @@ import type { EisConfig, EisSection } from '../../../avionics/garmin-g3000/confi
 import type { SynopticPageDef } from '../../../avionics/garmin-g3000/gdu/synoptic';
 import { M2_EIS } from '../../../avionics/garmin-g3000/presets';
 import { M2_LIMITS } from '../data';
-import { M2 } from '../vars';
+import { M2, M2_EVENTS, PRESS_SRC, TEST_SEL } from '../vars';
 import { LOW_FUEL_LB } from './fuel';
 
 const n1 = M2_EIS.sections.find((s) => s.kind === 'n1') as EisSection;
@@ -88,8 +88,9 @@ export const M2_SYNOPTICS: SynopticPageDef[] = [
       { type: 'readout', x: 250, y: 160, label: 'USED LB', value: 'fuel.used_kg * 2.20462', decimals: 0 },
     ],
     controls: [
-      { label: 'L BOOST', kind: 'toggle', var: M2.boostSw(1) },
-      { label: 'R BOOST', kind: 'toggle', var: M2.boostSw(2) },
+      // Boost pumps: the tilt-panel switches (OFF / NORM / ON) are the controls; the GTC mirrors them (EST).
+      { label: 'L BOOST', kind: 'cycle', var: M2.boostSw(1), values: [-1, 0, 1], valueLabels: ['OFF', 'NORM', 'ON'] },
+      { label: 'R BOOST', kind: 'cycle', var: M2.boostSw(2), values: [-1, 0, 1], valueLabels: ['OFF', 'NORM', 'ON'] },
       { label: 'TRANSFER', kind: 'cycle', var: M2.fuelXfer, values: [-1, 0, 1], valueLabels: ['L TANK', 'OFF', 'R TANK'] },
     ],
   },
@@ -129,7 +130,9 @@ export const M2_SYNOPTICS: SynopticPageDef[] = [
       { type: 'readout', x: 120, y: 280, label: 'CABIN °C', value: 'pneu.cabin_temp_c', decimals: 0 },
       { type: 'readout', x: 380, y: 280, label: 'SUPPLY °C', value: 'pneu.cabin_supply_c', decimals: 0 },
       { type: 'bar', x: 200, y: 330, w: 100, h: 20, value: 'press.outflow_pos', min: 0, max: 1, label: 'OUTFLOW' },
-      { type: 'indicator', x: 120, y: 420, label: 'EMER PRESS', on: `${M2.pressSource} == 4`, color: 'amber' },
+      { type: 'indicator', x: 120, y: 420, label: 'EMER PRESS', on: `${M2.pressSource} == ${PRESS_SRC.emer}`, color: 'amber' },
+      { type: 'indicator', x: 250, y: 460, label: 'FRESH AIR', on: `${M2.pressSource} == ${PRESS_SRC.fresh}`, color: 'amber' },
+      { type: 'indicator', x: 380, y: 460, label: 'MAN PRESS', on: `${M2.pressMode} == 2`, color: 'white' },
       { type: 'indicator', x: 380, y: 420, label: 'A/C', on: 'elec.air_cond_powered && elec.air_cond_amps > 1', color: 'green' },
       { type: 'readout', x: 250, y: 500, label: 'OXY PSI', value: 'oxy.main_psi', decimals: 0, limits: { cautionLow: 400 } },
     ],
@@ -139,7 +142,78 @@ export const M2_SYNOPTICS: SynopticPageDef[] = [
       { label: 'TEMP MODE', kind: 'cycle', var: M2.tempMode, values: [0, 1], valueLabels: ['AUTO', 'MANUAL'] },
       { label: 'A/C', kind: 'toggle', var: M2.airCondSw },
       { label: 'CABIN FAN', kind: 'cycle', var: M2.cabinFan, values: [0, 1, 2], valueLabels: ['OFF', 'LOW', 'HIGH'] },
+      // Cockpit air / defog diverter (EST steps; the M2 has no tilt-panel knob, S&D21 §10.3.2 GTC environmental control).
+      { label: 'DEFOG', kind: 'cycle', var: M2.airDistrib, values: [0, 0.3, 0.6, 1], valueLabels: ['OFF', 'LOW', 'MED', 'HIGH'] },
+      // Pressurization mode and manual cabin altitude (AOPA Mar 2014: pressurization is a G3000 function).
+      { label: 'PRESS MODE', kind: 'cycle', var: M2.pressMode, values: [0, 2], valueLabels: ['AUTO', 'MAN'] },
+      { label: 'CABIN UP', kind: 'button', event: M2_EVENTS.pressManUp },
+      { label: 'CABIN DN', kind: 'button', event: M2_EVENTS.pressManDn },
+    ],
+  },
+  {
+    id: 'cabin',
+    title: 'CABIN',
+    // S&D21 §10.3.2: the GTCs control "internal lighting"; passenger signs and passenger oxygen (EST, no tilt-panel
+    // controls in the photos).
+    elements: [
+      { type: 'indicator', x: 130, y: 140, label: 'SEAT BELT', on: 'ac.m2.pass_belt_lt', color: 'white' },
+      { type: 'indicator', x: 370, y: 140, label: 'NO SMOKING', on: 'ac.m2.pass_nosmk_lt', color: 'white' },
+      { type: 'indicator', x: 130, y: 240, label: 'CABIN LTS', on: 'ac.light.cabin > 0.05', color: 'green' },
+      { type: 'indicator', x: 370, y: 240, label: 'PASS O2 DEPLOYED', on: 'press.pax_masks', color: 'amber' },
+      { type: 'readout', x: 250, y: 340, label: 'OXY PSI', value: 'oxy.main_psi', decimals: 0, limits: { cautionLow: 400 } },
+      { type: 'indicator', x: 250, y: 420, label: 'EMER LTS', on: 'ac.m2.emer_lts', color: 'amber' },
+    ],
+    controls: [
+      { label: 'PASS SAFETY', kind: 'cycle', var: M2.paxSafety, values: [0, 1, 2], valueLabels: ['OFF', 'BELT', 'BELT & NS'] },
       { label: 'CABIN LTS', kind: 'toggle', var: M2.cabinLt },
+      { label: 'PASS OXY', kind: 'cycle', var: M2.paxOxy, values: [0, 1, 2], valueLabels: ['CREW ONLY', 'NORM', 'MAN DROP'] },
+    ],
+  },
+  {
+    id: 'engine',
+    title: 'ENGINE',
+    // AOPA Mar 2014: ignition control is incorporated in the G3000 (no pedestal ignition switches, S&D15 §10.2.D).
+    // SCOPE: page layout EST.
+    elements: [
+      { type: 'engine', x: 130, y: 200, label: 'L ENG', running: 'eng1.running' },
+      { type: 'engine', x: 370, y: 200, label: 'R ENG', running: 'eng2.running' },
+      { type: 'indicator', x: 130, y: 330, label: 'IGN', on: 'eng1.ignition', color: 'green' },
+      { type: 'indicator', x: 370, y: 330, label: 'IGN', on: 'eng2.ignition', color: 'green' },
+      { type: 'readout', x: 130, y: 420, label: 'N2 %', value: 'eng1.n2_pct', decimals: 1 },
+      { type: 'readout', x: 370, y: 420, label: 'N2 %', value: 'eng2.n2_pct', decimals: 1 },
+    ],
+    controls: [
+      { label: 'L IGNITION', kind: 'cycle', var: M2.ignSw(1), values: [0, 1], valueLabels: ['NORM', 'ON'] },
+      { label: 'R IGNITION', kind: 'cycle', var: M2.ignSw(2), values: [0, 1], valueLabels: ['NORM', 'ON'] },
+    ],
+  },
+  {
+    id: 'tests',
+    title: 'SYSTEM TESTS',
+    // Twin & Turbine / AOPA (M2): "the Garmin 3000 leads you through initialization of the aircraft, including
+    // systems tests"; M2 flows "SYS TEST ALL ITEMS - CHECKED". Same test channels the CJ-family rotary drove;
+    // each selection runs until the next or returns to OFF after 10 s (systems/logic.ts, EST).
+    elements: [
+      { type: 'indicator', x: 130, y: 120, label: 'FIRE WARN', on: `${M2.testSel} == ${TEST_SEL.fire}`, color: 'white' },
+      { type: 'indicator', x: 370, y: 120, label: 'ANNU', on: `${M2.testSel} == ${TEST_SEL.annu}`, color: 'white' },
+      { type: 'indicator', x: 130, y: 200, label: 'STALL WARN', on: `${M2.testSel} == ${TEST_SEL.stall}`, color: 'white' },
+      { type: 'indicator', x: 370, y: 200, label: "O'SPEED", on: `${M2.testSel} == ${TEST_SEL.overspeed}`, color: 'white' },
+      { type: 'indicator', x: 130, y: 280, label: 'LDG GEAR', on: `${M2.testSel} == ${TEST_SEL.gear}`, color: 'white' },
+      { type: 'indicator', x: 370, y: 280, label: 'TAWS', on: `${M2.testSel} == ${TEST_SEL.taws}`, color: 'white' },
+      { type: 'indicator', x: 250, y: 380, label: 'ENG FIRE L', on: M2.engFireLight(1), color: 'red' },
+      { type: 'indicator', x: 250, y: 440, label: 'ENG FIRE R', on: M2.engFireLight(2), color: 'red' },
+    ],
+    controls: [
+      {
+        label: 'TEST',
+        kind: 'cycle',
+        var: M2.testSel,
+        values: [TEST_SEL.off, TEST_SEL.fire, TEST_SEL.annu, TEST_SEL.stall, TEST_SEL.overspeed, TEST_SEL.gear, TEST_SEL.taws],
+        valueLabels: ['OFF', 'FIRE WARN', 'ANNU', 'STALL WARN', "O'SPEED", 'LDG GEAR', 'TAWS'],
+      },
+      { label: 'FIRE WARN', kind: 'cycle', var: M2.testSel, values: [TEST_SEL.fire, TEST_SEL.off], valueLabels: ['RUN', 'OFF'] },
+      { label: 'ANNU', kind: 'cycle', var: M2.testSel, values: [TEST_SEL.annu, TEST_SEL.off], valueLabels: ['RUN', 'OFF'] },
+      { label: 'TAWS', kind: 'cycle', var: M2.testSel, values: [TEST_SEL.taws, TEST_SEL.off], valueLabels: ['RUN', 'OFF'] },
     ],
   },
   {

@@ -92,7 +92,7 @@ export function buildC172G1000Cockpit(ctx: SimContext, cfg: G1000Resolved, opts:
       { name: 'Switch panel / circuit breakers', position_m: [sta(26), -0.34, hz(1.36)], yawDeg: 2, pitchDeg: -32, fovDeg: 55 },
       { name: 'Flaps / cabin heat', position_m: [sta(25), 0.2, hz(1.32)], yawDeg: 0, pitchDeg: -25, fovDeg: 55 },
       { name: 'Pedestal / trim', position_m: [sta(31), 0, hz(1.28)], yawDeg: 0, pitchDeg: -48, fovDeg: 55 },
-      { name: 'Fuel selector', position_m: [sta(31), 0, hz(1.12)], yawDeg: 0, pitchDeg: -80, fovDeg: 50 },
+      { name: 'Fuel selector', position_m: [sta(33), 0, hz(1.12)], yawDeg: 0, pitchDeg: -80, fovDeg: 50 },
       { name: 'Overhead console', position_m: [sta(50), -0.08, hz(1.62)], yawDeg: 0, pitchDeg: 72, fovDeg: 70 },
       { name: 'Left door', position_m: [sta(44), 0.05, hz(1.55)], yawDeg: -90, pitchDeg: -18, fovDeg: 72 },
     ],

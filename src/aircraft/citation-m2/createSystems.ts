@@ -38,6 +38,7 @@ import { M2_CAS } from './systems/cas';
 import { M2Logic, M2LogicLate } from './systems/logic';
 import { M2AvionicsHealth } from './systems/avionicsHealth';
 import { M2, TEST_SEL } from './vars';
+import { GcuController } from '../../avionics/garmin-g3000/state/Gcu';
 
 export interface M2Systems extends EngineControls, FlightControlBlocks, AvionicsBlocks {
   /** Update-ordered list for AircraftInstance.systems. */
@@ -56,6 +57,7 @@ export interface M2Systems extends EngineControls, FlightControlBlocks, Avionics
   oxy: OxygenSystem;
   lights: LightingSystem;
   cas: CasManager;
+  gcu: GcuController;
 }
 
 export interface CreateSystemsOptions extends AvionicsOptions {
@@ -88,6 +90,8 @@ export function createSystems(ctx: SimContext, opts: CreateSystemsOptions = {}):
   const logicLate = new M2LogicLate(ctx);
   // Power-loss consequences of LRUs without a power input in the shared models (GMA, XPDR, radar, GDU cooling).
   const avnHealth = new M2AvionicsHealth(ctx, av.suite);
+  // GCU 275 PFD controllers (LH / RH, under the glareshield; S&D15 §10.2.A / §10.3.D).
+  const gcu = new GcuController(av.suite.system, [1, 2]);
 
   const list: Subsystem[] = [
     failures,
@@ -106,6 +110,7 @@ export function createSystems(ctx: SimContext, opts: CreateSystemsOptions = {}):
     fc.gear,
     eng.ratings,
     ...av.suite.systems,
+    gcu,
     avnHealth,
     av.afcs,
     eng.fadec,
@@ -135,5 +140,5 @@ export function createSystems(ctx: SimContext, opts: CreateSystemsOptions = {}):
     const f = (s as { failures?: () => FailureDef[] }).failures;
     if (typeof f === 'function') failures.register(f.call(s));
   }
-  return { list, failures, logic, logicLate, avnHealth, elec, fuel, hyd, pneu, press, ice, fire, oxy, lights, cas, ...eng, ...fc, ...av };
+  return { list, failures, logic, logicLate, avnHealth, gcu, elec, fuel, hyd, pneu, press, ice, fire, oxy, lights, cas, ...eng, ...fc, ...av };
 }

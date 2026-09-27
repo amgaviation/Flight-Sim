@@ -107,6 +107,13 @@ export function exercise(c: CockpitControl, tick: () => void): void {
         c.onWheel?.(w, pointer(t));
         for (let i = 0; i < 8; i++) tick();
       }
+      // Drag gesture (toggle levers under a guard are thrown by dragging, as with the mouse).
+      const p = pointer(t);
+      c.onPointerDown?.(p);
+      c.onDrag?.(0, -60, p);
+      for (let i = 0; i < 3; i++) tick();
+      c.onPointerUp?.(p);
+      for (let i = 0; i < 8; i++) tick();
     }
   }
 }

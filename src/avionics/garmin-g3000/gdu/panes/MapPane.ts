@@ -71,6 +71,9 @@ export class MapPane {
   private readonly tmp = { x: 0, y: 0 };
   private readonly ll = { lat: 0, lon: 0 };
   private blink = 0;
+  /** Inset pan offset already applied to the map (px). */
+  private panDx = 0;
+  private panDy = 0;
 
   /**
    * `key` selects the map settings (pane id or 'inset1'/'inset2'); `pane` is
@@ -148,10 +151,19 @@ export class MapPane {
     s.todDistNm = nav && v.get(FMS.vnavValid) >= 0.5 ? v.get(FMS.todDistNm, NaN) : NaN;
     s.selAltFt = nav ? v.get(AP.selAltitude) : NaN;
     // Map pointer (panning).
-    const ptr = this.pane ? this.sys.pointers[this.pane] : null;
+    const ptr = this.pane ? this.sys.pointers[this.pane] : this.insetPointer();
     if (ptr && ptr.active) {
       if (!s.panActive) this.map.pan(0, 0);
-    } else if (s.panActive) this.map.clearPan();
+      // PFD inset pointer (GCU 275 joystick): apply the accumulated pan offset.
+      if (!this.pane && (ptr.dx !== this.panDx || ptr.dy !== this.panDy)) {
+        this.map.pan(ptr.dx - this.panDx, ptr.dy - this.panDy);
+        this.panDx = ptr.dx;
+        this.panDy = ptr.dy;
+      }
+    } else if (s.panActive) {
+      this.map.clearPan();
+      this.panDx = this.panDy = 0;
+    }
     // Route from the active flight plan.
     const fms = this.sys.fms;
     if (fms) {
@@ -187,6 +199,12 @@ export class MapPane {
     }
   }
 
+  /** PFD inset pointer (GCU 275), null for panes and for the insets of aircraft without a GCU (never activated). */
+  private insetPointer(): { active: boolean; dx: number; dy: number } | null {
+    if (!this.inset || this.pane) return null;
+    return this.sys.insetPointers[this.key === 'inset2' ? 2 : 1];
+  }
+
   /** Moves the map pointer (joystick / touch). */
   movePointer(dx: number, dy: number): void {
     if (!this.pane) return;
@@ -219,7 +237,7 @@ export class MapPane {
     if (!this.inset && m.terrain?.mode === 'relative' && m.state.valid) this.drawTerrainLegend(ctx, m.state.onGround);
     const traffic = this.sys.trafficThreats();
     if ((set.traffic || this.mode === 'traffic') && !traffic) TF.draw(ctx, 'TRFC UNAVAIL', r.x + 8, r.y + r.h - 16, 13, P.amber, 'left', 'middle', '#000000');
-    const ptr = this.pane ? this.sys.pointers[this.pane] : null;
+    const ptr = this.pane ? this.sys.pointers[this.pane] : this.insetPointer();
     if (ptr && ptr.active) this.drawPointer(ctx);
   }
 

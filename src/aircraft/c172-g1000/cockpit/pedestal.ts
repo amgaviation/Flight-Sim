@@ -139,7 +139,8 @@ export function buildPedestal(b: CockpitBuilder): void {
     micY - 0.005,
     { z: 0.013 },
   );
-  // Mic hanger clip and coiled cord (static).
+  // Mic hanger clip and coiled cord (static). The cord runs into the pedestal face above the FUEL SHUTOFF
+  // knob (EST routing) so it never covers the knob.
   {
     const clip = new THREE.Mesh(env.geometry.get('c172g.mic_clip', () => roundedBox(0.02, 0.012, 0.012, 0.002)), mats.get('steel'));
     clip.userData.cockpitStatic = true;
@@ -147,8 +148,8 @@ export function buildPedestal(b: CockpitBuilder): void {
     const pts: THREE.Vector3[] = [];
     for (let i = 0; i <= 120; i++) {
       const t = i / 120;
-      const a = t * Math.PI * 2 * 14;
-      pts.push(new THREE.Vector3(0.007 * Math.cos(a), -t * 0.12, 0.007 * Math.sin(a) + 0.012));
+      const a = t * Math.PI * 2 * 8;
+      pts.push(new THREE.Vector3(0.007 * Math.cos(a), -t * 0.06, 0.007 * Math.sin(a) + 0.012 * (1 - t)));
     }
     const cord = new THREE.Mesh(env.geometry.get('c172g.mic_cord', () => tube(pts, 0.0016, 360, 6)), mats.get('plasticBlack'));
     cord.userData.cockpitStatic = true;
@@ -186,15 +187,16 @@ export function buildPedestal(b: CockpitBuilder): void {
   // ---------------------------------------------------------------- fuel selector valve (item 22, placard 3) on the floor plate
   const floorPlate = b.panel({
     name: 'c172g.fuel_selector_plate',
-    center_m: [sta(PED.botFs + 3.2), 0, hz(FLOOR_H + 0.012)],
+    center_m: [sta(PED.botFs + 5), 0, hz(FLOOR_H + 0.012)], // EST: forward legend clear of the pedestal foot
     facing: 'up',
-    width: 0.15,
-    height: 0.13,
+    // EST 7.5 x 8 in plate (photographs): the position legends sit outside the handle's sweep.
+    width: 0.19,
+    height: 0.2,
     origin: 'center',
     material: mats.custom('paint', '#141414', 0.6),
     thickness: 0.012,
     radius: 0.012,
-    screws: { positions: [[-0.065, -0.055], [0.065, 0.055]] },
+    screws: { positions: [[-0.085, -0.09], [0.085, 0.09]] },
   });
   floorPlate.add(
     new FuelSelector(env, {
@@ -209,8 +211,11 @@ export function buildPedestal(b: CockpitBuilder): void {
       initial: 1,
       // POH placard 3: LEFT / RIGHT 26.5 gal LEVEL FLIGHT ONLY; BOTH 53.0 gal TAKEOFF LANDING ALL FLIGHT ATTITUDES.
       sublabels: ['26.5 GAL\nLEVEL FLIGHT\nONLY', '53.0 GAL\nTAKEOFF LANDING\nALL FLIGHT ATTITUDES', '26.5 GAL\nLEVEL FLIGHT\nONLY'],
-      placardDiameter: 0.1,
-      diameter: 0.065,
+      placardDiameter: 0.185,
+      // The 'wing' handle is ~2x `diameter` tip to tip (tip radius ~0.055 m, EST 4.3 in handle from the
+      // photographs); legends centred at 0.074 m so no legend is ever under the handle.
+      diameter: 0.055,
+      labelRadius: 0.074,
       labelHeight: 0.0028,
     }),
     0,
@@ -218,5 +223,5 @@ export function buildPedestal(b: CockpitBuilder): void {
   );
   const fsl = env.labels.text('FUEL SELECTOR', { height: 0.0028, weight: 700, zone: null, color: '#f0f0ec' });
   fsl.userData.cockpitStatic = true;
-  floorPlate.addObject(fsl, 0.046, -0.058, { z: 0.0002 });
+  floorPlate.addObject(fsl, 0.062, -0.09, { z: 0.0002 });
 }

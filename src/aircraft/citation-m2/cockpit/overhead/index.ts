@@ -6,11 +6,15 @@
  * instrument / tilt panels, the glareshield and the pedestal (S&D15 §10.2).
  * What the S&D places in the cockpit ceiling area (S&D15 §10.4
  * "Miscellaneous cockpit equipment" and §11.1) is built here:
- *   - "Magnetic Compass" on the windshield centre post (compass.ts);
- *   - "Eye Position Reference Indicator" (ball on the centre post);
+ *   - "Magnetic Compass" at the BASE of the windshield centre post, sitting
+ *     on the glareshield top in the forward view (S&D15 Fig III, S&D21 Fig 3;
+ *     compass.ts), with the "Eye Position Reference Indicator" (ball on a T
+ *     stalk, flanked by the two orange ice-detection lights of
+ *     cockpit/index.ts) directly above it on the post (M2-L09; EST positions);
  *   - "Two Reading Lights" (L / R, headliner above each seat): the fixtures
- *     around the map-light spots of cockpit/index.ts, lens lit by the
- *     MAP L / MAP R dimmers on the RH tilt panel (`ac.light.map_l/_r`);
+ *     around the map-light spots of cockpit/index.ts, lens lit by a small
+ *     dimmer knob on each fixture (EST: the M2 has no tilt-panel map-light
+ *     dimmers in the photos; `ac.m2.map_lt1/2` -> `ac.light.map_l/_r`);
  *   - "Two Ventilation Air Outlets" (gaspers) beside the reading lights;
  *   - "Floodlight": an overhead cockpit floodlight on the FLOOD dimmer
  *     (`ac.light.flood`), lighting the pedestal and throttle quadrant at
@@ -33,7 +37,7 @@
  */
 import * as THREE from 'three';
 import type { CockpitBuilder } from '../../../../cockpit/CockpitBuilder';
-import { AnnunciatorLight, PushButton, SelectorKnob } from '../../../../cockpit/controls';
+import { AnnunciatorLight, PushButton, RotaryKnob, SelectorKnob } from '../../../../cockpit/controls';
 import { bl } from '../../../../cockpit/frame';
 import { cylinderZ, merge, transform } from '../../../../cockpit/geometry/primitives';
 import { M2_FUSELAGE } from '../../exterior';
@@ -50,8 +54,10 @@ export const OVERHEAD = {
   gasper: { x: 2.95, y: 0.31 },
   mask: { x: 2.76, y: 0.3 },
   flood: { x: 2.92, y: 0, target: [3.25, 0, 0.2] as [number, number, number], candela: 3 },
-  compassX: 3.33,
-  eyeRefX: 3.5,
+  /** Compass centre (body x / z): on the glareshield top at the post base (fit.ts hood surface z -0.294 at x 3.71). */
+  compass: { x: 3.71, z: -0.317 },
+  /** Eye reference ball (body x / z), directly above the compass on the post. */
+  eyeRef: { x: 3.62, z: -0.388 },
 };
 
 const HEADLINER_GREY = '#8f8a80';
@@ -63,12 +69,18 @@ export default function buildOverhead(b: CockpitBuilder, c: M2CockpitContext): v
   const chrome = mats.get('chrome');
 
   // ---------------------------------------------------------------- compass + eye reference on the centre post
-  const postZ = (x: number) => M2_FUSELAGE.topZ(x) + LINING_INSET - 0.012; // centre post frame surface (shell.ts inset - 12 mm)
-  buildCompass(b, [OVERHEAD.compassX, 0, postZ(OVERHEAD.compassX) + 0.072]);
+  const postZ = (x: number) => M2_FUSELAGE.topZ(x) + LINING_INSET - 0.014; // centre post frame surface (shell.ts inset - 14 mm)
+  buildCompass(b, [OVERHEAD.compass.x, 0, OVERHEAD.compass.z]);
   {
-    // Eye position reference: a white ball on a short stalk under the centre post (EST shape).
-    const g = merge([transform(new THREE.SphereGeometry(0.006, 14, 10), 0, -0.022, 0), transform(new THREE.CylinderGeometry(0.0015, 0.0015, 0.02, 8), 0, -0.01, 0)]);
-    b.structureMesh(g, mats.custom('paint', '#f0f0ea', 0.4), [OVERHEAD.eyeRefX, 0, postZ(OVERHEAD.eyeRefX)], undefined, false).name = 'm2.eye_ref';
+    // Eye position reference: a white ball on a T stalk hanging from the centre post (EST shape).
+    const e = OVERHEAD.eyeRef;
+    const drop = e.z - postZ(e.x); // body z from the post surface down to the ball
+    const g = merge([
+      transform(new THREE.SphereGeometry(0.006, 14, 10), 0, 0, 0),
+      transform(new THREE.CylinderGeometry(0.0015, 0.0015, Math.max(0.005, drop), 8), 0, drop / 2, 0),
+      transform(new THREE.CylinderGeometry(0.0015, 0.0015, 0.03, 8).rotateZ(Math.PI / 2), 0, drop, 0),
+    ]);
+    b.structureMesh(g, mats.custom('paint', '#f0f0ea', 0.4), [e.x, 0, e.z], undefined, false).name = 'm2.eye_ref';
   }
 
   // ---------------------------------------------------------------- reading lights, gaspers, floodlight
@@ -90,6 +102,21 @@ export default function buildOverhead(b: CockpitBuilder, c: M2CockpitContext): v
     const lens = new THREE.Mesh(lensGeo, lensMat);
     lens.position.z = 0.0215;
     fx.add(lens);
+    // Reading-light dimmer on the fixture plate (EST), MAP L / MAP R.
+    const n = s < 0 ? 1 : 2;
+    const dp = b.panel({ name: `m2.ovhd.map_dim${n}`, center_m: [rl.x - 0.045, s * rl.y, headlinerZ(rl.x - 0.045, rl.y) + 0.003], normal: [0, -s * 0.35, 0.94], up: [-1, 0, 0], width: 0.03, height: 0.03, material: trim, radius: 0.006, screws: false });
+    dp.add(
+      new RotaryKnob(env, {
+        id: `m2.map_lt${n}`,
+        label: `MAP ${n === 1 ? 'L' : 'R'} LIGHT`,
+        cap: 'dimmer',
+        diameter: 0.012,
+        outer: { var: M2.mapLt(n), min: 0, max: 1, step: 0.05, angleRange: [-140, 140], format: (x) => (x <= 0.001 ? 'OFF' : `${Math.round(x * 100)} %`) },
+      }),
+      0,
+      0.002,
+    );
+    dp.label('MAP', 0, -0.011, { height: 0.0026 });
     // Gasper (ventilation air outlet): chrome eyeball nozzle.
     const gp = OVERHEAD.gasper;
     fixture(b, [gp.x, s * gp.y, headlinerZ(gp.x, gp.y)], s, `m2.gasper_${side}`).add(new THREE.Mesh(gasperNozzle, chrome));

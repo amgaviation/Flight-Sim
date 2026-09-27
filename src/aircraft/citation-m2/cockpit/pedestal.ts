@@ -4,16 +4,27 @@
  * (throttles with IDLE / CRU / CLB / TO detents and the TO/GA button on the
  * LH throttle, S&D15 §8 / §10.3.L), flap control handle (detents 0 / 15 / 35
  * / 60 ground flaps, S&D15 §9.1), speed brake control, elevator trim wheel
- * and indicator, rudder trim control, aileron trim control.
- * Photograph (S&D Figure III): light-grey pedestal, GTCs on a steep forward
- * face under the MFD, throttle quadrant, trim wheel on the left side, small
- * start panel at the aft end. Dimensions EST.
+ * and indicator, rudder trim control, aileron trim control. No ignition
+ * switches (S&D15 §10.2.D list; AOPA Mar 2014: ignition in the G3000, GTC
+ * ENGINE page, systems/eis.ts).
+ * Photographs (S&D15 Fig III, S&D21 Fig 3, flyradius, Skies 2017; M2-L26..L34):
+ * reduced-size pedestal with a silver sculpted shroud around the GTCs and the
+ * throttle quadrant, black face plates and a black lower pedestal to the
+ * floor; GTC 570s (115 x 181 mm, SE Aerospace) with the three knobs on one
+ * line; a textured phone tray with USB outlets forward of the power levers
+ * (AIN "a cellphone holder forward of the power levers"; AOPA USB ports);
+ * ENGINE START L / DISENGAGE / R as three abutting square buttons on the
+ * sloped aft face of the quadrant shroud; quadrant slot legends TO / CLB /
+ * CRU / IDLE / OFF; flap gates 0 / T.O. & APPR 15 / LAND 35 / GROUND FLAPS -
+ * GROUND USE ONLY 60; small SPEED BRAKE lever low on the LH quadrant face;
+ * short levers with horizontal cylindrical grips; rudder and aileron trim
+ * knobs on the aft face of the black lower pedestal near the floor. Dimensions EST.
  */
 import * as THREE from 'three';
 import type { CockpitBuilder } from '../../../cockpit/CockpitBuilder';
 import type { CockpitDisplay } from '../../../cockpit/types';
-import { Lever, PushButton, RotaryKnob, ToggleSwitch, TrimWheel } from '../../../cockpit/controls';
-import { extrude } from '../../../cockpit/geometry/primitives';
+import { Lever, PushButton, RotaryKnob, TrimWheel } from '../../../cockpit/controls';
+import { extrude, roundedBox } from '../../../cockpit/geometry/primitives';
 import { INPUT } from '../../../core/vars';
 import { G3K_EVENTS } from '../../../avionics/garmin-g3000/vars';
 import type { SimVars } from '../../../core/SimVars';
@@ -27,15 +38,16 @@ import { GTC_PUSH_VAR } from './logic';
 const inc = (e: string) => `${e}_inc`;
 const dec = (e: string) => `${e}_dec`;
 
-/** GTC 570 unit face (EST: 5.7 in portrait LCD 87 x 116 mm; knobs below the screen, Garmin PG Figure 1-12). */
-const GTC_W = 0.13;
-const GTC_H = 0.21;
+/** GTC 570 unit face 4.53 x 7.14 in (115 x 181 mm, SE Aerospace); 5.7 in portrait LCD 87 x 116 mm; knobs below the screen on one line (PG Figure 1-12). */
+const GTC_W = 0.115;
+const GTC_H = 0.181;
 const GTC_SCREEN: [number, number] = [0.0869, 0.1158];
 
 export function buildPedestal(b: CockpitBuilder, displays: Map<string, CockpitDisplay>): { throttles: Lever[] } {
   const env = b.env;
   const P = PEDESTAL;
-  const grey = env.materials.custom('plastic', '#7e8288', 0.55); // EST: light-grey pedestal (photograph)
+  const silver = env.materials.custom('paint', '#b4b7bb', 0.45); // EST: silver / light-grey sculpted shroud (photographs)
+  const black = env.materials.custom('plastic', '#1c1d1f', 0.6); // black lower pedestal
   const dark = env.materials.get('panel');
 
   // ------------------------------------------------------------------ pedestal body (structure): side profile extruded across the width
@@ -54,21 +66,38 @@ export function buildPedestal(b: CockpitBuilder, displays: Map<string, CockpitDi
     const W = P.halfWidth * 2 - 0.004;
     const g = extrude(sh, { depth: W, bevel: 0.006, bevelSegments: 2, curveSegments: 4 });
     g.applyMatrix4(new THREE.Matrix4().set(0, 0, 1, -W / 2, 0, 1, 0, 0, -1, 0, 0, 0, 0, 0, 0, 1));
-    const m = b.structureMesh(g, grey, [0, 0, FLOOR_Z]);
+    const m = b.structureMesh(g, black, [0, 0, FLOOR_Z]);
     m.name = 'pedestal_body';
+    // Silver shroud: the upper band of the profile (GTC surround and quadrant hood), 4 mm proud of the body sides.
+    const band = 0.075;
+    const sh2 = new THREE.Shape();
+    sh2.moveTo(P.aftEndX - 0.012, H(P.aftTopZ + 0.012));
+    sh2.lineTo(P.quadrantAftX, H(P.quadrantZ - 0.006));
+    sh2.lineTo(footX, H(P.quadrantZ));
+    sh2.lineTo(P.towerTopX, H(P.towerTopZ));
+    sh2.lineTo(P.towerTopX + 0.032, H(P.towerTopZ));
+    sh2.lineTo(P.towerTopX + 0.032, H(P.towerTopZ) - band * 1.4);
+    sh2.lineTo(footX, H(P.quadrantZ) - band);
+    sh2.lineTo(P.quadrantAftX, H(P.quadrantZ - 0.006) - band);
+    sh2.lineTo(P.aftEndX - 0.012, H(P.aftTopZ + 0.012) - band);
+    sh2.closePath();
+    const W2 = P.halfWidth * 2 + 0.008;
+    const g2 = extrude(sh2, { depth: W2, bevel: 0.005, bevelSegments: 2, curveSegments: 4 });
+    g2.applyMatrix4(new THREE.Matrix4().set(0, 0, 1, -W2 / 2, 0, 1, 0, 0, -1, 0, 0, 0, 0, 0, 0, 1));
+    b.structureMesh(g2, silver, [0, 0, FLOOR_Z]).name = 'pedestal_shroud';
   }
 
   // ------------------------------------------------------------------ GTC tower face with two GTC 570
   const [tcx, tcz] = downFace(P.towerTopX, P.towerTopZ, P.towerTiltDeg, P.towerLen / 2);
-  const T = b.panel({ name: 'm2.gtc_face', center_m: [tcx, 0, tcz], facing: 'aft', tiltDeg: P.towerTiltDeg, width: P.halfWidth * 2, height: P.towerLen, origin: 'top-left', screws: false, material: dark });
+  const T = b.panel({ name: 'm2.gtc_face', center_m: [tcx, 0, tcz], facing: 'aft', tiltDeg: P.towerTiltDeg, width: P.halfWidth * 2, height: P.towerLen, origin: 'top-left', screws: false, material: silver });
   for (const [gtc, gx] of [
-    ['gtc1', P.halfWidth - 0.069],
-    ['gtc2', P.halfWidth + 0.069],
+    ['gtc1', P.halfWidth - 0.0615],
+    ['gtc2', P.halfWidth + 0.0615],
   ] as const) {
-    const u = T.subPanel({ name: `m2.${gtc}`, x: gx, y: P.towerLen / 2, width: GTC_W, height: GTC_H, origin: 'top-left', material: 'bezel', screws: false, z: 0.004 });
+    const u = T.subPanel({ name: `m2.${gtc}`, x: gx, y: 0.006 + GTC_H / 2, width: GTC_W, height: GTC_H, origin: 'top-left', material: 'bezel', screws: false, z: 0.004 });
     u.display(displays.get(gtc) ?? new NullDisplay(gtc), GTC_W / 2, 0.012 + GTC_SCREEN[1] / 2, GTC_SCREEN[0], GTC_SCREEN[1], { bezel: false, z: 0.0015, display: { boot: false } });
     u.label('GARMIN', GTC_W / 2, 0.006, { height: 0.0024, color: '#b8bcc2', zone: null });
-    const ky = 0.165;
+    const ky = 0.153; // all three knobs on one line (photo)
     // Map knob with joystick (range / pointer / pan).
     u.add(
       new MapJoystickKnob(env, {
@@ -94,7 +123,7 @@ export function buildPedestal(b: CockpitBuilder, displays: Map<string, CockpitDi
         push: { event: G3K_EVENTS.gtcCenterPush(gtc), label: 'PUSH' },
       }),
       GTC_W / 2,
-      ky + 0.01,
+      ky,
     );
     // Dual concentric upper knob; push vs push-and-hold decided by GtcKnobPushLogic.
     u.add(
@@ -108,16 +137,32 @@ export function buildPedestal(b: CockpitBuilder, displays: Map<string, CockpitDi
         inner: { incEvent: inc(G3K_EVENTS.gtcUpperInner(gtc)), decEvent: dec(G3K_EVENTS.gtcUpperInner(gtc)), label: 'INNER' },
         push: { var: GTC_PUSH_VAR(gtc), mode: 'momentary', label: 'PUSH / HOLD SWAP' },
       }),
-      GTC_W - 0.026,
+      GTC_W - 0.024,
       ky,
     );
+  }
+  // Phone tray with USB outlets between the GTCs and the power levers (static; carbon-textured, EST size).
+  {
+    const trayY = 0.006 + GTC_H + 0.03;
+    const tray = new THREE.Mesh(roundedBox(0.2, 0.042, 0.012, 0.006), env.materials.custom('plastic', '#2b2c2e', 0.35));
+    b.trackGeometry(tray.geometry);
+    tray.userData.cockpitStatic = true;
+    T.addObject(tray, P.halfWidth, trayY, { z: -0.004 });
+    const usbG = new THREE.BoxGeometry(0.012, 0.005, 0.004);
+    b.trackGeometry(usbG);
+    for (const dx of [-0.02, 0.02]) {
+      const usb = new THREE.Mesh(usbG, env.materials.get('plasticBlack'));
+      usb.userData.cockpitStatic = true;
+      T.addObject(usb, P.halfWidth + dx, trayY + 0.012, { z: 0.004 });
+    }
+    T.label('USB', P.halfWidth, trayY + 0.019, { height: 0.0018, zone: null });
   }
 
   // ------------------------------------------------------------------ throttle quadrant
   const qLen = footX - P.quadrantAftX;
   const Q = b.panel({ name: 'm2.quadrant', center_m: [(footX + P.quadrantAftX) / 2, 0, P.quadrantZ - 0.002], facing: 'up', tiltDeg: -2, width: P.halfWidth * 2, height: qLen, origin: 'center', screws: { kind: 'phillips', pitch: 0.2 }, material: dark });
   const tlDetents = [
-    { value: TLA.cutoff, label: 'CUTOFF' },
+    { value: TLA.cutoff, label: 'OFF' },
     { value: TLA.idle, label: 'IDLE', kind: 'gate' as const, direction: 'decreasing' as const },
     { value: TLA.cru, label: 'CRU' },
     { value: TLA.clb, label: 'CLB' },
@@ -138,13 +183,15 @@ export function buildPedestal(b: CockpitBuilder, displays: Map<string, CockpitDi
       initial: TLA.cutoff,
       detents: tlDetents,
       travel: { kind: 'arc', minDeg: -34, maxDeg: 30, pivotDepth: 0.06 },
-      armLength: 0.115,
-      knob: 'throttle',
-      knobScale: 0.95,
+      armLength: 0.07,
+      // Short lever with a horizontal cylindrical black grip (~50 mm, photos): the T-bar knob shape.
+      knob: 'speedbrake',
+      knobScale: 1.1,
+      knobMaterial: 'plasticBlack',
       detentLabels: i === 1 ? 'left' : false,
       axis: { var: INPUT.throttle(i), map: (a) => Math.max(0, Math.min(1, a)) },
       limit: lockLimit,
-      format: (v) => (v < -0.05 ? 'CUTOFF' : `${Math.round(v * 100)} %`),
+      format: (v) => (v < -0.05 ? 'OFF' : `${Math.round(v * 100)} %`),
     });
     Q.add(lev, i === 1 ? -0.024 : 0.024, 0.02);
     throttles.push(lev);
@@ -153,7 +200,7 @@ export function buildPedestal(b: CockpitBuilder, displays: Map<string, CockpitDi
   {
     const arm = throttles[0].object.children[0]?.children[0];
     const toga = new PushButton(env, { id: 'm2.toga', label: 'TO/GA', style: 'small', width: 0.008, mode: 'momentary', event: 'ap.toga', capMaterial: 'knobGrey' });
-    toga.object.position.set(-0.021, 0, 0.122);
+    toga.object.position.set(-0.038, 0, 0.074);
     toga.object.rotation.y = -Math.PI / 2;
     (arm ?? throttles[0].object).add(toga.object);
     throttles[0].object.userData.cockpitDynamic = true;
@@ -168,11 +215,12 @@ export function buildPedestal(b: CockpitBuilder, displays: Map<string, CockpitDi
       min: 0,
       max: 3,
       discrete: true,
+      // Gate legends (flyradius quadrant photo): 0 / T.O. & APPR 15 / LAND 35 / GROUND FLAPS - GROUND USE ONLY 60.
       detents: [
-        { value: 0, label: 'UP' },
-        { value: 1, label: '15 T.O.&APPR' },
-        { value: 2, label: '35 LAND' },
-        { value: 3, label: '60 GND', kind: 'gate' },
+        { value: 0, label: '0°' },
+        { value: 1, label: 'T.O. & APPR 15°' },
+        { value: 2, label: 'LAND 35°' },
+        { value: 3, label: 'GROUND FLAPS 60°\nGROUND USE ONLY', kind: 'gate' },
       ],
       travel: { kind: 'arc', minDeg: 28, maxDeg: -28, pivotDepth: 0.05 },
       armLength: 0.09,
@@ -183,7 +231,8 @@ export function buildPedestal(b: CockpitBuilder, displays: Map<string, CockpitDi
     0.09,
     -0.02,
   );
-  // Speed brake handle (LH side): RETRACT / EXTEND.
+  // Speed brake: small lever in a fore-aft slot low on the LH quadrant face, RETRACT (fwd / top) / EXTEND (aft).
+  Q.label('SPEED BRAKE', -0.105, -0.075, { height: 0.0024 });
   Q.add(
     new Lever(env, {
       id: 'm2.speedbrake',
@@ -196,14 +245,15 @@ export function buildPedestal(b: CockpitBuilder, displays: Map<string, CockpitDi
         { value: 0, label: 'RETRACT' },
         { value: 1, label: 'EXTEND' },
       ],
-      travel: { kind: 'arc', minDeg: 22, maxDeg: -22, pivotDepth: 0.04 },
-      armLength: 0.07,
+      travel: { kind: 'linear', length: 0.04 },
+      armLength: 0.03,
       knob: 'speedbrake',
+      knobScale: 0.6,
       detentLabels: 'left',
       format: (v) => (v >= 0.5 ? 'EXTEND' : 'RETRACT'),
     }),
-    -0.09,
-    -0.02,
+    -0.105,
+    -0.045,
   );
   // Elevator trim wheel with indicator (LH side of the quadrant). EST: ~5 wheel turns for full travel.
   Q.add(
@@ -234,52 +284,58 @@ export function buildPedestal(b: CockpitBuilder, displays: Map<string, CockpitDi
     -0.02,
   );
 
-  // ------------------------------------------------------------------ aft console: engine start, ignition, rudder / aileron trim
+  // ------------------------------------------------------------------ ENGINE START on the sloped aft face of the quadrant shroud
   const aftLen = P.quadrantAftX - P.aftEndX;
-  const A = b.panel({ name: 'm2.ped_aft', center_m: [(P.quadrantAftX + P.aftEndX) / 2, 0, (P.aftTopZ + P.quadrantZ) / 2], facing: 'up', tiltDeg: -12, width: P.halfWidth * 2, height: aftLen, origin: 'top-left', screws: { kind: 'phillips', pitch: 0.25 }, material: dark });
-  A.label('ENGINE START', 0.15, 0.012, { height: 0.0026 });
+  const A = b.panel({ name: 'm2.ped_aft', center_m: [(P.quadrantAftX + P.aftEndX) / 2, 0, (P.aftTopZ + P.quadrantZ) / 2], facing: 'up', tiltDeg: -12, width: P.halfWidth * 2, height: aftLen, origin: 'top-left', screws: false, material: silver });
+  // ENGINE START bracket with L / DISENGAGE / R printed above three abutting square buttons (photos).
+  A.bracket('ENGINE START', 0.15, 0.03, 0.062, { height: 0.0026 });
   const startBtn = (i: 1 | 2) =>
     new PushButton(env, {
       id: `m2.start${i}`,
       var: M2.startBtn(i),
       label: `${i === 1 ? 'L' : 'R'} ENGINE START`,
       style: 'korry',
-      width: 0.02,
-      height: 0.016,
+      width: 0.019,
+      height: 0.019,
       mode: 'momentary',
-      segments: [{ text: [i === 1 ? 'L' : 'R', 'START'], color: 'white', var: M2.startLight(i) }],
+      segments: [{ text: '', color: 'white', var: M2.startLight(i) }],
     });
-  A.add(startBtn(1), 0.1, 0.038);
-  A.add(new PushButton(env, { id: 'm2.start_diseng', var: M2.startDiseng, label: 'START DISENGAGE', style: 'korry', width: 0.02, height: 0.016, mode: 'momentary', engraved: 'DISENG', engravedHeight: 0.0024 }), 0.15, 0.038);
-  A.add(startBtn(2), 0.2, 0.038);
-  A.label('IGNITION', 0.15, 0.064, { height: 0.0024 });
-  for (const i of [1, 2] as const) {
-    A.add(new ToggleSwitch(env, { id: `m2.ign${i}`, var: M2.ignSw(i), label: `${i === 1 ? 'L' : 'R'} IGNITION`, positions: ['NORM', 'ON'], scale: 0.85, labels: { name: i === 1 ? 'L' : 'R', positions: true, height: 0.0021 } }), i === 1 ? 0.12 : 0.18, 0.09);
-  }
-  // Rudder trim knob (centre aft) and aileron trim knob (EST: CJ-family pedestal trim knobs).
-  A.add(
+  A.add(startBtn(1), 0.1305, 0.056);
+  A.add(new PushButton(env, { id: 'm2.start_diseng', var: M2.startDiseng, label: 'START DISENGAGE', style: 'korry', width: 0.019, height: 0.019, mode: 'momentary', engraved: '', engravedHeight: 0.0024 }), 0.15, 0.056);
+  A.add(startBtn(2), 0.1695, 0.056);
+  A.label('L', 0.1305, 0.04, { height: 0.0028 });
+  A.label('DISENGAGE', 0.15, 0.04, { height: 0.0019 });
+  A.label('R', 0.1695, 0.04, { height: 0.0028 });
+
+  // ------------------------------------------------------------------ rudder / aileron trim on the aft face of the black lower pedestal
+  // (S&D15 Fig III / S&D21 Fig 3: pointer knobs with dot scales near the floor; rudder above aileron, EST order).
+  const trimZ = (P.aftTopZ + 0.02 + FLOOR_Z) / 2;
+  const TR = b.panel({ name: 'm2.ped_trim', center_m: [P.aftEndX - 0.012, 0, trimZ], facing: 'aft', tiltDeg: 0, width: P.halfWidth * 2 - 0.02, height: FLOOR_Z - P.aftTopZ - 0.06, origin: 'center', screws: false, material: black });
+  TR.add(
     new RotaryKnob(env, {
       id: 'm2.rud_trim',
       label: 'RUDDER TRIM',
-      cap: 'wing',
-      diameter: 0.03,
+      cap: 'pointer',
+      diameter: 0.028,
       outer: { var: M2.rudderTrim, min: -1, max: 1, step: 0.02, initial: 0, angleRange: [-120, 120], format: (v) => (Math.abs(v) < 0.01 ? 'NEUTRAL' : `${v < 0 ? 'NL' : 'NR'} ${Math.round(Math.abs(v) * 100)} %`) },
     }),
-    0.15,
-    0.15,
+    0,
+    0,
   );
-  A.label('NL  RUDDER TRIM  NR', 0.15, 0.125, { height: 0.0022 });
-  A.add(
+  TR.label('NOSE L    RUDDER TRIM    NOSE R', 0, 0.028, { height: 0.0024 });
+  TR.label('\u2022 \u2022 \u2022 \u2022 \u2022 \u2022 \u2022', 0, 0.02, { height: 0.0022 });
+  TR.add(
     new RotaryKnob(env, {
       id: 'm2.ail_trim',
       label: 'AILERON TRIM',
-      cap: 'wing',
+      cap: 'pointer',
       diameter: 0.022,
       outer: { var: M2.aileronTrim, min: -1, max: 1, step: 0.02, initial: 0, angleRange: [-120, 120], format: (v) => (Math.abs(v) < 0.01 ? 'NEUTRAL' : `${v < 0 ? 'LWD' : 'RWD'} ${Math.round(Math.abs(v) * 100)} %`) },
     }),
-    0.06,
-    0.15,
+    0,
+    -0.09,
   );
-  A.label('LWD AIL TRIM RWD', 0.06, 0.128, { height: 0.002 });
+  TR.label('LWD   AILERON TRIM   RWD', 0, -0.064, { height: 0.0022 });
+  TR.label('\u2022 \u2022 \u2022 \u2022 \u2022', 0, -0.071, { height: 0.0022 });
   return { throttles };
 }

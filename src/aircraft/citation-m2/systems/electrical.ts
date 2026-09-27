@@ -16,7 +16,7 @@
  *
  * Bus topology (EST, CJ-family architecture from the S&D descriptions):
  *
- *   NiCd -- HOT BATT --(batt relay: BATT)-- BATT BUS ==(225 A limiters)== L MAIN (gen 1) / R MAIN (gen 2)
+ *   NiCd --(batt disc relay: NORMAL)-- HOT BATT --(batt relay: BATT)-- BATT BUS ==(225 A limiters)== L MAIN (gen 1) / R MAIN (gen 2)
  *                  \--(emer relay: EMER)--.         \--(diode)--> EMER BUS --(avionics relay)--> AVN 1
  *                                          '--------------------->                (aux batt diode during start)
  *   L MAIN / BATT --> L XFEED ;  R MAIN / BATT --> R XFEED --(avionics relay)--> AVN 2
@@ -44,6 +44,9 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): ElectricalNetwo
     ...extra,
   });
   const loads: LoadDef[] = [
+    // ---- Battery terminal: the disconnect relay coil is held energized in DISC ("holding it in DISC drains the
+    //      battery slowly", CAE p.5-23). EST 0.4 A coil.
+    { id: 'batt_disc_coil', bus: 'batt_term', amps: 0.4, enabled: M2.battDisc },
     // ---- AVN 1 (pilot side G3000: GDU PFD1, GTC 1, GIA 63W #1, GDC 1, GRS 1, GMC 710, AP servos)
     load('pfd1', 'avn1', 6.5, {}, 10), // GDU 1400W: ~180 W at 28 V (EST)
     load('gtc1', 'avn1', 1.2, {}, 5),
@@ -101,7 +104,7 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): ElectricalNetwo
     load('tail_deice', 'r_main', `0.5 + 2 * ice.tail_boots`, {}, 5),
     load('antiskid', 'r_main', 1, { enabled: M2.antiskidSw }, 5),
     // ---- L XFEED (cockpit)
-    load('panel_lts', 'l_xfeed', `4 * ${M2.panelLt} + 1.5 * ${M2.pedestalLt}`, { model: 'resistive' }, 7.5),
+    load('panel_lts', 'l_xfeed', `5.5 * ${M2.panelLt}`, { model: 'resistive' }, 7.5), // panels + pedestal on the PANELS dimmer
     load('flood_lts', 'l_xfeed', `2 * ${M2.floodLt} + 0.5 * ${M2.mapLt(1)} + 0.5 * ${M2.mapLt(2)}`, { model: 'resistive' }, 5),
     load('cockpit_fans', 'l_xfeed', 1.5, {}, 5), // two glareshield avionics cooling fans (S&D15 §10.3.A)
     load('temp_ctl', 'l_xfeed', 0.5, {}, 3),
@@ -145,16 +148,18 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): ElectricalNetwo
   });
 
   return new ElectricalNetwork(ctx.vars, {
-    buses: [{ id: 'hot_batt' }, { id: 'batt_bus' }, { id: 'emer' }, { id: 'l_main' }, { id: 'r_main' }, { id: 'l_xfeed' }, { id: 'r_xfeed' }, { id: 'avn1' }, { id: 'avn2' }, { id: 'aux' }],
+    buses: [{ id: 'batt_term' }, { id: 'hot_batt' }, { id: 'batt_bus' }, { id: 'emer' }, { id: 'l_main' }, { id: 'r_main' }, { id: 'l_xfeed' }, { id: 'r_xfeed' }, { id: 'avn1' }, { id: 'avn2' }, { id: 'aux' }],
     batteries: [
       // 44 Ah NiCd main battery (S&D15/S&D21): 20-cell NiCd class of the 737NG preset, capacity per the S&D.
-      { id: 'batt', bus: 'hot_batt', ...BATTERY_737NG_NICD, capacityAh: 44, ambientC: 'fdm.sat_c' },
+      { id: 'batt', bus: 'batt_term', ...BATTERY_737NG_NICD, capacityAh: 44, ambientC: 'fdm.sat_c' },
       // 24 V 14 Ah sealed lead-acid auxiliary battery (S&D21 §9.3): RG24-15 class (13.6 Ah) scaled.
       { id: 'aux_batt', bus: 'aux', ...BATTERY_172S_MAIN, capacityAh: 14, ambientC: 'fdm.sat_c' },
     ],
     dcGenerators: [gen(1), gen(2)],
     externals: [{ id: 'gpu', bus: 'batt_bus', type: 'dc', available: M2.gpuConnected, voltage: 28 }],
     links: [
+      // BATTERY DISCONNECT relay (CAE CJ-family differences p.5-23: NORMAL / DISC switch above the pilot's armrest).
+      { id: 'batt_disc', a: 'batt_term', b: 'hot_batt', closed: `${M2.battDisc} == 0` },
       { id: 'batt_relay', a: 'hot_batt', b: 'batt_bus', closed: `${M2.battSw} == 1`, coil: { pickupV: 14, dropoutV: 8 } },
       { id: 'emer_relay', a: 'hot_batt', b: 'emer', closed: `${M2.battSw} == -1`, coil: { pickupV: 14, dropoutV: 8 } },
       { id: 'emer_feed', a: 'batt_bus', b: 'emer', kind: 'diode' },

@@ -142,6 +142,8 @@ export class G3000System implements Subsystem {
   readonly messages = new MessageList();
   readonly maps: Record<MapKey, MapSettings>;
   readonly pointers: Record<PaneId, PointerState>;
+  /** PFD inset map pointers (GCU 275 RANGE push / joystick, state/Gcu.ts); inactive unless an aircraft has a GCU. */
+  readonly insetPointers: Record<1 | 2, PointerState> = { 1: { active: false, dx: 0, dy: 0 }, 2: { active: false, dx: 0, dy: 0 } };
   /** Seconds since the heading / course was last changed (HSI readouts show for 3 s, PG §2.1). */
   hdgChangedS = 99;
   crsChangedS: [number, number, number] = [99, 99, 99];
