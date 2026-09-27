@@ -4,10 +4,8 @@
  * `presets.ts` and adding its power bindings and var names:
  *
  *   const suite = new G1000Suite(ctx, {
- *     ...C172S_NXI,
- *     power: { pfd: 'elec.ess_powered', mfd: 'elec.avn2_powered', gia1: 'elec.ess_powered', ... },
- *     elec: { mainBusV: 'elec.main_v', essBusV: 'elec.ess_v', mainBattA: 'elec.batt_amps', stbyBattA: 'elec.stby_amps' },
- *     checklists: C172S_CHECKLISTS,
+ *     ...C172S_NXI,                       // includes C172S_NXI_POWER (elec.<load>_powered bindings)
+ *     checklists: C172S_G1000_CHECKLISTS,
  *   });
  *
  * Every field except `aircraftId` has a default (tests and the preview

@@ -262,11 +262,16 @@ export function c172ElectricalConfig(variant: C172Variant, opts: C172ElectricalO
         // and ALT FLD / ALT FIELD power (UND: "Power from the X-FEED BUS via the ALT FIELD circuit
         // breaker is required for the alternator to generate power").
         switch: `${C172.masterAlt} && ${C172.masterBat} && elec.alt_field_powered`,
-        drive: `eng1.rpm * (1 - fail.${C172_FAIL.altBelt})`,
+        // Drive = engine rpm (belt). A runaway regulator (failure elec.alt.regulator) applies full
+        // field: the alternator then delivers beyond its 60 A rating (EST ~75 A max), which is what
+        // drives the bus past the ACU's 31.75 V trip even with both batteries absorbing charge. It is
+        // expressed as a x3 effective drive into the table's above-rating range (x > 2800), which
+        // normal operation (<= 2700 rpm redline) never reaches.
+        drive: `eng1.rpm * (1 - fail.${C172_FAIL.altBelt}) * (1 + 2 * (fail.elec.alt.regulator ?? 0))`,
         minDrive: 450,
         // EST: Lycoming alternator pulley ~3.2:1; output limited at idle (POH Sec 3: LOW VOLTS may
         // come on below 1000 rpm with electrical load; full 60 A above ~2000 rpm).
-        maxAmpsVsDrive: { x: [450, 600, 800, 1000, 1300, 1600, 2000], y: [0, 14, 26, 36, 46, 54, 60] },
+        maxAmpsVsDrive: { x: [450, 600, 800, 1000, 1300, 1600, 2000, 2800, 4800], y: [0, 14, 26, 36, 46, 54, 60, 60, 75] },
         field: { bus: 'xfeed', minV: 8 },
         ovTripV: ELEC_DATA.acuOvTripV, // POH NAV III Sec 3: ACU disconnects at ~31.75 V
         ovTripDelayS: 0.3,
@@ -307,25 +312,38 @@ export function c172ElectricalConfig(variant: C172Variant, opts: C172ElectricalO
       { id: 'avn2_relay', a: 'bus2', b: 'avn2', closed: C172.avionicsBus2, cb: cb(list, g ? 'avn2' : 'avn_bus2') },
       ...(g
         ? [
-            { id: 'ess_d1', a: 'bus1', b: 'ess', kind: 'diode' as const },
-            { id: 'ess_d2', a: 'bus2', b: 'ess', kind: 'diode' as const },
+            // ESS bus feed. POH NAV III Fig 7-7 sheet 2 shows one diode from each primary bus into
+            // the ESS bus. SCOPE: modelled as one diode from the crossfeed bus (itself diode-fed from
+            // both primary buses): the same behaviour for every failure except a crossfeed-bus short,
+            // and no diode loop (the network's ideal diodes cannot open inside a loop, which would
+            // let the standby battery back-feed the main buses through the second ESS diode).
+            { id: 'ess_d', a: 'xfeed', b: 'ess', kind: 'diode' as const },
             // Standby battery controller: discharges into ESS when ARMed and the main bus is below 20 V
             // (POH NAV III Sec 3), charges from ESS while ARMed. TEST (momentary) loads the battery only.
             { id: 'stby_discharge', a: 'stby_bus', b: 'ess', kind: 'diode' as const, closed: 'ac.c172.stby_release', cb: cb(list, 'stdby_batt') },
             { id: 'stby_charge', a: 'ess', b: 'stby_bus', kind: 'diode' as const, closed: `${C172.stbyBatt} == ${STBY_BATT.arm}`, cb: cb(list, 'stdby_batt') },
-            // Dual feeds (identical breakers on AVN BUS 1 and ESS, diode-ORed at the unit).
-            { id: 'pfd_f1', a: 'avn1', b: 'lru_pfd', kind: 'diode' as const, cb: cb(list, 'pfd_avn1') },
-            { id: 'pfd_f2', a: 'ess', b: 'lru_pfd', kind: 'diode' as const, cb: cb(list, 'pfd_ess') },
-            { id: 'adc_f1', a: 'avn1', b: 'lru_adc_ahrs', kind: 'diode' as const, cb: cb(list, 'adc_ahrs_avn1') },
-            { id: 'adc_f2', a: 'ess', b: 'lru_adc_ahrs', kind: 'diode' as const, cb: cb(list, 'adc_ahrs_ess') },
-            { id: 'nav1_f1', a: 'avn1', b: 'lru_nav1_eng', kind: 'diode' as const, cb: cb(list, 'nav1_eng_avn1') },
-            { id: 'nav1_f2', a: 'ess', b: 'lru_nav1_eng', kind: 'diode' as const, cb: cb(list, 'nav1_eng_ess') },
+            // Dual feeds (identical breakers on AVN BUS 1 and ESS, diode-ORed at the unit). The unit
+            // draws from the higher supply; only one feed conducts at a time so the unit bus never
+            // closes a diode loop between AVN BUS 1 and the ESS bus (see ess_d). The ESS feed wins a
+            // tie (0.5 V hysteresis, EST); a pulled ESS breaker hands the unit to AVN BUS 1.
+            ...dualFeed('pfd', 'lru_pfd', cb(list, 'pfd_avn1'), cb(list, 'pfd_ess')),
+            ...dualFeed('adc', 'lru_adc_ahrs', cb(list, 'adc_ahrs_avn1'), cb(list, 'adc_ahrs_ess')),
+            ...dualFeed('nav1', 'lru_nav1_eng', cb(list, 'nav1_eng_avn1'), cb(list, 'nav1_eng_ess')),
           ]
         : []),
     ],
     loads,
   };
   return cfg;
+}
+
+/** The two diode feeds (AVN BUS 1 and ESS) of a dual-fed G1000 unit bus; exactly one conducts. */
+function dualFeed(id: string, unitBus: string, cbAvn: { name: string; ratingA: number }, cbEss: { name: string; ratingA: number }) {
+  const avnWins = `(elec.avn1_v > elec.ess_v + 0.5 || (cb.${cbEss.name} ?? 1) < 0.5)`;
+  return [
+    { id: `${id}_f1`, a: 'avn1', b: unitBus, kind: 'diode' as const, closed: avnWins, cb: cbAvn },
+    { id: `${id}_f2`, a: 'ess', b: unitBus, kind: 'diode' as const, closed: `!${avnWins}`, cb: cbEss },
+  ];
 }
 
 export function createC172Electrical(ctx: Pick<SimContext, 'vars'>, variant: C172Variant, opts: C172ElectricalOptions = {}): ElectricalNetwork {

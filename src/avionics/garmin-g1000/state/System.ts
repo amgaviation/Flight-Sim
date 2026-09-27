@@ -37,6 +37,7 @@ import { ChecklistModel } from '../../garmin-g3000/state/models';
 import { FplEditor, LOC_APPROACH_TYPES } from '../../garmin-g3000/state/FplEditor';
 import { fmtCom, fmtNav } from '../../garmin-g3000/format';
 import type { CasModel } from '../../common/draw/CasWindow';
+import { AltitudeAlerter, ALT_ALERT_GARMIN, MinimumsAlerter, MINIMUMS_GARMIN, type AltitudeAlertPhase } from '../../common/alerting';
 import type { G1000Resolved } from '../config';
 import { BRG_SOURCE, CDI_SOURCE, DME_MODE, G1K, G1K_EVENTS, GDU_IDS, MAP_TER, PFD_MAP, WIND_OPTION, vn, type GduId, type G1kUnit } from '../vars';
 import { AfcsMonitor, AFCS_KEYS } from './afcs';
@@ -139,6 +140,15 @@ export class G1000System implements Subsystem {
   revision = 0;
   /** AFCS nav source override (receiver) while an ILS approach is armed with GPS on the CDI. */
   afcsNavOverride = 0;
+  /**
+   * Altitude alerting (PG §2.1 "Altitude Alerting": within 1000 ft of the selected altitude the box
+   * flashes black-on-cyan 5 s; within 200 ft it turns cyan-on-black, flashes 5 s and a tone sounds;
+   * a deviation of more than 200 ft after capture flashes yellow with a tone).
+   */
+  readonly altAlert = new AltitudeAlerter(ALT_ALERT_GARMIN);
+  /** Minimums alerting (PG §2.4: within 2500 ft cyan, 100 ft white, at minimums amber + "Minimums, minimums"). */
+  readonly minsAlert = new MinimumsAlerter(MINIMUMS_GARMIN);
+  private lastAltPhase: AltitudeAlertPhase = 'idle';
 
   private readonly offs: (() => void)[] = [];
   private readonly airborne: () => boolean;
@@ -355,6 +365,10 @@ export class G1000System implements Subsystem {
     on('ap.cws', (p) => {
       this.cwsHeld = pressedOf(p, !this.cwsHeld);
       this.esp?.setInterrupt(this.cwsHeld || this.discHeld);
+    });
+    on('ap.disc', () => {
+      this.discHeld = true;
+      this.esp?.setInterrupt(true);
     });
     on(G1K_EVENTS.apDiscHold, (p) => {
       this.discHeld = pressedOf(p, false);
@@ -1049,6 +1063,7 @@ export class G1000System implements Subsystem {
     if (v.get(G1K.vnvEnabled) < 0.5) v.set(FMS.vnavValid, 0);
     this.refs.timer.update(dt);
     this.refs.mins.publish();
+    this.updateAltitudeAlerts(dt, airborne);
     this.fuel.update(dt, u.up('gea'), airborne);
     // AFCS monitor and ESP.
     this.afcsMon.update(dt, u.up('gia1'), u.supplied('servos'), u.powered('servos'), u.up('servos'), u.bootProgress('servos') < 1 ? (1 - u.bootProgress('servos')) * this.cfg.bootS.servos : 0);
@@ -1078,6 +1093,24 @@ export class G1000System implements Subsystem {
       this.updateMessages(airborne);
     }
     if (this.refs.timer.expired) this.alerts.message('timer', 'TIMER EXPIRD – Timer has expired.', true);
+  }
+
+  private updateAltitudeAlerts(dt: number, airborne: boolean): void {
+    const v = this.vars;
+    if (!this.units.up('pfd') && !this.units.up('mfd')) return;
+    if (v.get(vn(ADC.valid, 1), 1) < 0.5) return;
+    const alt = v.get(ALT1);
+    this.altAlert.update(alt, v.get(AP.selAltitude), dt);
+    const ph = this.altAlert.phase;
+    if (ph !== this.lastAltPhase) {
+      // Tone within 200 ft and on a deviation (PG §2.1); not on the ground.
+      if (airborne && (ph === 'near' || ph === 'deviation')) this.audio?.play('alt_alert');
+      this.lastAltPhase = ph;
+    }
+    this.altAlert.consumeAural();
+    const mins = this.refs.mins.effectiveFt();
+    this.minsAlert.update(alt, Number.isFinite(mins) ? mins : NaN, !airborne, dt);
+    if (this.minsAlert.consumeAural()) this.audio?.callout('Minimums, minimums', 6);
   }
 
   private slowUpdate(dt: number): void {

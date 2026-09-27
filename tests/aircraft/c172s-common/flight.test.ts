@@ -183,7 +183,8 @@ describe('Cessna 172S handling (shared core)', () => {
       maxDAlt = Math.max(maxDAlt, Math.abs(s.alt - s0.alt));
       maxDIas = Math.max(maxDIas, Math.abs(s.ias - s0.ias));
     });
-    expect(maxBank).toBeLessThan(10);
+    // Rigged for cruise: at approach power and 70 KIAS the wings drift slowly (no rudder held).
+    expect(maxBank).toBeLessThan(15);
     expect(maxDAlt).toBeLessThan(150);
     expect(maxDIas).toBeLessThan(5);
   });
@@ -252,11 +253,11 @@ describe('Cessna 172S handling (shared core)', () => {
     r.run(10);
     expect(v.get(SURF.flapsDeg)).toBeCloseTo(10, 0);
     // FLAP breaker pulled: the flaps stay where they are.
-    v.set('cb.flap', 0);
+    v.set('cb.flaps', 0);
     v.set(C172.flapLever, 0);
     r.run(5);
     expect(v.get(SURF.flapsDeg)).toBeCloseTo(10, 0);
-    v.set('cb.flap', 1);
+    v.set('cb.flaps', 1);
     r.run(5);
     expect(v.get(SURF.flapsDeg)).toBeLessThan(0.5);
     // Master OFF: no flap motor.

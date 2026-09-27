@@ -13,6 +13,15 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { TerrainRaster, terrainBand } from '../../src/avionics/common/draw/TerrainRaster';
 import { MovingMap, MAP_GARMIN } from '../../src/avionics/common/draw/MovingMap';
 import type { Airport } from '../../src/nav/types';
+import { SimVars } from '../../src/core/SimVars';
+import { EventBus } from '../../src/core/EventBus';
+import { G3000Suite } from '../../src/avionics/garmin-g3000/Suite';
+import { G3000_M2_LAYOUT } from '../../src/avionics/garmin-g3000/presets';
+import { MapPane } from '../../src/avionics/garmin-g3000/gdu/panes/MapPane';
+import type { G3000System } from '../../src/avionics/garmin-g3000/state/System';
+import type { G3000Config } from '../../src/avionics/garmin-g3000/config';
+import type { SimContext } from '../../src/core/SimContext';
+import { loadDb } from './garmin-g3000/helpers';
 
 /** Minimal OffscreenCanvas: the raster only needs createImageData / putImageData. */
 class FakeCanvas {
@@ -134,5 +143,54 @@ describe('TerrainRaster near the departure airport', () => {
     map.state.terrain = 'relative';
     map.update(0.05);
     expect(map.terrain!.runwayElevFt).toBeNaN();
+  });
+});
+
+/** 2D context stub that records the fill colours used (the MapPane legend is drawn with box() fills). */
+function recordingCtx(): { ctx: unknown; fills: string[] } {
+  const fills: string[] = [];
+  const state: Record<string, unknown> = { fillStyle: '' };
+  const ctx = new Proxy(state, {
+    get: (t, k) => {
+      if (k in t) return t[k as string];
+      if (k === 'fill' || k === 'fillRect') return () => fills.push(String(t.fillStyle));
+      if (k === 'measureText') return () => ({ width: 10 });
+      if (k === 'createImageData') return (w: number, h: number) => ({ data: new Uint8ClampedArray(w * h * 4), width: w, height: h });
+      return () => undefined;
+    },
+    set: (t, k, v) => ((t[k as string] = v), true),
+  });
+  return { ctx, fills };
+}
+
+describe('G3000 / G5000 relative terrain legend on the map panes', () => {
+  it('on-ground legend (red + dark) on the ground, red / yellow / green in the air, none for topo', async () => {
+    const nav = await loadDb();
+    const vars = new SimVars();
+    const world = { elevationAt: () => 400 * FT, normalAt: () => [0, 0, 1], surfaceAt: () => 'asphalt' };
+    const suite = new G3000Suite({ vars, events: new EventBus(), nav, world } as unknown as SimContext, { ...G3000_M2_LAYOUT, aircraftId: 'test' } as G3000Config, { noDisplays: true });
+    const pane = new MapPane(suite.system as unknown as G3000System, 'mfd1', 'mfd1', { x: 0, y: 0, w: 500, h: 600 });
+    vars.set('gps.valid', 1);
+    const draw = () => {
+      pane.update(0.05);
+      const r = recordingCtx();
+      pane.draw(r.ctx as never);
+      return r.fills;
+    };
+    pane.mode = 'taws';
+    vars.set('gear.air_ground', 1);
+    let fills = draw();
+    expect(pane.map.state.onGround).toBe(true);
+    expect(fills).toContain('#ff0000');
+    expect(fills).toContain('#272b2b');
+    expect(fills).not.toContain('#ffff00');
+    vars.set('gear.air_ground', 0);
+    fills = draw();
+    expect(fills).toEqual(expect.arrayContaining(['#ff0000', '#ffff00', 'rgb(87,162,68)']));
+    // Absolute (topographic) terrain on the navigation map: no relative legend.
+    pane.mode = 'nav';
+    (suite.system as unknown as G3000System).maps.mfd1.terrain = 'topo';
+    fills = draw();
+    expect(fills).not.toContain('#ffff00');
   });
 });

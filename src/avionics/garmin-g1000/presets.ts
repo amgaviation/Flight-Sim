@@ -3,7 +3,7 @@
  * GFC 700 AFCS (Cessna NAV III). Spread it into the suite config and add the
  * aircraft's power bindings / var names:
  *
- *   new G1000Suite(ctx, { ...C172S_NXI, power: { ... }, eis: { ...C172S_NXI.eis!, elec: { ... } } })
+ *   new G1000Suite(ctx, { ...C172S_NXI, checklists: C172S_G1000_CHECKLISTS })
  *
  * Sources:
  *  - Cessna 172S NAV III POH/AFM 172SPHAUS-03 (G1000): Figure 2-2 airspeed
@@ -101,8 +101,9 @@ export const C172S_EIS: G1kEisConfig = {
     scale: { min: 3, max: 7, bands: [{ from: 4.5, to: 5.5, color: GREEN }], redlines: [], amberlines: [], ticks: [3, 7], labels: [], limits: {}, decimals: 1, readoutStep: 0, unit: 'IN' },
   },
   fuelQty: {
-    left: `fuel.tank0_kg / ${AVGAS_KG_PER_GAL}`,
-    right: `fuel.tank1_kg / ${AVGAS_KG_PER_GAL}`,
+    // Gauged (float transmitter) quantity from the fuel system; -1 gal = transmitter failed (red X).
+    left: `fuel.left_ind_kg / ${AVGAS_KG_PER_GAL}`,
+    right: `fuel.right_ind_kg / ${AVGAS_KG_PER_GAL}`,
     scale: {
       min: 0,
       max: 30,
@@ -121,35 +122,60 @@ export const C172S_EIS: G1kEisConfig = {
     lowGal: 5,
     lowDelayS: 60,
   },
-  elec: { mainBusV: 'elec.main_v', essBusV: 'elec.ess_v', mainBattA: 'elec.batt_amps', stbyBattA: 'elec.stby_batt_amps', lowVolts: 24.5 },
+  // c172s-common G1000 readouts (M BUS at the WARN breaker, E BUS at NAV1 ENG on the ESS bus; UND trainer).
+  elec: { mainBusV: 'ac.c172.m_bus_v', essBusV: 'ac.c172.e_bus_v', mainBattA: 'ac.c172.m_batt_a', stbyBattA: 'ac.c172.s_batt_a', lowVolts: 24.5 },
   // POH: 53 gal usable (Figure 7-5); PG Table 3-1 GAL REM keys 35 GAL / 53 GAL.
   totalizer: { defaultGal: 53, presetsGal: [35, 53], fuelFlowGph: 'eng1.ff_gph' },
 };
 
 /**
- * CAS annunciations of the 172S NXi (PG 190-02177-02 Appendix A). Conditions
- * default to standard vars; the aircraft may override any `when` binding.
- *  - OIL PRESSURE: separate low-oil-pressure switch, 0-20 PSI (POH 7-32).
- *  - LOW VOLTS: main bus below 24.5 V (POH 7-51).
- *  - HIGH VOLTS: EST 32 V (ACU over-voltage trip; UND C172S electrical guide).
- *  - LOW FUEL L/R: below 5 gal indicated for more than 60 s (POH 7-38).
- *  - LOW VACUUM: below 3.5 inHg (POH 7-60).
- *  - STBY BATT: EST standby battery discharging more than 0.5 A (it is feeding the essential bus).
- *  - CO LVL HIGH: `ac.co.high` from the CO detector (optional equipment).
+ * CAS annunciations of the 172S NXi (PG 190-02177-02 Appendix A). The GEA 71B
+ * reads the discrete sensors; the conditions are the annunciation outputs of
+ * the c172s-common systems (`ac.c172.ann.*`, which include the POH timing:
+ * LOW FUEL L/R below 5 gal for more than 60 s, POH 7-38; LOW VOLTS below
+ * 24.5 V from the ACU sense, POH 7-51; HIGH VOLTS above 32 V; LOW VACUUM
+ * below 3.5 inHg, POH 7-60; OIL PRESSURE from the 20 psi switch, POH 7-32;
+ * STBY BATT while the standby battery discharges). An aircraft without those
+ * systems overrides the `when` bindings.
  */
 export const C172S_CAS: CasDef[] = [
-  { id: 'oil_press', text: 'OIL PRESSURE', level: 'warning', when: 'eng1.oil_press_psi < 20' },
-  { id: 'low_volts', text: 'LOW VOLTS', level: 'warning', when: 'elec.main_v < 24.5' },
-  { id: 'high_volts', text: 'HIGH VOLTS', level: 'warning', when: 'elec.main_v > 32' },
-  { id: 'co_lvl', text: 'CO LVL HIGH', level: 'warning', when: 'ac.co.high ?? 0' },
-  { id: 'low_fuel_l', text: 'LOW FUEL L', level: 'caution', when: `fuel.tank0_kg / ${AVGAS_KG_PER_GAL} < 5`, delayS: 60 },
-  { id: 'low_fuel_r', text: 'LOW FUEL R', level: 'caution', when: `fuel.tank1_kg / ${AVGAS_KG_PER_GAL} < 5`, delayS: 60 },
-  { id: 'low_vac', text: 'LOW VACUUM', level: 'caution', when: 'ac.vac.suction_inhg < 3.5' },
-  { id: 'stby_batt', text: 'STBY BATT', level: 'caution', when: 'elec.stby_batt_amps < -0.5' },
+  { id: 'co_lvl', text: 'CO LVL HIGH', level: 'warning', when: 'ac.c172.ann.co_lvl_high ?? 0' },
+  { id: 'high_volts', text: 'HIGH VOLTS', level: 'warning', when: 'ac.c172.ann.high_volts ?? 0' },
+  { id: 'low_volts', text: 'LOW VOLTS', level: 'warning', when: 'ac.c172.ann.low_volts ?? 0' },
+  { id: 'oil_press', text: 'OIL PRESSURE', level: 'warning', when: 'ac.c172.ann.oil_press ?? 0' },
+  // USP ACTIVE is a CAS warning on the NXi with ESP (Appendix A).
+  { id: 'usp', text: 'USP ACTIVE', level: 'warning', when: `${G1K.uspActive} ?? 0` },
+  { id: 'low_fuel_l', text: 'LOW FUEL L', level: 'caution', when: 'ac.c172.ann.low_fuel_l ?? 0' },
+  { id: 'low_fuel_r', text: 'LOW FUEL R', level: 'caution', when: 'ac.c172.ann.low_fuel_r ?? 0' },
+  { id: 'low_vac', text: 'LOW VACUUM', level: 'caution', when: 'ac.c172.ann.low_vacuum ?? 0' },
+  { id: 'stby_batt', text: 'STBY BATT', level: 'caution', when: 'ac.c172.ann.stby_batt ?? 0' },
   { id: 'esp_off', text: 'ESP OFF', level: 'advisory', when: `${G1K.espEnabled} < 0.5` },
+  // AP AIL DISC: roll servo failed (Appendix A advisory, EST mapping to the shared Afcs roll servo failure).
+  { id: 'ap_ail_disc', text: 'AP AIL DISC', level: 'advisory', when: 'fail.afcs.servo_roll ?? 0' },
 ];
 
-/** Complete 172S G1000 NXi preset (without power bindings / checklists). */
+/**
+ * Unit power for the c172s-common G1000 electrical network (loads
+ * `elec.<id>_powered`, POH NAV III Figure 7-7 / UND C172S electrical
+ * trainer): PFD, ADC/AHRS and NAV1/ENG dual-fed from the ESS bus and AVN BUS 1;
+ * COMM 1 on ESS; MFD, NAV 2, COMM 2, XPNDR, AUDIO and AUTOPILOT on AVN BUS 2.
+ */
+export const C172S_NXI_POWER: NonNullable<G1000Config['power']> = {
+  pfd: 'elec.pfd_powered',
+  mfd: 'elec.mfd_powered',
+  gia1: 'elec.nav1_eng_powered',
+  gea: 'elec.nav1_eng_powered',
+  com1: 'elec.comm1_powered',
+  gia2: 'elec.nav2_powered',
+  com2: 'elec.comm2_powered',
+  adahrs: 'elec.adc_ahrs_powered',
+  gmu: 'elec.adc_ahrs_powered',
+  xpdr: 'elec.xpndr_powered',
+  gma: 'elec.audio_powered',
+  servos: 'elec.autopilot_powered',
+};
+
+/** Complete 172S G1000 NXi preset for the c172s-common systems (checklists are added by the aircraft). */
 export const C172S_NXI: G1000Config = {
   aircraftId: 'c172-g1000',
   aircraftName: 'Cessna 172S',
@@ -166,4 +192,8 @@ export const C172S_NXI: G1000Config = {
   // EST: GTX 345R (ADS-B In/Out) transponder as fitted to current Skyhawks (PG §1.1 lists 335R / 345R / 33ES).
   traffic: 'ADSB',
   terrain: 'SVT',
+  power: C172S_NXI_POWER,
+  // EST: USP activation in the altitude-critical modes "at stall warning" (PG §7.5); the 172S warning is the
+  // pneumatic horn (c172s-common `ac.c172.stall_horn`).
+  stallWarning: 'ac.c172.stall_horn ?? 0',
 };

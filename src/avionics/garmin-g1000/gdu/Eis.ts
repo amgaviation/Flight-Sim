@@ -134,8 +134,9 @@ export class EisRenderer {
     const lim = e.fuelQty.indicatorMaxGal;
     const fs = this.fuel.state;
     fs.valid = ok;
-    fs.value = Number.isFinite(fl) ? Math.min(fl, lim) : NaN;
-    fs.value2 = Number.isFinite(fr) ? Math.min(fr, lim) : NaN;
+    // A failed transmitter reads below 0 (c172s-common: -1 gal): red X instead of a pointer.
+    fs.value = Number.isFinite(fl) && fl > -0.5 ? Math.max(0, Math.min(fl, lim)) : NaN;
+    fs.value2 = Number.isFinite(fr) && fr > -0.5 ? Math.max(0, Math.min(fr, lim)) : NaN;
     this.lowFuelL = fl < e.fuelQty.lowGal ? this.lowFuelL + dt : 0;
     this.lowFuelR = fr < e.fuelQty.lowGal ? this.lowFuelR + dt : 0;
     this.fuel.update(dt);
