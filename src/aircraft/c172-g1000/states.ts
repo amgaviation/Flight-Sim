@@ -4,7 +4,7 @@
  * this adds the variant's controls, the G1000 (power-on / GPS / transponder via the suite),
  * the GRS 79 alignment, the altimeter settings and the GFC 700 references.
  *
- * POH 172SPHBUS-00 Sec 4: Before Takeoff ends with the Flight Director OFF and ALT SEL SET;
+ * POH 172SPHBUS-02 Sec 4: Before Takeoff ends with the Flight Director OFF and ALT SEL SET;
  * the cruise / approach presets start with the autopilot OFF and the references synchronised
  * to the current heading / altitude (the pilot engages it).
  */
@@ -14,6 +14,7 @@ import { ADC, AP, FDM } from '../../core/vars';
 import { applyC172State } from '../c172s-common/states';
 import { C172G, ELT_ROCKER, MET } from './vars';
 import type { C172G1000Systems } from './createSystems';
+import { C172G_PROC } from './systems/procedures';
 
 /** Writes the variant's own control vars for a state (all momentary controls released). */
 export function setC172G1000Switches(ctx: Pick<SimContext, 'vars'>): void {
@@ -46,6 +47,7 @@ export function applyC172G1000State(ctx: SimContext, sys: C172G1000Systems, s: I
   applyC172State(ctx, sys.core, s);
 
   // GRS 79 attitude / heading: aligned in every state but cold & dark.
+  sys.ahrsHold.reset();
   sys.ahrs.reset(!cold);
   sys.suite.applyState(s);
   // GFC 700: AP and FD off (POH Before Takeoff: "Flight Director - OFF"); references synchronised.
@@ -58,4 +60,10 @@ export function applyC172G1000State(ctx: SimContext, sys: C172G1000Systems, s: I
   sys.logic.reset();
   sys.lateLogic.reset();
   sys.disc.update(0);
+  // Procedure latches: a takeoff preset stands for "Before takeoff" complete (AP preflight test and magneto
+  // check done); a running preset has had its STBY BATT test (Starting engine 3a).
+  sys.tires.reset();
+  sys.procedures.reset();
+  v.set(C172G_PROC.stbyTestOk, cold ? 0 : 1);
+  if (s === 'takeoff') sys.procedures.markRunUpDone();
 }

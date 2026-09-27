@@ -21,6 +21,8 @@ interface Unit {
   up: boolean;
   /** Seconds since the unit came up (0 while down). */
   upS: number;
+  /** Seconds the supply has been missing (power hold-up). */
+  lostS: number;
   failVar: string;
   poweredVar: string;
   bootingVar: string;
@@ -31,10 +33,12 @@ interface Unit {
 export class UnitManager {
   private readonly units = new Map<G1kUnit, Unit>();
   private readonly list: Unit[] = [];
+  private readonly holdUpS: number;
   /** Power-on transitions seen this update (consumed by the system). */
   readonly justPowered = new Set<G1kUnit>();
 
   constructor(private readonly vars: SimVars, cfg: G1000Resolved) {
+    this.holdUpS = cfg.powerHoldUpS;
     const boot = (u: G1kUnit): number => {
       switch (u) {
         case 'pfd':
@@ -65,6 +69,7 @@ export class UnitManager {
         supplied: false,
         up: false,
         upS: 0,
+        lostS: 0,
         failVar: `fail.g1k.${id}`,
         poweredVar: G1K.unitPowered(id),
         bootingVar: G1K.unitBooting(id),
@@ -80,7 +85,10 @@ export class UnitManager {
     const v = this.vars;
     this.justPowered.clear();
     for (const u of this.list) {
-      u.supplied = u.power() >= 0.5;
+      const sup = u.power() >= 0.5;
+      // Power hold-up: a supply interruption shorter than `powerHoldUpS` (bus transfer) does not restart the unit.
+      u.lostS = sup ? 0 : u.lostS + dt;
+      u.supplied = sup || (u.powered && u.lostS <= this.holdUpS);
       const p = u.supplied && v.get(u.failVar) < 0.5;
       if (p && !u.powered) {
         u.left = u.bootS;

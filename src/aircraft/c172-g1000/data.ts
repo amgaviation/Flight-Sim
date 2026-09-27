@@ -69,4 +69,13 @@ export const EXTINGUISHER = { chargedPsi: 125, dischargeS: 8 } as const;
  * EST: GDU internal rise above the cabin 10 C with the fan, 30 C without it, 4 min time constant,
  * advisory above a 25 C rise (comes on within ~5 min of a fan failure on a warm day).
  */
-export const DISPLAY_COOLING = { riseFanC: 10, riseNoFanC: 30, tauS: 240, advisoryRiseC: 25 } as const;
+export const DISPLAY_COOLING = { riseFanC: 10, riseNoFanC: 30, tauS: 240, advisoryRiseC: 25, /** EST: PFD with only one of its two fans (PFD fan / deckskin fan). */ riseOneFanC: 20 } as const;
+
+/** MET split switch (CRG 190-00384-12 §6.1): one half alone for more than 3 s disables MET and shows PTRM. */
+export const MET_DATA = { singleHalfFaultS: 3 } as const;
+
+/** Cabin door handle spring return from OPEN to CLOSE after release (EST: the knob var is back-driven after this hold). */
+export const DOOR_HANDLE = { springReturnS: 0.4 } as const;
+
+/** Avionics cooling fan loads (EST ~0.25 A each at 28 V: small 12-16 CFM brushless fans). */
+export const FAN_AMPS = 0.25;

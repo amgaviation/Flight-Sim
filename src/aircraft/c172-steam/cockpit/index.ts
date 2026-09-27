@@ -5,7 +5,7 @@
  *
  * Structure: panel.ts (upper instrument panel, flight / engine instruments, annunciator panel,
  * NAV/GPS switch, avionics breakers, ELT, hour meter); stack.ts (KMA 28, KLN 94, KX 155A x2,
- * KR 87, KT 76C, KAP 140); lower.ts (lower switch / breaker panel, engine controls, dimmers,
+ * KT 76C, KAP 140, KR 87); lower.ts (lower switch / breaker panel, engine controls, dimmers,
  * flaps, cabin heat / air, pedestal, fuel selector, parking brake); cabin.ts (shell, windows,
  * overhead console, vents, doors, storm windows, compass, seats, extinguisher);
  * flightControls.ts (control wheels with the KAP 140 switches, pedals, control lock).
@@ -41,7 +41,10 @@ import { EYE, EYE_R, GLARE, PANEL, hz } from './layout';
 export const C172_STEAM_PALETTE: PaletteDef = {
   ...PALETTES.cessna172,
   name: 'Cessna 172S NAV II (grey panel)',
-  panel: '#50555b', // EST: photograph samples #5d5e5f (shade) .. #9ca19d (sunlit); darker base so the sunlit render matches
+  // EST: VH-SPQ (Commons, straight-on) panel samples #6b7376 .. #81888e, N146TC #5f5f61 (shade) ..
+  // #868782 (lit): a neutral, very slightly blue medium grey. Base chosen so the daylight render
+  // samples ~#6e787d (the cockpit's cool daylight fill multiplies it by ~0.87 / 0.92 / 0.95).
+  panel: '#7e8284',
   panelRoughness: 0.75,
   panelFinish: 'textured',
   panelDark: '#161618',
@@ -76,11 +79,11 @@ export function buildSteamCockpit(ctx: SimContext, sys: C172SteamSystems, opts: 
       // the lower panel views are taken from in front of the control wheels).
       { name: 'Flight instruments', position_m: [EYE[0] + 0.15, EYE[1], hz(1.7)], yawDeg: 0, pitchDeg: -37, fovDeg: 50 },
       { name: 'Radio stack', position_m: [EYE[0] + 0.15, 0.0, hz(1.66)], yawDeg: 13, pitchDeg: -36, fovDeg: 50 },
-      { name: 'KAP 140 / transponder', position_m: [0.36, 0.09, hz(1.32)], yawDeg: 0, pitchDeg: -18, fovDeg: 55 },
+      { name: 'KAP 140 / transponder', position_m: [0.36, 0.09, hz(1.36)], yawDeg: 0, pitchDeg: -18, fovDeg: 55 },
       { name: 'Lower switch panel', position_m: [0.36, -0.3, hz(1.27)], yawDeg: 0, pitchDeg: -20, fovDeg: 75 },
       { name: 'Engine controls / flaps', position_m: [0.36, 0.1, hz(1.25)], yawDeg: 0, pitchDeg: -25, fovDeg: 72 },
       { name: 'Pedestal / fuel selector', position_m: [EYE[0] + 0.2, 0, hz(1.5)], yawDeg: 0, pitchDeg: -62, fovDeg: 60 },
-      { name: 'Overhead console', position_m: [EYE[0] - 0.12, 0, hz(1.6)], yawDeg: 0, pitchDeg: 70, fovDeg: 60 },
+      { name: 'Overhead console', position_m: [sta(58), 0, hz(1.55)], yawDeg: 0, pitchDeg: 89, fovDeg: 90 },
       { name: 'Left door', position_m: [EYE[0] + 0.05, EYE[1] + 0.12, hz(1.55)], yawDeg: -90, pitchDeg: -38, fovDeg: 65 },
     ],
   });
@@ -107,7 +110,7 @@ export function buildSteamCockpit(ctx: SimContext, sys: C172SteamSystems, opts: 
   const main = buildMainPanel(b, ctx, sys, displays, opts.analog ?? false);
   buildStack(b, main.panel, displays);
   const lower = buildLowerPanel(b, main.panel);
-  buildPedestal(b);
+  const ped = buildPedestal(b);
   buildParkingBrake(b, main.panel);
   const fc = buildFlightControls(b, main.panel);
 
@@ -130,6 +133,15 @@ export function buildSteamCockpit(ctx: SimContext, sys: C172SteamSystems, opts: 
     cabin.stormLeft.quaternion.copy(qBaseL).multiply(qTmp.setFromAxisAngle(stormAxis, -wl * 0.8));
     cabin.stormRight.quaternion.copy(qBaseR).multiply(qTmp.setFromAxisAngle(stormAxis, -wr * 0.8));
     fc.lockFlag.visible = vars.get(C172.controlLock) > 0.5;
+    ped.auxPlug.visible = vars.get(ST.auxJack) > 0.5;
+    ped.pwrPlug.visible = vars.get(C172.cabinPwr12v) > 0.5;
+    // Windshield fog film and CO symptom shade (C172LateLogic / SteamCabinExtras outputs).
+    const fogV = vars.get(C172.windshieldFog);
+    cabin.fog.visible = fogV > 0.01;
+    (cabin.fog.material as THREE.MeshBasicMaterial).opacity = 0.75 * fogV;
+    const co = vars.get(ST.coImpair);
+    cabin.coShade.visible = co > 0.01;
+    (cabin.coShade.material as THREE.MeshBasicMaterial).opacity = 0.6 * co;
   });
 
   const build = b.build();

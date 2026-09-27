@@ -178,6 +178,8 @@ export interface TrimWheelOptions extends ControlOptions {
   stripes?: boolean;
   /** Fold-out crank handle on the wheel face (Boeing). */
   handle?: boolean;
+  /** Raised grip nubs spaced evenly around the rim (e.g. Cessna 172 elevator trim wheel). Default 0. Appended. */
+  nubs?: number;
   material?: MaterialName | THREE.Material;
   /** Continuous roll rate while a button is held (rev/s). Default 0.8. */
   holdRevPerS?: number;
@@ -242,6 +244,22 @@ export class TrimWheel extends ControlBase {
         return m;
       });
       this.mesh(sg, 'paintWhite', this.spin);
+    }
+    if (o.nubs && o.nubs > 0) {
+      const n = o.nubs;
+      const ng = this.geo(`trim.nubs.${d}.${t}.${n}`, () => {
+        const parts: THREE.BufferGeometry[] = [];
+        for (let i = 0; i < n; i++) {
+          const b = roundedBox(t * 0.8, d * 0.07, d * 0.035, Math.min(t * 0.3, d * 0.015), 2);
+          transform(b, 0, 0, d / 2 + d * 0.012);
+          b.rotateX((i / n) * Math.PI * 2);
+          parts.push(b);
+        }
+        const m = merge(parts);
+        for (const p of parts) p.dispose();
+        return m;
+      });
+      this.mesh(ng, typeof mat === 'string' ? env.materials.get(mat) : mat, this.spin);
     }
     if (o.handle) {
       const hg = this.geo(`trim.handle.${d}.${t}`, () => {

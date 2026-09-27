@@ -212,6 +212,8 @@ export class Afcs implements Subsystem {
     autoDisc: () => boolean;
   };
   private readonly s: Record<'pitch' | 'bank' | 'heading' | 'p' | 'q' | 'ias' | 'mach' | 'tas' | 'alt' | 'vs' | 'iasRate' | 'ra' | 'gs' | 'track' | 'flaps', string>;
+  /** Optional course-datum var (sensors.courseDatum, KAP 140 heading bug); '' = the receiver OBS / LOC course. */
+  private readonly courseDatum: string;
   /** Nav receiver var names, index = receiver number (0 aliases 1). */
   private readonly nav: NavNames[];
   private readonly latAllowed: ReadonlySet<LateralMode>;
@@ -275,6 +277,8 @@ export class Afcs implements Subsystem {
   private cwsRollActive = false;
   private cwsPitchActive = false;
   private prevNavValidT = 0;
+  /** Nav guidance lost in the active nav mode (cfg.navLossRevertS / navLossWingsLevel). */
+  private latFail = false;
   private annKey = -1;
   private kapAltArm = true;
   /**
@@ -316,6 +320,7 @@ export class Afcs implements Subsystem {
       track: sn.track ?? GPS.trackMag,
       flaps: sn.flaps ?? 'surf.flaps_deg',
     };
+    this.courseDatum = sn.courseDatum ?? '';
     const sp = cfg.servoPower;
     const spA: Binding | undefined = Array.isArray(sp) ? sp[0] : sp;
     const spB: Binding | undefined = Array.isArray(sp) ? sp[1] : sp;
@@ -633,6 +638,22 @@ export class Afcs implements Subsystem {
     if (this.style === 'kap140' || !this.fdOn()) this.clearModes();
   }
 
+  /**
+   * The pilot changed the CDI / navigation source manually (G1000 CDI softkey). Garmin: the nav signal to the
+   * autopilot is interrupted, so an active or armed LNAV/VOR/LOC/BC (and an approach) reverts to the default
+   * lateral mode, with no aural (Cessna NAV III GFC 700 POH 172SPHBUS-00 7-20 / 7-71 WARNING: "will cause the
+   * autopilot to revert to ROL mode operation. No aural alert will be provided"). Appended for the c172-g1000.
+   */
+  navSourceChanged(): void {
+    const navArmed = NAV_LATERAL.has(this.latArmed);
+    const navActive = NAV_LATERAL.has(this.lat);
+    if (!navArmed && !navActive && !this.approach) return;
+    if (this.approach) this.cancelApproach();
+    if (NAV_LATERAL.has(this.latArmed)) this.latArmed = 'NONE';
+    if (NAV_LATERAL.has(this.lat)) this.setLat(this.defaultLat());
+    this.publish();
+  }
+
   private pressCmd(a: boolean): void {
     const on = a ? this.cmdA : this.cmdB;
     const other = a ? this.cmdB : this.cmdA;
@@ -711,6 +732,7 @@ export class Afcs implements Subsystem {
     }
     if (m === 'TRK' || m === 'GA' || m === 'TO') this.trackRef = this.trkOk ? this.trk : this.hdg;
     if (m === 'LOC' || m === 'VOR' || m === 'BC') this.xtkIntegral = 0;
+    this.latFail = false;
     this.lat = m;
     if (this.latArmed === m) this.latArmed = 'NONE';
   }
@@ -1070,7 +1092,8 @@ export class Afcs implements Subsystem {
     // ---- disconnect warning timer
     if (this.discWarn) {
       this.discT += dt;
-      if (this.cfg.discWarningS !== undefined && this.discT >= this.cfg.discWarningS) this.discWarn = false;
+      const latched = this.cfg.autoDiscLatches === true && this.vars.get(AFCS_VARS.discAuto) !== 0;
+      if (this.cfg.discWarningS !== undefined && !latched && this.discT >= this.cfg.discWarningS) this.discWarn = false;
     }
     this.publish();
   }
@@ -1142,11 +1165,20 @@ export class Afcs implements Subsystem {
       }
     }
     // Loss of guidance.
-    if (this.lat === 'LNAV' && v.get(FMS.lnavValid) === 0) this.setLat(this.defaultLat());
-    if (this.lat === 'VOR' || this.lat === 'LOC' || this.lat === 'BC') {
-      const r = this.navRx;
-      this.prevNavValidT = v.get(this.nv(r).received) !== 0 ? 0 : this.prevNavValidT + dt;
-      if (this.prevNavValidT > 5 && !(this.style === 'boeing' && this.ra > 1500 && this.lat === 'LOC')) this.setLat(this.defaultLat());
+    if (this.cfg.navLossWingsLevel) {
+      // Opt-in (GFC 700 CRG §6.3): flashing mode, wings level, default mode after navLossRevertS (default 5 s).
+      const nav = this.lat === 'LNAV' || this.lat === 'VOR' || this.lat === 'LOC' || this.lat === 'BC';
+      const ok = !nav || (this.lat === 'LNAV' ? v.get(FMS.lnavValid) !== 0 : v.get(this.nv(this.navRx).received) !== 0);
+      this.prevNavValidT = ok ? 0 : this.prevNavValidT + dt;
+      this.latFail = nav && !ok;
+      if (this.latFail && this.prevNavValidT > (this.cfg.navLossRevertS ?? 5)) this.setLat(this.defaultLat());
+    } else {
+      if (this.lat === 'LNAV' && v.get(FMS.lnavValid) === 0) this.setLat(this.defaultLat());
+      if (this.lat === 'VOR' || this.lat === 'LOC' || this.lat === 'BC') {
+        const r = this.navRx;
+        this.prevNavValidT = v.get(this.nv(r).received) !== 0 ? 0 : this.prevNavValidT + dt;
+        if (this.prevNavValidT > (this.cfg.navLossRevertS ?? 5) && !(this.style === 'boeing' && this.ra > 1500 && this.lat === 'LOC')) this.setLat(this.defaultLat());
+      }
     }
     if (this.lat === 'TO' && !this.onGround && this.cfg.to?.lateral === 'TRK' && this.trackRef === 0) this.trackRef = this.trk;
   }
@@ -1362,6 +1394,7 @@ export class Afcs implements Subsystem {
 
   private lateralLaw(dt: number): number {
     const v = this.vars;
+    if (this.latFail) return 0; // cfg.navLossWingsLevel: wings level while the nav signal is lost
     switch (this.lat) {
       case 'ROL':
         return this.bankRef;
@@ -1433,6 +1466,9 @@ export class Afcs implements Subsystem {
   private courseFor(kind: LateralMode, r: number): number {
     const v = this.vars;
     const n = this.nv(r);
+    // Course datum input (KAP 140: the DG heading bug) replaces the OBS / LOC course; it is already in the
+    // heading frame, so no declination correction applies.
+    if (this.courseDatum) return norm360(v.get(this.courseDatum) + (kind === 'BC' ? 180 : 0));
     let c = v.get(n.isLoc) !== 0 && v.has(n.locCourse) ? v.get(n.locCourse) : v.get(n.obs);
     // VOR radials and localizer courses are magnetic w.r.t. the station's declination, while the
     // heading/track they are flown against use today's variation (AHRS / GPS, WMM). Refer the course
@@ -1719,6 +1755,7 @@ export class Afcs implements Subsystem {
     v.set(AFCS_VARS.forcePitch, force);
     v.set(AFCS_VARS.forceRoll, force);
     v.set(AFCS_VARS.discWarn, this.discWarn ? 1 : 0);
+    v.set(AFCS_VARS.latFail, this.latFail ? 1 : 0);
     v.set(AFCS_VARS.channels, this.channels);
     v.set(AFCS_VARS.cmdA, this.cmdA ? 1 : 0);
     v.set(AFCS_VARS.cmdB, this.cmdB ? 1 : 0);

@@ -9,7 +9,8 @@
  *    acknowledged from unacknowledged messages. Messages present when the
  *    system is powered on are already acknowledged.
  *  - Aurals: a warning gives a continuously repeating chime until the
- *    Warning softkey is pressed; a caution gives a single chime.
+ *    Warning softkey is pressed (unless its `auralInhibit` holds, e.g. LOW
+ *    VOLTS on the ground); a caution gives a single chime.
  *  - Alerts softkey (rightmost PFD softkey, visible at every level): flashes
  *    'Warning' / 'Caution' / 'Advisory' for an unacknowledged CAS message
  *    (pressing acknowledges that level and the label returns to 'Alerts'),
@@ -25,7 +26,7 @@
 import type { SimVars } from '../../../core/SimVars';
 import type { AudioApi } from '../../../core/SimContext';
 import { compileCondition } from '../../../systems/util/binding';
-import { CasModel } from '../../common/draw/CasWindow';
+import { CasModel, type CasMessage } from '../../common/draw/CasWindow';
 import { MessageList } from '../../garmin-g3000/state/models';
 import type { CasDef } from '../config';
 import { G1K } from '../vars';
@@ -36,7 +37,10 @@ export const ALERTS_KEY_LABELS = ['Alerts', 'Message', 'Advisory', 'Caution', 'W
 interface CasItem {
   def: CasDef;
   cond: () => boolean;
+  /** Aural inhibited (CasDef.auralInhibit), or null. */
+  quiet: (() => boolean) | null;
   heldS: number;
+  msg: CasMessage | null;
 }
 
 export class AlertSystem {
@@ -56,8 +60,8 @@ export class AlertSystem {
     // G1000 NXi: advisories are also shown inverse (flashing Advisory softkey) until acknowledged (PG Appendix A).
     this.cas = casModel ?? new CasModel(['warning', 'caution', 'advisory']);
     for (const d of defs) {
-      this.cas.define(d.id, d.text, d.level);
-      this.items.push({ def: d, cond: compileCondition(vars, d.when), heldS: 0 });
+      const msg = this.cas.define(d.id, d.text, d.level);
+      this.items.push({ def: d, cond: compileCondition(vars, d.when), quiet: d.auralInhibit !== undefined ? compileCondition(vars, d.auralInhibit, false) : null, heldS: 0, msg });
     }
   }
 
@@ -125,7 +129,14 @@ export class AlertSystem {
     }
     if (powerUp) this.cas.acknowledgeAll();
     // Aurals: repeating warning chime while any warning is unacknowledged; single chime per new caution.
-    const w = enabled && this.cas.unackedWarnings > 0;
+    // Unacknowledged warnings whose aural is not inhibited (CasDef.auralInhibit).
+    let loud = 0;
+    for (let i = 0; i < this.items.length; i++) {
+      const it = this.items[i];
+      const m = it.msg;
+      if (m && m.level === 'warning' && m.active && !m.acknowledged && !(it.quiet && it.quiet())) loud++;
+    }
+    const w = enabled && loud > 0;
     if (w !== this.warnTone) {
       this.warnTone = w;
       this.audio?.tone('master_warning', w);

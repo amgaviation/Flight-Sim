@@ -78,6 +78,14 @@ const PACEJKA_B = 10;
 const PACEJKA_C = 1.6;
 const CASTER_BREAKOUT = 0.25;
 const GEAR_DOWN_LOCKED = 0.98;
+/**
+ * Flat tyre (GEAR.tireFlat): EST the contact point rises by about half a light-aircraft tyre's
+ * section height (6.00-6: ~0.15 m section, rim flange then ~0.07 m off the ground), and the
+ * deflated tyre adds a large rolling drag (EST mu ~0.25, the "use brake on the good wheel"
+ * directional pull of POH 172S Sec 3 "Landing with a flat main tire").
+ */
+const FLAT_TIRE_DROP_M = 0.07;
+const FLAT_TIRE_ROLL_MU = 0.25;
 
 /** Per-contact runtime state (exposed read-only for diagnostics and tests). */
 export class ContactState {
@@ -106,6 +114,8 @@ export class ContactState {
   anchorActive = false;
   /** Last force (NED) and application point (body, relative to CG). */
   readonly force = new Vec3();
+  /** Tyre deflation 0..1 this step (GEAR.tireFlat of its gear index; 0 for structure). */
+  flat = 0;
 
   constructor(cfg: GearContactConfig) {
     this.cfg = cfg;
@@ -140,6 +150,8 @@ export class GroundContact {
   private readonly wowVars: string[];
   private readonly compVars: string[];
   private readonly speedVars: string[];
+  /** Per contact: GEAR.tireFlat var of its gear index ('' for structure contacts). */
+  private readonly flatVars: string[];
   private readonly idxWow: Float64Array;
   private readonly idxComp: Float64Array;
   private readonly idxSpeed: Float64Array;
@@ -162,6 +174,7 @@ export class GroundContact {
     this.vars = vars;
     this.contacts = configs.map((c) => new ContactState(c));
     this.posVars = configs.map((c) => (c.gearIndex >= 0 ? GEAR.pos(c.gearIndex) : ''));
+    this.flatVars = configs.map((c) => (c.gearIndex >= 0 && !c.isStructure ? GEAR.tireFlat(c.gearIndex) : ''));
     const idx = [...new Set(configs.filter((c) => c.gearIndex >= 0).map((c) => c.gearIndex))].sort((a, b) => a - b);
     this.gearIndices = idx;
     this.wowVars = idx.map((i) => GEAR.weightOnWheels(i));
@@ -269,7 +282,10 @@ export class GroundContact {
       this.rb.subVectors(c.bodyPos, cg);
       q.rotate(this.rb, this.pc).add(dPos);
       this.tmp.subVectors(this.pc, c.planePoint);
-      const h = this.tmp.dot(n);
+      const fv = this.flatVars[ci];
+      c.flat = fv ? clamp01(this.vars.get(fv)) : 0;
+      // A flat tyre's contact point sits higher (closer to the axle): the airplane settles on that side.
+      const h = this.tmp.dot(n) + c.flat * FLAT_TIRE_DROP_M;
       if (h >= 0) {
         this.noContact(c, dt);
         continue;
@@ -405,7 +421,7 @@ export class GroundContact {
 
     const muPeak = cfg.staticFriction * muSurf;
     const muSlide = cfg.dynamicFriction * muSurf;
-    const muRoll = cfg.rollingFriction * rollingMul;
+    const muRoll = (cfg.rollingFriction + c.flat * FLAT_TIRE_ROLL_MU) * rollingMul;
     const muBrake = cfg.brakeCoeff * clamp01(brake) * muSurf;
     const locked = muBrake > muPeak;
     c.skidding = locked && speed > V_STICK;

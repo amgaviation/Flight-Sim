@@ -7,9 +7,13 @@
  * microphone button; the copilot's the microphone button; the map light and its rheostat are on
  * the lower surface of the pilot's wheel (POH Sec 7 "Interior lighting").
  *
- * Same shape and dimensions as the c172-g1000 module's wheel (kept as a copy so the two aircraft
- * modules stay independent; EST from photographs, overall width ~0.39 m across the grips, hub
- * 0.09 x 0.17 m, grips ~0.20 m tall above the bar).
+ * Dimensions EST from the VH-SPQ / N146TC photographs scaled against the 6.25 in radio stack
+ * (no published drawing of Cessna P/N 0513576 was found): each wheel ~11.4 in across the grip
+ * pods (grip centres 9.6 in apart), so with the columns 18.7 in apart (Fig 7-2) the gap between the
+ * pilot's right pod and the copilot's left pod is ~7.3 in (the stack width plus ~1 in) and the
+ * pilot's wheel stays clear of the radio stack, as in the photographs; hub 0.09 x 0.17 m, grips ~0.20 m tall
+ * above the bar. The pilot's wheel carries the "Skyhawk" script emblem, the copilot's the oval
+ * "SP" emblem (photographs).
  */
 import * as THREE from 'three';
 import type { CockpitEnv } from '../../../cockpit/env';
@@ -17,9 +21,12 @@ import { Yoke, type YokeOptions } from '../../../cockpit/controls';
 import { extrude, hitBox, merge, roundedBox, tube, transform } from '../../../cockpit/geometry/primitives';
 import type { YokeAnchorName } from '../../../cockpit/geometry/yokes';
 
-const GRIP_X = 0.168;
+const GRIP_X = 0.122;
 const BAR_Y = -0.062;
 const POD_Y = 0.118;
+/** Pod width / centre offset outboard of the grip. */
+const POD_W = 0.036;
+const POD_X = GRIP_X + 0.005;
 
 function skyhawkWheelParts(): { frame: THREE.BufferGeometry; grips: THREE.BufferGeometry; hub: THREE.BufferGeometry; pad: THREE.BufferGeometry; emblem: THREE.BufferGeometry; rim: THREE.BufferGeometry } {
   // Lower bar + upright grips: one tube per side from the hub, along the bottom, up into the grip.
@@ -29,8 +36,8 @@ function skyhawkWheelParts(): { frame: THREE.BufferGeometry; grips: THREE.Buffer
     const bar = tube(
       [
         new THREE.Vector3(s * 0.03, BAR_Y + 0.004, -0.004),
-        new THREE.Vector3(s * 0.09, BAR_Y - 0.002, 0),
-        new THREE.Vector3(s * 0.14, BAR_Y, 0),
+        new THREE.Vector3(s * 0.075, BAR_Y - 0.002, 0),
+        new THREE.Vector3(s * 0.11, BAR_Y, 0),
         new THREE.Vector3(s * (GRIP_X - 0.004), BAR_Y + 0.04, 0.002),
       ],
       0.017,
@@ -51,8 +58,8 @@ function skyhawkWheelParts(): { frame: THREE.BufferGeometry; grips: THREE.Buffer
     );
     gripParts.push(grip);
     // Squared pod on top of each grip (switch housing on the pilot's left grip).
-    const pod = roundedBox(0.046, 0.05, 0.05, 0.009, 3);
-    transform(pod, s * (GRIP_X + 0.007), POD_Y, 0.003, 0.35, 0, 0);
+    const pod = roundedBox(POD_W, 0.05, 0.05, 0.009, 3);
+    transform(pod, s * POD_X, POD_Y, 0.003, 0.35, 0, 0);
     sideParts.push(pod);
   }
   const frame = merge(sideParts);
@@ -95,17 +102,17 @@ function skyhawkWheelParts(): { frame: THREE.BufferGeometry; grips: THREE.Buffer
 /** Anchor frames (position, outward normal, up) on the Skyhawk wheel. */
 const ANCHORS: Partial<Record<YokeAnchorName, { p: [number, number, number]; n: [number, number, number]; up: [number, number, number] }>> = {
   // Pod top face (tilted toward the pilot): MET and A/P TRIM DISC (photograph "Cessna 172SP G1000 02.jpg").
-  leftTop: { p: [-(GRIP_X + 0.007), POD_Y + 0.023, 0.011], n: [0, 0.94, 0.34], up: [0, 0.34, -0.94] },
-  rightTop: { p: [GRIP_X + 0.007, POD_Y + 0.023, 0.011], n: [0, 0.94, 0.34], up: [0, 0.34, -0.94] },
+  leftTop: { p: [-POD_X, POD_Y + 0.023, 0.011], n: [0, 0.94, 0.34], up: [0, 0.34, -0.94] },
+  rightTop: { p: [POD_X, POD_Y + 0.023, 0.011], n: [0, 0.94, 0.34], up: [0, 0.34, -0.94] },
   // Pod face toward the pilot: CWS / microphone button.
-  leftBack: { p: [-(GRIP_X + 0.007), POD_Y + 0.004, 0.03], n: [0, 0, 1], up: [0, 1, 0] },
-  rightBack: { p: [GRIP_X + 0.007, POD_Y + 0.004, 0.03], n: [0, 0, 1], up: [0, 1, 0] },
-  leftOutboard: { p: [-(GRIP_X + 0.031), POD_Y, 0.003], n: [-1, 0, 0], up: [0, 1, 0] },
-  rightOutboard: { p: [GRIP_X + 0.031, POD_Y, 0.003], n: [1, 0, 0], up: [0, 1, 0] },
-  leftInboard: { p: [-(GRIP_X - 0.017), POD_Y, 0.003], n: [1, 0, 0], up: [0, 1, 0] },
-  rightInboard: { p: [GRIP_X - 0.017, POD_Y, 0.003], n: [-1, 0, 0], up: [0, 1, 0] },
-  leftFront: { p: [-(GRIP_X + 0.007), POD_Y, -0.024], n: [0, 0, -1], up: [0, 1, 0] },
-  rightFront: { p: [GRIP_X + 0.007, POD_Y, -0.024], n: [0, 0, -1], up: [0, 1, 0] },
+  leftBack: { p: [-POD_X, POD_Y + 0.004, 0.03], n: [0, 0, 1], up: [0, 1, 0] },
+  rightBack: { p: [POD_X, POD_Y + 0.004, 0.03], n: [0, 0, 1], up: [0, 1, 0] },
+  leftOutboard: { p: [-(POD_X + POD_W / 2 + 0.001), POD_Y, 0.003], n: [-1, 0, 0], up: [0, 1, 0] },
+  rightOutboard: { p: [POD_X + POD_W / 2 + 0.001, POD_Y, 0.003], n: [1, 0, 0], up: [0, 1, 0] },
+  leftInboard: { p: [-(POD_X - POD_W / 2 - 0.001), POD_Y, 0.003], n: [1, 0, 0], up: [0, 1, 0] },
+  rightInboard: { p: [POD_X - POD_W / 2 - 0.001, POD_Y, 0.003], n: [-1, 0, 0], up: [0, 1, 0] },
+  leftFront: { p: [-POD_X, POD_Y, -0.024], n: [0, 0, -1], up: [0, 1, 0] },
+  rightFront: { p: [POD_X, POD_Y, -0.024], n: [0, 0, -1], up: [0, 1, 0] },
   // Under the hub: map light and its rheostat.
   hub: { p: [0, -0.094, 0.004], n: [0, -1, 0], up: [0, 0, -1] },
   hubTop: { p: [0, 0.085, 0], n: [0, 1, 0], up: [0, 0, -1] },
@@ -115,7 +122,10 @@ const ANCHORS: Partial<Record<YokeAnchorName, { p: [number, number, number]; n: 
  * Builds a shared `Yoke` and swaps its wheel for the Skyhawk SP shape (meshes, grip hit boxes,
  * anchors and occluders), before the builder registers it.
  */
-export function skyhawkYoke(env: CockpitEnv, o: Omit<YokeOptions, 'style'>): Yoke {
+/** Overall width of the wheel across the grip pods (m). */
+export const WHEEL_SPAN_M = 2 * (POD_X + POD_W / 2);
+
+export function skyhawkYoke(env: CockpitEnv, o: Omit<YokeOptions, 'style'>, emblem: 'skyhawk' | 'sp' = 'skyhawk'): Yoke {
   const y = new Yoke(env, { ...o, style: 'cessna', switches: [] });
   const w = y.wheel;
   // Remove the generic wheel meshes and grip hit boxes.
@@ -147,15 +157,27 @@ export function skyhawkYoke(env: CockpitEnv, o: Omit<YokeOptions, 'style'>): Yok
   add('grips', mats.get('yokeGrip'));
   add('hub', mats.get('yoke'), true);
   add('pad', mats.get('leather'));
-  add('emblem', mats.custom('metal', '#9aa1a8', 0.35));
+  add('emblem', mats.custom('metal', '#1d1e21', 0.45));
   add('rim', mats.get('chrome'));
+  // Emblem legend: "Skyhawk" script (pilot) or "SP" over a small "Skyhawk" (copilot), silver.
+  {
+    const lbl = env.labels.text(emblem === 'sp' ? 'SP' : 'Skyhawk', { height: emblem === 'sp' ? 0.011 : 0.0075, weight: 700, font: 'Georgia, "Times New Roman", serif', zone: null, color: '#d9dcdf' });
+    lbl.name = `yoke_emblem_${emblem}`;
+    lbl.position.set(0, -0.052 + (emblem === 'sp' ? 0.003 : 0), 0.0265);
+    w.add(lbl);
+    if (emblem === 'sp') {
+      const sub = env.labels.text('Skyhawk', { height: 0.003, weight: 700, font: 'Georgia, "Times New Roman", serif', zone: null, color: '#d9dcdf' });
+      sub.position.set(0, -0.062, 0.0265);
+      w.add(sub);
+    }
+  }
   // Grip hit boxes (drag the wheel) behind the grip switches (priority -1).
   const hb = mats.get('hitbox');
   for (const [bw, bh, bd, bx, by, bz] of [
-    [0.05, 0.2, 0.055, -GRIP_X, 0.02, 0],
-    [0.05, 0.2, 0.055, GRIP_X, 0.02, 0],
+    [0.045, 0.2, 0.055, -GRIP_X, 0.02, 0],
+    [0.045, 0.2, 0.055, GRIP_X, 0.02, 0],
     [0.11, 0.18, 0.05, 0, -0.005, 0],
-    [0.36, 0.045, 0.045, 0, BAR_Y, 0],
+    [2 * GRIP_X + 0.03, 0.045, 0.045, 0, BAR_Y, 0],
   ] as const) {
     const h = hitBox(hb, bw, bh, bd, bx, by, bz);
     h.userData.hitPriority = -1;

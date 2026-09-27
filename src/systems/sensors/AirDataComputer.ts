@@ -200,13 +200,19 @@ export class AirDataComputer implements Subsystem {
     ];
   }
 
-  reset(): void {
+  /**
+   * Re-initialises the computer. By default it restarts its power-up self test. `opts.powered`
+   * (initial-state presets of an airplane whose avionics have been running) skips the self test:
+   * the unit is taken as already powered and valid (it still flags if it is actually unpowered).
+   */
+  reset(opts?: { powered?: boolean }): void {
     this.ps = NaN;
     this.pt = NaN;
     this.vsFilter.reset();
     this.iasRate.reset();
-    this.testTimer = this.selfTestS;
-    this.wasPowered = this.power();
+    const running = opts?.powered === true;
+    this.testTimer = running ? 0 : this.selfTestS;
+    this.wasPowered = running ? true : this.power();
     this.aoa = this.vars.get(FDM.aoa);
   }
 

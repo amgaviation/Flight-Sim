@@ -487,7 +487,7 @@ export class Kln94Display extends SigDisplay {
     const v = this.vars!;
     this.animating = k.screen === 'pages' && (k.pageType === 'NAV' || k.pageType === 'AUX') ? true : k.cursor || v.get(KLN.msg) === 1;
     let s = k.screen.length * 1e3 + k.typeIndex * 17 + k.pageNum[k.typeIndex] * 131 + k.entry.length * 7 + k.entryPos * 3 + k.fplRow * 29;
-    s += k.nrstIndex * 37 + k.procIndex * 41 + (k.dtoConfirm ? 1e5 : 0) + k.messages.length * 1e6 + k.apr * 1e7 + (k.obsMode ? 1e8 : 0) + k.baroInHg * 1e3;
+    s += k.nrstIndex * 37 + k.procIndex * 41 + (k.dtoConfirm ? 1e5 : 0) + k.messages.length * 1e6 + k.apr * 1e7 + (k.obsMode ? 1e8 : 0) + k.baroInHg * 1e3 + v.get(KLN.obs) * 1e4;
     s += this.kln.approaches.length * 43;
     for (let i = 0; i < k.entry.length; i++) s += k.entry.charCodeAt(i) * (i + 1) * 53;
     return s;

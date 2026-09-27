@@ -138,7 +138,8 @@ describe.runIf(LONG)('Cessna 172S G1000 NXi check ride (KICT 01L -> ILS 19R)', (
       v.set(C172.controlLock, 0); // Pitot tube cover / control wheel lock - REMOVE
       hold(r, C172G.keyTag, 1, 0.2, 0); // ignition key in
       expect(v.get(C172.keyIn)).toBe(1);
-      expect(v.get(C172.fuelSelector)).toBe(1); // BOTH
+      expect(v.get(C172.fuelSelector)).toBe(0); // LEFT (Securing Airplane 10)
+      v.set(C172.fuelSelector, 1); // preflight cabin 26: FUEL SELECTOR Valve - BOTH
       expect(v.get(C172.fuelShutoff)).toBe(1); // ON (push full in)
       expect(v.get(C172.parkingBrake)).toBe(1);
       // Before starting engine: STBY BATT TEST 10 s (TEST light stays on), then ARM.

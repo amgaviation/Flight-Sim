@@ -370,7 +370,9 @@ export function c172Checklists(variant: C172Variant): Checklist[] {
       items: [
         { challenge: 'Pitot Heat', response: 'ON', check: on(C172.pitotHeat) },
         { challenge: 'Course / Altitude', response: 'TURN BACK or CHANGE ALTITUDE' },
-        { challenge: 'Cabin Heat', response: 'FULL OUT; defroster outlets OPEN', check: (v: V) => v.get(C172.cabinHeat) > 0.9 },
+        // POH Sec 3 Inadvertent Icing step 3: cabin heat full out, both defroster outlets open.
+        { challenge: 'Cabin Heat', response: 'FULL OUT; defroster outlets OPEN', check: (v: V) => v.get(C172.cabinHeat) > 0.9 && v.get(C172.defrostLeft) > 0.9 && v.get(C172.defrostRight) > 0.9 },
+        { challenge: 'Cabin Air', response: 'ADJUST for maximum defroster heat and airflow' },
         { challenge: 'Throttle / Mixture', response: 'ADJUST for maximum RPM (ice in the air intake)' },
         { challenge: 'Wing Flaps', response: 'LEAVE RETRACTED' },
         { challenge: 'Approach', response: '65-75 KIAS, level-attitude landing' },

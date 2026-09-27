@@ -122,7 +122,9 @@ export function createC172Flight(ctx: Pick<SimContext, 'vars' | 'events' | 'audi
     sources: [{ id: 'master', pressurePsi: 1000, antiskid: false }],
     maxPsi: 1000,
     minSourcePsi: 0,
-    parking: { var: C172.parkingBrake, kind: 'mechanical' },
+    // POH Sec 7 "Brake system": "To apply the parking brake, set the brakes with the rudder pedals, pull the
+    // handle aft, and rotate it 90° down": the valve traps the pedal pressure applied when it is set.
+    parking: { var: C172.parkingBrake, kind: 'trapped' },
     temperature: { heatCapacityJPerK: 2200, coolingTauS: 300 }, // EST: ~2.5 kg steel disc + caliper per side
   });
   const stall = new StallWarning(env, { kind: 'horn', hornThreshold: STALL_HORN_THRESHOLD, hornTone: 'stall_horn' });

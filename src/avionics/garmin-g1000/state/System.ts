@@ -821,6 +821,8 @@ export class G1000System implements Subsystem {
   cycleCdi(): void {
     const cur = this.cdiSource;
     this.setCdiSource(cur >= this.cfg.radios.nav ? CDI_SOURCE.gps : cur + 1);
+    // Manual CDI change: the autopilot loses its nav signal (reverts to ROL; POH 7-20 / 7-71 WARNING).
+    this.events?.emit(G1K_EVENTS.cdiManual, this.cdiSource);
   }
 
   /** Bearing 1 / 2 softkeys: NAV1 -> NAV2 -> GPS -> ADF -> Off (PG Table 1-3). */

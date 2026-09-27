@@ -435,7 +435,11 @@ describe.runIf(LONG)('Cessna 172S steam (NAV II, KAP 140) check ride (KICT 01L -
         hand.step(90, 0.05, 0.9);
         const lat = r.sys.afcs.lat;
         const vert = r.sys.afcs.vert;
-        if (isNaN(locT) && lat === 'LOC') locT = r.t();
+        if (isNaN(locT) && lat === 'LOC') {
+          locT = r.t();
+          // Supplement 15 Fig 2 item 15: the heading bug is the course datum in APR; set it to the course.
+          v.set(AP.selHeading, locCrs);
+        }
         if (!flaps10 && !isNaN(locT) && v.get(NAV.gsDev(1)) < 0.6) {
           v.set(C172.flapLever, 1); // flaps 10 approaching the glideslope (10 deg max with the AP engaged)
           flaps10 = true;

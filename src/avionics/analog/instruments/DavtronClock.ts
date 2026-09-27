@@ -2,9 +2,12 @@
  * Davtron M803 clock / OAT / voltmeter (172S POH Rev 4 Supplement 9) as a
  * 3D instrument with working buttons and LCD windows.
  *
- * Layout (POH Supplement 9 Figure 1): upper LCD window (OAT / volts) with
- * the upper button, lower LCD window (time) with the UT/LT/FT/ET
- * annunciators, SELECT (lower left) and CONTROL (lower right) buttons.
+ * Layout (POH Supplement 9 Figure 1; the face of the real unit, Commons
+ * "Flight training cockpit 5"): a round face with the red upper button at
+ * 12 o'clock between the "O.A.T." and "VOLTS" legends, one backlit
+ * two-line LCD (upper line OAT / volts; lower line time with the UT LT /
+ * FT ET flags on its left, the running mode underlined), and the SELECT
+ * (lower left) and CONTROL (lower right) buttons with "DAVTRON" between.
  * All button logic lives in models/davtron.ts. Mouse: left click presses
  * (held while the mouse button is held — hold SELECT 3 s for the display
  * test, hold CONTROL 3 s in FT to reset flight time); middle click or
@@ -49,8 +52,7 @@ const LCD_PERIOD_S = 0.1;
 export class DavtronClock extends AnalogGauge {
   readonly model = new DavtronM803();
   private readonly o: DavtronClockOptions;
-  private readonly upperLcd: DynamicPlane;
-  private readonly lowerLcd: DynamicPlane;
+  private readonly lcd: DynamicPlane;
   private readonly buttons = new Map<THREE.Object3D, ButtonId>();
   private readonly buttonMeshes: Record<ButtonId, THREE.Mesh>;
   private pressed: ButtonId | null = null;
@@ -63,22 +65,23 @@ export class DavtronClock extends AnalogGauge {
     this.o = o;
     if (o.localOffsetH !== undefined) this.model.localOffsetH = o.localOffsetH;
     const R = this.dialR;
-    // Black face plate.
+    // Black face plate with the printed legends.
     const f = this.face(256);
     f.background('#121212', true);
-    f.text('DAVTRON', 0, 0.84, 0.1, '#bdbdbd');
-    f.text('OAT / VOLTS', 0.0, 0.58, 0.075, '#bdbdbd');
-    f.text('SELECT', -0.55, -0.9, 0.075, '#bdbdbd');
-    f.text('CONTROL', 0.55, -0.9, 0.075, '#bdbdbd');
-    for (let i = 0; i < 4; i++) f.text(MODES[i], -0.54 + i * 0.36, -0.52, 0.085, '#bdbdbd');
+    f.text('O.A.T.', -0.42, 0.66, 0.1, '#c9c9c9');
+    f.text('VOLTS', 0.42, 0.66, 0.1, '#c9c9c9');
+    f.text('SELECT', -0.44, -0.6, 0.09, '#c9c9c9');
+    f.text('CONTROL', 0.44, -0.6, 0.09, '#c9c9c9');
+    f.text('DAVTRON', 0, -0.9, 0.08, '#c9c9c9');
     this.addDial(f, 0, R);
-    this.upperLcd = this.addDynamicPlane(256, 96, R * 1.1, R * 0.4, -0.12 * R, 0.3 * R, 0.0004, { lit: false });
-    this.lowerLcd = this.addDynamicPlane(256, 96, R * 1.5, R * 0.5, 0, -0.2 * R, 0.0004, { lit: false });
-    const bmat = this.track(new THREE.MeshStandardMaterial({ color: '#2b2b2e', roughness: 0.45, metalness: 0.2 }));
-    const bgeo = this.track(new THREE.CylinderGeometry(R * 0.13, R * 0.14, 0.003, 20));
+    // One two-line LCD.
+    this.lcd = this.addDynamicPlane(256, 144, R * 1.46, R * 0.82, 0, 0.04 * R, 0.0004, { lit: false });
+    const bgeo = this.track(new THREE.CylinderGeometry(R * 0.11, R * 0.12, 0.003, 20));
     bgeo.rotateX(Math.PI / 2);
+    const red = this.track(new THREE.MeshStandardMaterial({ color: '#b3171a', roughness: 0.35, metalness: 0.05 }));
+    const blue = this.track(new THREE.MeshStandardMaterial({ color: '#3f6fb8', roughness: 0.35, metalness: 0.05 }));
     const mk = (id: ButtonId, x: number, y: number): THREE.Mesh => {
-      const m = new THREE.Mesh(bgeo, bmat);
+      const m = new THREE.Mesh(bgeo, id === 'upper' ? red : blue);
       m.position.set(x, y, 0.0015);
       m.name = `davtron.${id}`;
       this.object.add(m);
@@ -87,9 +90,9 @@ export class DavtronClock extends AnalogGauge {
       return m;
     };
     this.buttonMeshes = {
-      upper: mk('upper', 0.72 * R, 0.3 * R),
-      select: mk('select', -0.55 * R, -0.72 * R),
-      control: mk('control', 0.55 * R, -0.72 * R),
+      upper: mk('upper', 0, 0.8 * R),
+      select: mk('select', -0.44 * R, -0.78 * R),
+      control: mk('control', 0.44 * R, -0.78 * R),
     };
     this.drawLcd(true);
   }
@@ -143,8 +146,7 @@ export class DavtronClock extends AnalogGauge {
     this.model.update(dt, powered, v.get(o.voltsVar ?? ANALOG_VARS.busVolts, volts), v.get(o.oatVar ?? ANALOG_VARS.oatC, 15), ftRun);
     // Backlight follows the panel lighting when powered.
     const back = powered ? 0.15 + this.light * 0.85 : 0;
-    this.upperLcd.material.emissiveIntensity = back * 0.35;
-    this.lowerLcd.material.emissiveIntensity = back * 0.35;
+    this.lcd.material.emissiveIntensity = back * 0.35;
     for (let i = 0; i < BUTTON_IDS.length; i++) {
       const id = BUTTON_IDS[i];
       this.buttonMeshes[id].position.z = this.pressed === id ? 0.0008 : 0.0015;
@@ -183,38 +185,51 @@ export class DavtronClock extends AnalogGauge {
     const key = `${upper}|${lower}|${ann}|${hideLower ? 1 : 0}|${m.setDigit}|${m.setDigit >= 0 && blink ? 1 : 0}|${m.powered ? 1 : 0}`;
     if (!force && key === this.lastKey) return;
     this.lastKey = key;
-    this.paintLcd(this.upperLcd, upper, -1, false);
-    this.paintLcd(this.lowerLcd, hideLower ? '' : lower, m.setDigit >= 0 && !blink ? m.setDigit : -1, true, ann);
+    this.paintLcd(upper, hideLower ? '' : lower, m.setDigit >= 0 && !blink ? m.setDigit : -1, ann);
   }
 
-  private paintLcd(p: DynamicPlane, text: string, hideDigit: number, lower: boolean, ann = '0000'): void {
+  /** Paints the two-line LCD: upper line OAT / volts, lower line the time with the UT LT / FT ET flags. */
+  private paintLcd(upper: string, lower: string, hideDigit: number, ann: string): void {
+    const p = this.lcd;
     const { ctx, canvas } = p;
     const W = canvas.width;
     const H = canvas.height;
+    const split = H * 0.44;
     ctx.fillStyle = this.model.powered ? LCD_BG : LCD_BG_OFF;
     ctx.fillRect(0, 0, W, H);
     ctx.strokeStyle = '#2a2a2a';
     ctx.lineWidth = 4;
     ctx.strokeRect(2, 2, W - 4, H - 4);
-    if (text) {
-      ctx.fillStyle = LCD_INK;
-      ctx.font = `bold ${Math.round(H * (lower ? 0.62 : 0.66))}px "DSEG7 Classic", "Digital-7", Consolas, "DejaVu Sans Mono", monospace`;
-      ctx.textAlign = 'right';
-      ctx.textBaseline = 'middle';
-      let shown = text;
+    ctx.fillStyle = '#5b6555';
+    ctx.fillRect(8, split - 1, W - 16, 2);
+    const digits = (h: number): string => `bold ${Math.round(h)}px "DSEG7 Classic", "Digital-7", Consolas, "DejaVu Sans Mono", monospace`;
+    ctx.fillStyle = LCD_INK;
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    if (upper) {
+      ctx.font = digits(split * 0.72);
+      ctx.fillText(upper, W - 18, split * 0.52);
+    }
+    if (lower) {
+      ctx.font = digits((H - split) * 0.7);
+      let shown = lower;
       if (hideDigit >= 0) {
         // Blank the digit being set during the dark blink phase (HH:MM -> index skipping ':').
         const idx = hideDigit < 2 ? hideDigit : hideDigit + 1;
-        shown = text.slice(0, idx) + ' ' + text.slice(idx + 1);
+        shown = lower.slice(0, idx) + ' ' + lower.slice(idx + 1);
       }
-      ctx.fillText(shown, W - 14, lower ? H * 0.42 : H / 2);
+      ctx.fillText(shown, W - 14, split + (H - split) * 0.52);
     }
-    if (lower) {
-      // UT LT FT ET annunciator bars under the digits.
+    // Mode flags: UT LT (upper row) / FT ET (lower row) left of the time; the running mode underlined.
+    if (this.model.powered) {
+      ctx.font = `bold ${Math.round((H - split) * 0.22)}px Arial, "DejaVu Sans", sans-serif`;
+      ctx.textAlign = 'left';
       for (let i = 0; i < 4; i++) {
-        if (ann[i] !== '1') continue;
+        const x = 12 + (i % 2) * 38;
+        const y = split + (H - split) * (i < 2 ? 0.3 : 0.7);
         ctx.fillStyle = LCD_INK;
-        ctx.fillRect(12 + i * (W - 24) * 0.25 + 10, H * 0.8, (W - 24) * 0.25 - 20, H * 0.1);
+        ctx.fillText(MODES[i], x, y);
+        if (ann[i] === '1') ctx.fillRect(x, y + (H - split) * 0.13, 28, 3);
       }
     }
     p.commit();

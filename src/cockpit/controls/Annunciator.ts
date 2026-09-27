@@ -7,7 +7,8 @@
  * legend and whose own material glows in the lamp colour when lit:
  *  - 'legend' style: legend glows, background stays dark (most annunciators);
  *  - 'field' style: the whole lens glows with a dark legend (warning lights).
- * Unlit segments show a dark tinted lens with a faintly visible legend.
+ * Unlit segments show a dark tinted lens with a faintly visible legend (or, with
+ * `unlitTint` near 0, a uniformly black lens whose legend shows only when lit).
  *
  * A segment is lit when its var satisfies `test` (default: != 0), during
  * lamp test (ALERT.annunTest), or when its owner forces it (e.g. a latched
@@ -65,7 +66,7 @@ export class LegendFace {
     w: number,
     h: number,
     layout: 'stack' | 'split' = 'stack',
-    opts: { intensity?: number; gap?: number; own?: (m: THREE.Material) => void } = {},
+    opts: { intensity?: number; gap?: number; own?: (m: THREE.Material) => void; unlitTint?: number } = {},
   ) {
     this.env = env;
     this.intensity = opts.intensity ?? 1.4;
@@ -80,7 +81,7 @@ export class LegendFace {
       const ph = Math.max(12, Math.min(256, Math.round(sh * pxPerM)));
       const style = def.style ?? 'legend';
       const lg = env.labels.legend(lines.length ? lines : [''], pw, ph, style);
-      const mat = env.materials.lens(def.color, lg.texture, style === 'field' ? 0.16 : 0.2);
+      const mat = env.materials.lens(def.color, lg.texture, opts.unlitTint ?? (style === 'field' ? 0.16 : 0.2));
       mat.map = lg.texture;
       opts.own?.(mat);
       const geo = env.labels.quad(lg.rect, sw, sh);
@@ -162,6 +163,11 @@ export interface AnnunciatorLightOptions extends ControlOptions {
   pressToTest?: boolean;
   /** Emissive intensity when lit (default 1.4). */
   intensity?: number;
+  /**
+   * Diffuse tint of the unlit lens (fraction of the lamp colour; default 0.2 legend / 0.16 field).
+   * Near 0 gives a black lens with no readable legend until lit (appended).
+   */
+  unlitTint?: number;
 }
 
 /**
@@ -181,7 +187,7 @@ export class AnnunciatorLight extends ControlBase {
     const w = o.width ?? 0.016;
     const h = o.height ?? 0.012;
     if (o.bezel !== false) this.mesh(this.geo(`annun.bezel.${w}.${h}`, () => rectBezelGeometry(w, h, 0.0015, 0.0022, 0.0015, 0.0005)), 'bezel', this.object, true);
-    this.face = new LegendFace(env, o.segments, w, h, o.layout ?? 'stack', { intensity: o.intensity, own: (m) => this.own(m) });
+    this.face = new LegendFace(env, o.segments, w, h, o.layout ?? 'stack', { intensity: o.intensity, own: (m) => this.own(m), unlitTint: o.unlitTint });
     this.face.group.position.z = 0.0012;
     this.object.add(this.face.group);
     // Lens segments and back are drawn as instances shared by every light of the cockpit (instancing.ts).

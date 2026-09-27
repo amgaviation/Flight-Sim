@@ -399,6 +399,30 @@ export const LOOPS: Record<string, Recipe> = {
     highpass(b, sr, 400);
     return makeLoopable(normalize(b, 0.4), sr);
   },
+  // ELT homing signal as heard on 121.5 MHz (FAA AIM 6-2-4 / TSO-C91a: audio tone swept downward
+  // 1600 -> 300 Hz, 2-4 sweeps per second). 3 sweeps/s here, loop of 1 s.
+  'elt.sweep': (sr) => {
+    const n = Math.round(sr);
+    const b = new Float32Array(n);
+    let ph = 0;
+    for (let i = 0; i < n; i++) {
+      const k = ((i / sr) * 3) % 1;
+      const f = 1600 - 1300 * k;
+      ph += (2 * Math.PI * f) / sr;
+      b[i] = Math.sin(ph) * 0.8 + Math.sin(2 * ph) * 0.1;
+    }
+    return normalize(b, 0.6);
+  },
+  // Navaid identification tone (appended for the c172-steam receiver audio): steady 1020 Hz, keyed in Morse by the
+  // aircraft through the loop gain. VOR/LOC/DME idents are 1020 Hz (FAA Order 6820.10 / AIM 1-1-3, 1-1-9); NDBs
+  // commonly use 1020 Hz (or 400 Hz) keyed modulation.
+  'ident.1020': (sr) => makeLoopable(normalize(tone(sr, 1, 1020, [1], 0.001, 0.001), 0.5), sr, 0.02),
+  // ELT remote aural warning buzzer (EST: ~2.9 kHz piezo beeping 0.5 s on / 0.5 s off).
+  'elt.buzzer': (sr) => {
+    const out = new Float32Array(Math.round(sr));
+    mixInto(out, tone(sr, 0.5, 2900, [1, 0.1], 0.005, 0.005), sr, 0, 0.5);
+    return out;
+  },
 };
 
 /** Tone ids handled by AudioApi.tone (continuous, on/off). */

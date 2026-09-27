@@ -26,19 +26,36 @@
  *    manual electric trim and the autotrim while held.
  *  - Manual electric trim, split switch (item 13): trims only when both halves move the same
  *    way; using it with the AP engaged disengages the AP. One half held alone for 5 s shows the
- *    red PT (trim monitor, preflight test step 3c/d).
+ *    red PT (trim monitor, preflight test step 3c/d: the RH half alone; the LH half alone only
+ *    has to show no trim motion, steps 3a/b).
  *  - Altitude: the KAP 140 alerter/preselect uses the blind encoder's pressure altitude
  *    corrected with the KAP's own baro setting ("Not inputting the proper barometric setting
  *    into the autopilot computer will produce inaccuracies"); dashed until the encoder warms up.
  *  - Heading datum: the vacuum DG heading bug (Supplement 15 item 15); loss of the turn
  *    coordinator makes the autopilot inoperative, loss of the attitude indicator has no effect.
+ *  - AP button (item 2, serials 172S9129 and on / SB KC140-M1): pressed and held ~0.25 s engages; a press
+ *    disengages. The keyboard AP command (EV.kap('ap')) stands for a complete press-and-hold.
+ *  - Lockout (Supplement 15 Sec 1): neither the autopilot nor the MET engages before the preflight self test
+ *    has passed.
+ *  - Blind encoder: the one encoder shared with the KT 76C (encoder.ts, XPNDR breaker). Its loss makes the
+ *    altitude alerter and preselect inoperative (Supplement 15 Sec 3).
+ *  - Red P in turbulence (item 1: "will illuminate during abnormal vertical accelerations"): EST |nz - 1| >
+ *    0.6 g for 0.5 s disengages the autopilot; the P goes out after about a minute (Sec 3 note).
+ *  - Trim faults are "visually and aurally annunciated" (Sec 1): the red PITCH TRIM lamp with repeating
+ *    2 s alert tones (EST cadence 5 s) while a trim fault / runaway persists.
+ *  - Disconnect horn and PITCH TRIM annunciator on the WARN breaker (item 11).
+ *  - Flashing GS after a glideslope loss is terminated by two ALT presses in rapid succession (Sec 3),
+ *    which leaves VS (ALT then VS); EST window 1 s.
+ *  - NAV/GPS switch or KLN 94 LEG/OBS change while coupled: the KAP 140 follows the #1 CDI source (the
+ *    NAV / APR mode re-arms on the new source).
  *  - Voice messages "TRIM IN MOTION" (elevator trim running > 5 s, repeats every 5 s) and
  *    "CHECK PITCH TRIM" (out of trim ~20 s) (Supplement 15 Sec 3 note, serials 172S9129 on /
  *    SB KC140-M1).
  *
  * EST values: PFT step timing (the POH gives no durations), P lamp 30 s ("approximately 30
- * seconds"), encoder warm-up 60 s, trim rates in data. SCOPE: the KAP 140 uses the #1 CDI OBS
- * course (the shared AFCS VOR/LOC law) rather than the DG heading bug as the course datum.
+ * seconds"), trim rates in data. Course datum: in NAV / APR / REV the shared Afcs VOR/LOC law flies the
+ * DG heading bug (Afcs sensors.courseDatum = the bug, createSystems.ts) plus the CDI deviation, as the
+ * real computer does (Supplement 15 Fig 2 items 14-15); only GPS roll steering (KLN 94 LEG) ignores it.
  */
 import type { Subsystem } from '../../types';
 import type { AudioApi, SimContext } from '../../../core/SimContext';
@@ -47,10 +64,9 @@ import { AP, ADC } from '../../../core/vars';
 import { clamp } from '../../../core/math';
 import { Afcs } from '../../../systems/autopilot/Afcs';
 import { AFCS_VARS } from '../../../systems/autopilot/vars';
-import { SENSOR_VARS } from '../../../systems/sensors/vars';
 import { indicatedAltitudeFt, HPA_PER_INHG } from '../../../avionics/analog/models/altimeter';
 import { ANN_SW, C172 } from '../../c172s-common/vars';
-import { EV, KAP, ST } from '../vars';
+import { ENC, EV, KAP, ST } from '../vars';
 import { Button, onEncoder, onEvent } from './util';
 
 /** Failure ids of the KAP 140 installation. */
@@ -75,8 +91,15 @@ export const KAP_TIMING = {
   altHoldVsFpm: 500, // item 9: "rate of 500 FPM"
   ptFlashS: 10, // item 16: 10 seconds
   metMonitorS: 5, // preflight test step 3c: 5 seconds
-  encoderWarmupS: 60,
+  encoderWarmupS: 60, // now the shared encoder's ENCODER_WARMUP_S (encoder.ts); kept for reference
   trimInMotionS: 5,
+  apHoldS: 0.25, // item 2: "pressed and held (approx. 0.25 seconds)"
+  altDoubleS: 1.0, // EST: "twice in rapid succession"
+  pAccelG: 0.6, // EST: abnormal vertical acceleration |nz - 1|
+  pAccelS: 0.5, // EST
+  pAccelClearS: 60, // Sec 3 note: "approximately one minute"
+  trimToneOnS: 2, // EST: 2 s alert tone (as the disconnect tone, "approximately 2 seconds")
+  trimTonePeriodS: 5, // EST repeat cadence while the fault persists
 } as const;
 
 /** Selected-altitude range of the alerter (ft). EST from the display's 5 digits and the 172S ceiling. */
@@ -109,7 +132,12 @@ export class Kap140Logic implements Subsystem {
   private ptT = 0;
   private metAloneT = 0;
   private metFault = false;
-  private encoderT = 0;
+  private apDiscPress = false;
+  private altTapT = -99;
+  private accelT = 0;
+  private pAccelT = 0;
+  private faultToneT = 0;
+  private prevSrc = -1;
   private prevLat = 'NONE';
   private prevVert = 'NONE';
   private pressedLat = false;
@@ -123,6 +151,7 @@ export class Kap140Logic implements Subsystem {
   private readonly bDn: Button;
   private readonly bBaro: Button;
   private readonly bDisc: Button;
+  private readonly bAp: Button;
   private readonly offs: (() => void)[] = [];
   private readonly v: SimContext['vars'];
 
@@ -133,6 +162,8 @@ export class Kap140Logic implements Subsystem {
     private readonly powerVar: string,
     /** Vars of the KAP rate sensors' validity (turn coordinator gyro powered). */
     private readonly sensorsValidVar: string,
+    /** Normal acceleration (g) of the KAP rate/accelerometer sensor block (red P in turbulence). */
+    private readonly nzVar: string,
   ) {
     this.v = ctx.vars;
     const v = ctx.vars;
@@ -140,6 +171,7 @@ export class Kap140Logic implements Subsystem {
     this.bDn = new Button(v, KAP.dn);
     this.bBaro = new Button(v, KAP.baro);
     this.bDisc = new Button(v, ST.apDisc);
+    this.bAp = new Button(v, KAP.apBtn);
     const ev = ctx.events;
     onEvent(ev, EV.kap('ap'), () => this.pressAp(), this.offs);
     onEvent(ev, EV.kap('hdg'), () => this.mode('HDG'), this.offs);
@@ -194,7 +226,11 @@ export class Kap140Logic implements Subsystem {
   private mode(m: 'HDG' | 'NAV' | 'APR' | 'BC' | 'ALT' | 'ARM'): void {
     if (!this.ready) return;
     this.pressedLat = true;
-    if (m === 'ALT' && this.flashGs) this.flashGs = false;
+    // Flashing GS: "Press ALT twice in rapid succession to terminate the flashing" (ALT, then VS).
+    if (m === 'ALT' && this.flashGs) {
+      if (this.clockT - this.altTapT <= KAP_TIMING.altDoubleS) this.flashGs = false;
+      this.altTapT = this.clockT;
+    }
     if (m !== 'ALT' && m !== 'ARM') this.flashLat = '';
     this.afcs.press(m);
     if (m === 'NAV' || m === 'APR' || m === 'BC') this.hdgFlashT = KAP_TIMING.hdgReminderS;
@@ -228,7 +264,7 @@ export class Kap140Logic implements Subsystem {
     this.pft = 0;
     this.pLamp = false;
     this.baroFlash = false;
-    this.encoderT = KAP_TIMING.encoderWarmupS;
+    this.pAccelT = 0;
   }
 
   update(dt: number): void {
@@ -237,7 +273,6 @@ export class Kap140Logic implements Subsystem {
     if (on && !this.powered) {
       this.powerT = 0;
       this.done = false;
-      this.encoderT = 0;
       this.baroFlash = true;
       this.metFault = false;
     }
@@ -247,10 +282,15 @@ export class Kap140Logic implements Subsystem {
     this.bDn.update(dt);
     this.bBaro.update(dt);
     this.bDisc.update(dt);
+    this.bAp.update(dt);
     const T = KAP_TIMING;
+    // Red P in abnormal vertical accelerations while engaged (item 1), out after about a minute.
+    if (on && this.afcs.engaged && Math.abs(v.get(this.nzVar, 1) - 1) > T.pAccelG) this.accelT += dt;
+    else this.accelT = 0;
+    if (this.accelT > T.pAccelS) this.pAccelT = T.pAccelClearS;
+    else if (this.pAccelT > 0) this.pAccelT = Math.max(0, this.pAccelT - dt);
     if (on) {
       this.powerT += dt;
-      this.encoderT += dt;
       const pftEnd = T.pftSteps * T.pftStepS;
       if (this.powerT < pftEnd) this.pft = 1 + Math.floor(this.powerT / T.pftStepS);
       else if (this.powerT < pftEnd + T.displayTestS) this.pft = 99;
@@ -258,26 +298,48 @@ export class Kap140Logic implements Subsystem {
         this.pft = 0;
         this.done = true;
       }
-      this.pLamp = this.failed(this.fv.pitch) || (this.done && this.powerT < pftEnd + T.displayTestS + T.pLampAfterPowerS);
+      this.pLamp = this.failed(this.fv.pitch) || (this.done && this.powerT < pftEnd + T.displayTestS + T.pLampAfterPowerS) || this.pAccelT > 0;
       this.rLamp = this.failed(this.fv.roll) || v.get(this.sensorsValidVar) < 0.5;
     } else {
       this.pft = 0;
       this.pLamp = this.rLamp = false;
       this.done = false;
+      this.pAccelT = 0;
     }
     if (this.afcs.engaged && (this.rLamp || this.pLamp)) this.afcs.disengage(true);
 
     // ---- A/P DISC / TRIM INT
     if (this.bDisc.pressed) this.afcs.press('DISC');
 
+    // ---- AP button: a press disengages; pressed and held ~0.25 s engages (item 2).
+    if (this.bAp.pressed) this.apDiscPress = this.afcs.engaged;
+    if (this.bAp.pressed && this.apDiscPress) this.pressAp();
+    else if (!this.apDiscPress && this.bAp.long(T.apHoldS)) this.pressAp();
+
+    // ---- #1 CDI source change while coupled (NAV/GPS switch, KLN 94 LEG/OBS): re-arm on the new source.
+    const src = v.get(AFCS_VARS.navSource);
+    if (src !== this.prevSrc) {
+      const a = this.afcs;
+      const navLat = (m: string): boolean => m === 'LNAV' || m === 'VOR' || m === 'LOC';
+      if (this.prevSrc >= 0 && a.engaged && (navLat(a.lat) || navLat(a.latArmed))) {
+        const key = a.approach ? 'APR' : 'NAV';
+        this.pressedLat = true;
+        a.press(key);
+        a.press(key);
+      }
+      this.prevSrc = src;
+    }
+
     // ---- manual electric trim (split switch; needs the AUTO PILOT breaker)
     const lh = Math.round(v.get(ST.metLeft));
     const rh = Math.round(v.get(ST.metRight));
-    const trimOk = on && !this.failed(this.fv.trim) && !this.bDisc.down;
+    // Lockout: no MET before the preflight self test has passed (Supplement 15 Sec 1).
+    const trimOk = on && this.done && this.pft === 0 && !this.failed(this.fv.trim) && !this.bDisc.down;
     let met = 0;
     if (trimOk && lh !== 0 && lh === rh) met = lh;
-    // Trim monitor: one half alone for 5 s -> red PT (preflight test 3c/3d).
-    if (on && (lh !== 0) !== (rh !== 0)) this.metAloneT += dt;
+    // Trim monitor: the RH half alone for 5 s -> red PT (preflight test 3c/3d); the LH half alone only
+    // must not move the trim (3a/3b).
+    if (on && rh !== 0 && lh === 0) this.metAloneT += dt;
     else this.metAloneT = 0;
     this.metFault = this.metAloneT >= T.metMonitorS;
     v.set(KAP.metCmd, met);
@@ -301,10 +363,10 @@ export class Kap140Logic implements Subsystem {
       this.fieldT -= dt;
       if (this.fieldT <= 0) this.field = 0;
     }
-    // ---- KAP altitude (blind encoder + KAP baro)
-    const encOk = on && this.encoderT >= T.encoderWarmupS && v.get(SENSOR_VARS.staticBlocked(1)) < 0.5;
+    // ---- KAP altitude (shared blind encoder + KAP baro)
+    const encOk = on && v.get(ENC.valid) > 0.5;
     v.set(KAP.encoderValid, encOk ? 1 : 0);
-    v.set('ac.kap140.alt_ft', indicatedAltitudeFt(v.get(SENSOR_VARS.pressAlt(1)), this.baroInHg));
+    v.set('ac.kap140.alt_ft', indicatedAltitudeFt(v.get(ENC.altFt), this.baroInHg));
     v.set('ac.kap140.ready', this.ready ? 1 : 0);
     v.set('ac.kap140.servo_ok', this.ready && !this.pLamp ? 1 : 0);
     v.set('ac.kap140.trim_ok', trimOk ? 1 : 0);
@@ -394,8 +456,13 @@ export class Kap140Logic implements Subsystem {
     const flash = Math.floor(this.clockT * 2.5) % 2 === 0;
     v.set(KAP.pitchTrimLamp, warn ? (annTest ? (flash ? bright : 0) : ptLamp ? bright : 0) : 0);
 
-    // Disconnect tone request: AFCS disconnect warning, or the self-test tone during the display test.
-    v.set('ac.kap140.tone', v.get(AFCS_VARS.discWarn) !== 0 || (this.powered && this.pft === 99) ? 1 : 0);
+    // Trim fault / runaway alert tones: repeating 2 s tones while the fault persists (not the PFT test path).
+    const trimFaultLamp = (this.powered && this.failed(this.fv.trim)) || runaway;
+    this.faultToneT = trimFaultLamp ? this.faultToneT + dt : 0;
+    const faultTone = trimFaultLamp && this.faultToneT % T.trimTonePeriodS < T.trimToneOnS;
+    // Tone request (disconnect horn on the WARN breaker, item 11): AFCS disconnect warning, the self-test tone
+    // during the display test, or the trim fault tone.
+    v.set('ac.kap140.tone', warn && (v.get(AFCS_VARS.discWarn) !== 0 || (this.powered && this.pft === 99) || faultTone) ? 1 : 0);
 
     // Voice messages (via the audio panel; OFF/EMG silences them).
     const inMotion = v.get('trim.pitch_in_motion') !== 0 && (a.engaged || v.get(KAP.metCmd) !== 0);
@@ -476,6 +543,9 @@ export class Kap140Logic implements Subsystem {
     this.bDn.reset();
     this.bBaro.reset();
     this.bDisc.reset();
+    this.bAp.reset();
+    this.apDiscPress = false;
+    this.prevSrc = this.v.get(AFCS_VARS.navSource, -1);
     this.prevLat = this.afcs.lat;
     this.prevVert = this.afcs.vert;
   }

@@ -91,6 +91,10 @@ export const KMA = {
   on: 'ac.kma28.on',
   /** Transmitter keyed: 0 none, 1 COM 1, 2 COM 2. */
   txCom: 'ac.kma28.tx_com',
+  /** "Swap" indicator (item 5). Supplement 20: "The swap function is not available on this installation" (always dark). */
+  swapLamp: 'ac.kma28.swap',
+  /** AUX (entertainment) audio level to the headsets: AUX selected, unit on, a device in the AUX AUDIO IN jack. */
+  auxLevel: 'ac.kma28.aux_level',
 } as const;
 export const KMA_BUTTONS = ['com1', 'com2', 'nav1', 'nav2', 'mkr', 'adf', 'dme', 'aux', 'spr', 'ics'] as const;
 export type KmaButton = (typeof KMA_BUTTONS)[number];
@@ -115,6 +119,16 @@ export const KT = {
   vfrCode: 'ac.kt76c.vfr_code',
   /** 1 while the unit is powered and not OFF. */
   on: 'ac.kt76c.on',
+} as const;
+
+/** Blind altitude encoder shared by the KT 76C and the KAP 140 (avionics/encoder.ts). */
+export const ENC = {
+  /** 1 = powered, warmed up, not failed. */
+  valid: 'ac.c172s.encoder_valid',
+  /** Pressure altitude (ft, 29.92) reported by the encoder (0 when invalid). */
+  altFt: 'ac.c172s.encoder_alt_ft',
+  /** Gillham (Mode C) altitude in hundreds of feet, -9999 when invalid. */
+  gillhamHft: 'ac.c172s.encoder_hft',
 } as const;
 
 /** KR 87 ADF (Supplement 6 Figure 1). */
@@ -179,8 +193,10 @@ export const KAP = {
   pitchTrimLamp: 'ac.c172.lamp.pitch_trim',
   /** Manual electric trim command after the split-switch logic (-1 nose down .. +1 nose up). */
   metCmd: 'ac.kap140.met_cmd',
-  /** 1 = the blind encoder / altitude data is valid (the alerter display dashes until it warms up). */
+  /** 1 = the KAP 140 is on and the shared blind encoder (ENC) data is valid (the alerter display dashes otherwise). */
   encoderValid: 'ac.kap140.encoder_valid',
+  /** AP button (momentary var; Supplement 15 Fig 2 item 2: pressed and held ~0.25 s engages, a press disengages). */
+  apBtn: 'ac.kap140.ap_btn',
 } as const;
 
 /** KLN 94 GPS (Supplement 19; Pilot's Guide 006-18207-0000 Figure 3-1). */
@@ -202,8 +218,13 @@ export const KLN = {
   apr: 'ac.kln94.apr',
   /** Navigation ready (acquired, self test approved). */
   navReady: 'ac.kln94.nav_ready',
-  /** OBS course from the #1 CDI (KI 209A) OBS knob, used in the KLN 94 OBS mode (deg magnetic). */
+  /**
+   * OBS-mode course (deg magnetic). Supplement 19 Fig 2 item 4: analog from the #1 CDI OBS while the NAV/GPS
+   * switch is in GPS (written by the NAV/GPS mux); in NAV it is set digitally with the KLN 94 knobs.
+   */
   obs: 'ac.kln94.obs_deg',
+  /** 1 = the OBS course comes from the #1 CDI OBS (NAV/GPS switch in GPS); 0 = digital entry on the KLN 94. */
+  obsAnalog: 'ac.kln94.obs_analog',
   /** CDI output to the NAV/GPS mux: deflection (-1..1, + = fly right), TO/FROM (1 TO, -1 FROM, 0 flag), validity. */
   cdi: 'ac.kln94.cdi',
   toFrom: 'ac.kln94.to_from',
@@ -214,6 +235,13 @@ export const KLN = {
 export const ST = {
   /** NAV/GPS switch-annunciator (Supplement 19 Fig 2 item 4): momentary push. */
   navGpsBtn: 'ac.c172s.navgps_btn',
+  /** Ground service: GPU plugged into the external power receptacle (left cowl, POH Sec 7); writes C172.extPower. */
+  gpuRequest: 'ac.c172s.gpu_request',
+  /** CO symptom level 0..1 (EST, systems.ts SteamCabinExtras): dims the pilot's view. */
+  coImpair: 'ac.c172s.co_impair',
+  /** Avionics cooling fan / cabin air noise loop gains (outputs, for tests). */
+  avnFanGain: 'ac.c172s.avn_fan_gain',
+  cabinAirNoise: 'ac.c172s.cabin_air_noise',
   /** Source shown on the #1 CDI (KI 209A) and coupled by the KAP 140: 0 NAV (NAV 1), 1 GPS. */
   cdiSource: 'ac.c172s.cdi_src',
   /** Split manual electric trim switch halves on the pilot's control wheel (Supplement 15 item 13): -1 DN (forward) / 0 / +1 UP (aft). */
@@ -233,12 +261,14 @@ export const ST = {
   dgHeading: 'ac.dg.hdg_deg',
   /** Glove box door (cosmetic storage; SCOPE). */
   gloveBox: 'ac.c172s.glove_box',
-  /** Sun visors (0 stowed .. 1 down), left / right. */
+  /** Sun visors (0 stowed .. 1 down), left / right: set by the visor controls (cockpit/cabinControls.ts). */
   visorLeft: 'ac.c172s.visor_l',
   visorRight: 'ac.c172s.visor_r',
-  /** Seat fore/aft position (0 full forward .. 1 full aft) of the pilot / front passenger seat. */
-  seatPilot: 'ac.c172s.seat_l',
-  seatCopilot: 'ac.c172s.seat_r',
+  // SCOPE: the front seats' fore/aft and vertical adjustment (POH Sec 7 "Seats") is not modelled:
+  // it would move the pilot's eye point, which the app camera takes once at load (the former
+  // seat_l / seat_r vars had no control or consumer and were removed).
+  /** AUX AUDIO IN jack on the pedestal: 1 = a portable audio device is plugged in (KMA 28 AUX source). */
+  auxJack: 'ac.c172s.aux_audio_jack',
   /** Radio (avionics) light level shared by the Bendix/King displays (RADIO LT rheostat x bus). */
   radioLight: 'ac.light.radio',
 } as const;

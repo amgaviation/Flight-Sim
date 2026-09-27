@@ -44,6 +44,28 @@ import { CDI1_RECEIVER } from '../systems';
 import type { C172SteamSystems } from '../createSystems';
 import { IN, PANEL, PANEL_CENTER, PANEL_CORNER_IN, PANEL_H, PANEL_W, POS, px, py } from './layout';
 
+/** POH Sec 2 placard 1 (operating limitations, "in full view of the pilot"), wording as printed. */
+const LIMITATIONS_PLACARD = [
+  'THE MARKINGS AND PLACARDS INSTALLED IN THIS AIRPLANE',
+  'CONTAIN OPERATING LIMITATIONS WHICH MUST BE COMPLIED',
+  'WITH WHEN OPERATING THIS AIRPLANE IN THE NORMAL CATEGORY.',
+  'OTHER OPERATING LIMITATIONS WHICH MUST BE COMPLIED WITH',
+  'WHEN OPERATING THIS AIRPLANE IN THIS CATEGORY OR IN THE',
+  "UTILITY CATEGORY ARE CONTAINED IN THE PILOT'S OPERATING",
+  'HANDBOOK AND FAA APPROVED AIRPLANE FLIGHT MANUAL.',
+  'NORMAL CATEGORY: NO ACROBATIC MANEUVERS, INCLUDING SPINS,',
+  'APPROVED.',
+  'UTILITY CATEGORY: NO ACROBATIC MANEUVERS APPROVED, EXCEPT',
+  "THOSE LISTED IN THE PILOT'S OPERATING HANDBOOK. BAGGAGE",
+  'COMPARTMENT AND REAR SEAT MUST NOT BE OCCUPIED.',
+  'SPIN RECOVERY: OPPOSITE RUDDER - FORWARD ELEVATOR -',
+  'NEUTRALIZE CONTROLS.',
+  'FLIGHT INTO KNOWN ICING CONDITIONS PROHIBITED.',
+  'THIS AIRPLANE IS CERTIFIED FOR THE FOLLOWING FLIGHT',
+  'OPERATIONS AS OF DATE OF ORIGINAL AIRWORTHINESS',
+  'CERTIFICATE: DAY - NIGHT - VFR - IFR',
+].join('\n');
+
 /** Combined annunciator legends written by systems.ts SteamCabinExtras. */
 export const ANN_ANY = { lowFuel: 'ac.c172s.ann_low_fuel', vac: 'ac.c172s.ann_vac' } as const;
 
@@ -130,10 +152,23 @@ export function buildMainPanel(b: CockpitBuilder, ctx: SimContext, sys: C172Stea
   panel.line(px(0.1), py(0.2), px(0.1), py(13.1), 0.0006, null);
   panel.line(px(6.8), py(0.2), px(6.8), py(13.1), 0.0006, null);
 
-  // Registration placard (Fig 7-2), SMOKING PROHIBITED, the seat-latch warning placard.
+  // Registration placard (Fig 7-2), SMOKING PROHIBITED (POH Sec 2 placard 12), the seat-latch
+  // warning placard, and the other POH Sec 2 / supplement placards:
+  //  - placard 1, the operating-limitations placard "in full view of the pilot" (Fig 7-2: the text
+  //    block left of the clock), wording from POH Sec 2;
+  //  - placard 9 "MANEUVERING SPEED - 105 KIAS" near the airspeed indicator (above it);
+  //  - Supplement 8 (winterization kit) "on the instrument panel near the EGT gauge", under the seat
+  //    warning as on VH-SPQ / N146TC;
+  //  - "No.1" / "No.2" beside the #1 and #2 CDIs (VH-SPQ).
+  // Placard 6 (compass calibration card) is the correction card under the magnetic compass.
   panel.placard({ text: 'N172SP', style: 'plate', height: 0.0045, plateColor: '#101010', color: '#e8e8e8', zone: null }, px(POS.regPlacard.X), py(POS.regPlacard.Z));
   panel.label('SMOKING PROHIBITED', px(10.6), py(0.7), { height: 0.0024, zone: null, color: '#e6e6e0' });
   panel.label('WARNING\nASSURE THAT SEAT IS LOCKED IN POSITION PRIOR TO TAXI,\nTAKE-OFF AND LANDING. FAILURE TO PROPERLY LATCH SEAT\nCAN RESULT IN SERIOUS INJURY OR DEATH.', px(-15.5), py(9.9), { height: 0.0016, zone: null, color: '#f1d27a', align: 'center' });
+  panel.label('WINTERIZATION KIT MUST BE REMOVED WHEN OUTSIDE\nAIR TEMPERATURE IS ABOVE 20°F.', px(-15.5), py(10.45), { height: 0.0014, zone: null, color: '#e6e6e0', align: 'center' });
+  panel.label('MANEUVERING SPEED - 105 KIAS', px(POS.asi.X - 0.5), py(0.42), { height: 0.0015, zone: null, color: '#e6e6e0' });
+  panel.label(LIMITATIONS_PLACARD, px(-18.8), py(3.4), { height: 0.00085, zone: null, color: '#e6e6e0', align: 'left', anchor: 'middle', lineHeight: 1.3 });
+  panel.label('No.1', px(-0.2), py(POS.cdi1.Z - 0.9), { height: 0.0017, zone: null, color: '#e6e6e0' });
+  panel.label('No.2', px(-0.2), py(POS.cdi2.Z - 0.9), { height: 0.0017, zone: null, color: '#e6e6e0' });
 
   // ---------------------------------------------------------------- flight and engine instruments
   const gauges: AnalogGauge[] = [];
@@ -155,7 +190,9 @@ export function buildMainPanel(b: CockpitBuilder, ctx: SimContext, sys: C172Stea
     add(new CourseIndicator({ id: 'c172s.cdi2', name: 'KI 208 course deviation (NAV 2)', receiver: 2, ...common }), POS.cdi2);
     add(new AdfIndicator({ id: 'c172s.adf', name: 'KI 227 ADF bearing indicator', receiver: 1, ...common }), POS.adf);
     add(new Tachometer({ id: 'c172s.tach', name: 'Recording tachometer', engine: 1, initialHours: 1873.4, ...common }), POS.tach);
-    add(new FuelQuantityGauge({ id: 'c172s.fuel_qty', name: 'Fuel quantity L / R', size: S2, ...common }), POS.fuelQty);
+    // Driven by the float transmitters' indicated quantity (FuelSystem gauge lag; C172LateLogic writes a
+    // failed transmitter as a negative quantity, POH Sec 7), which parks the needle below 0.
+    add(new FuelQuantityGauge({ id: 'c172s.fuel_qty', name: 'Fuel quantity L / R', size: S2, leftVar: 'fuel.left_ind_kg', rightVar: 'fuel.right_ind_kg', minReadGal: -2, ...common }), POS.fuelQty);
     add(new EgtFuelFlowGauge({ id: 'c172s.egt_ff', name: 'EGT / fuel flow', size: S2, engine: 1, ...common }), POS.egtFf);
     add(new OilTempPressGauge({ id: 'c172s.oil', name: 'Oil temperature / pressure', size: S2, engine: 1, ...common }), POS.oil);
     add(new VacuumAmmeterGauge({ id: 'c172s.vac_amp', name: 'Vacuum / ammeter', size: S2, ...common }), POS.vacAmp);
@@ -208,6 +245,8 @@ export function buildMainPanel(b: CockpitBuilder, ctx: SimContext, sys: C172Stea
         width: (w - 0.04) * IN,
         height: cellH,
         bezel: false,
+        // N146TC / VH-SPQ: the unlit panel is a uniformly black strip; legends show only when lit / on TST.
+        unlitTint: 0.012,
       }),
       px(cx + w / 2),
       py(ap.Z),
@@ -236,10 +275,11 @@ export function buildMainPanel(b: CockpitBuilder, ctx: SimContext, sys: C172Stea
   panel.label('BRT', px(POS.annSwitch.X + 0.42), py(POS.annSwitch.Z), { height: 0.0017, zone: null });
   panel.label('DIM', px(POS.annSwitch.X - 0.05), py(POS.annSwitch.Z + 0.42), { height: 0.0017, zone: null });
 
-  // ---------------------------------------------------------------- NAV/GPS switch-annunciator and KLN 94 annunciators (Supplement 19 Fig 2)
-  // EST arrangement: the square switch-annunciator above the #1 CDI (photograph), with the KLN 94
-  // external annunciators (message, waypoint alert, approach arm / active) beside it; the KLN 94
-  // lights them all during its self test (Pilot's Guide 3.2 step 3).
+  // ---------------------------------------------------------------- NAV/GPS switch-annunciator (Supplement 19 Fig 2)
+  // Serials 172S8704 and on (Supplement 19 Figure 2): a single square switch-annunciator above the #1
+  // CDI with the NAV (upper) and GPS (lower) legends (and "HSI" only with the optional HSI); the
+  // separate MSG / WPT / ARM / ACTV lamps of Figure 1 belong to serials 172S8372-8703 only. The
+  // KLN 94 shows its message / waypoint / approach annunciations on its own screen (VH-SPQ, N146TC).
   panel.add(
     new PushButton(env, {
       id: 'c172s.navgps',
@@ -254,20 +294,8 @@ export function buildMainPanel(b: CockpitBuilder, ctx: SimContext, sys: C172Stea
         { text: 'GPS', color: 'cyan', var: 'ac.c172s.ann_gps' },
       ],
     }),
-    px(POS.navGps.X - 0.55),
+    px(POS.navGps.X),
     py(POS.navGps.Z),
-  );
-  const klnAnn: { id: string; text: string; color: 'amber' | 'green' | 'white'; v: string; t: (x: number) => boolean }[] = [
-    { id: 'msg', text: 'MSG', color: 'amber', v: 'ac.c172s.ann_kln_msg', t: (x) => x > 0.5 },
-    { id: 'wpt', text: 'WPT', color: 'amber', v: 'ac.c172s.ann_kln_wpt', t: (x) => x > 0.5 },
-    { id: 'apr', text: 'APR', color: 'green', v: 'ac.c172s.ann_kln_apr', t: (x) => x > 0.5 },
-  ];
-  klnAnn.forEach((a, i) =>
-    panel.add(
-      new AnnunciatorLight(env, { id: `c172s.kln_ann.${a.id}`, label: `KLN 94 ${a.text} annunciator`, segments: [{ text: a.text, color: a.color, var: a.v, test: a.t }], width: 0.012, height: 0.008 }),
-      px(POS.navGps.X + 0.2 + i * 0.52),
-      py(POS.navGps.Z),
-    ),
   );
   void KLN;
 
@@ -301,7 +329,13 @@ export function buildMainPanel(b: CockpitBuilder, ctx: SimContext, sys: C172Stea
   avnOrder.forEach((c, i) => {
     const def = STEAM_BREAKERS.find((x) => x.name === c.name)!;
     const x = (0.75 + i * 0.98 + (i >= 4 ? 0.35 : 0)) * IN;
-    avn.add(new CircuitBreaker(env, { id: `c172s.cb.${c.name}`, label: `${def.label} circuit breaker (${def.ratingA} A)`, var: `cb.${c.name}`, trippedVar: `cb.${c.name}_tripped`, rating: def.ratingA, diameter: 0.0095 }), x, 0.9 * IN);
+    // Push-to-reset breakers (POH Sec 7), except AUTO PILOT: "a 5-amp pull-off circuit breaker" (Supplement 15 item 10).
+    const pull = c.name === 'autopilot';
+    avn.add(
+      new CircuitBreaker(env, { id: `c172s.cb.${c.name}`, label: `${def.label} circuit breaker (${def.ratingA} A, ${pull ? 'pull-off' : 'push to reset'})`, var: `cb.${c.name}`, trippedVar: `cb.${c.name}_tripped`, rating: def.ratingA, diameter: 0.0095, pullable: pull }),
+      x,
+      0.9 * IN,
+    );
     avn.label(c.text, x, 0.36 * IN, { height: 0.0017 });
   });
   avn.label('AVIONICS', 5.0 * IN, 1.32 * IN, { height: 0.0019 });
@@ -311,23 +345,38 @@ export function buildMainPanel(b: CockpitBuilder, ctx: SimContext, sys: C172Stea
   panel.add(
     new RockerSwitch(env, {
       id: 'c172s.elt',
-      label: 'ELT remote switch (ON / ARM / TEST-RESET)',
+      label: 'ELT remote switch/annunciator (ON / AUTO / RESET)',
       var: C172.elt,
-      positions: ['TEST', 'ARM', 'ON'],
+      positions: ['RESET', 'AUTO', 'ON'],
       values: [ELT_SW.reset, ELT_SW.arm, ELT_SW.on],
       initial: 1,
       springs: { 0: 1 },
       width: 0.011,
       height: 0.02,
       indicator: { var: C172.eltTx, color: 'red' },
-      capMaterial: 'plasticBlack',
+      capMaterial: 'paintRed',
     }),
     px(POS.elt.X),
     py(POS.elt.Z),
+    { z: 0.003 },
   );
-  panel.label('ELT', px(POS.elt.X), py(POS.elt.Z - 0.55), { height: 0.0022, zone: null });
-  panel.label('ON', px(POS.elt.X + 0.4), py(POS.elt.Z - 0.25), { height: 0.0016, zone: null });
-  panel.label('ARM', px(POS.elt.X + 0.45), py(POS.elt.Z + 0.25), { height: 0.0016, zone: null });
+  // Pointer Model 3000-11 ELT (POH 172SPHUS Rev 5 Supplement 4): remote switch/annunciator, a 3-position
+  // rocker ON / AUTO / RESET with the red transmit annunciator in the centre of the rocker. ON "remotely
+  // activates the transmitter", AUTO "arms transmitter for automatic activation", RESET (momentary)
+  // "deactivates and rearms transmitter after automatic activation". Plate layout after the VH-SPQ
+  // photograph (black plate with a red rocker,
+  // a CAUTION placard beside it and the "FOR AVIATION EMERGENCY USE ONLY" placard above).
+  {
+    const plate = new THREE.Mesh(env.geometry.get('c172s.elt_plate', () => roundedBox(0.03, 0.05, 0.003, 0.002)), mats.get('plasticBlack'));
+    plate.userData.cockpitStatic = true;
+    panel.addObject(plate, px(POS.elt.X), py(POS.elt.Z), { z: 0.0015 });
+  }
+  panel.label('ELT', px(POS.elt.X), py(POS.elt.Z - 0.78), { height: 0.0014, zone: null, color: '#e6e6e0' });
+  panel.label('ON', px(POS.elt.X - 0.4), py(POS.elt.Z - 0.3), { height: 0.0012, zone: null, color: '#e6e6e0' });
+  panel.label('AUTO', px(POS.elt.X - 0.46), py(POS.elt.Z), { height: 0.0012, zone: null, color: '#e6e6e0' });
+  panel.label('RESET', px(POS.elt.X - 0.48), py(POS.elt.Z + 0.3), { height: 0.0012, zone: null, color: '#e6e6e0' });
+  panel.label('FOR AVIATION EMERGENCY USE ONLY\nUNAUTHORIZED OPERATION PROHIBITED', px(POS.elt.X - 0.6), py(POS.elt.Z - 1.35), { height: 0.0011, zone: null, color: '#e6e6e0' });
+  panel.placard({ text: 'CAUTION', style: 'caution', height: 0.0016, zone: null }, px(POS.elt.X + 1.25), py(POS.elt.Z - 0.1));
   const hobbs = displays.get('hobbs');
   if (hobbs) {
     const hb = new THREE.Mesh(env.geometry.get('c172s.hobbs_case', () => roundedBox(0.044, 0.018, 0.008, 0.002)), mats.get('plasticBlack'));
@@ -335,7 +384,8 @@ export function buildMainPanel(b: CockpitBuilder, ctx: SimContext, sys: C172Stea
     panel.addObject(hb, px(POS.hobbs.X), py(POS.hobbs.Z), { z: 0.004 });
     panel.display(hobbs, px(POS.hobbs.X), py(POS.hobbs.Z), 0.034, 0.0085, { bezel: false, z: 0.0085 });
   }
-  panel.label('HOURS', px(POS.hobbs.X), py(POS.hobbs.Z + 0.4), { height: 0.0017, zone: null });
+  panel.label('QUARTZ', px(POS.hobbs.X), py(POS.hobbs.Z - 0.52), { height: 0.0013, zone: null, color: '#e6e6e0' });
+  panel.label('TOTAL HOURS', px(POS.hobbs.X), py(POS.hobbs.Z + 0.4), { height: 0.0013, zone: null, color: '#e6e6e0' });
 
   // ---------------------------------------------------------------- control-wheel column bushings (static)
   for (const s of [-1, 1]) {

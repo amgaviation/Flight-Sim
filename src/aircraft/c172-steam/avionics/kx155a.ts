@@ -25,8 +25,8 @@
  * powered (read by nav/Radios), com{n}.active_mhz / stby_mhz, and the display state vars in
  * KX(n). The 'T' annunciation follows the KMA 28 transmit selection.
  *
- * SCOPE: receiver audio (voice, ident morse) is not synthesised; the squelch / PULL IDENT
- * state is kept and shown. Channel program mode stores the current standby frequency into
+ * NAV ident audio: the Morse ident is heard with the volume knob pulled (PULL IDENT) through the
+ * KMA 28 NAV select (receiverAudio.ts). SCOPE: COM and NAV voice audio are not synthesised. Channel program mode stores the current standby frequency into
  * the selected channel (the unit's field-by-field editing is simplified). The pilot
  * configuration pages (SWRV / BRIM / SIDE) are not modelled.
  */
@@ -189,7 +189,7 @@ export class Kx155aLogic implements Subsystem {
     // Inner-knob pull states shown by the unit: COMM 25 kHz channel steps (item 9), NAV OBS set
     // mode of the internal CDI format (item 4 "PULL OBS").
     v.set(k.comStep, v.get(k.comInnerPull) > 0.5 ? 25 : 50);
-    // NAV audio (item 8; SCOPE: the ident morse is not synthesised, the level and PULL IDENT state are kept).
+    // NAV audio level (item 8); the ident Morse is keyed by receiverAudio.ts while PULL IDENT is out.
     v.set(k.navAudio, on ? v.get(k.navVol) : 0);
     v.set(k.navObsSet, on && this.format === 1 && v.get(k.navInnerPull) > 0.5 ? 1 : 0);
     this.bComXfr.update(dt);

@@ -44,6 +44,11 @@ export interface MagneticCompassOptions {
   correctionCard?: boolean;
   /** Decimal year for the WMM (default: now). */
   year?: number;
+  /**
+   * Material for the housing body and front plate (default: the built-in near-black plastic).
+   * Appended: lets an aircraft use its cockpit-lit plastic (not disposed by the compass).
+   */
+  housingMaterial?: THREE.Material;
 }
 
 export class MagneticCompass implements CockpitControl {
@@ -82,7 +87,7 @@ export class MagneticCompass implements CockpitControl {
     opening.lineTo(-winW / 2, H * 0.06 + winH / 2);
     opening.closePath();
     bodyShape.holes.push(opening);
-    const housingMat = this.track(new THREE.MeshStandardMaterial({ color: '#131314', roughness: 0.6, metalness: 0.1, side: THREE.DoubleSide }));
+    const housingMat = o.housingMaterial ?? this.track(new THREE.MeshStandardMaterial({ color: '#131314', roughness: 0.6, metalness: 0.1, side: THREE.DoubleSide }));
     const body = new THREE.Mesh(this.track(new THREE.ExtrudeGeometry(bodyShape, { depth: D, bevelEnabled: true, bevelSize: 0.002, bevelThickness: 0.002, bevelSegments: 3 })), housingMat);
     body.position.z = -D;
     this.object.add(body);
@@ -90,7 +95,7 @@ export class MagneticCompass implements CockpitControl {
     back.position.z = -D * 0.9;
     this.object.add(back);
     // Front plate with the window.
-    const plate = new THREE.Mesh(this.track(rectBezelGeometry(W * 0.98, H * 0.98, winW, winH, H * 0.06, 0.0035, 0.002)), this.track(new THREE.MeshStandardMaterial({ color: '#0e0e0f', roughness: 0.45, metalness: 0.15 })));
+    const plate = new THREE.Mesh(this.track(rectBezelGeometry(W * 0.98, H * 0.98, winW, winH, H * 0.06, 0.0035, 0.002)), o.housingMaterial ?? this.track(new THREE.MeshStandardMaterial({ color: '#0e0e0f', roughness: 0.45, metalness: 0.15 })));
     this.object.add(plate);
     // Card drum inside a gimbal (tilts with the card).
     const r = W * 0.3;

@@ -27,6 +27,11 @@ export interface DisconnectAlertsConfig {
   /** Max tone duration (s); Infinity = while the warning var is set. Defaults: AP Infinity, A/T 3. */
   apToneMaxS?: number;
   atToneMaxS?: number;
+  /**
+   * Max AP tone duration (s) after an automatic disconnect (`ap.disc_auto` = 1); default `apToneMaxS`.
+   * Infinity = while the warning is set (GFC 700: "until acknowledged", CRG 190-00384-12 §6.4). Appended.
+   */
+  apToneAutoMaxS?: number;
   apVoice?: string;
   apWarnVar?: string;
   atWarnVar?: string;
@@ -61,7 +66,8 @@ export class DisconnectAlerts implements Subsystem {
     if (atW && this.atT < 0) this.atT = 0;
     else if (!atW) this.atT = -1;
     else this.atT += dt;
-    const apTone = apW && this.apT < (c.apToneMaxS ?? Infinity);
+    const apMax = v.get('ap.disc_auto') !== 0 ? (c.apToneAutoMaxS ?? c.apToneMaxS ?? Infinity) : (c.apToneMaxS ?? Infinity);
+    const apTone = apW && this.apT < apMax;
     const atTone = atW && this.atT < (c.atToneMaxS ?? 3);
     if (apTone !== this.apOn) {
       this.apOn = apTone;

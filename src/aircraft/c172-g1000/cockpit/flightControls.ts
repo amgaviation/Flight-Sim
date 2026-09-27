@@ -7,14 +7,15 @@
  * a light assembly, both found on the lower surface of the pilot's control wheel" (Sec 7 "Interior
  * lighting"; the NAV light switch must be ON).
  *
- * Switch placement on the grip pod (EST from the photographs "C172S G1000 in flight.jpg" and
- * "Cessna 172SP G1000 02.jpg"): the red A/P TRIM DISC button at the forward end of the pod top, the
- * MET split switch behind it under the thumb, CWS on the face toward the pilot, PTT on the inboard side.
+ * Switch placement on the grip pod per POH Fig 7-2 Detail A: microphone button at the forward end of the
+ * pod top, CWS on the top face aft of it; on the inboard face the "CWS / MIC / A/P TRIM DISC" legend plate,
+ * the round A/P TRIM DISC button and, lower under the thumb, the MET split switch. Sizes EST.
  *
  * Bindings:
- *  - A/P TRIM DISC: event `ap.disc` (GFC 700 disconnect / tone silence) and C172G.apDisc held = trim
- *    interrupt (systems/variant.ts); MET: C172G.met +1 nose up / -1 nose down (spring to centre); MET
- *    with the AP engaged disconnects it (POH Sec 7).
+ *  - A/P TRIM DISC: event `ap.disc` (GFC 700 disconnect / tone silence), release `g1k.ap_disc_hold`
+ *    (ESP interrupt ends), C172G.apDisc held = trim interrupt (systems/variant.ts); MET split switch:
+ *    C172G.met +1 nose up / -1 nose down (spring to centre) with C172G.metHalf (both halves / ARM only /
+ *    DN-UP only); MET ARM with the AP engaged disconnects it, otherwise acknowledges a disconnect alert.
  *  - CWS: event `ap.cws` with the pressed state; PTT: `g1k.ptt` (GMA 1360 transmit).
  *  - Wheels / columns animate from the control-surface positions (cable controls are back-driven by
  *    the GFC 700 servos); mouse drag flies them through the cockpit.* input contract.
@@ -24,13 +25,33 @@
 import * as THREE from 'three';
 import type { CockpitBuilder } from '../../../cockpit/CockpitBuilder';
 import type { SimContext } from '../../../core/SimContext';
-import { PushButton, RudderPedals, Thumbwheel } from '../../../cockpit/controls';
+import { PushButton, RockerSwitch, RudderPedals, Thumbwheel } from '../../../cockpit/controls';
+import type { ControlPointer } from '../../../cockpit/types';
 import { SURF } from '../../../core/vars';
 import { G1K_EVENTS } from '../../../avionics/garmin-g1000/vars';
 import { C172 } from '../../c172s-common/vars';
 import { C172G } from '../vars';
 import { skyhawkYoke } from './yoke';
 import { FLOOR_H, PEDALS, PANEL, YOKE, hz } from './layout';
+
+/**
+ * MET split switch: a 3-position spring-centred rocker whose pointer modifiers choose the halves under the thumb
+ * (writes C172G.metHalf: 0 both, 1 ARM only, 2 DN/UP only; back to 0 on release).
+ */
+class MetRocker extends RockerSwitch {
+  override onPointerDown(p: ControlPointer): void {
+    this.env.vars.set(C172G.metHalf, p.shift ? 2 : p.ctrl || p.alt ? 1 : 0);
+    super.onPointerDown(p);
+  }
+  override onPointerUp(p?: ControlPointer): void {
+    super.onPointerUp(p);
+    this.env.vars.set(C172G.metHalf, 0);
+  }
+  override onCancel(): void {
+    super.onCancel();
+    this.env.vars.set(C172G.metHalf, 0);
+  }
+}
 
 export interface FlightControlParts {
   /** Control-lock flag (shown while C172.controlLock = 1). */
@@ -49,42 +70,72 @@ export function buildFlightControls(b: CockpitBuilder, _ctx: SimContext): Flight
     rollDeg: 45,
     pitchVar: SURF.elevator,
     rollVar: SURF.aileron,
+    // POH Fig 7-2 Detail A: the Microphone Button (raised round cap) at the forward end of the pod top with
+    // the Control Wheel Steering button beside it (aft); on the inboard face the round Autopilot Trim
+    // Disconnect button (upper) and the Manual Electric Trim split switch (lower, under the thumb).
+    // Anchor frames (yoke.ts): leftTop +y = forward along the top face; leftInboard +x = forward, +y = up.
     switches: [
       {
         anchor: 'leftTop',
-        offset: [0, 0.012, 0],
+        offset: [0, 0.011, 0],
         kind: 'button',
-        options: { id: 'c172g.yoke1.ap_disc', label: 'A/P TRIM DISC (AP disconnect / trim interrupt)', style: 'small', width: 0.0085, mode: 'momentary', var: C172G.apDisc, event: 'ap.disc', capMaterial: 'paintRed' },
+        options: { id: 'c172g.yoke1.ptt', label: 'PILOT MICROPHONE (PTT)', style: 'round', width: 0.0085, mode: 'momentary', var: C172G.pttPilot, event: G1K_EVENTS.ptt, releaseEvent: G1K_EVENTS.ptt, capMaterial: 'plasticBlack' },
       },
       {
         anchor: 'leftTop',
         offset: [0, -0.008, 0],
-        kind: 'rocker',
-        options: {
-          id: 'c172g.yoke1.met',
-          label: 'MANUAL ELECTRIC TRIM (MET)',
-          var: C172G.met,
-          positions: ['NOSE UP', 'OFF', 'NOSE DN'],
-          values: [1, 0, -1],
-          initial: 1,
-          springs: { 0: 1, 2: 1 },
-          width: 0.012,
-          height: 0.016,
-          capMaterial: 'plasticBlack',
-        },
-      },
-      {
-        anchor: 'leftBack',
         kind: 'button',
-        options: { id: 'c172g.yoke1.cws', label: 'CWS (control wheel steering)', style: 'small', width: 0.008, mode: 'momentary', var: C172G.cws, event: 'ap.cws', releaseEvent: 'ap.cws', capMaterial: 'plasticGrey' },
+        options: { id: 'c172g.yoke1.cws', label: 'CWS (control wheel steering)', style: 'small', width: 0.0075, mode: 'momentary', var: C172G.cws, event: 'ap.cws', releaseEvent: 'ap.cws', capMaterial: 'plasticGrey' },
       },
       {
         anchor: 'leftInboard',
+        offset: [0.008, 0.009, 0],
         kind: 'button',
-        options: { id: 'c172g.yoke1.ptt', label: 'PILOT MICROPHONE (PTT)', style: 'small', width: 0.009, mode: 'momentary', var: C172G.pttPilot, event: G1K_EVENTS.ptt, releaseEvent: G1K_EVENTS.ptt, capMaterial: 'plasticBlack' },
+        // Press: 'ap.disc' (AP disconnect / alert acknowledge); release: G1K apDiscHold { pressed: false } ends the
+        // ESP interrupt (PG §8.11: ESP is interrupted only while the switch is held).
+        options: { id: 'c172g.yoke1.ap_disc', label: 'A/P TRIM DISC (AP disconnect / trim interrupt)', style: 'round', width: 0.0082, mode: 'momentary', var: C172G.apDisc, event: 'ap.disc', releaseEvent: G1K_EVENTS.apDiscHold, capMaterial: 'paintRed' },
       },
     ],
   });
+  // MET split switch rocking fore / aft under the thumb: forward = NOSE DN (the rocker's upper end, index 2, turned to
+  // point forward). CRG 190-00384-12 §6.1: left half ARM, right half DN / UP; the thumb normally rocks both. Mouse:
+  // plain = both halves, Shift = DN/UP half only, Ctrl/Alt = ARM half only (C172G.metHalf, systems/variant.ts).
+  {
+    const met = new MetRocker(env, {
+      id: 'c172g.yoke1.met',
+      label: 'MANUAL ELECTRIC TRIM (MET) split switch (Shift: DN/UP half only, Ctrl: ARM half only)',
+      var: C172G.met,
+      positions: ['NOSE UP', 'OFF', 'NOSE DN'],
+      values: [1, 0, -1],
+      initial: 1,
+      springs: { 0: 1, 2: 1 },
+      width: 0.011,
+      height: 0.018,
+      capMaterial: 'plasticBlack',
+    });
+    met.object.position.set(0.002, -0.013, 0);
+    met.object.rotation.z = THREE.MathUtils.degToRad(-90);
+    pilot.anchors.leftInboard.add(met.object);
+    pilot.subControls.push(met);
+    // Split line between the ARM (left) and DN/UP (right) halves of the cap.
+    const split = new THREE.Mesh(env.geometry.get('c172g.met_split', () => new THREE.PlaneGeometry(0.0006, 0.017)), mats.custom('plastic', '#050505', 0.6));
+    split.rotation.z = Math.PI / 2;
+    split.position.set(0, 0, 0.0035);
+    split.userData.cockpitStatic = true;
+    met.object.add(split);
+  }
+  // Engraved legend plate on the inboard face, aft of the A/P TRIM DISC button (Detail A: "CWS / MIC /
+  // A/P TRIM DISC"). Static: the switches it names are the controls above.
+  {
+    const plateG = env.geometry.get('c172g.yoke_legend', () => new THREE.PlaneGeometry(0.02, 0.013));
+    const legend = new THREE.Mesh(plateG, mats.custom('plastic', '#101012', 0.5));
+    legend.position.set(-0.009, 0.009, 0.0004);
+    legend.userData.cockpitStatic = true;
+    pilot.anchors.leftInboard.add(legend);
+    const t = env.labels.text('CWS   MIC\nA/P TRIM\nDISC', { height: 0.0022, weight: 800, zone: null, color: '#e6e6e2' });
+    t.position.set(-0.009, 0.009, 0.0007);
+    pilot.anchors.leftInboard.add(t);
+  }
   // Map light rheostat (knurled thumbwheel) under the hub; the lens beside it.
   const mapWheel = new Thumbwheel(env, {
     id: 'c172g.yoke1.map_light',
@@ -108,7 +159,8 @@ export function buildFlightControls(b: CockpitBuilder, _ctx: SimContext): Flight
   // Placed after the map-light wheel joined the sub-controls (the builder registers them with the yoke).
   b.place(pilot, { center_m: [YOKE.x, -YOKE.y, YOKE.z], facing: 'aft', tiltDeg: PANEL.tiltDeg });
 
-  // Copilot (right) wheel: microphone button on the left grip (POH Fig 7-2 item 14).
+  // Copilot (right) wheel: microphone button on top of the right (outboard) grip (POH Fig 7-2 item 14,
+  // the leader line ends on the right grip's pod).
   const copilot = skyhawkYoke(env, {
     id: 'c172g.yoke2',
     label: 'COPILOT CONTROL WHEEL',
@@ -118,7 +170,8 @@ export function buildFlightControls(b: CockpitBuilder, _ctx: SimContext): Flight
     rollVar: SURF.aileron,
     switches: [
       {
-        anchor: 'leftTop',
+        anchor: 'rightTop',
+        offset: [0, 0.008, 0],
         kind: 'button',
         options: { id: 'c172g.yoke2.ptt', label: 'COPILOT MICROPHONE (PTT)', style: 'small', width: 0.009, mode: 'momentary', var: C172G.pttCopilot, event: G1K_EVENTS.ptt, releaseEvent: G1K_EVENTS.ptt, capMaterial: 'plasticBlack' },
       },

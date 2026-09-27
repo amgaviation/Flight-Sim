@@ -123,7 +123,7 @@ export const C172S_EIS: G1kEisConfig = {
     lowDelayS: 60,
   },
   // c172s-common G1000 readouts (M BUS at the WARN breaker, E BUS at NAV1 ENG on the ESS bus; UND trainer).
-  elec: { mainBusV: 'ac.c172.m_bus_v', essBusV: 'ac.c172.e_bus_v', mainBattA: 'ac.c172.m_batt_a', stbyBattA: 'ac.c172.s_batt_a', lowVolts: 24.5 },
+  elec: { mainBusV: 'ac.c172.m_bus_v', essBusV: 'ac.c172.e_bus_v', mainBattA: 'ac.c172.m_batt_a', stbyBattA: 'ac.c172.s_batt_a', lowVolts: 24.5, highVolts: 32.0, mainBattAmberA: -1.5 }, // POH 7-53 / 7-54
   // POH: 53 gal usable (Figure 7-5); PG Table 3-1 GAL REM keys 35 GAL / 53 GAL.
   totalizer: { defaultGal: 53, presetsGal: [35, 53], fuelFlowGph: 'eng1.ff_gph' },
 };
@@ -141,7 +141,9 @@ export const C172S_EIS: G1kEisConfig = {
 export const C172S_CAS: CasDef[] = [
   { id: 'co_lvl', text: 'CO LVL HIGH', level: 'warning', when: 'ac.c172.ann.co_lvl_high ?? 0' },
   { id: 'high_volts', text: 'HIGH VOLTS', level: 'warning', when: 'ac.c172.ann.high_volts ?? 0' },
-  { id: 'low_volts', text: 'LOW VOLTS', level: 'warning', when: 'ac.c172.ann.low_volts ?? 0' },
+  // CRG 190-00384-12 §13.2: "Aural tone is inhibited while the aircraft is on the ground" (POH 7-55: LOW VOLTS may show
+  // during low-rpm taxi with high loads). On ground = not airborne by the G1000's own inference (config `airborne`).
+  { id: 'low_volts', text: 'LOW VOLTS', level: 'warning', when: 'ac.c172.ann.low_volts ?? 0', auralInhibit: '!((gps.valid ?? 0) * gps.gs_kt > 30 || (adc1.valid ?? 0) * adc1.tas_kt > 50)' },
   { id: 'oil_press', text: 'OIL PRESSURE', level: 'warning', when: 'ac.c172.ann.oil_press ?? 0' },
   // USP ACTIVE is a CAS warning on the NXi with ESP (Appendix A).
   { id: 'usp', text: 'USP ACTIVE', level: 'warning', when: `${G1K.uspActive} ?? 0` },
@@ -193,6 +195,9 @@ export const C172S_NXI: G1000Config = {
   traffic: 'ADSB',
   terrain: 'SVT',
   power: C172S_NXI_POWER,
+  // EST: ~0.1 s hold-up of the GDU / GIA / GSU power supplies (input capacitance); no published figure. It lets
+  // the units ride through a one-update bus transfer (main bus -> standby battery) without restarting.
+  powerHoldUpS: 0.1,
   // EST: USP activation in the altitude-critical modes "at stall warning" (PG §7.5); the 172S warning is the
   // pneumatic horn (c172s-common `ac.c172.stall_horn`).
   stallWarning: 'ac.c172.stall_horn ?? 0',

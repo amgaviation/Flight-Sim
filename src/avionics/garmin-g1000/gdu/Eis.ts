@@ -22,6 +22,7 @@ import { blinkOn } from '../../common/dynamics';
 import { fmtFixed, fmtInt } from '../../common/format';
 import { DialGauge, DIAL_GARMIN, LinearGauge, BAR_GARMIN, formatValue, type LinearStyle } from '../../common/draw/EngineIndications';
 import type { G1000System } from '../state/System';
+import type { G1kEisConfig } from '../config';
 import { EIS_PAGE, G1K } from '../vars';
 import { EIS_W, G1K_COLORS, G1K_PALETTE, TF } from './style';
 
@@ -260,19 +261,19 @@ export class EisRenderer {
   /** ELECTRICAL: M BUS E (volts) and M BATT S (amps) rows (POH 7-50). */
   private drawElec(ctx: Ctx2D, y: number): void {
     const ev = this.ev;
-    const lowV = this.sys.cfg.eis.elec.lowVolts;
     TF.draw(ctx, 'ELECTRICAL', EIS_W / 2, y, 12, P.white, 'center', 'middle');
     const mb = ev.mBus();
     const eb = ev.eBus();
     const ma = ev.mBatt();
     const sa = ev.sBatt();
-    // Volts red at or below the LOW VOLTS threshold; negative (discharging) battery current amber (EST colours per POH 7-51).
-    TF.draw(ctx, fmtFixed(mb, 1), 12, y + 20, 15, mb <= lowV ? P.red : P.white, 'left', 'middle');
+    // POH 7-53 / 7-54 colours (eisElecColor).
+    const el = this.sys.cfg.eis.elec;
+    TF.draw(ctx, fmtFixed(mb, 1), 12, y + 20, 15, EIS_ELEC_COLOR[eisElecLevel(el, 'bus', mb)], 'left', 'middle');
     TF.draw(ctx, 'M BUS E', EIS_W / 2, y + 20, 11, P.white, 'center', 'middle');
-    TF.draw(ctx, fmtFixed(eb, 1), EIS_W - 12, y + 20, 15, eb <= lowV ? P.red : P.white, 'right', 'middle');
-    TF.draw(ctx, fmtFixed(ma, 1), 12, y + 40, 15, ma < 0 ? P.amber : P.white, 'left', 'middle');
+    TF.draw(ctx, fmtFixed(eb, 1), EIS_W - 12, y + 20, 15, EIS_ELEC_COLOR[eisElecLevel(el, 'bus', eb)], 'right', 'middle');
+    TF.draw(ctx, fmtFixed(ma, 1), 12, y + 40, 15, EIS_ELEC_COLOR[eisElecLevel(el, 'mbatt', ma)], 'left', 'middle');
     TF.draw(ctx, 'M BATT S', EIS_W / 2, y + 40, 11, P.white, 'center', 'middle');
-    TF.draw(ctx, fmtFixed(sa, 1), EIS_W - 12, y + 40, 15, sa < -0.05 ? P.amber : P.white, 'right', 'middle');
+    TF.draw(ctx, fmtFixed(sa, 1), EIS_W - 12, y + 40, 15, EIS_ELEC_COLOR[eisElecLevel(el, 'sbatt', sa)], 'right', 'middle');
   }
 
   private drawLean(ctx: Ctx2D, y0: number): void {
@@ -339,3 +340,15 @@ export class EisRenderer {
     this.drawHours(ctx, y + 70);
   }
 }
+
+/**
+ * Colour level of an ELECTRICAL readout (0 white, 1 amber, 2 red). POH 172SPHBUS-00 7-53: bus volts red "above 32.0
+ * volts" and below the LOW VOLTS threshold (24.5 V); 7-54: "Main battery current greater than -1.5 amps is shown in
+ * white" (amber below); standby battery current negative (discharging) amber.
+ */
+export function eisElecLevel(el: G1kEisConfig['elec'], kind: 'bus' | 'mbatt' | 'sbatt', x: number): 0 | 1 | 2 {
+  if (kind === 'bus') return x > (el.highVolts ?? 32) || x < el.lowVolts ? 2 : 0;
+  if (kind === 'mbatt') return x < (el.mainBattAmberA ?? -1.5) ? 1 : 0;
+  return x < -0.05 ? 1 : 0;
+}
+const EIS_ELEC_COLOR = [P.white, P.amber, P.red] as const;

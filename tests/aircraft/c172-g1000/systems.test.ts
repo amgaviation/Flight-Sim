@@ -152,15 +152,20 @@ describe('C172S G1000 NXi variant hardware', () => {
     expect(r.vars.get(C172.elt)).toBe(ELT_SW.arm);
   });
 
-  it('forward avionics fan failure: PFD1 / MFD1 COOLING advisories after a few minutes', () => {
+  it('PFD / deckskin / MFD fan failures: PFD1 COOLING / MFD1 COOLING system messages (not CAS) after a few minutes', () => {
     const r = makeG1k({ state: 'cruise', air: CRUISE });
     r.run(2);
-    expect(cas(r).some((t) => t.includes('COOLING'))).toBe(false);
+    const msgs = () => r.sys.suite.system.alerts.messages.list.filter((m) => m.active).map((m) => m.text);
+    expect(msgs().some((t) => t.includes('COOLING'))).toBe(false);
     r.vars.set(`fail.${C172G_FAIL.fwdFan}`, 1);
-    r.vars.set(`fail.${C172G_FAIL.aftFan}`, 1);
+    r.vars.set(`fail.${C172G_FAIL.pfdFan}`, 1);
+    r.vars.set(`fail.${C172G_FAIL.mfdFan}`, 1);
     r.run(600);
     expect(r.vars.get(C172G.fwdFan)).toBe(0);
-    expect(cas(r)).toContain('PFD1 COOLING');
+    expect(msgs().some((t) => t.startsWith('PFD1 COOLING'))).toBe(true);
+    expect(msgs().some((t) => t.startsWith('MFD1 COOLING'))).toBe(true);
+    // CRG Appendix A: system messages, not annunciation-window CAS.
+    expect(cas(r).some((t) => t.includes('COOLING'))).toBe(false);
   });
 
   it('standby attitude GYRO flag appears with low vacuum (engine stopped)', () => {
@@ -177,6 +182,10 @@ describe('C172S G1000 NXi variant hardware', () => {
     const r = makeG1k({ state: 'ready_to_taxi' });
     r.run(0.5);
     expect(r.vars.get(C172G.extPsi)).toBeCloseTo(125, 0);
+    // POH 7-79: the lever does nothing until the ring pin is pulled.
+    hold(r, C172G.extTrigger, 1, 2, 0);
+    expect(r.vars.get(C172G.extPsi)).toBeCloseTo(125, 0);
+    r.vars.set(C172G.extPin, 1);
     hold(r, C172G.extTrigger, 1, 4, 0);
     expect(r.vars.get(C172G.extPsi)).toBeGreaterThan(40);
     hold(r, C172G.extTrigger, 1, 5, 0);

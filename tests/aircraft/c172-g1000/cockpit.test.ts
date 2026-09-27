@@ -17,6 +17,7 @@ import { ANALOG_VARS } from '../../../src/avionics/analog';
 import { createC172Exterior } from '../../../src/aircraft/c172s-common/exterior';
 import { C172, DOOR, MAG } from '../../../src/aircraft/c172s-common/vars';
 import { C172G } from '../../../src/aircraft/c172-g1000/vars';
+import { JewelLamp } from '../../../src/aircraft/c172-g1000/cockpit/jewelLamp';
 import type { InitialState } from '../../../src/aircraft/types';
 
 const g = globalThis as unknown as { OffscreenCanvas?: unknown };
@@ -166,6 +167,12 @@ describe('Cessna 172S G1000 NXi cockpit controls', () => {
         if (!ok) unbound.push(`${c.id} (indicator var not written by any system)`);
         continue;
       }
+      if (c instanceof JewelLamp) {
+        const ok = sysWrites.has(c.lampVar);
+        report.push(`${c.id.padEnd(34)} indicator: ${c.lampVar}${ok ? '' : ' (NOT WRITTEN BY A SYSTEM)'}`);
+        if (!ok) unbound.push(`${c.id} (indicator var not written by any system)`);
+        continue;
+      }
       if (c instanceof CircuitBreaker && !(c as unknown as { o: { pullable?: boolean } }).o.pullable) {
         // Push-to-reset breakers (ELEC BUS 1 / 2, CROSSFEED): bound when the electrical network trips / reads them.
         const v = (c as unknown as { o: { var: string } }).o.var;
@@ -210,8 +217,10 @@ describe('Cessna 172S G1000 NXi cockpit controls', () => {
       C172.beacon, C172.land, C172.taxi, C172.nav, C172.strobe, C172.pitotHeat,
       C172.dimPanel, C172.dimRadio, C172.dimPedestal, C172.dimStbyInd, C172.floodLeft, C172.floodRight, C172.domeCourtesy, C172.mapLight,
       C172.cabinHeat, C172.cabinAir, C172.defrostLeft, C172.defrostRight, C172.altStatic, C172.ventLeft, C172.ventRight,
-      C172.doorLeft, C172.doorRight, C172.windowLeft, C172.windowRight,
+      C172G.doorHandleLeft, C172G.doorHandleRight, C172G.doorPullLeft, C172G.doorPullRight, C172.windowLeft, C172.windowRight,
+      C172G.extPin, C172G.gpuRequest,
       C172G.met, C172G.apDisc, C172G.cws, C172G.pttPilot, C172G.pttCopilot, C172G.pttHandMic, C172G.ga, C172G.eltRocker, C172G.keyTag, C172G.extTrigger,
+      C172G.glovebox, C172G.outletDevice, C172G.auxAudioCable,
       'cb.pfd_ess', 'cb.adc_ahrs_avn1', 'cb.mfd', 'cb.autopilot', 'g1k.display_backup', 'adc2.baro_inhg',
     ];
     const missing = inventory.filter((v) => !written.has(v));
@@ -267,9 +276,14 @@ describe('Cessna 172S G1000 NXi cockpit controls', () => {
     rig.run(0.1);
     clickHold('c172g.key_tag');
     expect(rig.vars.get(C172.keyIn)).toBe(0);
-    // Door handle: OPEN swings the interior door outward.
-    rig.vars.set(C172.doorLeft, DOOR.open);
-    for (let i = 0; i < 60; i++) ck.build.update?.(1 / 30);
+    // Door handle: OPEN unlatches the door, which swings outward on the ground; the handle springs back to CLOSE.
+    rig.vars.set(C172G.doorHandleLeft, DOOR.open);
+    for (let i = 0; i < 60; i++) {
+      rig.run(1 / 30);
+      ck.build.update?.(1 / 30);
+    }
+    expect(rig.vars.get(C172.doorLeft)).toBe(DOOR.open);
+    expect(rig.vars.get(C172G.doorHandleLeft)).toBe(DOOR.closed);
     const door = ck.build.root.getObjectByName('door_l')!;
     expect(Math.abs(door.rotation.y)).toBeGreaterThan(0.8);
     ck.build.dispose?.();

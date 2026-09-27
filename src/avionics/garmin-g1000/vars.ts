@@ -201,6 +201,11 @@ export const G1K = {
   warnChime: 'g1k.alert.warn_chime',
   /** AFCS status annunciation above the airspeed tape (string var: '', 'AIL→', '←AIL', '↓ELE', '↑ELE', 'PTRM', 'ROLL', 'PTCH', 'AFCS', 'PFT'). */
   afcsStatus: 'g1k.afcs.status',
+  /**
+   * Written by the aircraft: MET (manual electric trim) switch fault, one half of the split switch held alone for
+   * more than 3 s (CRG 190-00384-12 §6.1): AfcsMonitor shows the red PTRM status annunciation.
+   */
+  metFault: 'g1k.afcs.met_fault',
   /** AFCS status annunciation colour: 0 yellow (mistrim), 1 red (failure), 2 white (preflight test). */
   afcsStatusLevel: 'g1k.afcs.status_lvl',
   /** GFC 700 preflight test seconds remaining (PFT annunciation at servo power-up). */
@@ -331,4 +336,10 @@ export const G1K_EVENTS = {
   casAck: 'g1k.cas.ack',
   /** Yoke AP DISC switch held / released (payload { pressed }): holding it interrupts ESP (PG §8.11). Emit 'ap.disc' on the press too. */
   apDiscHold: 'g1k.ap_disc_hold',
+  /**
+   * Emitted by the system when the pilot changes the CDI source with the CDI softkey (not for the automatic
+   * GPS -> LOC switch): the autopilot's nav signal is interrupted (POH 172SPHBUS-00 7-20 / 7-71 WARNING). The
+   * aircraft wires it to the Afcs (`navSourceChanged()`).
+   */
+  cdiManual: 'g1k.cdi_manual',
 } as const;

@@ -77,8 +77,6 @@ export function setC172SteamSwitches(ctx: Pick<SimContext, 'vars'>, s: InitialSt
   v.set(ST.gloveBox, 0);
   v.set(ST.visorLeft, 0);
   v.set(ST.visorRight, 0);
-  v.set(ST.seatPilot, 0.5);
-  v.set(ST.seatCopilot, 0.5);
 }
 
 export function applyC172SteamState(ctx: SimContext, sys: C172SteamSystems, s: InitialState): void {
@@ -123,8 +121,9 @@ export function applyC172SteamState(ctx: SimContext, sys: C172SteamSystems, s: I
     sys.kx1.update(0);
     sys.kx2.update(0);
     sys.kr.update(0);
+    sys.encoder.warm();
+    sys.encoder.update(0);
     sys.kt.update(0);
-    sys.kt.warm();
     sys.kln.update(0);
     sys.kln.setReady();
     sys.kapSensors.update(0);
@@ -141,4 +140,12 @@ export function applyC172SteamState(ctx: SimContext, sys: C172SteamSystems, s: I
   sys.extras.reset();
   sys.altAlert.reset();
   sys.disc.update(0);
+  // No fire burning; checklist latches: a preset past the preflight has done the annunciator TST, the
+  // avionics fan and the KAP 140 preflight test (Supplement 15 Sec 4 A); the takeoff preset stands for
+  // "Before takeoff" complete (magnetos checked).
+  sys.fire.reset();
+  sys.procedures.reset();
+  if (cold) sys.procedures.clearAll();
+  else sys.procedures.markPreflightDone();
+  if (s === 'takeoff') sys.procedures.markRunUpDone();
 }

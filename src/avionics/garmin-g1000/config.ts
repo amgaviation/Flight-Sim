@@ -62,7 +62,17 @@ export interface G1kEisConfig {
   /** Engine hours readout (ENG HRS). Default: the suite's own meter (counts while oil pressure > 20 psi). */
   engineHours?: Binding;
   /** Bus voltage / battery current readouts ("M BUS E", "M BATT S", POH 7-50). */
-  elec: { mainBusV: Binding; essBusV: Binding; mainBattA: Binding; stbyBattA: Binding; lowVolts: number };
+  elec: {
+    mainBusV: Binding;
+    essBusV: Binding;
+    mainBattA: Binding;
+    stbyBattA: Binding;
+    lowVolts: number;
+    /** Bus volts red above this (POH 7-53: 32.0 V). Default 32. */
+    highVolts?: number;
+    /** M BATT amps amber below this (POH 7-54: white when greater than -1.5 A). Default -1.5. */
+    mainBattAmberA?: number;
+  };
   /** Fuel totalizer: default GAL REM after RST Fuel and the GAL REM preset keys (PG Table 3-1: 35 / 53 GAL). */
   totalizer: { defaultGal: number; presetsGal: number[]; fuelFlowGph: Binding };
 }
@@ -87,6 +97,11 @@ export interface CasDef {
   when: Binding;
   /** Seconds the condition must persist before the message shows (LOW FUEL: 60 s). */
   delayS?: number;
+  /**
+   * The aural tone is inhibited while this is true (the message still shows and flashes); e.g. LOW VOLTS
+   * "Aural tone is inhibited while the aircraft is on the ground" (CRG 190-00384-12 §13.2).
+   */
+  auralInhibit?: Binding;
 }
 
 export interface EspConfig {
@@ -135,6 +150,11 @@ export interface G1000Config {
   power?: Partial<Record<G1kUnit, Binding>>;
   /** Boot / self-test seconds (EST). */
   bootS?: Partial<Record<'gdu' | 'gia' | 'adahrs' | 'xpdr' | 'gma' | 'servos', number>>;
+  /**
+   * Unit power hold-up (s): a supply interruption shorter than this does not reboot a unit (internal hold-up
+   * capacitance riding through a bus transfer). Default 0.
+   */
+  powerHoldUpS?: number;
   eis?: G1kEisConfig;
   vspeeds?: VSpeedDef[];
   /** Airspeed tape colour ranges and Vne (barber pole above). */
@@ -182,6 +202,7 @@ export interface G1000Resolved {
   esp: EspConfig | null;
   power: Partial<Record<G1kUnit, Binding>>;
   bootS: Record<'gdu' | 'gia' | 'adahrs' | 'xpdr' | 'gma' | 'servos', number>;
+  powerHoldUpS: number;
   eis: G1kEisConfig;
   vspeeds: VSpeedDef[];
   speedTape: { ranges: SpeedRange[]; vneKt: number };
@@ -282,6 +303,7 @@ export function resolveConfig(c: G1000Config): G1000Resolved {
       // EST: GFC 700 preflight test (PFT) after servo power-up takes a few seconds.
       servos: c.bootS?.servos ?? 5,
     },
+    powerHoldUpS: c.powerHoldUpS ?? 0,
     eis: c.eis ?? PLACEHOLDER_EIS,
     vspeeds: c.vspeeds ?? DEFAULT_VSPEEDS,
     speedTape: c.speedTape ?? { ranges: [], vneKt: 400 },

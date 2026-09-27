@@ -44,6 +44,12 @@ export interface FuelQuantityOptions extends BaseOpts {
    * nz - 1). EST 0.8: float gauges visibly bounce in turbulence.
    */
   sloshGalPerG?: number;
+  /**
+   * (Appended.) Lowest reading (gal) the needle is driven to. Default 0 (the reading is floored at empty). A
+   * negative value lets a failed float transmitter (indicated quantity below zero) park the needle below the
+   * 0 mark (172S POH Sec 7 "Fuel quantity indicating").
+   */
+  minReadGal?: number;
 }
 
 /** Dual fuel quantity gauge (L | R), electric senders. */
@@ -53,13 +59,14 @@ export class FuelQuantityGauge extends TwinGauge {
     const unusable = o.unusableGal ?? 1.5;
     const full = o.fullScaleGal ?? 26.5;
     const slosh = o.sloshGalPerG ?? 0.8;
+    const floor = o.minReadGal ?? 0;
     const lv = o.leftVar ?? FUEL.tankKg(0);
     const rv = o.rightVar ?? FUEL.tankKg(1);
     // The float moves with the fuel surface: vertical acceleration (a physical input, read from the FDM) bounces it.
     const reader =
       (name: string) =>
       (vars: SimVars): number =>
-        Math.max(0, vars.get(name) / kgPerGal - unusable) + (vars.get(FDM.nz, 1) - 1) * slosh;
+        Math.max(floor, vars.get(name) / kgPerGal - unusable) + (vars.get(FDM.nz, 1) - 1) * slosh;
     const side = (caption: string, v: string): TwinSide => ({
       caption,
       min: 0,

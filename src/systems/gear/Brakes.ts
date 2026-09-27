@@ -33,7 +33,13 @@
  *   Control: PI on (target − measured) deceleration, measured from the
  *   filtered derivative of the ground speed.
  * Parking brake: `parking.var` set -> full pressure from the accumulator
- *   ('hydraulic') or full brake ('mechanical', light aircraft).
+ *   ('hydraulic') or full brake ('mechanical', light aircraft). (Appended)
+ *   'trapped': a parking-brake valve that traps the pedal pressure present
+ *   when the handle is set (Cessna 172S POH Sec 7: "set the brakes with the
+ *   rudder pedals, pull the handle aft, and rotate it 90° down"); further
+ *   pedal pressure while set is trapped too (check valves), optional slow
+ *   leak `parking.leakPerS` (fraction of full per second). A handle found
+ *   set at reset / first update (state presets) holds full pressure.
  * Accumulator (optional): isothermal gas spring (precharge, max pressure),
  *   charged by `chargeFrom` through a check valve, drained by brake
  *   applications (EST fluid per psi) and a slow internal leak.
@@ -128,7 +134,7 @@ export interface BrakeConfig {
     /** Anti-skid available when braking on the accumulator. Default true (737: accumulator on the normal system). */
     antiskid?: boolean;
   };
-  parking?: { var?: string; kind?: 'hydraulic' | 'mechanical' };
+  parking?: { var?: string; kind?: 'hydraulic' | 'mechanical' | 'trapped'; leakPerS?: number };
   emergency?: { var: string; pressurePsi?: Binding };
   antiskid?: {
     enabled: Binding;
@@ -173,6 +179,9 @@ export class Brakes implements Subsystem {
   private readonly pedalR: string;
   private readonly refVar: string;
   private readonly parkVar: string;
+  /** 'trapped' parking brake: trapped demand per side (0..1), previous handle state (-1 = unknown). */
+  private readonly trap = [0, 0];
+  private parkPrev = -1;
   private readonly abSel: string;
   private readonly decelRate = new RateFilter(0.4);
   private readonly abPid = new Pid({ kp: 0.08, ki: 0.12, iLimit: 12, outLimit: 1 });
@@ -241,6 +250,7 @@ export class Brakes implements Subsystem {
     this.abLevel = -1;
     this.touchdownT = -1;
     this.wasGround = this.ground();
+    this.parkPrev = -1;
     this.decelRate.reset();
     this.abPid.reset(0);
     for (const s of this.sides) {
@@ -297,7 +307,22 @@ export class Brakes implements Subsystem {
     let dR = v.get(this.pedalR);
     const pedalMax = Math.max(dL, dR);
     const parkSet = v.get(this.parkVar) !== 0;
-    if (parkSet) {
+    if (cfg.parking?.kind === 'trapped') {
+      const tr = this.trap;
+      if (this.parkPrev < 0) tr[0] = tr[1] = parkSet ? 1 : 0; // preset: a properly set parking brake
+      else if (parkSet && this.parkPrev === 0) {
+        tr[0] = dL;
+        tr[1] = dR;
+      }
+      if (parkSet) {
+        const leak = (cfg.parking.leakPerS ?? 0) * dt;
+        tr[0] = Math.max(dL, tr[0] - leak);
+        tr[1] = Math.max(dR, tr[1] - leak);
+        dL = tr[0];
+        dR = tr[1];
+      } else tr[0] = tr[1] = 0;
+      this.parkPrev = parkSet ? 1 : 0;
+    } else if (parkSet) {
       dL = 1;
       dR = 1;
     }

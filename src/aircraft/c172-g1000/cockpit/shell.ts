@@ -18,12 +18,11 @@ import type { CockpitBuilder } from '../../../cockpit/CockpitBuilder';
 import type { SimContext } from '../../../core/SimContext';
 import { PushButton, PushPullKnob, RotaryKnob, SelectorKnob } from '../../../cockpit/controls';
 import { cylinderZ, roundedBox, tube } from '../../../cockpit/geometry/primitives';
-import { glareshieldGeometry } from '../../../cockpit/geometry/structure';
 import { MagneticCompass } from '../../../avionics/analog';
 import { GROUND_Z, sta } from '../../c172s-common/fdm';
 import { C172, DOOR as DOOR_POS } from '../../c172s-common/vars';
 import { C172G } from '../vars';
-import { CABIN, DOOR, DOOR_WINDOW, FLOOR_H, GLARE, IN, PANEL, REAR_WINDOW, SEATS, WINDSHIELD, hz, lerpTable } from './layout';
+import { CABIN, DOOR, DOOR_WINDOW, FLOOR_H, GLARE, GLARE_ARC, IN, PANEL, REAR_WINDOW, SEATS, WINDSHIELD, glareSagIn, hz, lerpTable } from './layout';
 import { STBY_LIGHT } from './panel';
 
 /** Cockpit-local point (x right, y up, z aft) from (FS in, y m right, height m above ground). */
@@ -121,9 +120,72 @@ function wall(side: -1 | 1, fs0: number, fs1: number, h0: (fs: number) => number
   );
 }
 
+/**
+ * Drop (m) of the glareshield top below its centre height at X inches from the centreline, `fwd` metres
+ * forward of the brow: the full arc at the brow, 35 % of it at the windshield base (the hood's forward edge
+ * stays close to the straight windshield base; EST).
+ */
+export function glareDrop(Xin: number, fwd: number): number {
+  const w = THREE.MathUtils.clamp(1 - fwd / GLARE.depth, 0, 1);
+  return glareSagIn(Xin) * IN * (0.35 + 0.65 * w);
+}
+
+/**
+ * The 172S NAV III glareshield (POH Fig 7-2, photographs): the shared padded-hood section, bent to the arc
+ * of layout.ts GLARE_ARC; at the outboard ends the brow flange reaches lower and sweeps aft (the "ears").
+ * Local frame: x right, y up, z aft; origin at the brow top at the centreline.
+ */
+export function archedGlareshield(): THREE.BufferGeometry {
+  // Section in (sx = forward, sy = height) as the shared glareshieldGeometry (structure.ts, brow 0.028 m),
+  // extruded across X in 64 steps so it can bend (the shared helper extrudes in one step).
+  const width = PANEL.width - 0.02;
+  const half = width / 2;
+  const drop = GLARE.drop;
+  const brow = 0.028;
+  const depth = GLARE.depth;
+  const th = 0.012;
+  const s = new THREE.Shape();
+  s.moveTo(0, -drop);
+  s.lineTo(th, -drop);
+  s.lineTo(th, -brow * 0.6);
+  s.quadraticCurveTo(th + brow * 0.2, -th, brow, -th);
+  s.lineTo(depth, -th * 1.4);
+  s.lineTo(depth, 0.0);
+  s.lineTo(brow, 0.004);
+  s.quadraticCurveTo(0, 0.004, -0.006, -brow * 0.5);
+  s.lineTo(-0.004, -drop + 0.004);
+  s.quadraticCurveTo(-0.003, -drop, 0, -drop);
+  const g = new THREE.ExtrudeGeometry(s, { depth: width, steps: 64, bevelEnabled: false, curveSegments: 10 });
+  g.translate(0, 0, -half);
+  // (sx, sy, ez) -> (X = ez, Y = sy, Z = -sx).
+  g.applyMatrix4(new THREE.Matrix4().set(0, 0, 1, 0, 0, 1, 0, 0, -1, 0, 0, 0, 0, 0, 0, 1));
+  const p = g.getAttribute('position') as THREE.BufferAttribute;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i);
+    const y = p.getY(i);
+    const z = p.getZ(i);
+    const Xin = x / IN;
+    const t = THREE.MathUtils.smoothstep(Math.abs(x), (GLARE_ARC.earStart * IN), half);
+    const fwd = Math.max(0, -z);
+    let ny = y - glareDrop(Xin, fwd);
+    let nz = z;
+    // Brow flange (lower half of the section near the brow): longer and swept aft at the ears.
+    if (y < -GLARE.drop * 0.4 && fwd < 0.03) ny -= GLARE_ARC.earFlange * IN * t;
+    if (fwd < 0.05) nz += 0.018 * t * (1 - fwd / 0.05);
+    p.setXYZ(i, x, ny, nz);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+
 export interface ShellParts {
+  /** doorVar: the door opening 0..1 (C172.doorLeftPos / doorRightPos). */
   doors: { pivot: THREE.Group; win: THREE.Group; side: -1 | 1; doorVar: string; winVar: string; open: number; winOpen: number }[];
   extNeedle: THREE.Object3D;
+  /** Windshield glass material (own clone): fog / frost and cabin smoke haze are blended into it (index.ts). */
+  windshieldMat: THREE.MeshPhysicalMaterial;
+  /** Extinguisher operating ring pin (toggle button: out = pulled). */
+  extPinObj: THREE.Object3D;
 }
 
 export function buildShell(b: CockpitBuilder, ctx: SimContext, opts: { analog: boolean }): ShellParts {
@@ -237,7 +299,11 @@ export function buildShell(b: CockpitBuilder, ctx: SimContext, opts: { analog: b
     L(fsEdge - 2 * (1 - c) * (1 - u * 0.6), y, h, out);
   };
   const ws = patch(10, 20, wsPoint, new THREE.Vector3(0, 0, 1), uvSide);
-  const wsm = new THREE.Mesh(ws, mats.get('windowGlass'));
+  // Own clone of the window glass so fog / frost (C172.windshieldFog) and cabin smoke can tint it (index.ts onUpdate)
+  // without touching the door and rear windows; same draw calls as before.
+  const windshieldMat = (mats.get('windowGlass') as THREE.MeshPhysicalMaterial).clone();
+  windshieldMat.name = 'c172g.windshield_glass';
+  const wsm = new THREE.Mesh(ws, windshieldMat);
   wsm.name = 'windshield';
   b.trackGeometry(ws);
   b.root.add(wsm);
@@ -262,7 +328,7 @@ export function buildShell(b: CockpitBuilder, ctx: SimContext, opts: { analog: b
       new THREE.Vector3(-side, 0, 0),
       uvSide,
     );
-    const sgm = new THREE.Mesh(sg, mats.get('windowGlass'));
+    const sgm = new THREE.Mesh(sg, windshieldMat);
     sgm.name = `windshield_side_${s}`;
     b.trackGeometry(sg);
     b.root.add(sgm);
@@ -303,14 +369,15 @@ export function buildShell(b: CockpitBuilder, ctx: SimContext, opts: { analog: b
     add(tube(pts, 0.024, 32, 8), head, 'ws_header');
   }
 
-  // Glareshield: padded black top from the panel brow to the windshield base (EST depth 0.19 m).
+  // Glareshield: padded black hood from the panel brow to the windshield base (EST depth 0.19 m); its aft
+  // edge arcs across the panel and sweeps down and aft around the outboard corners (layout.ts GLARE_ARC).
   {
-    const g = glareshieldGeometry(PANEL.width - 0.02, GLARE.depth, GLARE.drop, 0.028, 0.06);
-    const m = add(g, mats.get('glareshield'), 'glareshield');
+    const m = add(archedGlareshield(), mats.get('glareshield'), 'glareshield');
     m.position.copy(L(PANEL.fs + 1.2, 0, GLARE.topH));
   }
 
-  // Magnetic compass hanging from the windshield centre (POH Sec 7; lit by the STBY IND dimmer).
+  // Magnetic compass hanging from the windshield centre (POH Sec 7; lit by the STBY IND dimmer), with the
+  // shared instrument's FOR / STEER correction card below it (14 CFR 23.1547; MagneticCompass correctionCard).
   if (opts.analog) {
     const comp = new MagneticCompass({ id: 'c172g.compass', vars: ctx.vars, lightVar: STBY_LIGHT, width: 0.07, year: 2026.7 });
     b.place(comp, { center_m: [sta(WS.topFs + 1.2), 0, hz(WS.topH - 0.07)], facing: 'aft', tiltDeg: -10 });
@@ -372,11 +439,11 @@ export function buildShell(b: CockpitBuilder, ctx: SimContext, opts: { analog: b
       new SelectorKnob(env, {
         id: `c172g.door_${s}.handle`,
         label: `${side < 0 ? 'LEFT' : 'RIGHT'} DOOR HANDLE (OPEN / CLOSE / LOCK)`,
-        var: side < 0 ? C172.doorLeft : C172.doorRight,
+        var: side < 0 ? C172G.doorHandleLeft : C172G.doorHandleRight,
         // POH Sec 7 "Entrance doors": CLOSE = handle up, LOCK = rotated forward flush with the arm rest,
         // OPEN = rotated aft. Panel +u points forward on the left door and aft on the right door.
-        // SCOPE: the handle position and the door position share C172.door*: OPEN = door open (the handle's
-        // spring return to CLOSE while the door stands open is not modelled).
+        // The handle is spring-loaded from OPEN back to CLOSE (POH 7-27); OPEN unlatches the door (C172.door* =
+        // OPEN), the door pull below shuts and latches it (systems/variant.ts).
         positions: [
           { value: DOOR_POS.open, label: 'OPEN', angle: -side * 60 },
           { value: DOOR_POS.closed, label: 'CLOSE', angle: 0 },
@@ -390,6 +457,26 @@ export function buildShell(b: CockpitBuilder, ctx: SimContext, opts: { analog: b
         labelHeight: 0.003,
         labelZone: null,
         material: 'chrome',
+      }),
+      0,
+      0,
+    );
+    // Door pull (grip on the arm rest): pulls the unlatched door shut; it latches unless the air load holds it open
+    // above ~85 KIAS (POH Sec 3: slow to ~75 KIAS, then pull the door shut).
+    const pullPanel = b.panel({ name: `c172g.door_pull_${s}`, center_m: [sta(47), side * (sideX(47, 1.1) - 0.065), hz(1.1)], facing, width: 0.06, height: 0.03, invisible: true });
+    pullPanel.add(
+      new PushButton(env, {
+        id: `c172g.door_${s}.pull`,
+        label: `${side < 0 ? 'LEFT' : 'RIGHT'} DOOR PULL (pull the door shut)`,
+        mode: 'momentary',
+        var: side < 0 ? C172G.doorPullLeft : C172G.doorPullRight,
+        style: 'mcp',
+        width: 0.04,
+        height: 0.012,
+        capMaterial: 'plasticBlack',
+        engraved: 'PULL',
+        engravedHeight: 0.003,
+        zone: null,
       }),
       0,
       0,
@@ -415,7 +502,7 @@ export function buildShell(b: CockpitBuilder, ctx: SimContext, opts: { analog: b
     b.root.updateMatrixWorld(true);
     pivot.attach(handlePanel.group);
     win.attach(latchPanel.group);
-    doors.push({ pivot, win, side, doorVar: side < 0 ? C172.doorLeft : C172.doorRight, winVar: side < 0 ? C172.windowLeft : C172.windowRight, open: 0, winOpen: 0 });
+    doors.push({ pivot, win, side, doorVar: side < 0 ? C172.doorLeftPos : C172.doorRightPos, winVar: side < 0 ? C172.windowLeft : C172.windowRight, open: 0, winOpen: 0 });
   }
 
   // ---------------------------------------------------------------- seats (front pair and rear bench)
@@ -565,7 +652,7 @@ export function buildShell(b: CockpitBuilder, ctx: SimContext, opts: { analog: b
   ext.add(
     new PushButton(env, {
       id: 'c172g.extinguisher',
-      label: 'FIRE EXTINGUISHER (squeeze to discharge)',
+      label: 'FIRE EXTINGUISHER lever (squeeze to discharge; ring pin pulled first)',
       mode: 'momentary',
       var: C172G.extTrigger,
       style: 'mcp',
@@ -581,5 +668,41 @@ export function buildShell(b: CockpitBuilder, ctx: SimContext, opts: { analog: b
     { z: 0.0, rotDeg: 90 },
   );
 
-  return { doors, extNeedle: needleGroup };
+  // External power receptacle (POH 7-58: on the left side of the cowl, forward of the firewall; EST position): its
+  // access door is where the ground crew plugs in a 28 V GPU. Ground-service toggle (on the ground, engine stopped):
+  // C172G.gpuRequest -> C172.extPower (systems/variant.ts).
+  {
+    const gp = b.panel({ name: 'c172g.ext_power', center_m: [sta(FWD - 8), -(sideX(FWD, 0.95) - 0.02), hz(0.95)], facing: 'left', width: 0.08, height: 0.06, invisible: true });
+    gp.add(
+      new PushButton(env, {
+        id: 'c172g.ext_power',
+        label: 'EXTERNAL POWER receptacle (ground crew: GPU connect / disconnect)',
+        mode: 'toggle',
+        var: C172G.gpuRequest,
+        style: 'mcp',
+        width: 0.05,
+        height: 0.035,
+        capMaterial: 'paintWhite',
+        engraved: 'EXT PWR 28V',
+        engravedHeight: 0.004,
+        zone: null,
+      }),
+      0,
+      0,
+    );
+  }
+
+  // Operating ring pin through the head (POH 7-79: "pull the operating ring pin"); preflight: lock pin secure.
+  const extPin = new PushButton(env, {
+    id: 'c172g.extinguisher.pin',
+    label: 'FIRE EXTINGUISHER ring pin (pull / reinsert)',
+    mode: 'toggle',
+    var: C172G.extPin,
+    style: 'round',
+    width: 0.012,
+    capMaterial: 'chrome',
+  });
+  ext.add(extPin, 0.012, 0.03, { z: 0.0 });
+
+  return { doors, extNeedle: needleGroup, windshieldMat, extPinObj: extPin.object };
 }

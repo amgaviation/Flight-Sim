@@ -22,8 +22,9 @@
  *
  * Marker tones (400 / 1300 / 3000 Hz, AIM 1-1-9 / Supplement 20 "Marker facilities") are
  * played through the audio engine's marker tones while MKR is selected and not muted.
- * SCOPE: receiver voice/ident audio, the intercom (VOX, isolation, entertainment soft mute)
- * and split COM 1/2 transmission are not synthesised; the selections are tracked and shown.
+ * The NAV 1 / NAV 2 / ADF selections gate the Morse ident audio (receiverAudio.ts).
+ * SCOPE: receiver voice audio, the intercom (VOX, isolation, entertainment soft mute) and split
+ * COM 1/2 transmission are not synthesised; the selections are tracked and shown.
  */
 import type { Subsystem } from '../../types';
 import type { AudioApi, SimContext } from '../../../core/SimContext';
@@ -66,6 +67,13 @@ export class Kma28Logic implements Subsystem {
     // whether the pilot hears the intercom (ISO isolates him, Supplement 20 Fig 1 sheet 4) are published.
     v.set('ac.kma28.ics_level', on ? v.get(KMA.icsVol) : 0);
     v.set('ac.kma28.pilot_hears_ics', on && Math.round(v.get(KMA.icsMode)) !== 1 ? 1 : 0);
+    // AUX: the AUX AUDIO IN jack on the pedestal (VH-SPQ photograph) feeds the AUX input. SCOPE: no
+    // entertainment audio is synthesised; the level the headsets would get is published.
+    const auxPlugged = v.get(ST.auxJack) > 0.5;
+    v.set(KMA.auxLevel, on && auxPlugged && v.get(KMA.sel('aux')) > 0.5 ? v.get(KMA.icsVol) : 0);
+    // Swap indicator (item 5): Supplement 20 "The swap function is not available on this
+    // installation", so the lamp stays dark.
+    v.set(KMA.swapLamp, 0);
     const ptt = v.get(ST.pttPilot) > 0.5 || v.get(ST.pttHandMic) > 0.5;
     const pttCo = v.get(ST.pttCopilot) > 0.5;
     const mic = Math.round(v.get(KMA.mic, KMA_MIC.com1));

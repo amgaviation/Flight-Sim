@@ -138,6 +138,12 @@ export interface AfcsSensors {
   valid: Binding;
   flaps: string;
   onGround: Binding;
+  /**
+   * (Appended for the c172-steam KAP 140.) Course datum var (deg, same frame as `heading`) used by the
+   * VOR/LOC/BC laws instead of the receiver's OBS / localizer course: the KAP 140 takes the course from the
+   * DG heading bug (POH 172SPHUS Supplement 15 Fig 2 item 15). BC flies the datum + 180. Default: unset (OBS).
+   */
+  courseDatum?: string;
 }
 
 export interface AfcsConfig {
@@ -235,6 +241,19 @@ export interface AfcsConfig {
   };
   /** Disconnect warning duration (s); undefined = until acknowledged (DISC / DISC_RESET). */
   discWarningS?: number;
+  /**
+   * Automatic (abnormal) disconnects keep the warning until acknowledged (DISC / DISC_RESET) even when
+   * `discWarningS` is set; the timeout then applies to manual disconnects only (GFC 700 CRG 190-00384-12 §6.4:
+   * automatic disengagement flashes red AP with the aural "until acknowledged"). Default false.
+   */
+  autoDiscLatches?: boolean;
+  /**
+   * Loss of the navigation signal in LNAV/VOR/LOC/BC: seconds before the default lateral mode (default 5), and
+   * whether the FD rolls wings level meanwhile (default false: keeps the last command). While the signal is lost
+   * `ap.lat_fail` = 1 (GFC 700 CRG §6.3: flashing yellow mode, wings level, default mode after 10 s).
+   */
+  navLossRevertS?: number;
+  navLossWingsLevel?: boolean;
   cws?: 'boeing' | 'garmin' | 'none';
   yawDamper?: { withAp?: boolean; requiredForAp?: boolean };
   /** Allow the bank selector var ap.bank_sel_deg (737 MCP). */

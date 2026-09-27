@@ -5,7 +5,7 @@
  * located at the base of the pedestal."
  *
  * Geometry (EST from the photographs "Cessna 172SP G1000 01.jpg" / "C172S G1000 in flight.jpg"): a
- * 6 in wide console whose face slopes from the lower edge of the instrument panel (FS 18.6, 1.075 m)
+ * 6 in wide console (layout.ts PEDESTAL) whose face slopes from the lower edge of the instrument panel (FS 18.6, 1.075 m)
  * down and aft to the floor (FS 25, 0.80 m); trim wheel in the left half of the face with its
  * NOSE DOWN / TAKE OFF / NOSE UP indicator beside it, the hand microphone hanging on the right, the
  * power outlet and aux audio jack low on the left, the red fuel shutoff knob low on the right; the
@@ -21,10 +21,10 @@ import { C172, FUEL_SEL } from '../../c172s-common/vars';
 import { TAKEOFF_TRIM } from '../../c172s-common/states';
 import { C172G } from '../vars';
 import { TRIM_WHEEL_TURNS } from '../data';
-import { FLOOR_H, IN, hz } from './layout';
+import { FLOOR_H, IN, PEDESTAL, hz } from './layout';
 
-/** Pedestal face: top (FS, height m), bottom (FS, height m), width (m). */
-export const PED = { topFs: 18.6, topH: 1.075, botFs: 25, botH: 0.8, width: 6 * IN };
+/** Pedestal face: top (FS, height m), bottom (FS, height m), width (m); layout.ts PEDESTAL (sourced there). */
+export const PED = PEDESTAL;
 const FACE_LEN = Math.hypot((PED.botFs - PED.topFs) * IN, PED.topH - PED.botH);
 const FACE_TILT = (Math.atan2((PED.botFs - PED.topFs) * IN, PED.topH - PED.botH) * 180) / Math.PI;
 
@@ -50,7 +50,13 @@ function pedestalBody(): THREE.BufferGeometry {
   return g;
 }
 
-export function buildPedestal(b: CockpitBuilder): void {
+export interface PedestalParts {
+  /** Plugs shown while a device is plugged in (C172G.auxAudioCable / C172G.outletDevice). */
+  auxPlug: THREE.Object3D;
+  outletPlug: THREE.Object3D;
+}
+
+export function buildPedestal(b: CockpitBuilder): PedestalParts {
   const env = b.env;
   const mats = env.materials;
   const black = mats.custom('plastic', '#1d1d20', 0.78);
@@ -157,7 +163,10 @@ export function buildPedestal(b: CockpitBuilder): void {
   }
   txt('MIC JACK', 0.118, 0.018, 0.0017);
 
-  // ---------------------------------------------------------------- aux audio jack and 12 V outlet (items 23, 24; static receptacles)
+  // ---------------------------------------------------------------- aux audio jack and 12 V outlet (items 23, 24)
+  // POH Sec 7 "Avionics support equipment". Clicking a receptacle plugs / unplugs a portable device: the
+  // outlet's device loads the CABIN PWR 12V converter (C172G.outletDevice, electrical.ts `cabin_12v`), the
+  // jack's cable feeds entertainment audio to the headsets (C172G.auxAudioCable -> auxAudioActive, variant.ts).
   const jack = new THREE.Mesh(env.geometry.get('c172g.aux_jack', () => cylinderZ(0.0045, 0.0042, 0, 0.004, 20)), mats.get('chrome'));
   jack.userData.cockpitStatic = true;
   face.addObject(jack, 0.03, 0.195);
@@ -169,6 +178,29 @@ export function buildPedestal(b: CockpitBuilder): void {
   hole.userData.cockpitStatic = true;
   face.addObject(hole, 0.035, 0.24, { z: 0.0062 });
   txt('POWER OUTLET\n12V - 10A', 0.04, 0.265, 0.0015);
+  // Plugs (shown while plugged in): a 3.5 mm jack plug with its cable, a cigarette-lighter adapter.
+  const auxPlug = new THREE.Group();
+  auxPlug.name = 'aux_audio_plug';
+  auxPlug.add(new THREE.Mesh(env.geometry.get('c172g.aux_plug', () => cylinderZ(0.003, 0.003, 0.004, 0.024, 12)), mats.get('plasticBlack')));
+  auxPlug.userData.cockpitDynamic = true;
+  face.addObject(auxPlug, 0.03, 0.195);
+  const outletPlug = new THREE.Group();
+  outletPlug.name = 'outlet_plug';
+  outletPlug.add(new THREE.Mesh(env.geometry.get('c172g.outlet_plug', () => cylinderZ(0.0105, 0.009, 0.004, 0.045, 20)), mats.get('plasticBlack')));
+  outletPlug.userData.cockpitDynamic = true;
+  face.addObject(outletPlug, 0.035, 0.24);
+  face.add(
+    new PushButton(env, { id: 'c172g.aux_audio_jack', label: 'AUX AUDIO IN (click: plug / unplug an audio player)', mode: 'toggle', var: C172G.auxAudioCable, style: 'small', width: 0.007, height: 0.007, capMaterial: 'chrome' }),
+    0.03,
+    0.195,
+    { z: 0.001 },
+  );
+  face.add(
+    new PushButton(env, { id: 'c172g.power_outlet', label: 'POWER OUTLET 12V - 10A (click: plug / unplug a device)', mode: 'toggle', var: C172G.outletDevice, style: 'small', width: 0.016, height: 0.016, capMaterial: 'plasticBlack' }),
+    0.035,
+    0.24,
+    { z: 0.001 },
+  );
 
   // ---------------------------------------------------------------- fuel shutoff valve (item 21): red knob, push ON / pull OFF
   face.add(
@@ -224,4 +256,5 @@ export function buildPedestal(b: CockpitBuilder): void {
   const fsl = env.labels.text('FUEL SELECTOR', { height: 0.0028, weight: 700, zone: null, color: '#f0f0ec' });
   fsl.userData.cockpitStatic = true;
   floorPlate.addObject(fsl, 0.062, -0.09, { z: 0.0002 });
+  return { auxPlug, outletPlug };
 }

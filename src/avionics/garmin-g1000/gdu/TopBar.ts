@@ -189,7 +189,11 @@ export class TopBar {
     line(ctx, x0 + w * 0.36, 28, x0 + w * 0.36, TOPBAR_H, G1K_COLORS.boxBorder, 1);
     line(ctx, x0 + w * 0.5, 28, x0 + w * 0.5, TOPBAR_H, G1K_COLORS.boxBorder, 1);
     if (latArmed && latArmed !== 'NONE') TF.draw(ctx, latArmed, x0 + w * 0.09, y, 16, P.white, 'center', 'middle');
-    if (lat && lat !== 'NONE' && (this.latFlash <= 0 || flashOn)) TF.draw(ctx, lat, x0 + w * 0.26, y, 17, P.green, 'center', 'middle');
+    // Loss of navigation data (CRG §6.3): the active lateral mode flashes yellow until it recovers or reverts.
+    const latFail = v.get('ap.lat_fail') >= 0.5;
+    if (lat && lat !== 'NONE' && latFail) {
+      if (flashOn) TF.draw(ctx, lat, x0 + w * 0.26, y, 17, P.yellow, 'center', 'middle');
+    } else if (lat && lat !== 'NONE' && (this.latFlash <= 0 || flashOn)) TF.draw(ctx, lat, x0 + w * 0.26, y, 17, P.green, 'center', 'middle');
     // AP: green 'AP' engaged; CWS replaces it (white); disconnect: flashing yellow (manual) / red-white (automatic).
     const ap = v.get(AP.engaged) >= 0.5;
     const cws = v.get('ap.cws') >= 0.5;

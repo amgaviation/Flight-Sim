@@ -19,7 +19,7 @@
  */
 import type { SimContext } from '../../../core/SimContext';
 import { LightingSystem, FLASH_PATTERNS, type DimmerDef, type ExteriorLightDef } from '../../../systems/lighting';
-import { C172 } from '../vars';
+import { ANN_SW, C172 } from '../vars';
 import type { C172Variant } from './electrical';
 
 export function createC172Lighting(ctx: Pick<SimContext, 'vars'>, variant: C172Variant): LightingSystem {
@@ -47,7 +47,11 @@ export function createC172Lighting(ctx: Pick<SimContext, 'vars'>, variant: C172V
     : [
         // POH Sec 7 "Interior lighting": PANEL LT, RADIO LT, GLARESHIELD LT, PEDESTAL LT dimmers.
         { id: 'panel', knob: C172.dimPanel, power: 'elec.panel_lts_powered', output: ['ac.light.panel', 'ac.light.instruments'] },
-        { id: 'radio', knob: C172.dimRadio, power: 'elec.panel_lts_powered' },
+        // "In addition to the RADIO LT dimmer, lighting intensity for the avionics displays and the NAV
+        // indicators ... is controlled by the annunciator panel test switch. When the switch is in the BRT ...
+        // or DAY position, this lighting may be off regardless of the RADIO LT dimmer position" (POH Sec 7
+        // "Interior lighting"): radio lighting only with the switch in DIM (ANN_SW.night = 0).
+        { id: 'radio', knob: `${C172.dimRadio} * (${C172.annSwitch} == ${ANN_SW.night})`, power: 'elec.panel_lts_powered' },
         { id: 'glareshield', knob: C172.dimGlareshield, power: 'elec.glareshield_lt_powered' },
         { id: 'pedestal', knob: C172.dimPedestal, power: 'elec.pedestal_lt_powered' },
         { id: 'flood', knob: `max(${C172.floodLeft}, ${C172.floodRight})`, power: 'elec.flood_lts_powered' },

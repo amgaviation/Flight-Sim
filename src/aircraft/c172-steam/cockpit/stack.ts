@@ -1,14 +1,18 @@
 /**
- * Bendix/King NAV II radio stack (POH Fig 7-2 items 16-21 plus the KAP 140 at the bottom slot),
- * each unit a 6.25 in wide bezel in the rack (stack X 0.26..6.62 in, layout.ts POS.stack):
+ * Bendix/King NAV II radio stack (POH Fig 7-2 items 16-21 plus the KAP 140), each unit a 6.25 in
+ * wide bezel in the rack (stack X 0.26..6.62 in, layout.ts POS.stack). Order top to bottom as in
+ * the straight-on photograph of VH-SPQ (172S NAV II, Wikimedia Commons) and N146TC: KMA 28,
+ * KLN 94, KX 155A #1, KX 155A #2, KT 76C, KAP 140, KR 87. Face arrangements from the unit
+ * figures, checked against the VH-SPQ close-up (~71 px/in):
  *
  *   KMA 28 (1.3 in)   Supplement 20 Fig 1 sheet 1 (item positions scaled from the drawing)
- *   KLN 94 (2.0 in)   Pilot's Guide Figure 3-1 (arrangement EST from photographs)
- *   KX 155A #1 / #2   Supplement 1 Fig 1 sheet 1 (2.0 in each)
- *   KR 87 (1.3 in)    Supplement 6 Fig 1 sheet 1
+ *   KLN 94 (2.0 in)   Pilot's Guide Figure 3-1; VH-SPQ: RNG rocker right of the screen with the
+ *                     small MNU button below it, CRSR top right, the concentric knob bottom right
+ *   KX 155A #1 / #2   Supplement 1 Fig 1 sheet 1 (2.0 in each); CHAN / MODE small round buttons
  *   KT 76C (1.55 in)  Supplement 2 Fig 1 sheet 1
- *   KAP 140 (1.65 in) Supplement 15 Fig 3 sheet 1 (ARM / BARO / knob positions EST: the figure
- *                     numbers them without drawing them)
+ *   KAP 140 (1.65 in) Supplement 15 Fig 3 sheet 1; VH-SPQ: UP / DN a framed vertical rocker right
+ *                     of the display, ARM / BARO above the altitude select knob
+ *   KR 87 (1.3 in)    Supplement 6 Fig 1 sheet 1
  *
  * Every knob and button is bound to the unit logic (avionics/*): encoders emit the EV.* events,
  * buttons write the KX / KMA / KR / KT / KAP / KLN vars or emit the key events. Button legends
@@ -34,9 +38,9 @@ export const UNITS = {
   kln94: { z: 1.95, h: 2.0 },
   kx1: { z: 4.05, h: 2.0 },
   kx2: { z: 6.15, h: 2.0 },
-  kr87: { z: 8.25, h: 1.3 },
-  kt76c: { z: 9.65, h: 1.55 },
-  kap140: { z: 11.3, h: 1.65 },
+  kt76c: { z: 8.25, h: 1.55 },
+  kap140: { z: 9.85, h: 1.65 },
+  kr87: { z: 11.55, h: 1.3 },
 } as const;
 
 interface Unit {
@@ -97,6 +101,25 @@ function bkButton(
     u.x(o.x),
     u.y(o.y),
   );
+}
+
+/** Small round Bendix/King push button (KX 155A CHAN / MODE) with its legend beside it. */
+function roundKey(b: CockpitBuilder, u: Unit, o: { id: string; label: string; text: string; x: number; y: number; var?: string; event?: string; legendDx?: number }): PushButton {
+  const k = u.p.add(
+    new PushButton(b.env, { id: o.id, label: o.label, var: o.var, event: o.event, mode: 'momentary', style: 'round', width: 0.17 * IN, capMaterial: 'plasticGrey', engraved: '', zone: ZONE }),
+    u.x(o.x),
+    u.y(o.y),
+  );
+  legend(u, o.text, o.x + (o.legendDx ?? 0.33), o.y, 0.0012);
+  return k;
+}
+
+/** Raised frame around a vertical rocker pair (KLN 94 RNG, KAP 140 UP / DN). */
+function rockerFrame(u: Unit, x: number, y: number, w: number, h: number): void {
+  const e = env();
+  const f = new THREE.Mesh(e.geometry.get(`c172s.rocker_frame.${w}.${h}`, () => roundedBox(w * IN, h * IN, 0.0025, 0.0012, 2)), e.materials.custom('plastic', '#3a3b3e', 0.5));
+  f.userData.cockpitStatic = true;
+  u.p.addObject(f, u.x(x), u.y(y), { z: 0.0002 });
 }
 
 /** Frequency / encoder knob pair (outer + inner) with an optional pull function on the inner knob. */
@@ -237,7 +260,8 @@ export function buildStack(b: CockpitBuilder, panel: Panel, displays: Map<string
         );
       }),
     );
-    // Photocell (item 9, static) and the mic selector (item 4), transmit indicator (item 6), swap (item 5, not available).
+    // Photocell (item 9, static) and the mic selector (item 4), transmit indicator (item 6) and swap
+    // indicator (item 5, "not available on this installation": dark) below the mic selector (VH-SPQ).
     const cell = new THREE.Mesh(env.geometry.get('c172s.photocell', () => cylinderZ(0.0022, 0.002, 0, 0.001, 16)), env.materials.custom('gloss', '#301a10', 0.2));
     cell.userData.cockpitStatic = true;
     u.p.addObject(cell, u.x(2.87), u.y(0.4), { z: 0.0002 });
@@ -260,15 +284,21 @@ export function buildStack(b: CockpitBuilder, panel: Panel, displays: Map<string
         labelHeight: 0.0011,
         labelZone: ZONE,
       }),
-      u.x(5.4),
-      u.y(0.62),
+      u.x(5.72),
+      u.y(0.6),
     );
     u.p.add(
       new AnnunciatorLight(env, { id: 'c172s.kma28.tx', label: 'KMA 28 transmit indicator', segments: [{ text: '', color: 'green', var: KMA.txLamp, test: (v) => v > 0.5 }], width: 0.1 * IN, height: 0.1 * IN }),
-      u.x(5.06),
+      u.x(5.25),
       u.y(1.08),
     );
-    legend(u, 'Transmit', 5.06, 1.2, 0.0009);
+    legend(u, 'Transmit', 5.25, 1.2, 0.0009);
+    u.p.add(
+      new AnnunciatorLight(env, { id: 'c172s.kma28.swap', label: 'KMA 28 swap indicator (swap not available on this installation)', segments: [{ text: '', color: 'green', var: KMA.swapLamp, test: (v) => v > 0.5 }], width: 0.1 * IN, height: 0.1 * IN }),
+      u.x(5.85),
+      u.y(1.08),
+    );
+    legend(u, 'Swap', 5.85, 1.2, 0.0009);
     legend(u, 'KMA 28 TSO', 3.3, 1.2, 0.0011);
     legend(u, 'BENDIX/KING', 2.2, 1.2, 0.0011);
   }
@@ -307,12 +337,21 @@ export function buildStack(b: CockpitBuilder, panel: Panel, displays: Map<string
       ['ent', 'ENT'],
     ];
     keys.forEach(([k, t], i) => bkButton(b, u, { id: `c172s.kln94.${k}`, label: `KLN 94 ${t}`, text: t, x: 1.12 + i * 0.5, y: 1.8, w: 0.4, h: 0.2, event: EV.klnKey(k) }));
-    bkButton(b, u, { id: 'c172s.kln94.rng_up', label: 'KLN 94 RNG (up)', text: 'RNG▲', x: 4.78, y: 0.3, w: 0.44, h: 0.2, event: EV.klnKey('rng_up') });
-    bkButton(b, u, { id: 'c172s.kln94.rng_dn', label: 'KLN 94 RNG (down)', text: 'RNG▼', x: 4.78, y: 0.56, w: 0.44, h: 0.2, event: EV.klnKey('rng_dn') });
-    bkButton(b, u, { id: 'c172s.kln94.mnu', label: 'KLN 94 MNU', text: 'MNU', x: 5.4, y: 0.43, w: 0.44, h: 0.2, event: EV.klnKey('mnu') });
-    bkButton(b, u, { id: 'c172s.kln94.crsr', label: 'KLN 94 CRSR', text: 'CRSR', x: 4.85, y: 1.45, w: 0.44, h: 0.2, event: EV.klnKey('crsr') });
+    // RNG: a vertical rocker right of the screen (upper half range up, lower half down), the small
+    // round MNU button below it; CRSR top right under the unit legend (VH-SPQ photograph).
+    rockerFrame(u, 4.62, 0.53, 0.36, 0.62);
+    bkButton(b, u, { id: 'c172s.kln94.rng_up', label: 'KLN 94 RNG (up)', text: '▲', x: 4.62, y: 0.38, w: 0.28, h: 0.26, event: EV.klnKey('rng_up') });
+    bkButton(b, u, { id: 'c172s.kln94.rng_dn', label: 'KLN 94 RNG (down)', text: '▼', x: 4.62, y: 0.68, w: 0.28, h: 0.26, event: EV.klnKey('rng_dn') });
+    legend(u, 'RNG', 4.62, 0.12, 0.0010);
+    u.p.add(
+      new PushButton(env, { id: 'c172s.kln94.mnu', label: 'KLN 94 MNU', mode: 'momentary', event: EV.klnKey('mnu'), style: 'round', width: 0.2 * IN, capMaterial: 'plasticGrey', engraved: '', zone: ZONE }),
+      u.x(4.62),
+      u.y(1.02),
+    );
+    legend(u, 'MNU', 4.62, 1.22, 0.0009);
+    bkButton(b, u, { id: 'c172s.kln94.crsr', label: 'KLN 94 CRSR', text: 'CRSR', x: 5.55, y: 0.45, w: 0.44, h: 0.2, event: EV.klnKey('crsr') });
     dualKnob(b, u, { id: 'c172s.kln94.knob', label: 'KLN 94 right knobs (outer: page type / cursor, inner: page / character, PULL SCAN)', x: 5.62, y: 1.4, outer: [EV.klnOuter, 'OUTER'], inner: [EV.klnInner, 'INNER'], pull: { var: KLN.scan, label: 'PULL SCAN' }, d: 0.56 });
-    legend(u, 'KLN 94 TSO', 5.3, 0.1, 0.0011);
+    legend(u, 'KLN 94 TSO\nGPS', 5.55, 0.17, 0.0010);
   }
 
   // ---------------------------------------------------------------- KX 155A #1 / #2
@@ -328,14 +367,14 @@ export function buildStack(b: CockpitBuilder, panel: Panel, displays: Map<string
     legend(u, 'PULL\nTEST', 0.22, 1.39, 0.0009);
     legend(u, 'OFF', 0.59, 1.78, 0.0010);
     bkButton(b, u, { id: `c172s.kx155a_${n}.com_xfr`, label: `NAV/COM ${n} COMM transfer (hold 2 s: active entry)`, text: '⇄', x: 1.4, y: 1.32, w: 0.34, h: 0.2, var: k.comXfr });
-    bkButton(b, u, { id: `c172s.kx155a_${n}.chan`, label: `NAV/COM ${n} CHAN (hold 2 s: program)`, text: 'CHAN', x: 1.45, y: 1.74, w: 0.36, h: 0.16, var: k.chan });
+    roundKey(b, u, { id: `c172s.kx155a_${n}.chan`, label: `NAV/COM ${n} CHAN (hold 2 s: program)`, text: 'CHAN', x: 1.25, y: 1.74, var: k.chan });
     dualKnob(b, u, { id: `c172s.kx155a_${n}.com_freq`, label: `NAV/COM ${n} COMM frequency (outer MHz, inner kHz, PULL 25K)`, x: 2.47, y: 1.32, outer: [EV.kxComMhz(n), 'MHz'], inner: [EV.kxComKhz(n), 'kHz'], pull: { var: k.comInnerPull, label: 'PULL 25K' } });
     legend(u, 'PULL 25K', 2.47, 1.86, 0.0010);
     volKnob(b, u, { id: `c172s.kx155a_${n}.nav_vol`, label: `NAV/COM ${n} NAV volume (PULL IDENT)`, x: 3.93, y: 1.39, var: k.navVol, pull: { var: k.navIdent, label: 'PULL IDENT' } });
     legend(u, 'PULL\nIDENT', 3.56, 1.39, 0.0009);
     bkButton(b, u, { id: `c172s.kx155a_${n}.nav_xfr`, label: `NAV/COM ${n} NAV transfer / TIMER (hold 2 s: active entry / timer reset)`, text: '⇄', x: 4.64, y: 1.32, w: 0.34, h: 0.2, var: k.navXfr });
     legend(u, 'TIMER', 4.64, 1.5, 0.0009);
-    bkButton(b, u, { id: `c172s.kx155a_${n}.nav_mode`, label: `NAV/COM ${n} NAV MODE (ACT/STBY, CDI, BRG, RAD, TIMER)`, text: 'MODE', x: 4.64, y: 1.74, w: 0.36, h: 0.16, var: k.navMode });
+    roundKey(b, u, { id: `c172s.kx155a_${n}.nav_mode`, label: `NAV/COM ${n} NAV MODE (ACT/STBY, CDI, BRG, RAD, TIMER)`, text: 'MODE', x: 4.5, y: 1.74, var: k.navMode });
     dualKnob(b, u, { id: `c172s.kx155a_${n}.nav_freq`, label: `NAV/COM ${n} NAV frequency (outer MHz, inner kHz, PULL OBS)`, x: 5.72, y: 1.32, outer: [EV.kxNavMhz(n), 'MHz'], inner: [EV.kxNavKhz(n), 'kHz'], pull: { var: k.navInnerPull, label: 'PULL OBS' } });
     legend(u, 'PULL OBS', 5.72, 1.86, 0.0010);
     legend(u, 'KX 155A TSO', 5.5, 0.03, 0.0010);
@@ -393,9 +432,9 @@ export function buildStack(b: CockpitBuilder, panel: Panel, displays: Map<string
   // ---------------------------------------------------------------- KAP 140 autopilot with altitude preselect
   {
     const u = unit(b, panel, 'kap140', UNITS.kap140);
-    legend(u, 'BENDIX\nKING', 0.5, 0.3, 0.0016);
-    legend(u, 'KAP 140', 0.52, 0.72, 0.0016);
-    screen(u, displays.get('kap140'), 2.99, 0.62, 3.78, 0.83);
+    legend(u, 'BENDIX/KING', 0.5, 0.1, 0.0010);
+    legend(u, 'KAP 140', 0.4, 0.42, 0.0011);
+    screen(u, displays.get('kap140'), 2.55, 0.62, 3.6, 0.83);
     u.p.add(new AnnunciatorLight(env, { id: 'c172s.kap140.p', label: 'KAP 140 red P (pitch axis)', segments: [{ text: 'P', color: 'red', var: KAP.pLamp, test: (v) => v > 0.5 }], width: 0.2 * IN, height: 0.2 * IN }), u.x(0.25), u.y(1.12));
     u.p.add(new AnnunciatorLight(env, { id: 'c172s.kap140.r', label: 'KAP 140 red R (roll axis)', segments: [{ text: 'R', color: 'red', var: KAP.rLamp, test: (v) => v > 0.5 }], width: 0.2 * IN, height: 0.2 * IN }), u.x(0.66), u.y(1.12));
     const btns: ['ap' | 'hdg' | 'nav' | 'apr' | 'rev' | 'alt', string][] = [
@@ -406,12 +445,26 @@ export function buildStack(b: CockpitBuilder, panel: Panel, displays: Map<string
       ['rev', 'REV'],
       ['alt', 'ALT'],
     ];
-    const bx = [0.38, 1.39, 2.19, 3.04, 3.84, 4.65];
-    btns.forEach(([k, t], i) => bkButton(b, u, { id: `c172s.kap140.${k}`, label: `KAP 140 ${t}`, text: t, x: bx[i], y: 1.43, w: 0.46, h: 0.24, event: EV.kap(k) }));
-    bkButton(b, u, { id: 'c172s.kap140.up', label: 'KAP 140 UP (VS +100 fpm / ALT +20 ft; hold = rate)', text: 'UP', x: 5.36, y: 0.8, w: 0.44, h: 0.26, var: KAP.up });
-    bkButton(b, u, { id: 'c172s.kap140.dn', label: 'KAP 140 DN (VS -100 fpm / ALT -20 ft; hold = rate)', text: 'DN', x: 5.36, y: 1.35, w: 0.44, h: 0.26, var: KAP.dn });
-    bkButton(b, u, { id: 'c172s.kap140.arm', label: 'KAP 140 ARM (altitude arm on / off)', text: 'ARM', x: 5.2, y: 0.26, w: 0.38, h: 0.2, event: EV.kap('arm') });
-    bkButton(b, u, { id: 'c172s.kap140.baro', label: 'KAP 140 BARO (hold 2 s: IN HG / HPA)', text: 'BARO', x: 5.82, y: 0.26, w: 0.38, h: 0.2, var: KAP.baro });
-    dualKnob(b, u, { id: 'c172s.kap140.alt_sel', label: 'KAP 140 altitude select (outer 1000 ft, inner 100 ft; baro while shown)', x: 5.9, y: 1.12, outer: [EV.kapAltOuter, '1000 FT'], inner: [EV.kapAltInner, '100 FT'], d: 0.42 });
+    const bx = [0.38, 1.6, 2.22, 2.84, 3.46, 4.08]; // VH-SPQ: AP at the left edge, HDG .. ALT under the display
+    // AP: momentary var, engage by pressing and holding ~0.25 s, disengage with a press (Supplement 15 Fig 2 item 2).
+    btns.forEach(([k, t], i) =>
+      bkButton(b, u, {
+        id: `c172s.kap140.${k}`,
+        label: k === 'ap' ? 'KAP 140 AP (press and hold ~0.25 s to engage; press to disengage)' : `KAP 140 ${t}`,
+        text: t,
+        x: bx[i],
+        y: 1.43,
+        w: 0.46,
+        h: 0.24,
+        ...(k === 'ap' ? { var: KAP.apBtn } : { event: EV.kap(k) }),
+      }),
+    );
+    // UP / DN: a framed vertical rocker pair right of the display (VH-SPQ photograph).
+    rockerFrame(u, 4.78, 0.98, 0.46, 0.9);
+    bkButton(b, u, { id: 'c172s.kap140.up', label: 'KAP 140 UP (VS +100 fpm / ALT +20 ft; hold = rate)', text: 'UP', x: 4.78, y: 0.76, w: 0.36, h: 0.36, var: KAP.up });
+    bkButton(b, u, { id: 'c172s.kap140.dn', label: 'KAP 140 DN (VS -100 fpm / ALT -20 ft; hold = rate)', text: 'DN', x: 4.78, y: 1.2, w: 0.36, h: 0.36, var: KAP.dn });
+    bkButton(b, u, { id: 'c172s.kap140.arm', label: 'KAP 140 ARM (altitude arm on / off)', text: 'ARM', x: 5.1, y: 0.24, w: 0.38, h: 0.2, event: EV.kap('arm') });
+    bkButton(b, u, { id: 'c172s.kap140.baro', label: 'KAP 140 BARO (hold 2 s: IN HG / HPA)', text: 'BARO', x: 5.7, y: 0.24, w: 0.38, h: 0.2, var: KAP.baro });
+    dualKnob(b, u, { id: 'c172s.kap140.alt_sel', label: 'KAP 140 altitude select (outer 1000 ft, inner 100 ft; baro while shown)', x: 5.68, y: 1.02, outer: [EV.kapAltOuter, '1000 FT'], inner: [EV.kapAltInner, '100 FT'], d: 0.5 });
   }
 }

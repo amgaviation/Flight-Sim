@@ -22,8 +22,11 @@
  *    direct from present position (shared FMS directTo).
  *  - NRST (3.11): nearest airports list; the inner knob moves the selection, D-> goes direct.
  *  - MSG: message page; the 'M' prompt flashes on a new message (3.5).
- *  - OBS (5.5): toggles LEG / OBS; in OBS mode the #1 CDI OBS sets the course to the active
- *    waypoint (a course-to-fix leg in the FMS).
+ *  - OBS (5.5): toggles LEG / OBS; in OBS mode the course to the active waypoint (a course-to-fix
+ *    leg in the FMS) comes from the #1 CDI OBS while the NAV/GPS switch is in GPS, and is set
+ *    digitally on the KLN 94 while it is in NAV (Supplement 19 Fig 2 item 4): on a NAV page with the
+ *    cursor on (CRSR), the right inner knob changes the course 1 deg and the outer knob 10 deg per
+ *    click (EST: the pilot's guide selects the OBS course with the cursor and the right knobs).
  *  - ALT (6): altitude page with the baro setting (inner knob).
  *  - PROC (6.2): approach selection for the destination; ENT loads it into the flight plan.
  *    Approach ARM within 30 nm of the destination with an approach loaded, ACTV from 2 nm
@@ -320,8 +323,17 @@ export class Kln94Logic implements Subsystem {
     return r.length ? r[0] : null;
   }
 
+  /** Digital OBS course entry (OBS mode, NAV/GPS switch in NAV): `deg` per click. Returns true when handled. */
+  private digitalObs(steps: number, deg: number): boolean {
+    if (!this.obsMode || this.v.get(KLN.obsAnalog) > 0.5 || this.screen !== 'pages' || !this.cursor || this.pageType !== 'NAV') return false;
+    const crs = Math.round(this.v.get(this.obsVar));
+    this.v.set(this.obsVar, wrap360(crs + steps * deg));
+    return true;
+  }
+
   private outer(steps: number): void {
     if (!this.on) return;
+    if (this.digitalObs(steps, 10)) return;
     if (this.screen === 'alt') {
       this.baroInHg = clamp(Math.round((this.baroInHg + steps * 0.1) * 100) / 100, 28.1, 31.0);
       return;
@@ -352,6 +364,7 @@ export class Kln94Logic implements Subsystem {
 
   private inner(steps: number): void {
     if (!this.on) return;
+    if (this.digitalObs(steps, 1)) return;
     if (this.screen === 'alt') {
       this.baroInHg = clamp(Math.round((this.baroInHg + steps * 0.01) * 100) / 100, 28.1, 31.0);
       return;

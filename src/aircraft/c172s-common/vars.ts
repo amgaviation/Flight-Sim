@@ -15,14 +15,14 @@ export const FUEL_SEL = { left: 0, both: 1, right: 2 } as const;
 /** G1000 STBY BATT switch (POH NAV III Sec 7: three-position ARM / OFF / TEST, TEST momentary). */
 export const STBY_BATT = { test: -1, off: 0, arm: 1 } as const;
 /**
- * ELT remote switch. Steam (Artex ME406 remote rocker, POH Sec 7 "remote
- * switch/annunciator"): ARM (normal) / ON; G1000 (POH NAV III Sec 7): ON / AUTO / RESET.
- * One var for both: -1 RESET/TEST (momentary), 0 ARM/AUTO, 1 ON.
+ * ELT remote switch/annunciator, 3-position rocker ON / AUTO / RESET with the red transmit lamp in its
+ * centre. Steam: Pointer Model 3000-11 (POH 172SPHUS Rev 5 Supplement 4); G1000: per its POH / supplement
+ * (see the c172-g1000 variant). One var: -1 RESET (momentary), 0 AUTO (armed, normal), 1 ON.
  */
 export const ELT_SW = { reset: -1, arm: 0, on: 1 } as const;
 /**
- * Steam annunciator panel toggle (POH Sec 7 "Annunciator panel", later serials):
- * DAY / NIGHT brightness with a momentary TEST position. -1 TEST, 0 NIGHT (dim), 1 DAY (bright).
+ * Steam annunciator panel toggle (POH Sec 7 "Annunciator panel"; the NAV II panel legend is TST / BRT / DIM,
+ * earlier serials DAY / NIGHT / TEST): -1 TST (momentary), 0 DIM (night), 1 BRT (day).
  */
 export const ANN_SW = { test: -1, night: 0, day: 1 } as const;
 /** Cabin door handle (POH Sec 7 "Entrance doors"): OPEN / CLOSE / LOCK. */
@@ -41,7 +41,7 @@ export const C172 = {
   stbyBatt: 'ac.c172.stby_batt',
   /** External power cart plugged into the receptacle (left cowl) and on. */
   extPower: 'ac.c172.ext_pwr',
-  /** CABIN PWR 12V switch (G1000 switch panel) / 12 V power port load (steam: always on with CABIN LTS/PWR CB). */
+  /** CABIN PWR 12V switch (G1000 switch panel) / steam: a device plugged into the 12 V outlet (Supplement 22; CABIN LTS/PWR CB). */
   cabinPwr12v: 'ac.c172.cabin_pwr_12v',
   // ---------------------------------------------------------------- engine and fuel
   /** Ignition / MAGNETOS key switch, see MAG (START spring-loaded back to BOTH). */
@@ -149,6 +149,25 @@ export const C172 = {
   stbyTestLamp: 'ac.c172.stby_test_lamp',
   /** ELT transmitting (remote switch annunciator lit). */
   eltTx: 'ac.c172.elt_tx',
+  /**
+   * Door opening 0 (shut) .. 1 (swung fully open, ~55 deg) from the door state C172.doorLeft/Right and the
+   * airflow: an unlatched door trails about 3 in open in flight (POH 7-27; C172LateLogic).
+   */
+  doorLeftPos: 'ac.c172.door_left_pos',
+  doorRightPos: 'ac.c172.door_right_pos',
+  /** Cabin smoke density 0..1 (fire model, systems/fire.ts): cleared by ventilation. */
+  cabinSmoke: 'ac.c172.cabin_smoke',
+  /** Halon agent concentration in the cabin 0..1 (portable extinguisher discharging; decays with ventilation). */
+  extAgent: 'ac.c172.ext_agent',
+  /** Fire intensities 0..1 (systems/fire.ts): engine compartment, electrical (behind the panel), cabin, left wing. */
+  fireEngine: 'ac.c172.fire.engine',
+  fireElectrical: 'ac.c172.fire.electrical',
+  fireCabin: 'ac.c172.fire.cabin',
+  fireWing: 'ac.c172.fire.wing',
+  /** Any fire burning (0/1). */
+  fireAny: 'ac.c172.fire.any',
+  /** Carbon monoxide detector powered and serviceable (G1000 option): 1 = working. */
+  coDetOk: 'ac.c172.co_det_ok',
 } as const;
 
 /**
@@ -192,4 +211,17 @@ export const C172_FAIL = {
   /** Fuel quantity transmitter failure (needle to OFF, LOW FUEL annunciator). */
   fuelXmtrL: 'c172.fuel_xmtr_l',
   fuelXmtrR: 'c172.fuel_xmtr_r',
+  /** Engine compartment fire (fed by fuel and oil; POH Sec 3 "Engine fire in flight"). */
+  fireEngine: 'c172.fire.engine',
+  /** Induction fire during engine start (POH Sec 3 "Fire during start on ground"). */
+  fireStart: 'c172.fire.start',
+  /** Electrical fire in the wiring behind the instrument panel (POH Sec 3 "Electrical fire in flight"). */
+  fireElectrical: 'c172.fire.electrical',
+  /** Cabin fire (POH Sec 3 "Cabin fire"). */
+  fireCabin: 'c172.fire.cabin',
+  /** Left wing fire in the light / pitot-heat wiring (POH Sec 3 "Wing fire"). */
+  fireWing: 'c172.fire.wing',
+  /** CO detector needs service (CO DET SRVC) / lost communication with the G1000 (CO DET FAIL). */
+  coDetSrvc: 'c172.co_det_srvc',
+  coDetFail: 'c172.co_det_fail',
 } as const;

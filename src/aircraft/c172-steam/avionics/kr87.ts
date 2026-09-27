@@ -18,7 +18,8 @@
  *
  * Outputs: adf1.powered / active_khz / stby_khz / mode (nav/Radios AdfReceiver) and KR.*.
  * Power: ADF breaker (avionics bus 2) and the ON/OFF/VOL knob.
- * SCOPE: receiver audio (AM voice, ident, BFO beat tone) is not synthesised.
+ * Audio: the NDB Morse ident at the VOL level through the KMA 28 ADF select (receiverAudio.ts).
+ * SCOPE: AM voice and a distinct BFO beat tone are not synthesised.
  */
 import type { Subsystem } from '../../types';
 import type { SimContext } from '../../../core/SimContext';

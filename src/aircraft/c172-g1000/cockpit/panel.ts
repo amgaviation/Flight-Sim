@@ -23,7 +23,6 @@ import { ADC, SURF } from '../../../core/vars';
 import type { CockpitBuilder, Panel } from '../../../cockpit/CockpitBuilder';
 import type { CockpitDisplay } from '../../../cockpit/types';
 import {
-  AnnunciatorLight,
   CircuitBreaker,
   Lever,
   PushButton,
@@ -43,7 +42,8 @@ import { G1000_BREAKERS } from '../../c172s-common/systems/electrical';
 import { FLAP_DETENTS } from '../../c172s-common/data';
 import { C172G, ELT_ROCKER } from '../vars';
 import { GDU_MM, GMA_MM, NullDisplay, buildGdu, buildGma } from './gdu';
-import { IN, LOWER_PANEL_Z, PANEL, PANEL_CENTER, PANEL_H, px, py } from './layout';
+import { JewelLamp } from './jewelLamp';
+import { IN, LOWER_PANEL_Z, PANEL, PANEL_CENTER, PANEL_H, glareSagIn, px, py } from './layout';
 
 /** Standby instrument lighting var (STBY IND dimmer, c172s-common lighting.ts). */
 export const STBY_LIGHT = 'ac.light.stby_ind';
@@ -177,6 +177,8 @@ export interface InstrumentPanel {
   flapPointer: THREE.Object3D;
   /** Ignition key bow group (hidden while the key is out). */
   keyBow: THREE.Object3D | null;
+  /** Glove box door (hinged at its lower edge; opened by C172G.glovebox). */
+  gloveDoor: THREE.Object3D;
 }
 
 export function buildInstrumentPanel(pc: PanelBuildContext): InstrumentPanel {
@@ -193,10 +195,35 @@ export function buildInstrumentPanel(pc: PanelBuildContext): InstrumentPanel {
   // Upper panel: textured grey overlay from the glareshield lip to the lower panel (photograph).
   // Instrument holes (3-1/8 in) for the standby cluster: the dials sit in the holes, their black backing behind.
   const stbyHoles = [STBY.asi, STBY.ai, STBY.alt].map((X) => ({ X, Z: STBY.Z, d: ATI3_HOLE }));
-  plate(b, panel, 'c172g.upper', -W / IN / 2, 0, W / IN / 2, LOWER_PANEL_Z, 'panel', 0, 0.004, 0.012, stbyHoles);
-  // Screws along the upper edge and around the display openings (photograph).
+  // Its top edge follows the glareshield arc (layout.ts GLARE_ARC: lower toward the ends, dropping around
+  // the outboard corners under the glareshield ears), so it is an extruded outline rather than a rectangle.
+  {
+    const halfW = W / 2;
+    const hPl = LOWER_PANEL_Z * IN;
+    const sh = new THREE.Shape();
+    sh.moveTo(-halfW, -hPl / 2);
+    sh.lineTo(halfW, -hPl / 2);
+    const n = 48;
+    for (let i = 0; i <= n; i++) {
+      const Xin = (halfW / IN) * (1 - (2 * i) / n);
+      sh.lineTo(Xin * IN, hPl / 2 - glareSagIn(Xin) * IN);
+    }
+    sh.closePath();
+    for (const h of stbyHoles) {
+      const hp = new THREE.Path();
+      hp.absarc(h.X * IN, (LOWER_PANEL_Z / 2 - h.Z) * IN, h.d / 2, 0, Math.PI * 2, true);
+      sh.holes.push(hp);
+    }
+    const g = env.geometry.get('c172g.upper_plate', () => extrude(sh, { depth: 0.004, bevel: 0.001, bevelSegments: 2, curveSegments: 32, anchor: 'front0' }));
+    const m = new THREE.Mesh(g, mats.get('panel'));
+    m.name = 'panelPlate:c172g.upper';
+    m.userData.cockpitStatic = true;
+    panel.addObject(m, px(0), py(LOWER_PANEL_Z / 2));
+    b.occluders.push(m);
+  }
+  // Screws along the (arched) upper edge and around the display openings (photograph).
   screws(b, panel, [
-    [-19.2, 0.35], [-15.9, 0.3], [-12, 0.3], [-8, 0.3], [-4, 0.3], [0, 0.3], [4, 0.3], [7.9, 0.3], [11.9, 0.3], [15.7, 0.3], [19.2, 0.35],
+    ...([-19.0, -15.9, -12, -8, -4, 0, 4, 7.9, 11.9, 15.7, 19.0] as const).map((X): [number, number] => [X, glareSagIn(X) + 0.32]),
     [-11.2, 13.25], [11.9, 13.2], [19.2, 13.2], [14.5, 9.4], [19.2, 6.5],
   ]);
   // Black lower panel (engine controls, breakers, flaps, cabin heat/air, glove box).
@@ -279,9 +306,10 @@ export function buildInstrumentPanel(pc: PanelBuildContext): InstrumentPanel {
     py(6.08),
     { z: zSw },
   );
-  // Green STBY BATT TEST annunciator (POH Fig 7-2 item 3).
+  // Green STBY BATT TEST annunciator (POH Fig 7-2 item 3): a round jewel lens (~6 mm) in a round bezel with
+  // "TEST" printed to its right (photographs "Cessna 172SP G1000 01/02.jpg").
   panel.add(
-    new AnnunciatorLight(env, { id: 'c172g.stby_batt_test_lamp', label: 'STBY BATT TEST', segments: [{ text: '', color: 'green', var: C172.stbyTestLamp }], width: 0.0048, height: 0.0048 }),
+    new JewelLamp(env, { id: 'c172g.stby_batt_test_lamp', label: 'STBY BATT TEST', var: C172.stbyTestLamp, color: 'green', diameter: 0.006 }),
     px(-17.3),
     py(6.08),
     { z: zSw },
@@ -419,17 +447,16 @@ export function buildInstrumentPanel(pc: PanelBuildContext): InstrumentPanel {
       width: 0.0085,
       height: 0.017,
       capMaterial: 'paintRed',
-      indicator: { var: C172.eltTx, color: 'red' },
+      indicator: { var: C172G.eltLight, color: 'red' }, // flashes while the ELT transmits (NXi Supplement 1)
     }),
     px(13.05),
     py(2.0),
     { z: 0.001 },
   );
   // Hour (Hobbs) meter: electromechanical counter (display 'hobbs').
-  const hob = plate(b, panel, 'c172g.hobbs', 14.3, 1.4, 15.95, 2.15, mats.custom('plastic', '#161617', 0.5), 0.0015, 0.003, 0.0015);
+  const hob = plate(b, panel, 'c172g.hobbs', 14.3, 1.37, 15.95, 2.18, mats.custom('plastic', '#161617', 0.5), 0.0015, 0.003, 0.0015);
   void hob;
-  panel.display(disp('hobbs'), px(15.1), py(1.78), 0.03, 0.009, { z: 0.0034, bezel: false });
-  text(b, panel, 'HOURS', 15.1, 2.33, 0.0011, null, 0.0015);
+  panel.display(disp('hobbs'), px(15.12), py(1.775), 0.033, 0.0132, { z: 0.0034, bezel: false });
 
   // ---------------------------------------------------------------- circuit breakers (POH Fig 7-2 item 31, Fig 7-7)
   const busOf = new Map(G1000_BREAKERS.map((x) => [x.name, x]));
@@ -581,7 +608,9 @@ export function buildInstrumentPanel(pc: PanelBuildContext): InstrumentPanel {
       max: 3,
       initial: 0,
       discrete: true,
-      detents: FLAP_DETENTS.map((d) => ({ value: d.lever, label: d.label })),
+      // POH 7-22: the slotted panel "provides mechanical stops at the 10°, 20° and FULL positions"; the lever is moved
+      // right to clear the stops at 10° and 20° (gates: a drag stops there, release and drag again to pass).
+      detents: FLAP_DETENTS.map((d) => ({ value: d.lever, label: d.label, ...(d.lever === 1 || d.lever === 2 ? { kind: 'gate' as const } : {}) })),
       travel: { kind: 'linear', length: (fBot - fTop) * IN },
       knob: 'flap',
       knobScale: 0.7,
@@ -614,21 +643,37 @@ export function buildInstrumentPanel(pc: PanelBuildContext): InstrumentPanel {
   flapPointer.userData.flapScale = { yTop: py(fTop), yBot: py(fBot) };
 
   // ---------------------------------------------------------------- cabin heat / air (POH Fig 7-2 items 16, 17; Sec 7 "Cabin heating")
-  panel.add(new PushPullKnob(env, { id: 'c172g.cabin_heat', label: 'CABIN HT (PULL ON)', var: C172.cabinHeat, valueIn: 0, valueOut: 1, style: 'cabin', travel: 0.05, vernierStep: 0.05, clickToggles: false, material: 'knobWhite' }), px(10.7), py(14.6));
+  // Plain chrome push-pull knobs, legends printed to their left (photograph "Cessna 172SP G1000 01.jpg").
+  panel.add(new PushPullKnob(env, { id: 'c172g.cabin_heat', label: 'CABIN HT (PULL ON)', var: C172.cabinHeat, valueIn: 0, valueOut: 1, style: 'cabin', travel: 0.05, vernierStep: 0.05, clickToggles: false, material: 'chrome' }), px(10.7), py(14.6));
   text(b, panel, 'CABIN\nHT\nPULL ON', 9.3, 14.6, 0.0014, 'panel');
-  panel.add(new PushPullKnob(env, { id: 'c172g.cabin_air', label: 'CABIN AIR (PULL ON)', var: C172.cabinAir, valueIn: 0, valueOut: 1, style: 'cabin', travel: 0.05, vernierStep: 0.05, clickToggles: false }), px(10.7), py(16.15));
+  panel.add(new PushPullKnob(env, { id: 'c172g.cabin_air', label: 'CABIN AIR (PULL ON)', var: C172.cabinAir, valueIn: 0, valueOut: 1, style: 'cabin', travel: 0.05, vernierStep: 0.05, clickToggles: false, material: 'chrome' }), px(10.7), py(16.15));
   text(b, panel, 'CABIN\nAIR\nPULL ON', 9.3, 16.15, 0.0014, 'panel');
 
-  // ---------------------------------------------------------------- glove box (POH Fig 7-2 item 15; static)
+  // ---------------------------------------------------------------- glove box (POH Fig 7-2 item 15)
+  // The door hinges at its lower edge and drops open when the chrome latch is clicked (C172G.glovebox,
+  // animated by the cockpit hook). EST 7.6 x 3.6 in door (photograph). SCOPE: the glove box is empty.
+  const gloveDoor = new THREE.Group();
+  gloveDoor.name = 'glovebox_door';
+  gloveDoor.userData.cockpitDynamic = true;
   {
     const g = env.geometry.get('c172g.glovebox', () => roundedBox(7.6 * IN, 3.6 * IN, 0.006, 0.004));
     const m = new THREE.Mesh(g, black);
-    m.userData.cockpitStatic = true;
-    panel.addObject(m, px(15.85), py(16.15), { z: 0.003 });
-    const latch = new THREE.Mesh(env.geometry.get('c172g.glove_latch', () => roundedBox(0.03, 0.008, 0.004, 0.0015)), mats.get('chrome'));
-    latch.userData.cockpitStatic = true;
-    panel.addObject(latch, px(15.85), py(14.75), { z: 0.0065 });
+    m.position.set(0, 1.8 * IN, 0);
+    gloveDoor.add(m);
+    panel.addObject(gloveDoor, px(15.85), py(17.95), { z: 0.003 });
+    // Dark cavity behind the door (visible while open).
+    const cav = new THREE.Mesh(env.geometry.get('c172g.glove_cavity', () => new THREE.PlaneGeometry(7.4 * IN, 3.4 * IN)), mats.get('panelDark'));
+    cav.userData.cockpitStatic = true;
+    panel.addObject(cav, px(15.85), py(16.15), { z: -0.0005 });
   }
+  const gloveLatch = panel.add(
+    new PushButton(env, { id: 'c172g.glovebox_latch', label: 'GLOVE BOX latch (open / close)', mode: 'toggle', var: C172G.glovebox, style: 'mcp', width: 0.03, height: 0.008, capMaterial: 'chrome' }),
+    px(15.85),
+    py(14.75),
+    { z: 0.0065 },
+  );
+  b.root.updateMatrixWorld(true);
+  gloveDoor.attach(gloveLatch.object);
 
   // ---------------------------------------------------------------- parking brake (POH Fig 7-2 item 30)
   // T-handle under the lower left panel: pull aft and rotate 90 deg down to set (POH Sec 4 "Securing airplane").
@@ -658,5 +703,5 @@ export function buildInstrumentPanel(pc: PanelBuildContext): InstrumentPanel {
   }
 
   void SURF;
-  return { panel, gyroFlag, flapPointer, keyBow };
+  return { panel, gyroFlag, flapPointer, keyBow, gloveDoor };
 }

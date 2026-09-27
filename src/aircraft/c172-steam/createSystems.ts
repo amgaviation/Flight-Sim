@@ -15,7 +15,8 @@
  *   KAP 140 annunciation] -> stall horn -> rigging -> flight controls -> pitch trim (manual wheel,
  *   KAP manual electric trim, autotrim servo) -> flaps -> steering -> brakes ->
  *   [KAP 140 altitude alerter, AP disconnect tone] -> lighting -> C172LateLogic ->
- *   [cabin extras: manual trim keys, throttle creep, extinguisher, annunciator dim/test].
+ *   [cabin extras: manual trim keys, throttle creep, extinguisher, annunciator dim/test] ->
+ *   [procedure monitor (checklist latches, extinguisher discharge), fire model (c172s-common fire.ts)].
  *
  * Sources: POH = Cessna 172S Skyhawk SP POH/AFM 172SPHUS Rev 5 with Supplements 1 (KX 155A),
  * 2 (KT 76C), 6 (KR 87), 15 (KAP 140), 19 (KLN 94), 20 (KMA 28).
@@ -23,7 +24,7 @@
 import type { SimContext } from '../../core/SimContext';
 import type { Subsystem } from '../types';
 import type { FailureDef } from '../../systems/failures';
-import { ADC } from '../../core/vars';
+import { ADC, AP } from '../../core/vars';
 import { Ahrs } from '../../systems/sensors';
 import { SENSOR_VARS } from '../../systems/sensors/vars';
 import { Afcs } from '../../systems/autopilot/Afcs';
@@ -40,7 +41,11 @@ import { Kt76cLogic } from './avionics/kt76c';
 import { Kr87Logic } from './avionics/kr87';
 import { Kap140Logic } from './avionics/kap140';
 import { Kln94Logic } from './avionics/kln94';
+import { BlindEncoder } from './avionics/encoder';
+import { ReceiverIdentAudio } from './avionics/receiverAudio';
 import { CdiSourceMux, SteamCabinExtras, SteamDirectionalGyro } from './systems';
+import { SteamProcedureMonitor, STEAM_PROC } from './procedures';
+import { C172Fire } from '../c172s-common/systems/fire';
 
 /**
  * Pitch trim rates (trim units per second, full travel = 2 units).
@@ -91,6 +96,10 @@ export interface C172SteamSystems {
   kx2: Kx155aLogic;
   kma: Kma28Logic;
   kt: Kt76cLogic;
+  /** Blind altitude encoder shared by the KT 76C and the KAP 140. */
+  encoder: BlindEncoder;
+  /** Morse ident audio of NAV 1 / NAV 2 / ADF through the KMA 28. */
+  identAudio: ReceiverIdentAudio;
   kr: Kr87Logic;
   kln: Kln94Logic;
   mux: CdiSourceMux;
@@ -101,6 +110,10 @@ export interface C172SteamSystems {
   altAlert: AltitudeAlert;
   disc: DisconnectAlerts;
   extras: SteamCabinExtras;
+  /** Checklist action-sequence latches (procedures.ts). */
+  procedures: SteamProcedureMonitor;
+  /** Engine / start / electrical / cabin / wing fires and cabin smoke (POH Sec 3 fire procedures). */
+  fire: C172Fire;
   /** Update-ordered list for AircraftInstance.systems. */
   list: Subsystem[];
 }
@@ -138,9 +151,12 @@ export function createC172SteamSystems(ctx: SimContext, opts: C172SteamSystemsOp
   const kx1 = new Kx155aLogic(ctx, { n: 1, powerVar: 'elec.nav_com1_powered' });
   const kx2 = new Kx155aLogic(ctx, { n: 2, powerVar: 'elec.nav_com2_powered' });
   const kr = new Kr87Logic(ctx, 'elec.adf_powered');
+  // EST: the blind encoder is powered with the transponder (XPNDR breaker), see avionics/encoder.ts.
+  const encoder = new BlindEncoder(v, 'elec.xpndr_powered');
   const kt = new Kt76cLogic(ctx, 'elec.xpndr_powered');
   const radios = new Radios(ctx, { navCount: 2, adfCount: 1 });
   const kma = new Kma28Logic(v, ctx.audio, KMA_POWER);
+  const identAudio = new ReceiverIdentAudio(v, ctx.audio);
   // KLN 94 flight plan / D-> / OBS guidance core (Bendix/King: same leg sequencing as the shared FMS).
   const fms = new Fms(ctx, { style: 'garmin', engineCount: 1, bankLimitDeg: 25 });
   const kln = new Kln94Logic(ctx, ctx.nav, fms, 'elec.gps_powered', KLN.obs);
@@ -162,13 +178,17 @@ export function createC172SteamSystems(ctx: SimContext, opts: C172SteamSystemsOp
       // SCOPE: no GPS track input to the KAP 140; courses are flown on the DG heading.
       track: ST.dgHeading,
       trackValid: false,
+      // Course datum in NAV / APR / REV: the DG heading bug (Supplement 15 Fig 2 item 15: "the position of
+      // the heading bug also provides course datum to the autopilot when tracking in NAV, APR, or REV (BC)
+      // modes"). The CDI deviation adds the intercept; a mis-set bug gives the real tracking error.
+      courseDatum: AP.selHeading,
     },
     // The keyboard / hat trim is the manual trim wheel here (no AP disconnect); the split
     // switch disconnect is handled by Kap140Logic.
     disconnect: { ...AFCS_KAP140.disconnect, trimDisconnects: false },
     gains: { ...KAP140_GAINS },
   });
-  const kap = new Kap140Logic(ctx, afcs, alertAudio, 'elec.autopilot_powered', ADC.ahrsValid(KAP_SENSOR_INDEX));
+  const kap = new Kap140Logic(ctx, afcs, alertAudio, 'elec.autopilot_powered', ADC.ahrsValid(KAP_SENSOR_INDEX), SENSOR_VARS.nz(KAP_SENSOR_INDEX));
 
   // ---- warnings
   const altAlert = new AltitudeAlert(alertCtx, {
@@ -180,14 +200,16 @@ export function createC172SteamSystems(ctx: SimContext, opts: C172SteamSystemsOp
   // plus the PFT disconnect-tone test.
   const disc = new DisconnectAlerts(alertCtx, { apWarnVar: 'ac.kap140.tone', apToneMaxS: 2 });
 
-  const extras = new SteamCabinExtras(v);
+  const extras = new SteamCabinExtras(v, ctx.audio);
+  const procedures = new SteamProcedureMonitor(v);
+  const fire = new C172Fire(v, { extDischarging: STEAM_PROC.extDischarging });
 
   const list = core.compose({
     sensors: [dg, kapSensors],
-    avionics: [kx1, kx2, kr, kt, radios, kma, fms, kln, mux],
+    avionics: [kx1, kx2, kr, encoder, kt, radios, kma, identAudio, fms, kln, mux],
     afcs: [kap, afcs, kap.post],
     warnings: [altAlert, disc],
-    late: [extras],
+    late: [extras, procedures, fire],
   });
-  return { core, radios, fms, kx1, kx2, kma, kt, kr, kln, mux, dg, kapSensors, afcs, kap, altAlert, disc, extras, list };
+  return { core, radios, fms, kx1, kx2, kma, kt, encoder, identAudio, kr, kln, mux, dg, kapSensors, afcs, kap, altAlert, disc, extras, procedures, fire, list };
 }

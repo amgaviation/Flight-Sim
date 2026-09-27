@@ -57,6 +57,8 @@ export const GEAR = {
   weightOnWheels: (i: number) => `gear.wow${i}`, // 0/1
   compression: (i: number) => `gear.compression${i}`, // 0..1
   wheelSpeedKt: (i: number) => `gear.wheel_speed${i}_kt`,
+  /** Tyre deflated (failure input, 0 = inflated .. 1 = flat): the wheel runs on the rim, lower and with high rolling drag. */
+  tireFlat: (i: number) => `gear.tire_flat${i}`,
 } as const;
 
 /**

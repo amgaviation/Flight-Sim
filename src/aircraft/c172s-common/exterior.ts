@@ -156,7 +156,9 @@ export function createC172Exterior(vars: SimVars, opts: C172ExteriorOptions = {}
   const tyre = std(0x141414, 0.92, 0);
   const metal = std(0xb8bcc2, 0.3, 0.85);
   const propMat = std(0x2b2d30, 0.5, 0.4, THREE.DoubleSide);
-  const tipMat = std(0xf0d020, 0.4, 0.1, THREE.DoubleSide); // yellow/white prop tips (McCauley standard)
+  // Blade tip markings as on N146TC (photographs): a white tip with a red band inboard of it.
+  const tipMat = std(0xf2f2ee, 0.4, 0.1, THREE.DoubleSide);
+  const tipBandMat = std(0xc8202a, 0.4, 0.1, THREE.DoubleSide);
   const discMat = track(new THREE.MeshBasicMaterial({ color: 0x33363a, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }));
 
   const mesh = (g: THREE.BufferGeometry, m: THREE.Material, name: string, parent: THREE.Object3D = root): THREE.Mesh => {
@@ -256,12 +258,27 @@ export function createC172Exterior(vars: SimVars, opts: C172ExteriorOptions = {}
     b.rotation.x = 0; // blade in the prop disc plane (x-y local)
     const tip = mesh(track(new THREE.PlaneGeometry(0.1, 0.07)), tipMat, `blade_tip${k}`, b);
     tip.position.set(0.95 * R, 0, 0.001);
+    const band = mesh(track(new THREE.PlaneGeometry(0.03, 0.085)), tipBandMat, `blade_band${k}`, b);
+    band.position.set(0.95 * R - 0.065, 0, 0.001);
     // Blade pitch twist (visual): ~18 deg at 3/4 radius.
     b.rotateOnAxis(new THREE.Vector3(1, 0, 0), (k === 0 ? 1 : -1) * 18 * D2R);
   }
   const disc = mesh(track(new THREE.CircleGeometry(R, 40)), discMat, 'prop_disc', prop);
   disc.castShadow = false;
   disc.receiveShadow = false;
+  // Seen from the seat the turning prop is only a faint flicker: the blur disc is much fainter when
+  // the camera is close to it (cockpit views), and the solid blades are hidden above ~800 rpm there.
+  // The camera distance is measured in the disc's onBeforeRender (no allocation).
+  let camNear = false;
+  let discBlur = 0;
+  const discPos = new THREE.Vector3();
+  const camPos = new THREE.Vector3();
+  disc.onBeforeRender = (_r, _s, camera) => {
+    discPos.setFromMatrixPosition(disc.matrixWorld);
+    camPos.setFromMatrixPosition(camera.matrixWorld);
+    camNear = discPos.distanceToSquared(camPos) < 3.5 * 3.5;
+    discMat.opacity = (camNear ? 0.08 : 0.35) * discBlur;
+  };
 
   // ---------------------------------------------------------------- wings, struts, flaps, ailerons
   const wings = new THREE.Group();
@@ -569,6 +586,33 @@ export function createC172Exterior(vars: SimVars, opts: C172ExteriorOptions = {}
   const landSpot = spot(0xfff0dc, [ll.xLe + 0.02, -1.9, ll.z], [80, -1.9, 4.5], 10, 'landing');
   const taxiSpot = spot(0xfff0dc, [tl.xLe + 0.02, -2.15, tl.z], [30, -2.5, 1.9], 26, 'taxi');
 
+  // ---------------------------------------------------------------- fire and smoke cues (systems/fire.ts)
+  // POH 172S Sec 3 amplified "Fires": the airplane has no fire detection; the pilot recognises a fire from flames,
+  // smoke and odour. SCOPE: flickering glow sprites (flames) and a grey smoke puff at the lower cowl (engine
+  // compartment fire) and at the left wing light bay (wing fire), not a particle simulation. Hidden (no draw calls)
+  // while nothing burns.
+  const cue = (color: number, pos: [number, number, number], scale: number, parent: THREE.Object3D, additive: boolean, name: string) => {
+    const m = track(new THREE.SpriteMaterial({ color, map: glowTex, transparent: true, blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending, depthWrite: false, opacity: 0 }));
+    const sp = new THREE.Sprite(m);
+    sp.name = name;
+    sp.scale.setScalar(scale);
+    sp.position.copy(bl(...pos));
+    sp.visible = false;
+    parent.add(sp);
+    return { sp, m, scale };
+  };
+  const cowlFlame = cue(0xff6a1a, [sta(-10), 0.1, hz(0.66)], 0.9, nose, true, 'fire_cowl');
+  const cowlSmoke = cue(0x55575a, [sta(8), 0.05, hz(0.7)], 2.2, nose, false, 'smoke_cowl');
+  const wingFlame = cue(0xff6a1a, [ll.xLe - 0.15, -2.0, ll.z + 0.05], 0.8, wings, true, 'fire_wing');
+  const wingSmoke = cue(0x55575a, [ll.xLe - 1.3, -2.1, ll.z - 0.1], 1.8, wings, false, 'smoke_wing');
+  let fireT = 0;
+  const setCue = (c: { sp: THREE.Sprite; m: THREE.SpriteMaterial; scale: number }, level: number, flicker: number) => {
+    c.sp.visible = level > 0.02;
+    if (!c.sp.visible) return;
+    c.m.opacity = Math.min(1, level * 1.4) * flicker;
+    c.sp.scale.setScalar(c.scale * (0.6 + 0.6 * level) * (0.9 + 0.2 * flicker));
+  };
+
   for (const c of root.children) if (c.userData.visibleFromCockpit === undefined) c.userData.visibleFromCockpit = false;
 
   // ---------------------------------------------------------------- animation
@@ -594,8 +638,10 @@ export function createC172Exterior(vars: SimVars, opts: C172ExteriorOptions = {}
     propAngle = (propAngle + ((rpm * 2 * Math.PI) / 60) * dt) % (2 * Math.PI);
     blades.rotation.z = -propAngle; // clockwise seen from the cockpit
     const blur = Math.max(0, Math.min(1, (rpm - 500) / 900));
-    discMat.opacity = 0.35 * blur;
-    for (const b of blades.children) b.visible = blur < 0.98 || dt === 0;
+    discBlur = blur;
+    discMat.opacity = (camNear ? 0.08 : 0.35) * blur;
+    const showBlades = (blur < 0.98 || dt === 0) && !(camNear && rpm > 800);
+    for (const b of blades.children) b.visible = showBlades;
 
     // Flaps (single-slot, 0-30 deg), trailing edge down = positive.
     const flaps = v.get(SURF.flapsDeg) * D2R;
@@ -652,6 +698,16 @@ export function createC172Exterior(vars: SimVars, opts: C172ExteriorOptions = {}
     const k = v.get(WORLD_VARS.renderUnitsPerLux, 3e-5);
     landSpot.intensity = land * (led ? 250_000 : 150_000) * k;
     taxiSpot.intensity = taxi * (led ? 60_000 : 40_000) * k;
+
+    // Fire / smoke cues.
+    fireT += dt;
+    const fl = 0.75 + 0.25 * Math.sin(fireT * 23) * Math.sin(fireT * 7.3);
+    const fe = v.get(C172.fireEngine);
+    setCue(cowlFlame, fe, fl);
+    setCue(cowlSmoke, fe * 0.6, 1);
+    const fw = v.get(C172.fireWing);
+    setCue(wingFlame, fw, fl);
+    setCue(wingSmoke, fw * 0.6, 1);
   }
 
   update(0);

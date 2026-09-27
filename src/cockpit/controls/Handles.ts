@@ -57,6 +57,8 @@ export interface TBarHandleOptions extends ControlOptions {
   legend?: string;
   material?: MaterialName | THREE.Material;
   scale?: number;
+  /** 'tbar' style: grip bar width (m, before `scale`). Default 0.056. Appended (Cessna 172S wide parking-brake bar). */
+  barWidth?: number;
 }
 
 export class TBarHandle extends ControlBase {
@@ -224,8 +226,9 @@ export class TBarHandle extends ControlBase {
     let faceH = 0.012 * s;
     switch (style) {
       case 'tbar': {
-        this.mesh(this.geo(`tbar.bar.${s}`, () => {
-          const bar = roundedBox(0.056 * s, 0.013 * s, 0.014 * s, 0.006 * s, 3);
+        const bw = this.o.barWidth ?? 0.056;
+        this.mesh(this.geo(`tbar.bar.${s}${bw === 0.056 ? '' : `.${bw}`}`, () => {
+          const bar = roundedBox(bw * s, 0.013 * s, 0.014 * s, 0.006 * s, 3);
           transform(bar, 0, 0, 0.02 * s);
           return bar;
         }), m, this.turn);
@@ -295,7 +298,7 @@ export class TBarHandle extends ControlBase {
       const l = this.engrave(this.o.legend, 0, 0, { height: Math.min(0.0028, faceH * 0.45), weight: 700, zone: 'panel' }, this.turn, true);
       l.position.z = faceZ;
     }
-    const hbW = style === 'fire' ? 0.078 : style === 'tbar' ? 0.06 : 0.04;
+    const hbW = style === 'fire' ? 0.078 : style === 'tbar' ? Math.max(0.06, (this.o.barWidth ?? 0.056) + 0.004) : 0.04;
     this.addHitBox(hbW * s, 0.04 * s, 0.04 * s, 0, 0, 0.02 * s, this.slide);
   }
 }
@@ -323,6 +326,8 @@ export interface PushPullKnobOptions extends ControlOptions {
   material?: MaterialName | THREE.Material;
   /** Pixels of drag for full travel (default 250). */
   dragPxFull?: number;
+  /** Number of flutes on a 'throttle' / 'mixture' (fluted) cap (default: knob library default). Appended. */
+  ridges?: number;
 }
 
 /** Cessna-style push-pull control. Internally `logic.value` = fraction pulled out (0 = in, 1 = out). */
@@ -355,7 +360,8 @@ export class PushPullKnob extends ControlBase {
     const travel = o.travel ?? 0.07;
     this.mesh(this.geo(`pp.shaft.${travel}`, () => cylinderZ(0.0032, 0.0032, -travel, 0.006, 16)), 'chrome', this.spin);
     const mat = o.material ?? (style === 'mixture' ? 'knobRed' : 'knob');
-    const knob = this.mesh(this.geo(`pp.knob.${style}.${d}`, () => knobGeometry({ style: style === 'throttle' || style === 'mixture' ? 'fluted' : 'smooth', diameter: d, height: d * 0.55, ridges: 20 })), typeof mat === 'string' ? env.materials.get(mat) : mat, this.spin);
+    const ridges = o.ridges ?? 20;
+    const knob = this.mesh(this.geo(`pp.knob.${style}.${d}${ridges === 20 ? '' : `.r${ridges}`}`, () => knobGeometry({ style: style === 'throttle' || style === 'mixture' ? 'fluted' : 'smooth', diameter: d, height: d * 0.55, ridges })), typeof mat === 'string' ? env.materials.get(mat) : mat, this.spin);
     knob.position.z = 0.005;
     const faceZ = 0.005 + d * 0.55 * 1.02 + 0.0001;
     if (o.lockButton ?? style === 'mixture') {

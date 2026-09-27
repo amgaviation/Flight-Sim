@@ -93,9 +93,10 @@ export const G1000_BREAKERS: C172Breaker[] = [
   { name: 'taxi_lt', label: 'TAXI LT', ratingA: 10, bus: 'bus2' },
   { name: 'strobe_lts', label: 'STROBE LTS', ratingA: 5, bus: 'bus2' },
   { name: 'panel_lts', label: 'PANEL LTS', ratingA: 5, bus: 'bus2' },
-  // CROSSFEED BUS (ratings EST: not listed by UND)
+  // CROSSFEED BUS (not listed by UND): both caps read "5" on the photograph Wikimedia Commons
+  // "Cessna 172SP G1000 01.jpg" (X-FEED BUS row: ALT FIELD 5, WARN 5).
   { name: 'alt_field', label: 'ALT FIELD', ratingA: 5, bus: 'xfeed' },
-  { name: 'warn', label: 'WARN', ratingA: 2, bus: 'xfeed' },
+  { name: 'warn', label: 'WARN', ratingA: 5, bus: 'xfeed' },
   // ESSENTIAL BUS
   { name: 'pfd_ess', label: 'PFD', ratingA: 5, bus: 'ess' },
   { name: 'adc_ahrs_ess', label: 'ADC AHRS', ratingA: 10, bus: 'ess' },
@@ -143,7 +144,10 @@ function lightLoads(list: C172Breaker[], v: C172Variant): LoadDef[] {
       : [{ id: 'glareshield_lt', bus: 'bus1', amps: `1.0 * ${C172.dimGlareshield}`, model: 'resistive' as const, cb: cb(list, 'cabin_lts_pwr') }]),
     { id: 'flood_lts', bus: 'bus1', amps: `0.5 * (${C172.floodLeft} + ${C172.floodRight})`, model: 'resistive', cb: cb(list, 'cabin_lts_pwr') },
     { id: 'dome_courtesy', bus: 'bus1', amps: 1.5, model: 'resistive', enabled: C172.domeCourtesy, cb: cb(list, 'cabin_lts_pwr') },
-    { id: 'cabin_12v', bus: 'bus1', amps: 1.0, enabled: C172.cabinPwr12v, cb: cb(list, 'cabin_lts_pwr') },
+    // G1000 NXi: the 28 -> 12 VDC converter (POH NAV III Sec 7 "12V power outlet", 10 A max at 12 V) idles at
+    // EST 0.1 A and draws EST 2.5 A with a portable device charging (12 V x 5 A / 0.85 efficiency / 28 V),
+    // `ac.c172g.outlet_device` = device plugged in (c172-g1000 pedestal). Steam: EST 1.0 A constant.
+    { id: 'cabin_12v', bus: 'bus1', amps: g ? '0.1 + 2.5 * ac.c172g.outlet_device' : 1.0, enabled: C172.cabinPwr12v, cb: cb(list, 'cabin_lts_pwr') },
   ];
 }
 
@@ -162,16 +166,22 @@ export const STEAM_LOADS = (list = STEAM_BREAKERS): LoadDef[] => [
   // AVIONICS BUS 1
   { id: 'avn_fan', bus: 'avn1', amps: 0.5, cb: cb(list, 'avn_fan') },
   { id: 'gps', bus: 'avn1', amps: 1.8, cb: cb(list, 'gps') }, // GPS/MFD (KLN 94 / GNS 430 class)
-  { id: 'gyro', bus: 'avn1', amps: 1.0, cb: cb(list, 'gyro') }, // HSI slaved gyro (option)
-  { id: 'nav_com1', bus: 'avn1', amps: 1.1, cb: cb(list, 'nav_com1') }, // KX 155A #1 + KMA 26 audio panel
+  // GYRO breaker feeds "TO HSI" (Fig 7-7A): the optional slaved HSI gyro. The modelled NAV II airplane has the
+  // vacuum DG, so the breaker is fitted with no equipment behind it (0 A).
+  { id: 'gyro', bus: 'avn1', amps: 0, cb: cb(list, 'gyro') },
+  // Fig 7-7A legend: audio panel "(1) BASE" on NAV/COM 1, "(2) ALL OTHERS" (the NAV II KMA 28) on NAV/COM 2.
+  { id: 'nav_com1', bus: 'avn1', amps: 1.1, cb: cb(list, 'nav_com1') }, // KX 155A #1
   // AVIONICS BUS 2
-  { id: 'nav_com2', bus: 'avn2', amps: 0.6, cb: cb(list, 'nav_com2') },
+  { id: 'nav_com2', bus: 'avn2', amps: 1.1, cb: cb(list, 'nav_com2') }, // KX 155A #2 0.6 A + KMA 28 audio panel EST 0.5 A
   { id: 'xpndr', bus: 'avn2', amps: 0.8, cb: cb(list, 'xpndr') }, // KT 76C
   { id: 'autopilot', bus: 'avn2', amps: 1.2, cb: cb(list, 'autopilot') }, // KAP 140 computer + servos (EST)
   { id: 'adf', bus: 'avn2', amps: 0.5, cb: cb(list, 'adf') }, // KR 87
   // Davtron clock keep-alive from the battery through the PDM glass fuse (POH Sec 7 "Circuit breakers and fuses").
   { id: 'clock_mem', bus: 'batt_bus', amps: 0.01 },
 ];
+
+/** Avionics fan relay: both AVIONICS switches ON (POH NAV III 7-73). */
+const FANS_ON = `${C172.avionicsBus1} > 0.5 && ${C172.avionicsBus2} > 0.5`;
 
 export const G1000_LOADS = (list = G1000_BREAKERS): LoadDef[] => [
   ...lightLoads(list, 'g1000'),
@@ -189,13 +199,20 @@ export const G1000_LOADS = (list = G1000_BREAKERS): LoadDef[] => [
   { id: 'comm1', bus: 'ess', amps: 0.6, cb: cb(list, 'comm1') }, // GIA 63W #1 COM (receive)
   { id: 'stby_ind_lts', bus: 'ess', amps: `0.3 * ${C172.dimStbyInd}`, model: 'resistive', cb: cb(list, 'stdby_ind_lts') },
   // Dual-fed units (load on the diode-ORed unit bus)
-  { id: 'pfd', bus: 'lru_pfd', amps: 2.2 }, // GDU 1040/1050 PFD + deck-skin cooling fans
+  { id: 'pfd', bus: 'lru_pfd', amps: 1.7 }, // GDU 1040/1050 PFD (its cooling fans are the fan_* loads below)
   { id: 'adc_ahrs', bus: 'lru_adc_ahrs', amps: 1.2 }, // GDC 72/74 + GRS 79
   { id: 'nav1_eng', bus: 'lru_nav1_eng', amps: 2.6 }, // GIA 63W #1 NAV/GPS + GEA 71 engine/airframe unit
   // AVIONICS BUS 2
-  { id: 'mfd', bus: 'avn2', amps: 2.2, cb: cb(list, 'mfd') }, // GDU MFD + MFD fan
+  { id: 'mfd', bus: 'avn2', amps: 1.95, cb: cb(list, 'mfd') }, // GDU MFD
   { id: 'xpndr', bus: 'avn2', amps: 1.2, cb: cb(list, 'xpndr') }, // GTX 33/345
-  { id: 'nav2', bus: 'avn2', amps: 2.0, cb: cb(list, 'nav2') }, // GIA 63W #2 + aft avionics fan
+  { id: 'nav2', bus: 'avn2', amps: 1.75, cb: cb(list, 'nav2') }, // GIA 63W #2
+  // Avionics cooling fans (POH NAV III 7-73: they run only with MASTER BAT and AVIONICS BUS 1 and BUS 2 ON; none on
+  // the standby battery. Fig 7-7 sheet 2: deckskin and PFD fans on the AVN 1 PFD breaker, MFD fan on the MFD
+  // breaker, aft (tailcone) fan on the NAV 2 breaker). EST 0.25 A each.
+  { id: 'fan_deck', bus: 'avn1', amps: 0.25, enabled: FANS_ON, cb: cb(list, 'pfd_avn1') },
+  { id: 'fan_pfd', bus: 'avn1', amps: 0.25, enabled: FANS_ON, cb: cb(list, 'pfd_avn1') },
+  { id: 'fan_mfd', bus: 'avn2', amps: 0.25, enabled: FANS_ON, cb: cb(list, 'mfd') },
+  { id: 'fan_aft', bus: 'avn2', amps: 0.25, enabled: FANS_ON, cb: cb(list, 'nav2') },
   { id: 'comm2', bus: 'avn2', amps: 0.6, cb: cb(list, 'comm2') },
   { id: 'audio', bus: 'avn2', amps: 0.9, cb: cb(list, 'audio') }, // GMA 1347/1360
   { id: 'autopilot', bus: 'avn2', amps: 1.5, cb: cb(list, 'autopilot') }, // GFC 700 servos (GSA 81 x3) + GSM
@@ -249,7 +266,11 @@ export function c172ElectricalConfig(variant: C172Variant, opts: C172ElectricalO
         ambientC: 'fdm.sat_c',
       },
       // Standby battery (POH NAV III equipment list 24-07-S, AVT 200413, 14.0 lb): capacity EST (preset).
-      ...(g ? [{ id: 'stby_batt', bus: 'stby_bus', ...BATTERY_172S_STANDBY, ambientC: 'fdm.sat_c' }] : []),
+      // The controller charges it from the ESS bus through a current-limited charger: EST float voltage 28.0 V and
+      // ~2 ohm effective charge path, so a full battery floats at ~0.2-0.3 A at the ~28.3-28.5 V ESS bus (POH NAV III
+      // 7-54: "After engine start, with the STBY BATT switch in the ARM position, the standby battery ammeter should
+      // indicate a charge") and a discharged one takes ~1.5-2 A.
+      ...(g ? [{ id: 'stby_batt', bus: 'stby_bus', ...BATTERY_172S_STANDBY, fullChargeV: 28.0, chargeResistanceFactor: 50, ambientC: 'fdm.sat_c' }] : []),
     ],
     dcGenerators: [
       {

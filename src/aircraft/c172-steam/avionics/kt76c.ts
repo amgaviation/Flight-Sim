@@ -16,22 +16,23 @@
  * Outputs: xpdr.code / xpdr.mode (core NAV vars: 0 off, 1 stby, 2 on, 3 alt) / xpdr.ident,
  * and the display state vars in KT. Power: XPNDR breaker (avionics bus 2).
  *
+ * Altitude: the shared blind encoder (encoder.ts, ENC.*), which also feeds the KAP 140. In ALT the
+ * transponder replies with Mode A and Mode C (Supplement 2); without valid encoder data there is no
+ * altitude to report, so xpdr.mode is 2 (Mode A only) and the altitude display is dashed.
+ *
  * EST: interrogations are assumed every 4.8 s (terminal radar antenna at 12.5 rpm) while
- * the transponder is replying; the blind encoder needs a 60 s warm-up after power-up (the
- * KAP 140 supplement notes the encoder may need up to 3 minutes; 60 s at a temperate cabin).
+ * the transponder is replying.
  */
 import type { Subsystem } from '../../types';
 import type { SimContext } from '../../../core/SimContext';
 import { NAV } from '../../../core/vars';
-import { SENSOR_VARS } from '../../../systems/sensors/vars';
-import { EV, KT } from '../vars';
+import { ENC, EV, KT } from '../vars';
 import { Button, onEvent } from './util';
 
 export const KT_MODE = { off: 0, sby: 1, tst: 2, on: 3, alt: 4 } as const;
 const CODE_DELAY_S = 5;
 const IDENT_S = 18;
 const SWEEP_S = 4.8;
-const ENCODER_WARMUP_S = 60;
 
 export class Kt76cLogic implements Subsystem {
   readonly name = 'kt76c';
@@ -46,8 +47,6 @@ export class Kt76cLogic implements Subsystem {
   private identT = 0;
   private sweepT = 0;
   private replyT = 0;
-  private warmT = 0;
-  private wasOn = false;
   private readonly offs: (() => void)[] = [];
   private readonly bIdt: Button;
 
@@ -111,8 +110,6 @@ export class Kt76cLogic implements Subsystem {
     const mode = Math.round(v.get(KT.mode));
     this.bIdt.update(dt);
     v.set(KT.on, on ? 1 : 0);
-    if (on && !this.wasOn) this.warmT = 0;
-    this.wasOn = on;
     if (!on) {
       this.identT = 0;
       this.entry.length = 0;
@@ -126,7 +123,6 @@ export class Kt76cLogic implements Subsystem {
       v.set(NAV.xpdrCode, this.code);
       return;
     }
-    this.warmT += dt;
     // Code entry: pending code goes live after 5 s; an incomplete entry is abandoned after 5 s idle (EST).
     if (this.pendingCode >= 0) {
       this.pendingT -= dt;
@@ -158,7 +154,9 @@ export class Kt76cLogic implements Subsystem {
     }
     if (mode === KT_MODE.tst) reply = true;
     v.set(KT.reply, reply ? 1 : 0);
-    v.set(NAV.xpdrMode, mode === KT_MODE.alt ? 3 : mode === KT_MODE.on ? 2 : 1);
+    const encValid = v.get(ENC.valid) > 0.5;
+    // Mode C only with valid encoder data (no altitude to report otherwise): ALT falls back to Mode A.
+    v.set(NAV.xpdrMode, mode === KT_MODE.alt ? (encValid ? 3 : 2) : mode === KT_MODE.on ? 2 : 1);
     v.set(NAV.xpdrCode, this.code);
     v.set(NAV.xpdrIdent, this.identT > 0 ? 1 : 0);
     // Display: digits being entered (left-filled) or the pending / active code.
@@ -170,20 +168,13 @@ export class Kt76cLogic implements Subsystem {
     v.set(KT.display, disp);
     v.set(KT.entry, this.entry.length);
     v.set(KT.vfrCode, this.vfrCode);
-    // Blind encoder on the static system: pressure altitude of the pneumatic static source.
-    const encValid = this.warmT >= ENCODER_WARMUP_S && v.get(SENSOR_VARS.staticBlocked(1)) < 0.5;
-    v.set(KT.altHft, mode === KT_MODE.alt && encValid ? Math.round(v.get(SENSOR_VARS.pressAlt(1)) / 100) : -9999);
+    // Blind encoder (shared with the KAP 140): Gillham altitude in hundreds of feet.
+    v.set(KT.altHft, mode === KT_MODE.alt && encValid ? v.get(ENC.gillhamHft) : -9999);
   }
 
-  /** Encoder warmed up (the altitude display and Mode C reporting are valid). */
+  /** Shared encoder valid (the altitude display and Mode C reporting). */
   get encoderValid(): boolean {
-    return this.warmT >= ENCODER_WARMUP_S;
-  }
-
-  /** Skips the warm-up (state presets with the avionics already running). */
-  warm(): void {
-    this.warmT = ENCODER_WARMUP_S;
-    this.wasOn = this.on;
+    return this.vars.get(ENC.valid) > 0.5;
   }
 
   reset(): void {

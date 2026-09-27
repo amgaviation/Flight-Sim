@@ -13,7 +13,8 @@
  *    "Control locks"); rudder free (the rudder gust lock is an external item).
  *  - ACU: an alternator over-voltage opens the ALT FLD / ALT FIELD breaker (POH Sec 7).
  *  - G1000 standby battery controller: releases the standby battery onto the ESS bus when
- *    ARMed and the main bus is below 20 V; TEST lamp logic (POH NAV III Sec 4/7).
+ *    ARMed and the main bus (sensed through the WARN breaker) is below 20 V or the MASTER BAT
+ *    switch is OFF; TEST lamp logic (POH NAV III Sec 4/7).
  *
  * C172LateLogic (last): annunciator conditions and the steam annunciator-panel lamps, the
  * hour meter, electrical readouts (G1000 EIS M/E BUS VOLTS, M/S BATT AMPS; steam analog
@@ -22,18 +23,29 @@
 import type { Subsystem } from '../../types';
 import type { SimContext } from '../../../core/SimContext';
 import type { FailureDef } from '../../../systems/failures';
-import { ENG, FDM, INPUT } from '../../../core/vars';
+import { ENG, FDM, INPUT, SURF } from '../../../core/vars';
 import { Hysteresis, OnDelay } from '../../../systems/util';
 import { SENSOR_VARS } from '../../../systems/sensors/vars';
-import { ANN, ANN_SW, C172, C172_FAIL, ELT_SW, MAG, STBY_BATT } from '../vars';
+import { ANN, ANN_SW, C172, C172_FAIL, DOOR, ELT_SW, MAG, STBY_BATT } from '../vars';
 import { ELEC_DATA, FUEL_DATA, KG_PER_GAL } from '../data';
 import type { C172Variant } from './electrical';
 
 const f = (id: string) => `fail.${id}`;
 
+/** Cabin door in flight (POH Sec 3 NOTE "Inadvertent opening of a cabin door in flight"). */
+export const DOOR_DATA = {
+  /** POH: the door trails "approximately 3 inches open": ~3 in at the aft edge of a ~36 in door = ~5 deg of the ~55 deg swing (EST). */
+  trailPos: 0.09,
+  /** EST: above this the slipstream holds an unlatched door in its trail position. */
+  trailAboveKias: 40,
+  /** EST: POH advises trimming to 75 KIAS before closing; above ~85 KIAS the air load holds it open. */
+  maxCloseKias: 85,
+} as const;
+
 export class C172Logic implements Subsystem {
   readonly name = 'c172-logic';
   private prevAlt = 0;
+  private prevKeyIn = true;
   private prevBat = 0;
   private prevAltTripped = 0;
   private readonly stbyRelease = new Hysteresis(ELEC_DATA.stbyTakeoverV, ELEC_DATA.stbyTakeoverV + 1, true);
@@ -56,6 +68,12 @@ export class C172Logic implements Subsystem {
       { id: C172_FAIL.mufflerLeak, name: 'Muffler shroud crack', category: 'cabin', description: 'Carbon monoxide in the cabin with CABIN HT on.' },
       { id: C172_FAIL.fuelXmtrL, name: 'Left fuel quantity transmitter', category: 'fuel', description: 'Needle to OFF, L LOW FUEL annunciation.' },
       { id: C172_FAIL.fuelXmtrR, name: 'Right fuel quantity transmitter', category: 'fuel', description: 'Needle to OFF, LOW FUEL R annunciation.' },
+      ...(this.variant === 'g1000'
+        ? [
+            { id: C172_FAIL.coDetSrvc, name: 'CO detector needs service', category: 'cabin', description: 'CO DET SRVC system message (detector still works).' },
+            { id: C172_FAIL.coDetFail, name: 'CO detector failure', category: 'cabin', description: 'CO DET FAIL system message; CO LVL HIGH can no longer be annunciated.' },
+          ]
+        : []),
     ];
   }
 
@@ -63,6 +81,7 @@ export class C172Logic implements Subsystem {
     this.prevAlt = this.vars.get(C172.masterAlt);
     this.prevBat = this.vars.get(C172.masterBat);
     this.prevAltTripped = this.vars.get('elec.alt_tripped');
+    this.prevKeyIn = this.vars.get(C172.keyIn, 1) >= 0.5;
   }
 
   update(): void {
@@ -82,7 +101,15 @@ export class C172Logic implements Subsystem {
     this.prevBat = bat;
 
     // ---- ignition key and magnetos
-    if (v.get(C172.keyIn, 1) < 0.5 && v.get(C172.magneto) !== MAG.off) v.set(C172.magneto, MAG.off);
+    // The key can be withdrawn only in OFF (key-operated OFF/R/L/BOTH/START switch, POH Sec 7 "Ignition-starter
+    // system"): a removal attempt in any other position leaves the key in; without the key the switch cannot
+    // leave OFF.
+    const keyIn = v.get(C172.keyIn, 1) >= 0.5;
+    if (!keyIn && v.get(C172.magneto) !== MAG.off) {
+      if (this.prevKeyIn) v.set(C172.keyIn, 1);
+      else v.set(C172.magneto, MAG.off);
+    }
+    this.prevKeyIn = v.get(C172.keyIn, 1) >= 0.5;
     const mag = Math.round(v.get(C172.magneto));
     const left = mag === MAG.left || mag === MAG.both || mag === MAG.start;
     const right = mag === MAG.right || mag === MAG.both || mag === MAG.start;
@@ -110,8 +137,16 @@ export class C172Logic implements Subsystem {
     // ---- G1000 standby battery controller
     if (this.variant === 'g1000') {
       const sw = Math.round(v.get(C172.stbyBatt));
-      const mainLow = this.stbyRelease.update(v.get('elec.xfeed_v'));
-      v.set('ac.c172.stby_release', sw === STBY_BATT.arm && mainLow ? 1 : 0);
+      // Main bus voltage sense: from the crossfeed bus through the WARN breaker (POH NAV III Fig 7-7 sheets
+      // 2/3 "Main Bus Voltage Sense"); a pulled or tripped WARN breaker reads as a low main bus.
+      const sense = v.get('elec.warn_powered') > 0.5 ? v.get('elec.warn_v') : 0;
+      const mainLow = this.stbyRelease.update(sense);
+      // The sense above is last update's voltage. With the MASTER BAT switch OFF the main buses have no
+      // source at all this update (alternator field and external power both need BAT, POH Sec 7), so the
+      // controller is released in the same update: MASTER OFF with STBY BATT ARM keeps the ESS bus powered
+      // without a dropout (POH 172SPHBUS-00 7-51: "the standby battery will power the essential bus").
+      const noMain = v.get(C172.masterBat) < 0.5;
+      v.set('ac.c172.stby_release', sw === STBY_BATT.arm && (mainLow || noMain) ? 1 : 0);
       // TEST: the green lamp stays lit while the battery holds its voltage under the test load
       // (EST threshold 23.5 V under ~3 A: fails a battery below ~20 % charge).
       v.set(C172.stbyTestLamp, sw === STBY_BATT.test && v.get('elec.stby_batt_v') >= 23.5 ? 1 : 0);
@@ -149,6 +184,8 @@ export class C172LateLogic implements Subsystem {
   private co = 0;
   private cabinT = NaN;
   private fog = 0;
+  private readonly doorPos = [0, 0];
+  private readonly doorWasOpen = [false, false];
 
   constructor(
     private readonly vars: SimContext['vars'],
@@ -166,6 +203,11 @@ export class C172LateLogic implements Subsystem {
     this.co = 0;
     this.cabinT = NaN;
     this.fog = 0;
+    for (const side of [0, 1]) {
+      const st = Math.round(v.get(side === 0 ? C172.doorLeft : C172.doorRight, DOOR.closed));
+      this.doorWasOpen[side] = st === DOOR.open;
+      this.doorPos[side] = st === DOOR.open ? (v.get(FDM.ias) > DOOR_DATA.trailAboveKias ? DOOR_DATA.trailPos : 1) : 0;
+    }
   }
 
   update(dt: number): void {
@@ -244,8 +286,8 @@ export class C172LateLogic implements Subsystem {
     v.set(C172.starterEngaged, v.get('elec.starter_engaged'));
     v.set(C172.stallHorn, v.get('alert.stall_horn'));
 
-    // ---------------------------------------------------------------- ELT (Artex ME406 / 406 MHz)
-    // Remote switch ON transmits; ARM/AUTO transmits after an impact (crash or > ~2.3 g
+    // ---------------------------------------------------------------- ELT (steam: Pointer 3000-11, Supplement 4)
+    // Remote switch ON transmits; AUTO transmits after an impact (crash or > ~2.3 g
     // longitudinal deceleration, EST G-switch); RESET/TEST stops it.
     const elt = Math.round(v.get(C172.elt));
     if (v.get(FDM.crashed) > 0.5 || v.get(FDM.nx) < -2.3) this.eltLatched = true;
@@ -254,6 +296,38 @@ export class C172LateLogic implements Subsystem {
 
     // ---------------------------------------------------------------- cabin heat / air / defrost / CO
     this.updateCabin(dt);
+    this.updateDoors(dt);
+  }
+
+  /**
+   * Cabin doors (POH 7-27 / Sec 3 "Inadvertent opening of a cabin door in flight" NOTE): an unlatched door
+   * trails about 3 in open in flight ("the door will trail in a position approximately 3 inches open"), with
+   * some drag, buffet and wind noise. To close it the pilot slows down (POH: trim to 75 KIAS, then pull the
+   * door shut); above DOOR_DATA.maxCloseKias the air load holds it open, so the door state returns to OPEN.
+   * On the ground an unlatched door swings fully open. Drag: the door increments `surf.speedbrake`, which the
+   * 172S FDM maps to CD_speedbrake (fdm.ts, EST) and to the FDM buffet.
+   */
+  private updateDoors(dt: number): void {
+    const v = this.vars;
+    const ias = v.get(FDM.ias);
+    const flying = ias > DOOR_DATA.trailAboveKias;
+    let drag = 0;
+    for (const side of [0, 1] as const) {
+      const doorVar = side === 0 ? C172.doorLeft : C172.doorRight;
+      const posVar = side === 0 ? C172.doorLeftPos : C172.doorRightPos;
+      let st = Math.round(v.get(doorVar, DOOR.closed));
+      const wasOpen = this.doorWasOpen[side];
+      if (st !== DOOR.open && wasOpen && ias > DOOR_DATA.maxCloseKias) {
+        st = DOOR.open;
+        v.set(doorVar, DOOR.open);
+      }
+      this.doorWasOpen[side] = st === DOOR.open;
+      const target = st === DOOR.open ? (flying ? DOOR_DATA.trailPos : 1) : 0;
+      this.doorPos[side] += (target - this.doorPos[side]) * (1 - Math.exp(-dt / 0.4));
+      v.set(posVar, this.doorPos[side]);
+      if (flying) drag += Math.min(this.doorPos[side], DOOR_DATA.trailPos) / DOOR_DATA.trailPos;
+    }
+    v.set(SURF.speedbrake, 0.5 * drag);
   }
 
   private updateCabin(dt: number): void {
@@ -284,7 +358,11 @@ export class C172LateLogic implements Subsystem {
     this.co += (leak - this.co * (0.02 + 0.1 * ventilation)) * dt;
     if (this.co < 0) this.co = 0;
     v.set('ac.c172.co_ppm', this.co);
-    v.set(ANN.coLvlHigh, this.variant === 'g1000' && this.co > 50 ? 1 : 0); // EST alarm level 50 ppm
+    // CO detector (G1000 option, POH 7-80): EST powered through the WARN circuit; a failed ("CO DET FAIL") or
+    // unpowered detector cannot raise CO LVL HIGH. "CO DET SRVC" (needs service) still detects.
+    const det = this.variant === 'g1000' && v.get('elec.warn_powered') > 0.5 && v.get(f(C172_FAIL.coDetFail)) === 0;
+    v.set(C172.coDetOk, det ? 1 : 0);
+    v.set(ANN.coLvlHigh, det && this.co > 50 ? 1 : 0); // EST alarm level 50 ppm
   }
 }
 

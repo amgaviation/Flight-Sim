@@ -172,7 +172,9 @@ export const C172S_FDM: FdmConfig = {
     CD_mach: { x: [0, 0.3], y: [0, 0.001] },
     CD_gear: 0,
     CD_spoiler: 0,
-    CD_speedbrake: 0,
+    // EST: no speedbrake; `surf.speedbrake` carries the cabin doors trailing ~3 in open in flight (logic.ts
+    // updateDoors, 0.5 per door): ~0.05 m^2 of door edge and disturbed flow at CD ~1 over 16.2 m^2 = ~0.004 each.
+    CD_speedbrake: 0.008,
     CD_groundSpoiler: 0,
     CD_beta: 0.17, // EST
     // Lateral-directional: Roskam, Airplane Flight Dynamics Part I, Appendix B (Cessna 172 cruise).

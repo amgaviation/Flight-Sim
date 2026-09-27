@@ -51,7 +51,7 @@ describe('Cessna 172S initial states', () => {
             expect(v.get('elec.pfd_powered')).toBe(0);
           }
           expect(v.get(SURF.flapsDeg)).toBe(0);
-          expect(v.get(C172.fuelSelector)).toBe(FUEL_SEL.both);
+          expect(v.get(C172.fuelSelector)).toBe(g ? FUEL_SEL.left : FUEL_SEL.both); // G1000: POH Securing Airplane 10
           expect(v.get(C172.fuelShutoff)).toBe(1);
           // A cold airplane stays cold.
           r.run(10);

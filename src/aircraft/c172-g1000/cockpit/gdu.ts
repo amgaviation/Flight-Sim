@@ -319,7 +319,22 @@ export function buildGdu(b: CockpitBuilder, panel: Panel, cfg: G1000Resolved, g:
     const ctl = makeControl(env, c, zone, 'c172g', c.id.slice(g.length + 1));
     panel.add(ctl, x0 + mm(pos[0]), y0 + mm(pos[1]), { z: BEZEL_DEPTH });
   }
-  // Twelve softkeys under the screen (instanced keypad).
+  // Softkey divider strip above the key row and the two vertical SD card slots in the right bezel beside the
+  // COM and CRS/BARO knobs (PG 190-02177-00 Fig 1-2 / Fig 7-1, measured at 5.54 px/mm: strip x 41-274 mm at
+  // y 181 mm; slots x 280 mm, y 41-67 and 77-103 mm, ~3 mm wide). Static.
+  {
+    const strip = new THREE.Mesh(env.geometry.get('c172g.gdu.sk_strip', () => new THREE.BoxGeometry(mm(233), mm(1.1), 0.0006)), env.materials.get('plasticGrey'));
+    strip.userData.cockpitStatic = true;
+    panel.addObject(strip, x0 + mm(157.5), y0 + mm(181.2), { z: BEZEL_DEPTH + 0.0003 });
+    const slotG = env.geometry.get('c172g.gdu.sd_slot', () => extrude(roundedRectShape(mm(3), mm(26), mm(1)), { depth: 0.0005, anchor: 'back0' }));
+    for (const yc of [54, 90]) {
+      const slot = new THREE.Mesh(slotG, env.materials.get('lcdOff'));
+      slot.userData.cockpitStatic = true;
+      panel.addObject(slot, x0 + mm(280), y0 + mm(yc), { z: BEZEL_DEPTH });
+    }
+  }
+  // Twelve softkeys under the screen (instanced keypad); each key carries the printed up-triangle
+  // (PG Fig 1-2); the function legends are drawn by the display above each key.
   const keyW = 0.012;
   const pitch = 0.018;
   panel.add(
@@ -327,7 +342,8 @@ export function buildGdu(b: CockpitBuilder, panel: Panel, cfg: G1000Resolved, g:
       id: `c172g.${g}.softkeys`,
       label: `${g.toUpperCase()} SOFTKEYS`,
       eventPrefix: `g1k.${g}.sk`,
-      rows: [Array.from({ length: 12 }, (_, i) => ({ id: String(i + 1), label: '' }))],
+      rows: [Array.from({ length: 12 }, (_, i) => ({ id: String(i + 1), label: '▲' }))],
+      legendHeight: 0.0018,
       keyWidth: keyW,
       keyHeight: 0.0068,
       gap: pitch - keyW,
@@ -339,7 +355,13 @@ export function buildGdu(b: CockpitBuilder, panel: Panel, cfg: G1000Resolved, g:
   );
 }
 
-/** GMA 1360 key grid (mm): rows 14 mm apart from y 11, columns at x 9.5 / 24.5 (photograph). */
+/**
+ * GMA 1360 key grid (mm): rows 14 mm apart from y 11, columns at x 9.5 / 24.5 (photograph).
+ * SCOPE: the ADF (and DME) receiver keys are fitted on every GMA 1360, but the optional KR 87 ADF (POH
+ * Fig 7-2 item 13, "if installed") and DME are not installed in this simulation (their AVN BUS 1 breaker
+ * holes carry blank plugs, panel.ts CB_RIGHT): the keys select / deselect the receiver audio and light
+ * their annunciators as on an airplane without the receiver, and there is no ADF / DME audio to hear.
+ */
 const GMA_POS: Record<string, [number, number]> = {
   com1_mic: [9.5, 11],
   com1: [24.5, 11],

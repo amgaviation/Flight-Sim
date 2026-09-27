@@ -63,14 +63,30 @@ export const YOKE = { y: 9.2 * IN, x: sta(PANEL.fs) - 0.2, z: hz(PANEL.topH - 11
 /** Rudder pedals: floor pivots near the firewall (EST FS 6), 0.23 m apart per seat. */
 export const PEDALS = { x: sta(6), y: 9.2 * IN, z: hz(0.74), spacing: 0.23 };
 
-/** Glareshield: brow 1.2 in aft of the panel face, top 1.60 m, forward to the windshield base (EST FS 12). */
+/** Glareshield: brow 1.2 in aft of the panel face, top 1.60 m (at the centre), forward to the windshield base (EST FS 12). */
 export const GLARE = { browX: sta(PANEL.fs + 1.2), topH: 1.6, depth: 0.19, drop: 0.03 };
 
 /**
- * Pedestal below the lower centre panel (POH Fig 7-2 items 20-25): face from the panel's lower edge
- * (FS 18.5) down and aft to the floor at FS 26, 5.2 in wide (photograph proportions, EST).
+ * Glareshield / upper panel edge arc (POH Fig 7-2; photographs "Cessna 172SP G1000 01.jpg" and "C172S G1000
+ * in flight.jpg"): the padded hood's aft edge follows a gentle arc across the panel and sweeps down around
+ * the outboard corners ("ears"), and the grey panel's top edge follows it.
+ * EST from the photographs: 0.6 in lower at X = +/-15 in than at the centre (parabolic), plus an extra
+ * 1.2 in drop over the outboard 2.75 in (the ears); the brow flange also reaches 0.8 in lower at the ears.
  */
-export const PEDESTAL = { topFs: 18.6, botFs: 26, topH: PANEL.topH - PANEL_H + 0.002, botH: FLOOR_H + 0.03, width: 5.2 * IN };
+export const GLARE_ARC = { rise: 0.6, halfSpan: 15, ear: 1.2, earStart: 17, earEnd: 19.75, earFlange: 0.8 };
+/** Drop (inches) of the glareshield brow / upper panel edge below its centre height at X inches from the centreline. */
+export function glareSagIn(Xin: number): number {
+  const a = Math.abs(Xin);
+  const t = Math.min(1, Math.max(0, (a - GLARE_ARC.earStart) / (GLARE_ARC.earEnd - GLARE_ARC.earStart)));
+  return GLARE_ARC.rise * (a / GLARE_ARC.halfSpan) ** 2 + GLARE_ARC.ear * t * t * (3 - 2 * t);
+}
+
+/**
+ * Centre pedestal (POH Fig 7-2 items 20-25): face from the panel's lower edge (FS 18.6, 1.075 m) down and
+ * aft to FS 25 (0.80 m), then to the floor. Width 6.0 in: measured on POH Fig 7-2 with the GDU bezel
+ * (315 mm, 12.4 in) as the scale (pedestal 130 px vs bezel 267 px). The one value pedestal.ts builds.
+ */
+export const PEDESTAL = { topFs: 18.6, topH: 1.075, botFs: 25, botH: 0.8, width: 6 * IN } as const;
 
 /** Front seats (seat front edge FS 32, EST from the FS 34-46 occupant arm range); rear bench at FS 73 (POH Fig 6-3). */
 export const SEATS = { frontFs: 32, y: 10 * IN, rearFs: 64 };

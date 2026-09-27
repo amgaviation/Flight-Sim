@@ -42,6 +42,13 @@ export const AFCS_GFC700_NXI: Preset = {
   name: 'gfc700_nxi_172',
   limits: { ...AFCS_GFC700_G1000.limits, maxVsFpm: -NXI_VS_MIN_FPM },
   altCaptureToHoldFt: 50,
+  // CRG 190-00384-12 §6.4: automatic disengagement flashes red AP with the aural "until acknowledged by pushing the
+  // AP DISC or MET Switch"; manual: 5 s flashing yellow (discWarningS 5 from the preset).
+  autoDiscLatches: true,
+  // CRG §6.3: loss of navigation data flashes the mode yellow, the FD rolls wings level, and after 10 s without
+  // pilot action enters the default mode (ROL).
+  navLossRevertS: 10,
+  navLossWingsLevel: true,
 };
 
 /** GFC 700 keys on the GDU 1054B bezel (PG Figure 7-1) -> shared-Afcs event suffix and payload. */
@@ -124,7 +131,8 @@ export class AfcsMonitor {
     // --- status annunciation priority: red (PFT fail, AFCS, PTRM, ROLL, PTCH) > white PFT > yellow mistrim
     let text = '';
     let level = 0;
-    const trimFail = v.get('fail.trim.pitch.jam') >= 0.5 || v.get('fail.trim.pitch.runaway') >= 0.5;
+    // PTRM also for a stuck MET half (CRG 190-00384-12 §6.1 "MET function is disabled and PTRM is displayed").
+    const trimFail = v.get('fail.trim.pitch.jam') >= 0.5 || v.get('fail.trim.pitch.runaway') >= 0.5 || v.get(G1K.metFault) >= 0.5;
     if (this.pftFailed) {
       text = AFCS_STATUS.pft;
       level = 1;

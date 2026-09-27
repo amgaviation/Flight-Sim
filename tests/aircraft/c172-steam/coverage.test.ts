@@ -8,17 +8,21 @@
  * annunciators must show vars the systems write. Instruments are self-contained sensors (POH
  * Sec 7; src/avionics/analog): their knobs must change the instrument (tooltip) or a consumed var.
  * The 3D yoke / pedal drag vars `cockpit.*` are read by the input module and count as consumed.
+ * Push-to-reset circuit breakers (not pullable) are tripped first and must reset with a click.
+ * Mechanical cabin fittings whose whole function is their own position (sun visors, the rotatable
+ * flood-light eyeballs; cockpit/cabinControls.ts CabinFitting) must change that position.
  */
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import type { CockpitControl, ControlPointer } from '../../../src/cockpit/types';
 import type { EventBus } from '../../../src/core/EventBus';
 import type { SimVars } from '../../../src/core/SimVars';
-import { AnnunciatorLight } from '../../../src/cockpit/controls';
+import { AnnunciatorLight, CircuitBreaker } from '../../../src/cockpit/controls';
 import { AnalogGauge, MagneticCompass } from '../../../src/avionics/analog';
 import { applyC172SteamState } from '../../../src/aircraft/c172-steam/states';
 import type { SteamRig } from './rig';
 import { steamCockpitRig } from './cockpitRig';
+import { CabinFitting } from '../../../src/aircraft/c172-steam/cockpit/cabinControls';
 
 function recordReads(vars: SimVars, fn: () => void): Set<string> {
   const reads = new Set<string>();
@@ -186,8 +190,16 @@ describe('c172-steam cockpit: control coverage', () => {
       let via = '';
       for (const g of gestures(c)) {
         applyC172SteamState(r.ctx, r.sys, 'ready_to_taxi');
+        // Push-to-reset breakers (POH Sec 7) cannot be pulled: their function is resetting after a trip.
+        if (c instanceof CircuitBreaker && !c.logic.pullable) {
+          const name = c.id.replace('c172s.cb.', '');
+          r.vars.set(`cb.${name}`, 0);
+          r.vars.set(`cb.${name}_tripped`, 1);
+          advance(c)(0.1);
+        }
         emitted.length = 0;
         const tip0 = c instanceof AnalogGauge ? c.tooltip() : '';
+        const phys0 = c instanceof CabinFitting ? c.physicalState() : '';
         const changed = [...recordWrites(r.vars, () => g(advance(c)))];
         const sysReads = recordReads(r.vars, () => {
           for (const s of r.sys.list) s.update(1 / 60);
@@ -197,6 +209,7 @@ describe('c172-steam cockpit: control coverage', () => {
         if (consumedVar) via = `var ${consumedVar}`;
         else if (handled) via = `event ${handled}`;
         else if (c instanceof AnalogGauge && c.tooltip() !== tip0) via = 'instrument state';
+        else if (c instanceof CabinFitting && c.physicalState() !== phys0) via = `fitting ${c.physicalState()}`;
         if (via) break;
       }
       report.push({ id: c.id, bound: via !== '', via });

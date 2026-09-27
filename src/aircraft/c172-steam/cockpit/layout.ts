@@ -125,14 +125,23 @@ export const YOKE = { y: 9.35 * IN, x: sta(PANEL.fs) - 0.2, z: hz(PANEL.topH - 1
 /** Rudder pedals: floor pivots near the firewall (EST FS 6), one pair per seat, 0.23 m apart. */
 export const PEDALS = { x: sta(6), y: 9.35 * IN, z: hz(0.74), spacing: 0.23 };
 
-/** Glareshield: brow 1.2 in aft of the panel face, top 1.60 m, forward to the windshield base (EST FS 12). */
-export const GLARE = { browX: sta(PANEL.fs + 1.2), topH: 1.6, depth: 0.19, drop: 0.05 };
+/**
+ * Padded glareshield (equipment list 25-17-S "padded glareshield"): top 1.60 m, from the windshield
+ * base forward to a rolled brow that overhangs the panel face by 2 in (EST from the VH-SPQ / N146TC
+ * photographs) and follows the panel's upper outline, curving down over the 5.3 in corner radii.
+ * `browX` = body x of the brow's aft face; `browIn` its overhang aft of the panel face (in);
+ * `lipIn` how far the brow comes down over the panel's upper edge (in); `roll` the brow radius (m).
+ */
+export const GLARE = { browX: sta(PANEL.fs + 2.0), browIn: 2.0, topH: 1.6, lipIn: 0.15, roll: 0.02 };
 
 /**
  * Pedestal below the lower centre panel (POH Fig 7-2 items 33-35, 41, 42): face from the lower
- * panel's bottom edge down and aft to the floor at FS 25, 6 in wide (EST from photographs).
+ * panel's bottom edge down and aft to FS 24.5, 6 in wide, ending in a sloped foot that carries the
+ * fuel selector valve handle and its placard (POH Fig 7-2 item 34 "at the base of the pedestal";
+ * VH-SPQ photograph: a plate inclined up and aft, ~7 in wide). EST from the photographs:
+ * foot plate from (FS 24.5, 0.87 m) to (FS 30, 0.765 m), ~37 deg above horizontal.
  */
-export const PED = { topFs: 18.6, topH: PANEL.topH - PANEL_H - 0.005, botFs: 25, botH: 0.8, width: 6 * IN };
+export const PED = { topFs: 18.6, topH: PANEL.topH - PANEL_H - 0.005, botFs: 24.5, botH: 0.87, width: 6 * IN, footFs: 30, footH: FLOOR_H + 0.005, footWidth: 7 * IN };
 
 /** Front seats (seat pan front edge FS 32, EST from the FS 34-46 occupant arm range); rear bench at FS 64. */
 export const SEATS = { frontFs: 32, y: 10 * IN, rearFs: 64 };
@@ -155,8 +164,12 @@ export const DOOR = { fwdFsBottom: 26, fwdFsTop: 30, aftFs: 65.3, sillH: 0.8, to
 export const DOOR_WINDOW = { fs0: 31.4, fs1: 63.7, h0: 1.46, h1: 1.79 }; // fs0: nominal; cabin.ts starts the glass 1.5 in aft of the slanted door edge
 export const REAR_WINDOW = { fs0: 68, fs1: 95, h0: 1.46, h1: 1.79 };
 
-/** Overhead console (flood lights, dome switch, vents): centre on the headliner, FS 36-48 (EST from photographs). */
-export const OVERHEAD = { fs0: 34, fs1: 50, width: 0.2 };
+/**
+ * Overhead console (POH Sec 7 "Interior lighting": the two front flood lights and the rear dome light
+ * "are contained in the overhead console", with a push switch near each light; "the overhead speaker
+ * is located in the center overhead console"). EST from photographs: from the windshield top (FS 41) aft to FS 76, 0.2 m wide, following the headliner.
+ */
+export const OVERHEAD = { fs0: 41.5, fs1: 76, width: 0.2, floodFs: 45, speakerFs: 57, domeFs: 70 };
 
 /** Linear interpolation in a {x, y} table (clamped). */
 export function lerpTable(t: { x: readonly number[]; y: readonly number[] }, v: number): number {

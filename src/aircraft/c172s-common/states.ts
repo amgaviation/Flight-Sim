@@ -5,16 +5,17 @@
  *
  * Switch positions follow the POH checklists (Section 4):
  *  - cold_dark: everything OFF, key out, control lock installed, parking brake SET, fuel
- *    selector BOTH (POH "Securing airplane" leaves it on LEFT or RIGHT to prevent
- *    crossfeeding; the preflight then sets BOTH — we start from the preflight "Fuel selector
- *    valve - BOTH"), fuel shutoff ON (pushed in), mixture idle cut-off, throttle closed, flaps
+ *    selector LEFT on the G1000 (BOTH on the steam variant) (POH "Securing airplane" 10: LEFT or RIGHT to prevent crossfeeding; the
+ *    preflight cabin item 26 then sets BOTH), fuel shutoff ON (pushed in), mixture idle
+ *    cut-off, throttle closed, flaps
  *    UP, trim neutral-ish (takeoff mark).
  *  - ready_to_taxi: after "Starting engine": engine at ~1000 rpm, mixture leaned for ground
  *    operations, MASTER and AVIONICS on, beacon and nav lights on, flaps retracted.
  *  - takeoff: "Before takeoff" complete: flaps 10 (G1000 POH: "UP - 10 deg (10 deg
  *    preferred)"), trim TAKEOFF, mixture RICH, strobes/landing/taxi on, parking brake off.
  *  - cruise: flaps UP, mixture leaned, trimmed level at the app's cruise speed.
- *  - approach: flaps 10, mixture RICH, landing/taxi lights on, trimmed level.
+ *  - approach: "Before landing" complete: flaps 10, mixture RICH, LAND and TAXI lights on
+ *    (day and night), trimmed level.
  */
 import type { InitialState } from '../types';
 import type { SimContext } from '../../core/SimContext';
@@ -83,7 +84,10 @@ export function setC172Switches(ctx: Pick<SimContext, 'vars'>, core: Pick<C172Co
   v.set(C172.keyIn, powered ? 1 : 0);
   v.set(C172.magneto, powered ? MAG.both : MAG.off);
   v.set(C172.fuelPump, 0);
-  v.set(C172.fuelSelector, FUEL_SEL.both);
+  // POH 172SPHBUS-02 Securing Airplane 10 leaves the selector on LEFT or RIGHT (to prevent
+  // crossfeeding); the preflight cabin item 26 then sets BOTH. The G1000 cold & dark therefore
+  // starts on LEFT. SCOPE: the steam variant keeps BOTH until its own checklist/check ride adopt it.
+  v.set(C172.fuelSelector, cold && g ? FUEL_SEL.left : FUEL_SEL.both);
   v.set(C172.fuelShutoff, 1);
   v.set(C172.throttleFriction, 0.3);
   // Flight controls
@@ -96,7 +100,9 @@ export function setC172Switches(ctx: Pick<SimContext, 'vars'>, core: Pick<C172Co
   v.set(C172.nav, powered && (night || moving) ? 1 : 0);
   v.set(C172.strobe, moving ? 1 : 0);
   v.set(C172.land, s === 'takeoff' || s === 'approach' ? 1 : 0);
-  v.set(C172.taxi, s === 'ready_to_taxi' || s === 'takeoff' || (s === 'approach' && night) ? 1 : 0);
+  // POH Before Landing 5 "LAND and TAXI Light Switches - ON" (day or night): the approach preset
+  // stands for Before Landing complete.
+  v.set(C172.taxi, s === 'ready_to_taxi' || s === 'takeoff' || s === 'approach' ? 1 : 0);
   v.set(C172.pitotHeat, 0);
   // Interior lights
   v.set(C172.dimPanel, powered && night ? 0.6 : 0);
@@ -162,7 +168,8 @@ export function applyC172State(ctx: SimContext, core: C172Core, s: InitialState,
   } else if (s === 'ready_to_taxi') {
     // POH Sec 4 "Leaning for ground operations": lean for max RPM at 1200, then 800-1000 RPM.
     v.set(C172.mixture, bestPowerMixture(sigma));
-    v.set(C172.throttle, 0.05);
+    // "800 to 1000 RPM recommended": 0.04 settles at ~930 RPM with the leaned mixture (idle-rpm probe).
+    v.set(C172.throttle, 0.04);
   } else if (s === 'takeoff') {
     // Full rich for takeoff (above 3000 ft lean for maximum RPM: POH Sec 4).
     v.set(C172.mixture, v.get(FDM.pressAlt) > 3000 ? bestPowerMixture(sigma) : 1);
@@ -220,7 +227,9 @@ export function applyC172State(ctx: SimContext, core: C172Core, s: InitialState,
   core.elec.settle();
   core.fuel.update(1 / 60);
   core.vacuum.reset?.();
-  for (const a of core.airData.sources) a.reset();
+  // A preset stands for an airplane whose avionics have been running: the GDC has finished its
+  // power-up self test (POH Before Takeoff 6 "Flight Instruments (PFD) - CHECK (no red X's)").
+  for (const a of core.airData.sources) a.reset({ powered: true });
   core.pitchTrim.reset?.();
   core.late.reset();
 }

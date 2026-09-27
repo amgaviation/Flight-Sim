@@ -102,7 +102,7 @@ export function buildFlightControls(b: CockpitBuilder, panel: Panel): FlightCont
         options: { id: 'c172s.yoke2.ptt', label: 'COPILOT MICROPHONE (push-to-talk)', style: 'small', width: 0.009, mode: 'momentary', var: ST.pttCopilot, capMaterial: 'plasticBlack' },
       },
     ],
-  });
+  }, 'sp');
   b.place(copilot, { center_m: [YOKE.x, YOKE.y, YOKE.z], facing: 'aft', tiltDeg: PANEL.tiltDeg });
   env.lighting.addMapLight('c172s.map', 'map', [YOKE.x - 0.02, -YOKE.y, YOKE.z + 0.1], [YOKE.x - 0.25, -YOKE.y, hz(FLOOR_H + 0.35)], b.root, 2.5);
 

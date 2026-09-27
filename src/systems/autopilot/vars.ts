@@ -17,6 +17,8 @@ export const AFCS_VARS = {
   discWarn: 'ap.disc_warn',
   /** 1 = the last disconnect was automatic (abnormal), 0 = pilot initiated. */
   discAuto: 'ap.disc_auto',
+  /** Navigation signal lost in the active nav mode (cfg.navLossWingsLevel): the FMA flashes it (appended). */
+  latFail: 'ap.lat_fail',
   /** Out-of-trim warning (Garmin "CHECK PITCH TRIM"/PTRM, 737 STAB OUT OF TRIM). */
   mistrim: 'ap.mistrim',
   /** AFDS status string: '', 'FD', 'CMD', 'CWS', 'SINGLE CH', 'LAND 3', ... (FMA status column). */
