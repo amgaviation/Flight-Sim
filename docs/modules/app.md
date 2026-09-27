@@ -490,7 +490,7 @@ interface SimDebugApi {
   profile(reset?: boolean): ProfileReport;                  // per-frame JS time by stage (FrameProfiler)
   pick(ndcX, ndcY): PickResult | null;                      // visible opaque surface under a screen point
   displays(): DisplayProbe[];                               // cockpit display power / renders / lit fraction
-  ground(): { surface, elevation_m, precise };              // world ground under the aircraft
+  ground(lat?, lon?): { surface, elevation_m, precise, normal }; // world ground under the aircraft (or at lat/lon)
   pilot: { takeoff(opts?): phase; stop(): void; state(): { phase, log } };   // scripted test pilot
 }
 ```

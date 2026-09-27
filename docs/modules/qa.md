@@ -140,7 +140,7 @@ interface SimDebugApi {
   profile(reset?: boolean): ProfileReport;                // section 5
   pick(ndcX: number, ndcY: number): PickResult | null;    // visible opaque surface under a screen point
   displays(): DisplayProbe[];                             // cockpit display health
-  ground(): { surface: string; elevation_m: number; precise: boolean };   // world ground under the aircraft
+  ground(lat?: number, lon?: number): { surface: string; elevation_m: number; precise: boolean; normal: [number, number, number] };   // world ground under the aircraft, or at lat/lon (ENU normal)
   pilot: {
     takeoff(opts?: Partial<TakeoffScript>): ScriptedPilotPhase;   // section 4
     stop(): void;
@@ -366,3 +366,57 @@ What the numbers show:
 - **No land-use data.** Cities render as farmland and forest (the biomes are procedural). Only airports have buildings.
 - **Headless Electron.** `--headless=new` segfaults as soon as WebGL starts. Under Xvfb the packaged app runs and flies. The Windows exe is only built in CI and was not run here.
 - **Slow smoke.** The smoke needs network access to AWS Terrain Tiles and takes ~12 minutes under SwiftShader.
+
+---
+
+## 10. Six-jet integration QA (`scripts/jets-qa.mjs`)
+
+`npm run build && npm run jets-qa` serves `dist/`, opens the menu in headless Chromium (SwiftShader)
+and checks that the six production jets are listed and selectable (the two 172S variants are
+greyed out). It then loads every jet at a real airport in every initial state through
+`window.__sim.launch`, the same path as the menu's FLY button:
+
+| Jet | Airport / runway |
+|---|---|
+| Citation M2 | KICT 19R |
+| Citation Longitude | KICT 01L |
+| G650 | KSAV 10 |
+| G800 | KTEB 06 |
+| Global 6000 | KTEB 24 |
+| 737-800 | KLAX 25R |
+
+Per load it checks: phase `flying`, no page or console errors, every physical SimVar finite (NaN is
+the documented "no value" sentinel of some avionics vars), not crashed, ground states on the ground
+with GS < 1 kt, in-air states within 600 ft over 10 s of sim time, cockpit displays dark in cold &
+dark (a Hobbs meter excepted) and powered otherwise. It records draw calls, geometries, textures and
+JS heap after a forced GC. At the end it reloads the first jet after all the others were loaded and
+unloaded and compares textures (+20 max) and heap (+150 MB max) as a leak check. Output: one
+pilot-view PNG per load, chase views for takeoff and approach, and `qa.json` in `tests/output/jets/`
+(`QA_OUT`). `QA_AIRCRAFT` and `QA_STATES` narrow the run. A full run takes about 65 minutes under
+SwiftShader.
+
+### 10.1 Defects found by the integration pass and fixed
+
+- **Every 737-800 ground state at KLAX 25R crashed at spawn** (and the G650 did the same there).
+  The runway there rises about 0.1 % toward the tail. `FlightModel.settleOnGround` started its Newton
+  solve with only the uphill (nose) gear touching, so the Jacobian had no main-gear terms; the
+  pitch steps ran into their clamp (-17 deg) and the aircraft was released 11 ft up, nose down, and
+  failed the load-factor check. The initial guess now has every gear touching (the contact that
+  needs the lowest CG just touching, the others compressed). Test: `tests/physics/settleSlope.test.ts`
+  (737, G650, Global 6000 and M2 on +/-0.2 % and +/-1 % slopes).
+- **Screens lit in a cold & dark cockpit** (Longitude standby, G650 clocks / brake gauge / oxygen and
+  APU readouts, 737 clocks, ISFD, radio and pressurization LCDs, Global EMS CDUs). The
+  `DisplayManager` read only `display.<id>.power` (missing = powered), while these displays declare
+  their own power var. It now follows the display's own `powerVar` when the registration names none
+  (`CockpitDisplay.powerVar`, optional). Test: `tests/cockpit/displayManager.test.ts`.
+- **Global 6000 IESI powered with the batteries off**: its load sat on the hot DC EMER bus. It is now
+  switched with BATT MASTER (EST, see `global6000/systems/electrical.ts`).
+- **Longitude MFD map solid red on the ground**: nav and inset maps now default to Absolute terrain,
+  as on the M2 (TAWS pane stays Relative).
+- **Savannah and Atlanta rendered as desert**: the terrain shader's 10-40 deg arid belt ignored the
+  humid eastern continental margins. `humidRegionWeight` (terrain/biome.ts, Koppen-Geiger outlines)
+  cancels it there. Test: `tests/world/humidRegion.test.ts`.
+- **Ground starts that waited the full 120 s scenery timeout** (seen twice in one run): a stalled tile
+  request never completed. Tile fetches now abort after 20 s and retry.
+- **CI time**: the six published-performance flights moved from `npm test` to `npm run test:long`
+  (section 1), so `npm test` stays under 5 minutes on a 4-vCPU runner.

@@ -271,6 +271,8 @@ export interface WorldUniforms {
   /** 0 = day, 1 = full night (sun below -12 deg). */
   uNight: THREE.IUniform<number>;
   uDayOfYear: THREE.IUniform<number>;
+  /** Humid-region weight 0..1 at the camera (terrain aridity heuristic, see terrain/biome.ts humidRegionWeight). */
+  uHumid: THREE.IUniform<number>;
   uNoiseTex: THREE.IUniform<THREE.Texture | null>;
   /** Sky colours for water reflections. */
   uSkyZenith: THREE.IUniform<THREE.Color>;
@@ -310,6 +312,7 @@ export function createWorldUniforms(): WorldUniforms {
     uAmbient: { value: 1 },
     uNight: { value: 0 },
     uDayOfYear: { value: 172 },
+    uHumid: { value: 0 },
     uNoiseTex: { value: null },
     uSkyZenith: { value: new THREE.Color(0.2, 0.35, 0.7) },
     uSkyHorizon: { value: new THREE.Color(0.6, 0.7, 0.8) },

@@ -115,6 +115,30 @@ describe('DisplayManager', () => {
     expect(h.texture.colorSpace).toBe(THREE.SRGBColorSpace);
   });
 
+  it("follows the display's own power var when the registration names none (jets QA: standby / clocks lit in cold & dark)", () => {
+    const vars = new SimVars();
+    const dm = new DisplayManager(vars);
+    const own = Object.assign(new FakeDisplay('stby', 30), { powerVar: 'elec.stby_inst_powered' });
+    const h = dm.add(own, new THREE.Mesh(new THREE.PlaneGeometry(1, 1)));
+    vars.set('elec.stby_inst_powered', 0);
+    frames(dm, 30);
+    expect(h.powered).toBe(false);
+    expect(own.renders).toBe(0);
+    vars.set('elec.stby_inst_powered', 1);
+    frames(dm, 30);
+    expect(h.powered).toBe(true);
+    // An explicit registration power var still wins; a null own power var keeps display.<id>.power.
+    const reg = Object.assign(new FakeDisplay('clk', 10), { powerVar: 'elec.stby_inst_powered' });
+    const h2 = dm.add(reg, new THREE.Mesh(new THREE.PlaneGeometry(1, 1)), { powerVar: 'elec.clock_powered' });
+    vars.set('elec.clock_powered', 0);
+    const nul = Object.assign(new FakeDisplay('gauge', 10), { powerVar: null });
+    const h3 = dm.add(nul, new THREE.Mesh(new THREE.PlaneGeometry(1, 1)));
+    vars.set('display.gauge.power', 0);
+    frames(dm, 5);
+    expect(h2.powered).toBe(false);
+    expect(h3.powered).toBe(false);
+  });
+
   it('blacks out and stops rendering when unpowered; brightness goes to setBrightness (self-dimming display)', () => {
     const vars = new SimVars();
     const dm = new DisplayManager(vars);

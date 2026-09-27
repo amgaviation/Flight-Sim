@@ -101,7 +101,8 @@ export interface SimDebugApi {
   /** Cockpit displays: power, render counters and the fraction of lit (non-black) canvas pixels. */
   displays(): DisplayProbe[];
   /** World ground sample under the aircraft (surface type, elevation, precise = terrain tile loaded). */
-  ground(): { surface: string; elevation_m: number; precise: boolean };
+  /** Optional lat/lon (deg) sample elsewhere (e.g. along the fuselage for placement checks). */
+  ground(lat?: number, lon?: number): { surface: string; elevation_m: number; precise: boolean; normal: [number, number, number] };
   /** Scripted test pilot (input/ScriptedPilot) flying through the normal pilot inputs. */
   pilot: {
     /**
@@ -1033,9 +1034,9 @@ export class App {
           lit: litFraction(h.display.canvas as HTMLCanvasElement | OffscreenCanvas),
         }));
       },
-      ground() {
-        const g = app.world.sampleGround(app.vars.get(FDM.lat), app.vars.get(FDM.lon));
-        return { surface: String(g.surface), elevation_m: g.elevation_m, precise: g.precise };
+      ground(lat?: number, lon?: number) {
+        const g = app.world.sampleGround(lat ?? app.vars.get(FDM.lat), lon ?? app.vars.get(FDM.lon));
+        return { surface: String(g.surface), elevation_m: g.elevation_m, precise: g.precise, normal: [g.normal[0], g.normal[1], g.normal[2]] as [number, number, number] };
       },
       profile(reset = false): ProfileReport {
         const r = app.profiler.report();

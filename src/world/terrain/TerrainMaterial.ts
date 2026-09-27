@@ -33,6 +33,7 @@ varying vec3 vWorldPosT;
 `;
 
 const FRAG_PARS = /* glsl */ `
+uniform float uHumid;
 varying vec4 vTerrain;
 varying float vFlat;
 varying float vCoast;
@@ -94,6 +95,9 @@ vec3 terrainAlbedo() {
   float dryPhase = cos((uDayOfYear - (lat >= 0.0 ? 240.0 : 57.0)) / 365.25 * 6.283185307);
   float summerDry = max(0.0, dryPhase) * smoothstep(28.0, 32.0, absLat) * (1.0 - smoothstep(43.0, 47.0, absLat));
   arid = max(arid, 0.32 * summerDry * (0.5 + regionG) * (1.0 - smoothstep(1800.0, 2600.0, elev)));
+  // Humid eastern margins and monsoon lands inside the belt (SE United States, S China, E Australia...):
+  // wet summers, no desert and no summer drought (uHumid from terrain/biome.ts humidRegionWeight at the camera).
+  arid *= 1.0 - 0.9 * uHumid;
   float boreal = smoothstep(48.0, 58.0, absLat);
   float tundra = smoothstep(62.0, 70.0, absLat);
   float snowL = snowLine(lat, uDayOfYear);

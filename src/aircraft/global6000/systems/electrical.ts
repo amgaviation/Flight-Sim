@@ -204,7 +204,10 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): G6kElectrical {
     dc('cabin_dc', 'dc_bus2', 20, 40, { enabled: V.cabinPwr, shed: `${airborne} && ${V.singleGen}` }),
     dc('pass_signs', 'dc_bus2', 0.5, 3),
     // ------------------------------------------------ DC EMER (hot from both battery direct buses)
-    dc('iesi', 'dc_emer', 1.5, 3), // integrated electronic standby instrument (standby ADC / AHRS)
+    // Integrated electronic standby instrument (standby ADC / AHRS). EST: switched with BATT MASTER. DC EMER is hot
+    // here, and a standby instrument that stayed on with the batteries off would drain them on a parked aircraft
+    // (integration QA found it lit in cold & dark); no public Global wiring diagram gives its switching.
+    dc('iesi', 'dc_emer', 1.5, 3, { enabled: `${V.battMaster} == 1` }),
     dc('eng_sov1', 'dc_emer', 0.3, 3), // GXFU CB: L ENG FUEL SOV DC EMER
     dc('eng_sov2', 'dc_emer', 0.3, 3),
     dc('apu_fire_sov', 'dc_emer', 0.3, 3), // GXFU CB: APU FIRE SOV DC EMER

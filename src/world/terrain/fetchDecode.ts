@@ -69,26 +69,43 @@ export async function fetchTileBlob(url: string): Promise<{ blob: Blob; cached: 
       /* fall through to network */
     }
   }
-  let res: Response;
+  // A stalled request (proxy or network hiccup) used to hold its tile forever, and a ground start then
+  // waited out the app's 120 s scenery timeout (jets QA). Abort it so the loader retries (status 0).
+  const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = ctrl ? setTimeout(() => ctrl.abort(), TILE_FETCH_TIMEOUT_MS) : null;
   try {
-    res = await fetch(url, { mode: 'cors', credentials: 'omit' });
-  } catch (e) {
-    throw new TileHttpError(0, `network error: ${(e as Error)?.message ?? e}`);
-  }
-  if (!res.ok) throw new TileHttpError(res.status, `HTTP ${res.status}`);
-  if (cache) {
+    let res: Response;
     try {
-      await cache.put(url, res.clone());
-      if (cacheMax > 0 && ++putsSinceTrim >= 200) {
-        putsSinceTrim = 0;
-        void trimCache(cache);
-      }
-    } catch {
-      /* quota or opaque response: ignore */
+      res = await fetch(url, { mode: 'cors', credentials: 'omit', signal: ctrl?.signal });
+    } catch (e) {
+      throw new TileHttpError(0, `network error: ${(e as Error)?.message ?? e}`);
     }
+    if (!res.ok) throw new TileHttpError(res.status, `HTTP ${res.status}`);
+    let blob: Blob;
+    try {
+      blob = await res.clone().blob();
+    } catch (e) {
+      throw new TileHttpError(0, `network error: ${(e as Error)?.message ?? e}`);
+    }
+    if (cache) {
+      try {
+        await cache.put(url, res);
+        if (cacheMax > 0 && ++putsSinceTrim >= 200) {
+          putsSinceTrim = 0;
+          void trimCache(cache);
+        }
+      } catch {
+        /* quota or opaque response: ignore */
+      }
+    }
+    return { blob, cached: false };
+  } finally {
+    if (timer !== null) clearTimeout(timer);
   }
-  return { blob: await res.blob(), cached: false };
 }
+
+/** Per-request time limit for a terrain tile (fetch + body), ms. EST: tiles are ~50-150 kB. */
+export const TILE_FETCH_TIMEOUT_MS = 20_000;
 
 let scratchCanvas: OffscreenCanvas | HTMLCanvasElement | null = null;
 

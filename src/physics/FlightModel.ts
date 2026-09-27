@@ -637,15 +637,19 @@ export class FlightModel implements FlightModelHandle {
     this.alt = alt0;
     this.q.setFromEuler(psi, 0, 0);
     this.ground.sampleTerrain(this.world, this.lat, this.lon, alt0, this.q, cg);
-    // Initial guess: lowest active contact just touching (flat approximation).
-    let alt = elev + 0.5;
+    // Initial guess: every active gear touching (the contact that needs the lowest CG just touching, the
+    // others compressed). Starting with only the uphill gear in contact (the old "highest contact" guess)
+    // gave a Jacobian without the other gear, and on a sloped runway (e.g. KLAX 25R, ~0.1 %) the Newton
+    // steps then pitched long airframes into the clamp and released them feet above the ground.
+    let alt = Infinity;
     for (let i = 0; i < this.ground.contacts.length; i++) {
       const c = this.ground.contacts[i];
       if (c.cfg.isStructure || !this.ground.isActive(i)) continue;
       this.t1.subVectors(c.bodyPos, cg);
       const groundZ = alt0 - c.planePoint.z; // terrain elevation under the contact
-      alt = Math.max(alt, groundZ + this.t1.z);
+      alt = Math.min(alt, groundZ + this.t1.z);
     }
+    if (!Number.isFinite(alt)) alt = elev + 0.5;
     let th = 0;
     let ph = 0;
     const r0 = [0, 0, 0];

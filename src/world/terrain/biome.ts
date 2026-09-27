@@ -50,6 +50,37 @@ export function snowLineM(latDeg: number, dayOfYear: number): number {
 /** Slope (rad) above which snow does not stick and rock shows (EST ~ 50 deg, avalanche angle). */
 export const SNOW_MAX_SLOPE_RAD = 50 * DEG2RAD;
 
+/**
+ * Humid (sub)tropical regions inside the 10-40 deg "arid belt" the terrain shader assumes:
+ * the eastern continental margins and monsoon lands (Koppen Cfa / Cwa / Am / Aw), after the
+ * Koppen-Geiger map of Beck et al. (2018, Scientific Data 5:180214). Each entry is
+ * [latMin, latMax, lonMin, lonMax] in degrees. EST: rectangles are coarse outlines of those
+ * climate zones, with a 3 deg soft edge (the heuristic has no land-cover data).
+ */
+const HUMID_BOXES: readonly (readonly [number, number, number, number])[] = [
+  [24, 39, -98, -74], // south-eastern United States (Cfa east of ~98 W: Atlanta, Savannah, Houston, Florida)
+  [7, 24, -98, -59], // Gulf coast of Mexico, Central America, Caribbean
+  [20, 40, 104, 142], // southern China, Taiwan, southern Korea and Japan
+  [6, 22, 95, 127], // mainland South-East Asia, Philippines
+  [16, 30, 79, 97], // eastern India, Bangladesh, Myanmar (monsoon)
+  [-38, -15, 145, 154], // eastern Australia coast
+  [-35, -15, -60, -38], // south-eastern Brazil, Paraguay, Uruguay, north-eastern Argentina
+  [-32, -12, 29, 41], // south-east African coast
+];
+
+/** Humid-region weight 0..1 at a position (1 inside a humid box, fading over 3 deg outside). */
+export function humidRegionWeight(latDeg: number, lonDeg: number): number {
+  const EDGE = 3;
+  let w = 0;
+  for (const [la0, la1, lo0, lo1] of HUMID_BOXES) {
+    const dLat = Math.max(la0 - latDeg, 0, latDeg - la1);
+    const dLon = Math.max(lo0 - lonDeg, 0, lonDeg - lo1) * Math.cos(latDeg * DEG2RAD);
+    const d = Math.hypot(dLat, dLon);
+    w = Math.max(w, 1 - Math.min(1, d / EDGE));
+  }
+  return w;
+}
+
 /** GLSL mirror of `snowLineM` (keep in sync). Expects `uDayOfYear` uniform. */
 export const GLSL_BIOME = /* glsl */ `
 float permanentSnowLine(float latDeg) {

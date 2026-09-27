@@ -33,6 +33,7 @@ import { CloudLayer } from './Clouds';
 import { Precipitation } from './Precipitation';
 import type { QualitySettings } from '../quality';
 import { WORLD_VARS } from '../worldVars';
+import { humidRegionWeight } from '../terrain/biome';
 
 export { WORLD_VARS };
 
@@ -229,6 +230,7 @@ export class Environment {
     const doy = vars.has(ENV.dayOfYear) ? vars.get(ENV.dayOfYear) : Math.floor((now.getTime() - startOfYear) / 86400000) + 1;
     this.jd = julianDayFromDayOfYear(year, doy, hours);
     u.uDayOfYear.value = doy;
+    u.uHumid.value = humidRegionWeight(camLat, camLon);
 
     // --- Sun and moon.
     sunPosition(this.jd, camLat, camLon, this.sun);

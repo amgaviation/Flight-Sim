@@ -425,7 +425,9 @@ class Environment {
   never cleared at low quality). Tested in `tests/world/terrainStreaming.test.ts`.
 - Material (`TerrainMaterial.ts`): MeshStandardMaterial + onBeforeCompile (scene lights,
   landing lights and shadows work). Biomes: grass, forest, farmland patchwork, dry grass and
-  desert (subtropical belts, high continental plains), boreal/tundra, rock by slope,
+  desert (subtropical belts, high continental plains; cancelled over the humid eastern margins and
+  monsoon lands by `uHumid` = `humidRegionWeight(camLat, camLon)` in `terrain/biome.ts`, set by
+  `Environment.update`), boreal/tundra, rock by slope,
   seasonal snow line by latitude, water with depth colour/shoreline/foam/ripples/glint/sky
   reflection, detail noise near the camera. Noise is anchored to Web Mercator metres
   (deterministic per place).
