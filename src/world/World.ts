@@ -70,7 +70,8 @@ export interface WorldStats {
 
 interface LoadWaiter {
   keys: number[];
-  resolve: () => void;
+  /** true when every tile arrived (or is known missing), false on timeout. */
+  resolve: (complete: boolean) => void;
   deadline: number;
   timer: ReturnType<typeof setTimeout> | null;
 }
@@ -229,7 +230,17 @@ export class World implements WorldQuery {
    * sampleGround reports `precise: false` and the fallback elevation.
    */
   ensureLoaded(latDeg: number, lonDeg: number, radius_m = 2500): Promise<void> {
-    if (this.disposed || !Number.isFinite(latDeg) || !Number.isFinite(lonDeg)) return Promise.resolve();
+    return this.ensureLoadedWithin(latDeg, lonDeg, radius_m, ENSURE_TIMEOUT_MS).then(() => undefined);
+  }
+
+  /**
+   * Same as ensureLoaded with a caller-chosen timeout. Resolves `true` when
+   * every tile arrived or is known to be missing (offline, 404), `false` when
+   * the timeout expired first (slow network or a busy CPU); the requests stay
+   * queued either way.
+   */
+  ensureLoadedWithin(latDeg: number, lonDeg: number, radius_m: number, timeoutMs: number): Promise<boolean> {
+    if (this.disposed || !Number.isFinite(latDeg) || !Number.isFinite(lonDeg)) return Promise.resolve(true);
     this.airports.refresh(latDeg, lonDeg, performance.now(), true);
     const fe = this.airports.nearestElevation(latDeg, lonDeg);
     if (Number.isFinite(fe) && this.store.size === 0) this.ground.fallbackElevation = fe;
@@ -238,17 +249,17 @@ export class World implements WorldQuery {
     const keys: number[] = [];
     tilesCoveringBox(PHYSICS_ZOOM_NEAR, latDeg - dLat, lonDeg - dLon, latDeg + dLat, lonDeg + dLon, keys);
     const missing = keys.filter((k) => !this.store.has(k) && !this.loader.isMissing(k));
-    if (missing.length === 0) return Promise.resolve();
-    return new Promise<void>((resolve) => {
-      const w: LoadWaiter = { keys, resolve, deadline: performance.now() + ENSURE_TIMEOUT_MS, timer: null };
-      w.timer = setTimeout(() => this.finishWaiter(w), ENSURE_TIMEOUT_MS);
+    if (missing.length === 0) return Promise.resolve(true);
+    return new Promise<boolean>((resolve) => {
+      const w: LoadWaiter = { keys, resolve, deadline: performance.now() + timeoutMs, timer: null };
+      w.timer = setTimeout(() => this.finishWaiter(w, false), timeoutMs);
       this.waiters.push(w);
       for (const k of missing) this.loader.request(keyZ(k), keyX(k), keyY(k), -2000, null);
       this.loader.pump();
     });
   }
 
-  private finishWaiter(w: LoadWaiter): void {
+  private finishWaiter(w: LoadWaiter, complete = true): void {
     const i = this.waiters.indexOf(w);
     if (i >= 0) this.waiters.splice(i, 1);
     if (w.timer) clearTimeout(w.timer);
@@ -260,7 +271,7 @@ export class World implements WorldQuery {
         this.pinned.add(k);
       }
     }
-    w.resolve();
+    w.resolve(complete);
   }
 
   private checkWaiters(): void {

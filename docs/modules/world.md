@@ -144,6 +144,10 @@ It, in order:
   are known (forces an airport refresh, so call it after `nav.load()`). Never rejects;
   resolves after 25 s at the latest (offline: `sampleGround(...).precise` stays false).
   The tiles are pinned in memory while the aircraft is near.
+- `ensureLoadedWithin(lat, lon, radius_m, timeoutMs): Promise<boolean>`: the same
+  with a caller-chosen timeout; resolves `true` when every tile arrived or is known
+  missing, `false` on timeout. The app uses 120 s for ground starts, so an
+  aircraft is not placed on the fallback elevation under a slow network or CPU.
 
 ### `setQuality(level)` / `quality`
 

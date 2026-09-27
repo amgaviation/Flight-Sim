@@ -24,8 +24,10 @@ You can code against it without reading the sources.
 | Step | Command | Pass criteria |
 |---|---|---|
 | Types | `npm run typecheck` | No output (TypeScript 7 strict, whole project). |
-| Unit + integration tests | `npm test` | All files pass (vitest; `tests/**`, `src/**/*.test.ts`). |
+| Unit + integration tests | `npm test` | All files pass (vitest; `tests/**`, `src/**/*.test.ts`). The six full-flight check rides are left out (about 4.5 min on 4 cores). |
+| Full-flight check rides | `npm run test:long` | The six `tests/aircraft/<id>/verify/fullFlight.test.ts` pass (cold & dark to cold & dark per jet, about 1-3 min each; `AMG_LONG_TESTS=1` un-excludes them, see `vite.config.ts`). `npm run test:all` runs everything. CI runs them in the `long-tests` job. |
 | Web build | `npm run build` | `dist/` written, no errors. |
+| Jets in the app | `npm run build && npm run jets-qa` | Prints `JETS QA PASSED`; every jet loads in every initial state (section 10). Look at the PNGs in `tests/output/jets/`. |
 | Browser smoke | `npm run build && npm run smoke` | Prints `SMOKE PASSED: n/n checks`; exit code 0. Look at every PNG in `tests/output/`. |
 | Dev server | `npm run dev` then `curl http://localhost:5173/` | HTML with `<div id="app">` and `/src/main.ts`; `/data/*.json.gz` served (Vite adds `Content-Encoding: gzip`; the nav loader sniffs the gzip magic, so both encodings work). |
 | Packaging | `npx electron-builder --linux dir` | `release/linux-unpacked/amg-flight-sim` exists; `resources/app.asar` lists `/dist/index.html`, `/dist/assets/*`, `/dist/data/*`, `/electron/main.cjs`, `/electron/preload.cjs`, `/electron/guards.cjs`, `/package.json`, and no `node_modules` and no `.map`. |

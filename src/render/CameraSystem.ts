@@ -36,6 +36,8 @@ export interface CameraAircraftInfo {
   views: CockpitViewDef[];
   /** Chase distance (AircraftMeta.chaseDistance_m). */
   chaseDistance_m: number;
+  /** Pitch of the default pilot view (deg, + up; default -8). */
+  eyePitchDeg?: number;
 }
 
 /** Per-frame motion cues (from FDM vars). */
@@ -222,7 +224,7 @@ export class CameraSystem {
 
   /** Pilot eye first, then the aircraft's presets. */
   views(): CockpitViewDef[] {
-    return [{ name: 'Pilot', position_m: this.info.eye_m, yawDeg: 0, pitchDeg: -8 }, ...this.info.views];
+    return [{ name: 'Pilot', position_m: this.info.eye_m, yawDeg: 0, pitchDeg: this.info.eyePitchDeg ?? -8 }, ...this.info.views];
   }
 
   get inCockpit(): boolean {

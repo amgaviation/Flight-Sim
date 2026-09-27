@@ -9,21 +9,32 @@ For personal and internal use by AMG Aviation Group.
 
 ## Aircraft
 
-| Aircraft | Avionics | Status |
-|---|---|---|
-| Cessna Citation M2 | Garmin G3000 | in development |
-| Cessna Citation Longitude | Garmin G5000 | in development |
-| Gulfstream G650 | Honeywell PlaneView II | in development |
-| Gulfstream G800 | Honeywell Symmetry | in development |
-| Bombardier Global 6000 | Collins Pro Line Fusion (Global Vision) | in development |
-| Boeing 737-800 | 737NG common display system / FMC | in development |
-| Cessna 172S Skyhawk (steam gauges) | Analog six-pack, KX 155A, KAP 140 | in development |
-| Cessna 172S Skyhawk (G1000 NXi) | Garmin G1000 NXi, GFC 700 | in development |
+| Aircraft | Avionics | Status | Dossier |
+|---|---|---|---|
+| Cessna Citation M2 (525) | Garmin G3000 (GTC 570 touch controllers, GMC 710) | flyable | [docs/aircraft/citation-m2.md](docs/aircraft/citation-m2.md) |
+| Cessna Citation Longitude (700) | Garmin G5000 (four GTC 570s, autothrottle) | flyable | [docs/aircraft/citation-longitude.md](docs/aircraft/citation-longitude.md) |
+| Gulfstream G650 | Honeywell PlaneView II (Primus Epic), MCDUs, CCDs | flyable | [docs/aircraft/g650.md](docs/aircraft/g650.md) |
+| Gulfstream G800 | Honeywell Symmetry (touch screens, active sidesticks) | flyable | [docs/aircraft/g800.md](docs/aircraft/g800.md) |
+| Bombardier Global 6000 | Collins Pro Line Fusion (Global Vision) | flyable | [docs/aircraft/global6000.md](docs/aircraft/global6000.md) |
+| Boeing 737-800 (winglets) | 737NG common display system, FMC/CDU, MCP, autoland | flyable | [docs/aircraft/b737-800.md](docs/aircraft/b737-800.md) |
+| Cessna 172S Skyhawk (steam gauges) | Analog six-pack, KX 155A, KAP 140 | not built yet (greyed out in the menu) | |
+| Cessna 172S Skyhawk (G1000 NXi) | Garmin G1000 NXi, GFC 700 | not built yet (greyed out in the menu) | |
 
-An aircraft appears in the menu as soon as its module exists
-(`src/aircraft/<id>/index.ts`). Until then the menu offers a development
-**Test Jet**. It exercises the full pipeline: flight model, systems, a
-clickable cockpit, a PFD, sound, and the exterior model.
+An aircraft becomes selectable as soon as its module exists
+(`src/aircraft/<id>/index.ts`). If none exists, the menu offers a development
+**Test Jet** instead (it is still reachable with `?aircraft=_test-jet`; the
+smoke test flies it).
+
+Each jet has a complete, clickable 3D flight deck in which every modelled
+switch, knob, lever, button and breaker drives a system, and every
+annunciator shows real system state. Each one has been flown headless from
+cold & dark to cold & dark through its cockpit controls only (engine start,
+FMS route and approach, takeoff, autopilot climb, cruise, VNAV descent, ILS,
+landing, shutdown); see "Checks" below. Every number (weights, speeds,
+limits, thrust, fuel, electrical, hydraulic and pneumatic values, CAS
+messages, AFCS modes) carries its public source in a code comment, and
+estimates are marked `// EST:`. The dossier of each aircraft lists its
+sources, what is modelled and what is simplified.
 
 ## Features
 
@@ -103,10 +114,20 @@ may ask for confirmation on first launch.
 
 ```bash
 npm run typecheck   # TypeScript (strict)
-npm test            # unit + headless integration tests (vitest)
+npm test            # unit + headless integration tests (vitest), about 4.5 min
+npm run test:long   # the six full-flight check rides, cold & dark to cold & dark (about 10 min)
 npm run build       # production bundle in dist/
 npm run smoke       # headless browser flight, ~40 numeric checks, screenshots in tests/output/
+npm run jets-qa     # every jet in every start state in the real app, screenshots in tests/output/jets/
 ```
+
+The check rides (`tests/aircraft/<id>/verify/fullFlight.test.ts`) fly each
+jet through its cockpit controls only: power-up and engine start, FMS route
+and approach entry, taxi, takeoff, autopilot climb, cruise, VNAV descent, ILS
+capture, landing, rollout and shutdown, asserting CAS, flight-mode
+annunciations and published numbers at every phase. They are left out of
+`npm test` to keep it short (`AMG_LONG_TESTS=1` includes them); CI runs them
+in a separate job.
 
 `docs/modules/qa.md` describes the full release pipeline, every smoke check,
 the `window.__sim` scripting API and the scripted test pilot.
@@ -135,6 +156,80 @@ the `window.__sim` scripting API and the scripted test pilot.
 Mouse: drag the cockpit controls with the left button. Drag on empty space
 to look around, and use the wheel to zoom. Every key can be rebound in
 **Controls**.
+
+### What the keys move in each jet
+
+The keys move the aircraft's own cockpit levers (the 3D lever follows), so
+the systems see exactly what a hand on the lever would do.
+
+| Aircraft | Flaps (F5-F8, `[` `]`) | Reverse (hold F2 at idle, Shift+F2) | Speedbrake (`/`) | `Z` (AP) | Shift+`T` (A/T disconnect) |
+|---|---|---|---|---|---|
+| Citation M2 | UP / 15 / 35 (the 60° ground-flap detent only on the cockpit handle) | none (no reversers) | RETRACT / EXTEND | GMC 710 AP key | none (no autothrottle) |
+| Citation Longitude | UP / 1 / 2 / FULL | integral reverse range on the thrust levers | 0 / half / full | GMC AP key | A/T disconnect |
+| G650 | UP / 10 / 20 / 39 | integral reverse range | 0 / half / full | guidance panel AP | A/T disconnect |
+| G800 | UP / 10 / 20 / 39 | piggy-back reverse levers | 0 / half / full | AP engage | A/T disconnect |
+| Global 6000 | 0 IN / 0 OUT / 6 / 16 / 30 | piggy-back reverse levers | flight spoiler lever 0 / ½ / 0.8 / full | FCP AP | A/T disconnect |
+| 737-800 | UP / 1 / 2 / 5 / 10 / 15 / 25 / 30 / 40 | piggy-back reverse levers | DOWN / flight detent / UP, Ctrl+`/` ARMED | MCP CMD A | A/T disconnect |
+
+Everything else (engine start, fuel, electrical, pressurization, FMS,
+radios, lights, autobrake, TO/GA buttons on the levers, and so on) is done in
+the cockpit with the mouse: click, drag or scroll the control. Hover over a
+control to see its name. `C` cycles each cockpit's preset views (overhead,
+pedestal, FMS, side panels), which makes the small legends readable.
+`K` opens the aircraft's normal checklists, with live ticks.
+
+## Known limitations
+
+These are the main gaps found by the check rides and the integration QA. Each
+aircraft dossier (`docs/aircraft/<id>.md`) has the full list.
+
+**All aircraft**
+
+- Panel geometry, breaker panel contents and some overhead layouts are
+  estimates where no public drawings exist (marked `EST` in the code and the
+  dossiers).
+- Cockpit lighting: surfaces in shadow get little daylight fill, so white
+  legends under the glareshield (overhead edges, side and breaker panels) are
+  hard to read by day. Use the preset close-up views (`C`). At night the
+  backlit legends read well.
+- The default pilot view looks 8° down; at 16:9 the bottom row of PFD
+  softkeys can sit just below the screen edge until you look down.
+- Radio audio (ATC, ident tones through the audio panels), cockpit doors,
+  cabin interior lighting, weather radar returns, charts, CVR and ELT hold
+  state only; there is no radio or weather model behind them.
+- FMS (shared nav library): the VNAV profile uses nominal leg lengths (big
+  fly-by turns can step the path), there is no deceleration segment before
+  the 250 kt / 10,000 ft limit, distance to destination can include the
+  missed approach or leave out a hold-in-lieu-of-procedure-turn leg, and the
+  thrust rating is not switched to CRZ automatically at level-off.
+- Autothrottle MIN/MAX speed protection is not modelled. Hardware
+  bindings that write only an autopilot-disconnect var (without sending the
+  `ap.disc` event, as the 3D button does) do not disconnect the autopilot.
+- On the ground, the relative-terrain map layers paint the area around the
+  airport red or yellow (no suppression near runway elevation).
+- Lift-off in the hand-flown check rides comes 10-17 kt above VR because the
+  scripted rotation is gentle; stall speeds and field lengths match the
+  published data.
+- Frame rate: the flight decks draw 600-2,000 draw calls; on a real GPU this
+  is fine, under software rendering it is 4-5 fps.
+
+**Per aircraft**
+
+- *Citation M2:* no Gen2 autothrottle; climb fuel is about 25 % above the
+  Flight Planning Guide; the autopilot minimum-use heights are documented
+  but not enforced.
+- *Citation Longitude:* no autothrottle MIN/MAX SPD or 2 nm approach-speed
+  reduction; the synoptic page artwork is schematic.
+- *G650 / G800:* PERF INIT speed defaults are estimates; the G800 fifth
+  touch screen (jump seat), sidestick push-to-talk and force feel, and
+  triplex flight-control computer voting are not built.
+- *Global 6000:* V-speeds and the flaps 6 lift curve are estimates (no public
+  AFM tables); the pedestal EMS CDU duplicates the side-panel functions.
+- *737-800:* the autopilot keeps VNAV ALT instead of VNAV PTH when the MCP
+  altitude equals the cruise altitude (push VNAV at top of descent); the
+  idle descent path is steep; NO AUTOLAND shows 2 s after touchdown; V2 is a
+  few knots below 1.13 × the flaps-5 stall speed in the estimated tables.
+- *Cessna 172S (both):* not built yet.
 
 ## Data sources and licences
 

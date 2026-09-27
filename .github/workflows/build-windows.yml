@@ -1,5 +1,5 @@
 # Builds the Windows installer + portable exe on every push (any branch) and on demand,
-# and runs typecheck/tests/web build on Linux.
+# and runs typecheck/tests/web build and the full-flight check rides on Linux.
 name: build
 
 on:
@@ -31,6 +31,20 @@ jobs:
           name: web-dist
           path: dist/
           retention-days: 7
+
+  long-tests:
+    name: Full-flight check rides (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # One cold & dark to cold & dark flight per jet (tests/aircraft/*/verify/fullFlight.test.ts).
+      - run: npm run test:long
 
   windows:
     name: Windows exe (NSIS installer + portable)

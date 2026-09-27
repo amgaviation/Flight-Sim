@@ -49,14 +49,17 @@ runway), `approach` (10 nm final) and `cruise`. Weather presets are `cavok`,
 ```
 Main menu (aircraft, airport + runway/parking/auto, state, UTC date/time, weather)
   -> weather: preset | manual | live METAR (station or nearest, fallback CAVOK)
-  -> unload previous session; set env.time_utc_hours / env.day_of_year; applyWeather()
+  -> unload previous session (instance.dispose, cockpit dispose, and every aircraft-owned var removed:
+     only vars that existed before the first aircraft was created, plus input.* env.* sim.* world.*, survive);
+     set env.time_utc_hours / env.day_of_year; applyWeather()
   -> planStart(airport, spot, state, meta, surface wind)          (src/ui/startPosition.ts)
-  -> world.frame.recenter(start); await world.ensureLoaded(start, 2500 m ground / 1500 m air)
+  -> world.frame.recenter(start); ground: await world.ensureLoadedWithin(start, 2500 m, 120 s); air: ensureLoaded(start, 1500 m)
   -> fdm = new FlightModel(module.fdm, vars, world, { magneticYear }); fdm.wind.setWindsAloft(...)
   -> ctx = { vars, events, world, nav, audio, fdm, storage: createStorage('ac.<id>') }
   -> instance = await module.create(ctx)
   -> app adds what the aircraft did not create (see 2.3)
-  -> fdm.reposition(start); instance.applyState(state); NAV1 ILS auto-tune; radios/FMS reset; GPS acquired
+  -> fdm.reposition(start); instance.applyState(state); ground starts: fdm.reposition(start) again (settles on the
+     gear the state has just put down); NAV1 ILS auto-tune; radios/FMS reset; GPS acquired
   -> vehicle models + CockpitShadows.prepare; CockpitRuntime; camera.setAircraft; audio.configure;
      input.router.setMap(instance.inputMap)
   -> loop.start()  (document.body.dataset.simPhase = 'flying'; window.__sim.ready = true)
@@ -98,7 +101,8 @@ faster at higher sim rates) and wraps `env.day_of_year`.
 |---|---|
 | `systems` | Updated at 60 Hz in array order (sources before consumers). If a `Radios` instance is in the list the app does not add its own (see 2.3). |
 | `cockpit.root` | Cockpit-local frame (x right, y up, z aft; the root sits at the datum). Top-level children are hidden in external views unless `userData.visibleFromOutside = true`. |
-| `cockpit.eyePosition_m` | Pilot eye in body metres; default cockpit view. The camera looks 8 deg down from the horizontal (EST: typical design eye over-the-nose view). |
+| `cockpit.eyePosition_m` | Pilot eye in body metres; default cockpit view. The camera looks 8 deg down from the horizontal (EST: typical design eye over-the-nose view) unless `cockpit.eyePitchDeg` is set. |
+| `cockpit.eyePitchDeg` | Optional pitch of the default pilot view (deg, + up). Set it when the PFD sits low so the whole PFD is on screen at 16:9 with the default 55 deg vertical FOV. |
 | `cockpit.views` | Preset views (`name`, body `position_m`, `yawDeg`, `pitchDeg`, `fovDeg?`). `C` cycles them. |
 | `exterior` | Object3D in the same local frame. Top-level children are hidden in the cockpit view unless `userData.visibleFromCockpit = true`. Flag the wings, engines and nose so they show through the windows, and leave the fuselage cabin unflagged. |
 | `updateExterior(dt)` | Called every frame after placement (animate gear, surfaces, lights, fans). |

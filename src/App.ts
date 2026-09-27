@@ -177,6 +177,8 @@ function litFraction(canvas: HTMLCanvasElement | OffscreenCanvas): number {
   return lit / (n * n);
 }
 const _camWorld = new THREE.Vector3();
+/** Longest wait for the terrain under a ground start (see App.loadScenery). */
+const GROUND_START_WAIT_MS = 120_000;
 
 export class App {
   readonly vars = new SimVars();
@@ -218,6 +220,13 @@ export class App {
   private volumes: AudioVolumes;
   private cfg: LaunchConfig;
   private session: Session | null = null;
+  /**
+   * Vars that existed before the first aircraft was created (app, world,
+   * input, weather and time state). Everything else belongs to an aircraft
+   * and is removed when it is unloaded (see dropAircraftVars).
+   */
+  private appVarKeys: Set<string> | null = null;
+  private appStringKeys: Set<string> | null = null;
   private menu: MainMenu | null = null;
   private pause: PauseMenu | null = null;
   private help: HTMLElement | null = null;
@@ -595,13 +604,17 @@ export class App {
         step(0.25 + Math.min(0.4, s.tilesLoaded * 0.02), `Loading scenery around ${placement.description}... (${s.tilesLoaded} tiles, ${s.terrain.pendingLoads} pending)`);
       }, 250);
       try {
-        await this.world.ensureLoaded(placement.lat, placement.lon, placement.onGround ? 2500 : 1500);
+        await this.loadScenery(placement.lat, placement.lon, placement.onGround);
       } finally {
         clearInterval(poll);
       }
 
       step(0.7, `Building ${module.meta.name}...`);
       const date = cfg.time.mode === 'now' ? new Date() : new Date(`${cfg.time.date}T12:00:00Z`);
+      if (!this.appVarKeys) {
+        this.appVarKeys = new Set(this.vars.keys());
+        this.appStringKeys = new Set(this.vars.stringKeys());
+      }
       const fdm = new FlightModel(module.fdm, this.vars, this.world, { magneticYear: decimalYear(date) });
       fdm.wind.setWindsAloft(weather.windsAloft);
       const ctx: SimContext = { vars: this.vars, events: this.events, world: this.world, nav: this.nav, audio: this.audio, fdm, storage: createStorage(`ac.${module.meta.id}`) };
@@ -646,7 +659,7 @@ export class App {
           tooltipContainer: this.ui,
         },
       });
-      this.camera.setAircraft({ eye_m: instance.cockpit.eyePosition_m, views: instance.cockpit.views ?? [], chaseDistance_m: module.meta.chaseDistance_m });
+      this.camera.setAircraft({ eye_m: instance.cockpit.eyePosition_m, views: instance.cockpit.views ?? [], chaseDistance_m: module.meta.chaseDistance_m, eyePitchDeg: instance.cockpit.eyePitchDeg });
       this.audio.configure(profileFromFdm(module.fdm, { apu: systems.some((s) => s instanceof Apu) }));
       this.input.router.setMap(instance.inputMap);
       this.session = { entry, module, fdm, ctx, instance, runtime, systems, navSystems, radios, failures, fuelSystems, airport, placement, weather };
@@ -673,8 +686,13 @@ export class App {
   /** Reposition + initial state + radio resets (used by launch and in-flight reposition). */
   private placeAndApply(fdm: FlightModel, instance: AircraftInstance, radios: Radios | null, navSystems: Subsystem[], p: StartPlacement, state: InitialState, airport: Airport): void {
     this.pilot.stop();
-    fdm.reposition({ lat: p.lat, lon: p.lon, onGround: p.onGround, altFtMsl: p.onGround ? undefined : p.altFtMsl, headingTrue: p.headingTrue, iasKt: p.iasKt });
+    const where = { lat: p.lat, lon: p.lon, onGround: p.onGround, altFtMsl: p.onGround ? undefined : p.altFtMsl, headingTrue: p.headingTrue, iasKt: p.iasKt };
+    fdm.reposition(where);
     instance.applyState(state);
+    // Ground starts settle on the gear, so settle again once the state has set the gear down: repositioned
+    // from the air (gear up), the first settle rests the aircraft on its belly, and the gear snapping down
+    // under it threw it into the air and triggered the structural-failure crash check.
+    if (p.onGround) fdm.reposition(where);
     if (p.ils) {
       // Auto-tune NAV1 to the approach ILS and set the course (magnetic).
       const mv = airport.magVar ?? this.vars.get(FDM.magVar);
@@ -697,7 +715,7 @@ export class App {
     const p = planStart(airport, spot, state, s.module.meta, { dir: s.weather.surfaceWind.directionDeg, kt: s.weather.surfaceWind.speedKt });
     this.loop.setPaused(true);
     this.world.frame.recenter(p.lat, p.lon);
-    await this.world.ensureLoaded(p.lat, p.lon, p.onGround ? 2500 : 1500);
+    await this.loadScenery(p.lat, p.lon, p.onGround);
     this.placeAndApply(s.fdm, s.instance, s.radios, s.navSystems, p, state, airport);
     s.airport = airport;
     s.placement = p;
@@ -705,6 +723,22 @@ export class App {
     this.settings.set('launch', this.cfg);
     this.crashedShown = false;
     this.overlays.toast(p.description, 3);
+  }
+
+  /**
+   * Streams the terrain around a start position. Ground starts wait up to
+   * GROUND_START_WAIT_MS (not the world's default 25 s) for the z14 tiles:
+   * placed on the fallback (airport) elevation, an aircraft whose real terrain
+   * arrives a few feet lower would drop onto it and could register a hard
+   * landing or crash. Offline, missing tiles end the wait at once.
+   */
+  private async loadScenery(lat: number, lon: number, onGround: boolean): Promise<void> {
+    if (!onGround) {
+      await this.world.ensureLoaded(lat, lon, 1500);
+      return;
+    }
+    const complete = await this.world.ensureLoadedWithin(lat, lon, 2500, GROUND_START_WAIT_MS);
+    if (!complete) console.warn(`Terrain around the start position did not finish loading in ${GROUND_START_WAIT_MS / 1000} s; using the fallback elevation`);
   }
 
   private unloadSession(): void {
@@ -728,8 +762,27 @@ export class App {
     }
     for (const n of s.navSystems) n.dispose?.();
     this.vehicle.setModels(null, null);
+    this.dropAircraftVars();
     this.audio.configure({ engines: [], cockpitCutoffHz: 18000, cockpitGain: 1, windLevel: 0 });
     for (const id of ['stall_horn', 'stick_shaker', 'overspeed', 'ap_disconnect', 'at_disconnect', 'master_warning', 'gear_horn', 'takeoff_config', 'marker_outer', 'marker_middle', 'marker_inner']) this.audio.tone(id, false);
+  }
+
+  /**
+   * Removes the unloaded aircraft's vars so the next aircraft starts from a
+   * clean state. Systems initialise from vars that already exist (for
+   * example LandingGear keeps `gear.pos{i}`), so without this an aircraft
+   * loaded on the ground after another one's cruise state started with its
+   * gear retracted and "crashed" on the runway. App-owned vars (those present
+   * before the first aircraft was created, plus the input, env, sim and world
+   * namespaces) are kept.
+   */
+  private dropAircraftVars(): void {
+    const keep = this.appVarKeys;
+    if (!keep) return;
+    const appNs = /^(input|env|sim|world)\./;
+    for (const k of [...this.vars.keys()]) if (!keep.has(k) && !appNs.test(k)) this.vars.delete(k);
+    const keepS = this.appStringKeys ?? new Set<string>();
+    for (const k of [...this.vars.stringKeys()]) if (!keepS.has(k) && !appNs.test(k)) this.vars.deleteString(k);
   }
 
   private quitToMenu(): void {

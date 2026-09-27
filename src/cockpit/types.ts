@@ -79,6 +79,12 @@ export interface CockpitBuild {
   eyePosition_m: [number, number, number];
   /** Optional preset views (e.g. overhead, pedestal, FMS, copilot) in body metres + yaw/pitch deg. */
   views?: { name: string; position_m: [number, number, number]; yawDeg: number; pitchDeg: number; fovDeg?: number }[];
+  /**
+   * Optional pitch of the default pilot view (deg, + up). Default -8 (the app's
+   * generic over-the-nose view); set it lower when the PFD sits low in the
+   * panel so the whole PFD is on screen at 16:9.
+   */
+  eyePitchDeg?: number;
   controls: CockpitControl[];
   displays: { display: CockpitDisplay; mesh: THREE.Mesh }[];
   lighting?: CockpitLightingZone[];

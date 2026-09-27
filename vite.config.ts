@@ -29,5 +29,9 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['tests/**/*.test.ts', 'src/**/*.test.ts'],
+    // The full-flight check rides (tests/aircraft/<id>/verify/fullFlight.test.ts, 1-3 min each) are
+    // left out of `npm test` to keep it under ~5 min on CI; `npm run test:long` runs them
+    // (AMG_LONG_TESTS=1). CI runs both. See docs/modules/qa.md.
+    exclude: process.env.AMG_LONG_TESTS ? ['**/node_modules/**'] : ['**/node_modules/**', 'tests/aircraft/*/verify/fullFlight.test.ts'],
   },
 } as any);

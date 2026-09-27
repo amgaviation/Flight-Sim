@@ -198,6 +198,10 @@ const b = new CockpitBuilder(ctx /* SimContext or { vars, events, audio? } */, {
 | `addGrid(panel, GridLayout, (ControlSpec \| null)[][])` | rows go down the panel |
 | `zone(LightingZoneOptions)` / `light(CockpitLightSpec)` | lighting (section 11) |
 | `onUpdate(fn(dt))` | per-frame hook (aircraft demo systems, visual-only animation) |
+
+`build()` returns the `CockpitBuild`. Its optional `eyePitchDeg` (deg, + up,
+default -8 in the app) sets the pitch of the default pilot view; set it on the
+returned build when the PFD sits low (`build.eyePitchDeg = -12`).
 | `trackGeometry(...g)` | geometry disposed with the build |
 | `build(): CockpitBuildEx` | finalizes (once): flushes labels, consolidates static meshes |
 

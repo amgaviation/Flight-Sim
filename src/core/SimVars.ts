@@ -109,6 +109,24 @@ export class SimVars {
     for (const [k, v] of Object.entries(snap.strings)) this.setString(k, v);
   }
 
+  /**
+   * Removes one numeric var (listeners stay registered and are not called).
+   * Used by the app to drop an unloaded aircraft's state. Returns true if it existed.
+   */
+  delete(name: string): boolean {
+    return this.values.delete(name);
+  }
+
+  /** Removes one string var (listeners stay registered and are not called). */
+  deleteString(name: string): boolean {
+    return this.strings.delete(name);
+  }
+
+  /** Names of every string var. */
+  stringKeys(): IterableIterator<string> {
+    return this.strings.keys();
+  }
+
   clear(): void {
     this.values.clear();
     this.strings.clear();
