@@ -22,8 +22,13 @@
  *    re-engaged while it is latched (EST: the AP pitch and roll servos drive
  *    one cable run; Citation-family practice, `disconnect.auto` /
  *    `engageInhibit` in createSystems.ts).
- * SCOPE: the handle is reset on the ground (maintenance action on the real
- * aircraft); pushing it back in the cockpit re-connects the runs.
+ * Handle (AOPA 2021 photograph a21_006, pedestal aft face): red flag "PULL"
+ * at NORM; pulled = both axes split; rotated up = PITCH RECONNECT (pitch runs
+ * re-joined, roll still split), down = ROLL RECONNECT; pushed in =
+ * "PITCH/ROLL RECONNECT PUSH-RESET" (both re-joined, NORM).
+ * SCOPE: on the aircraft the reconnect detents re-engage the disconnect
+ * mechanism in flight only when the wheels / columns are aligned; here they
+ * re-join at once.
  *
  * Runs right after MechanicalFlightControls and before the spoilers (roll
  * spoilers follow the aileron). No per-step allocation.
@@ -39,29 +44,33 @@ interface Half {
   jam: string;
   surf: string;
   free: number;
+  wasSplit: boolean;
 }
 
 export class LongitudePitchRollDisconnect implements Subsystem {
   readonly name = 'lon.pitch_roll_disconnect';
   private readonly halves: Half[] = [
-    { column: 'fcs.pitch_column', jam: 'fcs.pitch_jam', surf: 'surf.elevator', free: 0 },
-    { column: 'fcs.roll_column', jam: 'fcs.roll_jam', surf: 'surf.aileron', free: 0 },
+    { column: 'fcs.pitch_column', jam: 'fcs.pitch_jam', surf: 'surf.elevator', free: 0, wasSplit: false },
+    { column: 'fcs.roll_column', jam: 'fcs.roll_jam', surf: 'surf.aileron', free: 0, wasSplit: false },
   ];
-  private wasSplit = false;
-
   constructor(private readonly vars: SimVars) {}
 
   update(dt: number): void {
     const v = this.vars;
-    const split = v.get(V.pitchRollDisc) !== 0;
+    // Handle states (AOPA 2021 photograph a21_006: PULL; rotate up PITCH RECONNECT, down ROLL RECONNECT; PUSH-RESET):
+    // 1 = both axes split, 2 = pitch reconnected (roll still split), 3 = roll reconnected (pitch still split).
+    const st = v.get(V.pitchRollDisc);
     for (let i = 0; i < this.halves.length; i++) {
       const h = this.halves[i];
+      const split = i === 0 ? st === 1 || st === 3 : st === 1 || st === 2;
+      if (!split) h.wasSplit = false;
       const channel = v.get(h.surf); // MechanicalFlightControls output this frame (frozen if jammed)
       if (!split) {
         h.free = channel;
         continue;
       }
-      if (!this.wasSplit) h.free = channel;
+      if (!h.wasSplit) h.free = channel;
+      h.wasSplit = true;
       const cmd = v.get(h.column);
       const step = RATE * dt;
       const d = cmd - h.free;
@@ -69,11 +78,12 @@ export class LongitudePitchRollDisconnect implements Subsystem {
       const other = v.get(h.jam) !== 0 ? channel : 0;
       v.set(h.surf, 0.5 * h.free + 0.5 * other);
     }
-    this.wasSplit = split;
   }
 
   reset(): void {
-    this.wasSplit = false;
-    for (const h of this.halves) h.free = this.vars.get(h.surf);
+    for (const h of this.halves) {
+      h.wasSplit = false;
+      h.free = this.vars.get(h.surf);
+    }
   }
 }

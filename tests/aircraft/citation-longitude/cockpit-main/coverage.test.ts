@@ -168,6 +168,11 @@ describe('Citation Longitude cockpit: control coverage', () => {
       'lon.lp.gear': () => r.vars.set('gear.handle_lock', 0), // down-lock solenoid released (airborne)
       'lon.lp.ext_pwr': () => r.vars.set(LON_VARS.extPwrAvail, 1), // ground power cart connected
       'lon.ped.cabin_alt': () => r.vars.set(LON_VARS.pressMode, 1), // PRESS MODE MANUAL
+      // CONTROL LOCK can only be engaged with both thrust levers at idle (gust-lock interlock).
+      'lon.ped.control_lock': () => {
+        r.vars.set(LON_VARS.tla(1), 0);
+        r.vars.set(LON_VARS.tla(2), 0);
+      },
     };
     // Also count reads made while the systems react to each actuation (state-dependent branches).
     const emitted: string[] = [];
@@ -183,9 +188,10 @@ describe('Citation Longitude cockpit: control coverage', () => {
     // Indicators (no actuation): their lamp vars must be written by the systems.
     const INDICATORS: Record<string, string[]> = {
       'lon.lp.stby_led': [LON_VARS.stbyBattLed],
-      'lon.lp.gear_lt_l': ['gear.green1', 'gear.red1'],
-      'lon.lp.gear_lt_n': ['gear.green0', 'gear.red0'],
-      'lon.lp.gear_lt_r': ['gear.green2', 'gear.red2'],
+      'lon.g5k.gmc.cpl_l': ['g3k.gmc.lt_xfr_l'],
+      'lon.g5k.gmc.cpl_r': ['g3k.gmc.lt_xfr_r'],
+      'lon.g5k.gmc.spd_lt': ['g3k.gmc.lt_at'],
+      'lon.ped.cvr_status': [LON_VARS.cvrTestOk],
     };
     for (const c of build.controls) {
       if (c instanceof AnnunciatorLight) {

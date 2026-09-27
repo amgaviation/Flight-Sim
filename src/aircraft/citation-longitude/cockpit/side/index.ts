@@ -22,10 +22,9 @@
  */
 import * as THREE from 'three';
 import { AnnunciatorLight, CircuitBreaker, PushButton, SelectorKnob } from '../../../../cockpit/controls';
-import type { Panel } from '../../../../cockpit/CockpitBuilder';
 import { trimBoxGeometry } from '../../../../cockpit/geometry/structure';
 import { LON_VARS as V } from '../../vars';
-import { seg, type LonCockpitContext } from '../context';
+import { lonMaterials, seg, type LonCockpitContext } from '../context';
 import { FLOOR_Z, MOUNTS, TILLER } from '../layout';
 import { cbGroupsFor, ratingText } from './breakers';
 import { MaskStowage } from './oxygenMask';
@@ -37,19 +36,28 @@ import { MaskStowage } from './oxygenMask';
  */
 export const SIDE_CONSOLE = {
   xAft: 7.1,
-  xFwdRight: 8.0,
-  /** Left console top stops aft of the tiller mount (TILLER centre 7.90, mount 0.13 long). */
-  xFwdLeft: TILLER.center_m[0] - 0.07,
+  /** L50: the consoles run forward under the PFD GTC wedges (c_lcon); the tiller knob sits in the left console top. */
+  xFwdRight: 8.2,
+  xFwdLeft: 8.2,
   topZ: MOUNTS.sideLeft.center_m[2],
   y: Math.abs(MOUNTS.sideLeft.center_m[1]) + 0.06,
   width: 0.16,
 };
 
-/** Sidewall circuit-breaker panel (EST): below the side-window sill (z -0.32), beside the seat, face tilted 8 deg up. */
-export const CB_PANEL = { x: 7.43, y: 1.045, z: -0.08, length: 0.56, height: 0.25, tiltDeg: 8 };
+/**
+ * Circuit-breaker panels (L51, c_lcon / Textron photograph): on the forward sidewall beside the console, below the GTC
+ * wedge and ahead of the seat, turned ~30 deg toward the pilot; breakers on a lettered-column / numbered-row grid
+ * (left columns N.. / right AA.. in the photographs), the breaker name engraved under each. Position EST.
+ */
+export const CB_PANEL = { x: 7.76, y: 0.93, z: -0.03, yawDeg: 30, tiltDeg: 10 };
 
-/** CB layout inside a CB sub-panel. */
-const CB = { cols: 16, pitch: 0.029, rowPitch: 0.032, titleH: 0.018, diameter: 0.0095 };
+/** CB grid: rows of breakers at `pitch`, `rowPitch` (name under each). */
+const CB = { rows: 5, pitch: 0.032, rowPitch: 0.036, diameter: 0.0095, margin: 0.024 };
+/** Column letters (photographs: left panel N, O, P, ...; right panel AA, BB, CC, ...). */
+const CB_LETTERS = {
+  left: ['N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y'],
+  right: ['AA', 'BB', 'CC', 'DD', 'EE', 'FF', 'GG', 'HH', 'JJ', 'KK', 'LL', 'MM'],
+};
 
 export function buildSideConsoles(c: LonCockpitContext): void {
   buildConsole(c, 'left');
@@ -67,17 +75,18 @@ function buildConsole(c: LonCockpitContext, side: 'left' | 'right'): void {
 
   // Console body down to the floor (dark), top panel flush on it.
   const bodyH = FLOOR_Z - S.topZ - 0.0035;
-  b.structureMesh(trimBoxGeometry(S.width, bodyH, len, 0.01), 'panelDark', [xc, y, S.topZ + 0.0035 + bodyH / 2]).name = `console_${side}`;
-  const p = b.panel({ name: `side_${side}`, center_m: [xc, y, S.topZ], facing: 'up', width: S.width, height: len, material: 'panel', radius: 0.008, screws: { kind: 'dzus', diameter: 0.007, inset: 0.008, pitch: 0.25 } });
+  const M = lonMaterials(env);
+  b.structureMesh(trimBoxGeometry(S.width, bodyH, len, 0.01), M.trim, [xc, y, S.topZ + 0.0035 + bodyH / 2]).name = `console_${side}`;
+  const p = b.panel({ name: `side_${side}`, center_m: [xc, y, S.topZ], facing: 'up', width: S.width, height: len, material: M.deck, radius: 0.008, screws: { kind: 'hex', diameter: 0.004, inset: 0.008, pitch: 0.3 } });
 
   // ---- crew oxygen (forward end)
   const who = side === 'left' ? 'PILOT' : 'COPILOT';
   const s = side === 'left' ? 'l' : 'r';
-  const vFwd = len / 2;
-  const vBox = vFwd - 0.085;
-  p.label(`${who} OXYGEN`, 0, vFwd - 0.014, { height: 0.0028 });
+  // Mask cup aft of the tiller knob (c_lcon), same station on both consoles.
+  const vBox = TILLER.center_m[0] - 0.17 - xc;
+  p.label(`${who} OXYGEN`, 0, vBox + 0.065, { height: 0.0028 });
   p.add(new MaskStowage(env, { id: `lon.sc.mask_${s}`, label: `${who} O2 MASK`, var: side === 'left' ? V.oxyMaskL : V.oxyMaskR, inboard: side === 'left' ? 1 : -1 }), 0, vBox);
-  const vCtl = vBox - 0.11;
+  const vCtl = vBox - 0.085;
   // Regulator: NORM (diluter) / 100 % / EMER (positive pressure), OxygenSystem crew mask `mode`.
   p.add(
     new SelectorKnob(env, {
@@ -120,56 +129,58 @@ function buildConsole(c: LonCockpitContext, side: 'left' | 'right'): void {
     vCtl,
   );
 
-  // ---- circuit breakers: sidewall panel beside the seat, in a trim housing reaching back to the wall.
-  // Height fits the breaker rows (the fixed 0.25 m left ~40 % of the panel empty); the top edge stays under the sill.
+  // ---- circuit breakers: forward sidewall grid panel turned toward the pilot (L51), in a black trim housing.
   const C = CB_PANEL;
   const groups = cbGroupsFor(side, c.sys.elec.breakerNames());
-  const h = Math.min(C.height, cbPanelHeight(groups.map((g) => g.items.length)));
-  const zc = C.z - C.height / 2 + h / 2;
-  const cbp = b.panel({ name: `cb_${side}`, center_m: [C.x, sgn * C.y, zc], facing: side === 'left' ? 'right' : 'left', tiltDeg: C.tiltDeg, width: C.length, height: h, material: 'panel', radius: 0.008, screws: { kind: 'dzus', diameter: 0.007, inset: 0.008, pitch: 0.28 } });
-  const housing = new THREE.Mesh(new THREE.BoxGeometry(C.length + 0.02, h + 0.02, 0.07), env.materials.get('interior'));
+  const items = groups.flatMap((g) => g.items.map((it) => ({ ...it, bus: g.title })));
+  const cols = Math.ceil(items.length / CB.rows);
+  const w = CB.margin * 2 + (cols - 1) * CB.pitch + 0.01;
+  const h = CB.margin + 0.012 + (CB.rows - 1) * CB.rowPitch + 0.02;
+  const cbp = b.panel({
+    name: `cb_${side}`,
+    center_m: [C.x, sgn * C.y, C.z],
+    facing: side === 'left' ? 'right' : 'left',
+    // Turned toward the pilot (aft): facing 'right' has +u forward, so a negative yaw turns the left panel aft.
+    yawDeg: side === 'left' ? -C.yawDeg : C.yawDeg,
+    tiltDeg: C.tiltDeg,
+    width: w,
+    height: h,
+    origin: 'top-left',
+    material: M.deck,
+    radius: 0.008,
+    screws: { kind: 'hex', diameter: 0.004, inset: 0.007 },
+  });
+  const housing = new THREE.Mesh(new THREE.BoxGeometry(w + 0.02, h + 0.02, 0.09), M.trim);
   b.trackGeometry(housing.geometry);
   housing.userData.cockpitStatic = true;
   housing.name = `cb_housing_${side}`;
-  cbp.addObject(housing, 0, 0, { z: -0.036 });
-  cbp.label(`${side === 'left' ? 'LEFT' : 'RIGHT'} CIRCUIT BREAKERS`, 0, h / 2 - 0.012, { height: 0.0034 });
-  buildBreakers(c, cbp, groups, h / 2 - 0.032);
+  cbp.addObject(housing, w / 2, h / 2, { z: -0.046 });
+  const letters = CB_LETTERS[side];
+  // The forward end is the panel's +u side on the left wall (-u on the right): column letters run from the forward end.
+  const colX = (col: number) => (side === 'left' ? w - CB.margin - col * CB.pitch : CB.margin + col * CB.pitch);
+  for (let col = 0; col < cols; col++) cbp.label(letters[col] ?? String(col + 1), colX(col), 0.011, { height: 0.0042 });
+  for (let row = 0; row < CB.rows; row++) cbp.label(String(row + 1), side === 'left' ? 0.008 : w - 0.008, CB.margin + 0.004 + row * CB.rowPitch, { height: 0.004 });
+  items.forEach((it, i) => {
+    const col = Math.floor(i / CB.rows);
+    const row = i % CB.rows;
+    cbp.add(
+      new CircuitBreaker(c.env, {
+        id: `lon.cb.${it.name}`,
+        label: `CB ${letters[col] ?? col + 1}${row + 1} ${it.bus}: ${it.label}`,
+        var: `cb.${it.name}`,
+        trippedVar: `cb.${it.name}_tripped`,
+        rating: ratingText(it.ratingA),
+        name: it.label,
+        diameter: CB.diameter,
+      }),
+      colX(col),
+      CB.margin + 0.004 + row * CB.rowPitch,
+    );
+  });
 }
 
-/** Panel height (m) that fits the header and the breaker groups (item counts per group). */
+/** CB panel height (m) for `n` breakers on the 5-row grid (kept for the breaker tests). */
 export function cbPanelHeight(groupSizes: number[]): number {
-  let h = 0.032;
-  for (const n of groupSizes) h += CB.titleH + Math.ceil(n / CB.cols) * CB.rowPitch + 0.008;
-  return h + 0.006;
-}
-
-function buildBreakers(c: LonCockpitContext, p: Panel, groups: ReturnType<typeof cbGroupsFor>, yTop: number): void {
-  let yy = yTop;
-  const x0 = (-(CB.cols - 1) * CB.pitch) / 2;
-  for (const g of groups) {
-    p.label(g.title, 0, yy, { height: 0.0028 });
-    p.line(x0 - 0.008, yy - 0.004, -x0 + 0.008, yy - 0.004, 0.0004);
-    yy -= CB.titleH;
-    g.items.forEach((it, i) => {
-      const col = i % CB.cols;
-      const row = Math.floor(i / CB.cols);
-      // Rows centred on the panel.
-      const inRow = Math.min(CB.cols, g.items.length - row * CB.cols);
-      const xs = (-(inRow - 1) * CB.pitch) / 2;
-      p.add(
-        new CircuitBreaker(c.env, {
-          id: `lon.cb.${it.name}`,
-          label: `CB ${it.label}`,
-          var: `cb.${it.name}`,
-          trippedVar: `cb.${it.name}_tripped`,
-          rating: ratingText(it.ratingA),
-          name: it.label,
-          diameter: CB.diameter,
-        }),
-        xs + col * CB.pitch,
-        yy - row * CB.rowPitch,
-      );
-    });
-    yy -= Math.ceil(g.items.length / CB.cols) * CB.rowPitch + 0.008;
-  }
+  void groupSizes;
+  return CB.margin + 0.012 + (CB.rows - 1) * CB.rowPitch + 0.02;
 }

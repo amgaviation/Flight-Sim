@@ -15,7 +15,7 @@ import * as THREE from 'three';
 import type { ControlPointer } from '../../../../cockpit/types';
 import type { CockpitEnv } from '../../../../cockpit/env';
 import { ControlBase, type ControlOptions } from '../../../../cockpit/controls/ControlBase';
-import { roundedBox } from '../../../../cockpit/geometry/primitives';
+import { cylinderZ, tube } from '../../../../cockpit/geometry/primitives';
 import { smoothTo } from '../../../../cockpit/anim';
 
 export interface MaskStowageOptions extends ControlOptions {
@@ -27,44 +27,47 @@ export interface MaskStowageOptions extends ControlOptions {
   inboard?: 1 | -1;
 }
 
-const DEFAULT_SIZE: [number, number, number] = [0.105, 0.125, 0.05]; // EST from photographs of EROS MC20 stowage boxes
+const DEFAULT_SIZE: [number, number, number] = [0.1, 0.1, 0.05]; // cup diameter x (unused) x depth, EST from c_lcon
 
+/**
+ * Layout audit L52 (c_lcon): the quick-donning mask stows in a round console cup; its red squeeze tabs stand up out of
+ * the cup and the white supply hose loops over the cup rim. No stowage-box doors.
+ */
 export class MaskStowage extends ControlBase {
   private readonly o: MaskStowageOptions;
   private readonly mask = new THREE.Group();
-  private readonly doorL = new THREE.Group();
-  private readonly doorR = new THREE.Group();
   private pos = 0;
 
   constructor(env: CockpitEnv, o: MaskStowageOptions) {
     super(env, o);
     this.o = o;
     this.initVar(o.var, 0);
-    const [w, l, h] = o.size ?? DEFAULT_SIZE;
-    // Box body (static).
-    this.mesh(this.geo(`lon.maskbox.${w}.${l}.${h}`, () => roundedBox(w, l, h, 0.006)), 'plasticBlack', this.object, true).position.z = h / 2;
-    // Doors on top, hinged along the outer long edges; open while the mask is out.
-    const doorG = this.geo(`lon.maskdoor.${w}.${l}`, () => new THREE.BoxGeometry(w / 2 - 0.002, l - 0.006, 0.003).translate((w / 2 - 0.002) / 2, 0, 0));
-    this.doorL.position.set(-w / 2 + 0.001, 0, h + 0.0015);
-    this.doorR.position.set(w / 2 - 0.001, 0, h + 0.0015);
-    this.doorR.rotation.z = Math.PI;
-    this.mesh(doorG, 'plasticGrey', this.doorL);
-    this.mesh(doorG, 'plasticGrey', this.doorR);
-    this.object.add(this.doorL, this.doorR);
-    // Red release tabs at the front edge.
-    const tabG = this.geo('lon.masktab', () => new THREE.BoxGeometry(0.018, 0.006, 0.008));
-    for (const s of [-1, 1]) this.mesh(tabG, 'knobRed', this.object, true).position.set(s * 0.022, l / 2 - 0.003, h + 0.006);
-    // Mask: oro-nasal cup + inflatable harness ring (EST shapes).
-    const cupG = this.geo('lon.maskcup', () => new THREE.SphereGeometry(0.038, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 1.2, 0.9));
-    const ringG = this.geo('lon.maskring', () => new THREE.TorusGeometry(0.045, 0.006, 8, 24));
-    const hoseG = this.geo('lon.maskhose', () => new THREE.CylinderGeometry(0.007, 0.007, 0.12, 10).rotateX(Math.PI / 2).translate(0, 0, -0.06));
+    const [d, , h] = o.size ?? DEFAULT_SIZE;
+    const r = d / 2;
+    // Cup: black rim ring on the console and a dark well.
+    this.mesh(this.geo(`lon.maskcup.rim.${r}`, () => new THREE.TorusGeometry(r, 0.006, 10, 36)), 'plasticBlack', this.object, true).position.z = 0.002;
+    this.mesh(this.geo(`lon.maskcup.well.${r}.${h}`, () => cylinderZ(r, r * 0.92, -h, 0.001, 32)), 'panelDark', this.object, true);
+    // White supply hose loop over the rim (c_lcon), from the cup's inboard rim up and back into the console.
+    const inb = o.inboard ?? 1;
+    const hoseG = this.geo(`lon.maskhose.loop.${inb}`, () => {
+      const pts = [
+        new THREE.Vector3(inb * r * 0.6, -r * 0.2, -0.01),
+        new THREE.Vector3(inb * r * 0.8, -r * 0.4, 0.07),
+        new THREE.Vector3(inb * r * 0.9, -r * 1.0, 0.1),
+        new THREE.Vector3(inb * r * 0.95, -r * 1.6, 0.06),
+        new THREE.Vector3(inb * r * 1.0, -r * 1.9, 0.0),
+      ];
+      return tube(pts, 0.0065, 32, 10);
+    });
+    this.mesh(hoseG, 'knobWhite', this.object, true);
+    // Mask: oro-nasal cup (black) with the red squeeze tabs on top (EST shapes).
+    const cupG = this.geo('lon.maskcup.mask', () => new THREE.SphereGeometry(0.036, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 1.2, 0.9));
     this.mesh(cupG, 'rubber', this.mask);
-    const ring = this.mesh(ringG, 'guardRed', this.mask);
-    ring.position.z = 0.012;
-    this.mesh(hoseG, 'rubber', this.mask);
-    this.mask.position.set(0, 0, h - 0.02);
+    const tabG = this.geo('lon.masktab2', () => new THREE.BoxGeometry(0.022, 0.012, 0.02));
+    for (const s2 of [-1, 1]) this.mesh(tabG, 'knobRed', this.mask).position.set(s2 * 0.016, 0, 0.03);
+    this.mask.position.set(0, 0, -0.012);
     this.object.add(this.mask);
-    this.addHitBox(w, l, h + 0.02, 0, 0, (h + 0.02) / 2);
+    this.addHitBox(d, d, 0.06, 0, 0, 0.02);
     this.pos = this.readVar(o.var) !== 0 ? 1 : 0;
     this.apply();
   }
@@ -96,13 +99,9 @@ export class MaskStowage extends ControlBase {
 
   private apply(): void {
     const k = this.pos;
-    const [, , h] = this.o.size ?? DEFAULT_SIZE;
     const s = this.o.inboard ?? 1;
-    // Lifted up and toward the crew member (toward -y = aft, and inboard), tipped toward the face.
-    this.mask.position.set(s * 0.12 * k, -0.06 * k, h - 0.02 + 0.3 * k);
+    // Lifted out of the cup up and toward the crew member (aft and inboard), tipped toward the face.
+    this.mask.position.set(s * 0.12 * k, -0.06 * k, -0.012 + 0.32 * k);
     this.mask.rotation.set(1.3 * k, 0, 0);
-    const open = Math.min(1, k * 3) * 1.9;
-    this.doorL.rotation.y = -open;
-    this.doorR.rotation.y = open;
   }
 }

@@ -5,8 +5,8 @@
  *
  * Switch positions follow the POH checklists (Section 4):
  *  - cold_dark: everything OFF, key out, control lock installed, parking brake SET, fuel
- *    selector LEFT on the G1000 (BOTH on the steam variant) (POH "Securing airplane" 10: LEFT or RIGHT to prevent crossfeeding; the
- *    preflight cabin item 26 then sets BOTH), fuel shutoff ON (pushed in), mixture idle
+ *    selector LEFT (POH "Securing airplane": LEFT or RIGHT to prevent crossfeeding; the preflight
+ *    cabin item then sets BOTH), fuel shutoff ON (pushed in), mixture idle
  *    cut-off, throttle closed, flaps
  *    UP, trim neutral-ish (takeoff mark).
  *  - ready_to_taxi: after "Starting engine": engine at ~1000 rpm, mixture leaned for ground
@@ -84,10 +84,10 @@ export function setC172Switches(ctx: Pick<SimContext, 'vars'>, core: Pick<C172Co
   v.set(C172.keyIn, powered ? 1 : 0);
   v.set(C172.magneto, powered ? MAG.both : MAG.off);
   v.set(C172.fuelPump, 0);
-  // POH 172SPHBUS-02 Securing Airplane 10 leaves the selector on LEFT or RIGHT (to prevent
-  // crossfeeding); the preflight cabin item 26 then sets BOTH. The G1000 cold & dark therefore
-  // starts on LEFT. SCOPE: the steam variant keeps BOTH until its own checklist/check ride adopt it.
-  v.set(C172.fuelSelector, cold && g ? FUEL_SEL.left : FUEL_SEL.both);
+  // POH Securing Airplane (172SPHUS item 8, 172SPHBUS-02 item 10) leaves the selector on LEFT or
+  // RIGHT "to prevent cross feeding"; the preflight cabin item (steam 16, G1000 26) then sets BOTH.
+  // Cold & dark therefore starts on LEFT in both variants.
+  v.set(C172.fuelSelector, cold ? FUEL_SEL.left : FUEL_SEL.both);
   v.set(C172.fuelShutoff, 1);
   v.set(C172.throttleFriction, 0.3);
   // Flight controls
@@ -173,7 +173,11 @@ export function applyC172State(ctx: SimContext, core: C172Core, s: InitialState,
   } else if (s === 'takeoff') {
     // Full rich for takeoff (above 3000 ft lean for maximum RPM: POH Sec 4).
     v.set(C172.mixture, v.get(FDM.pressAlt) > 3000 ? bestPowerMixture(sigma) : 1);
-    v.set(C172.throttle, 0.05);
+    // Before Takeoff "Throttle - 1000 RPM or LESS" (POH 4-15): 0.04 settles at ~920 RPM full rich.
+    // Lined up with the brakes off the airplane creeps forward at this power (about 4 kt after 12 s, as a
+    // real 172 does at 1000 RPM on pavement). Idle (~620 RPM) would stop it, but then the alternator is off
+    // line (LOW VOLTS) and the POH / presets test band of 800-1000 RPM is not met, so the creep is kept.
+    v.set(C172.throttle, 0.04);
   } else if (s === 'cruise') {
     v.set(C172.mixture, recommendedLeanMixture(sigma));
     v.set(C172.throttle, 0.7);

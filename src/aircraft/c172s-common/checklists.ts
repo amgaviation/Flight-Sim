@@ -9,6 +9,7 @@ import type { SimContext } from '../../core/SimContext';
 import { ENG, FDM, SURF } from '../../core/vars';
 import { ANN, C172, FUEL_SEL, MAG, STBY_BATT } from './vars';
 import type { C172Variant } from './systems/electrical';
+import { c172SteamPohChecklists, type C172SteamChecklistHooks } from './checklistsSteam';
 
 type V = SimContext['vars'];
 const on = (name: string) => (v: V) => v.get(name) > 0.5;
@@ -16,7 +17,11 @@ const off = (name: string) => (v: V) => v.get(name) < 0.5;
 const eq = (name: string, x: number) => (v: V) => Math.round(v.get(name)) === x;
 const flaps = (lo: number, hi: number) => (v: V) => v.get(SURF.flapsDeg) >= lo - 0.5 && v.get(SURF.flapsDeg) <= hi + 0.5;
 
-export function c172Checklists(variant: C172Variant): Checklist[] {
+export function c172Checklists(variant: C172Variant, steamHooks: C172SteamChecklistHooks = {}): Checklist[] {
+  // Steam: the item-by-item POH 172SPHUS transcription (checklistsSteam.ts). The lists below are the
+  // original condensed set, kept for the G1000 core tests (the G1000 variant has its own
+  // c172-g1000/checklists.ts transcription of 172SPHBUS).
+  if (variant === 'steam') return c172SteamPohChecklists(steamHooks);
   const g = variant === 'g1000';
   const avionicsOff = (v: V) => v.get(C172.avionicsBus1) < 0.5 && v.get(C172.avionicsBus2) < 0.5;
   const avionicsOn = (v: V) => v.get(C172.avionicsBus1) > 0.5 && v.get(C172.avionicsBus2) > 0.5;

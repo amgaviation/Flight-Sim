@@ -1,57 +1,48 @@
 /**
- * Citation Longitude overhead panel (loaded by cockpit/index.ts through
- * import.meta.glob; contract in cockpit/context.ts).
+ * Citation Longitude overhead LIGHTS strip (loaded by cockpit/index.ts through import.meta.glob; contract in
+ * cockpit/context.ts).
  *
- * The Longitude overhead is a short console at the windshield header (dossier
- * §7.0 / §7.7). OG Section 16 names what it carries:
- *   - "The overhead lighting panel contains the following cockpit lighting
- *     controls: PANEL knob (instrument panel label backlighting, the Day
- *     position is full intensity), FLOOD knob (overhead cockpit flood light),
- *     AUX knob" (OG 16-2, Fig 16-2-1);
- *   - the exterior-light buttons L LDG, R LDG, RECOG, PULSE, TAXI, WING INSP,
- *     TAIL FLOOD and ANTI COLL "on the overhead lighting panel" (OG 16-3/16-4,
- *     Fig 16-3-2). NAV, BEACON and auto-PULSE live on the GTC Exterior Lights
- *     page (OG 16-3), not here;
- *   - EMER LTS OFF / ARM / ON (OG 17-2 Cockpit Inspection "EMER LTS Switch ...
- *     ARM"), PASS SAFETY, FIRE WARN TEST and PASS OXY (dossier §7.7, EST
- *     positions and legends, Citation-family practice).
- * Added here (EST, Citation-family practice; every one drives a system):
- *   - DOME light toggle (hot battery bus load `dome_lt`, dimmer 'dome');
- *   - ANNUN TEST: annunciator / CAS lamp test (`alert.annun_test`, read by the
- *     CasManager and every cockpit lens);
- *   - PASS OXY ON status lens (`oxy.pax_on`).
- * Not fitted on the Longitude (so not built): windshield wipers (OG 12-3: "not
- * equipped with windshield wipers ... hydrophobic coating"), windshield-heat
- * switches (OG 12-3: automatic controller), storm lights (the FLOOD knob at
- * full is the thunderstorm setting; SCOPE).
+ * Layout audit L27-L31: the Longitude overhead is a single long narrow strip at the windshield header titled
+ * "LIGHTS" (AOPA 2021 photograph c_oh; OG Fig 16-2-1, 16-3-2), measured at ~0.42 mm/px on a ~0.56 m strip, left to
+ * right:
+ *   L LDG, R LDG, TAXI, RECOG, PULSE | PANEL (MIN .. DAY), FLOOD (MIN), AUX (MIN) knobs | EMER LTS toggle in a ring
+ *   guard ("EMER LTS ARM" above, "ON" at the side) | ANTI COLL, WING INSP, TAIL FLOOD, PAX SAFETY, SEAT BELTS.
+ * Lighting buttons show a cyan ON when selected (OG oh_b). NAV, BEACON and auto-PULSE are on the GTC Exterior Lights
+ * page (OG 16-3).
+ * Not on the real overhead (so not built here): DOME toggle (the cockpit dome light is a GTC Lights-page toggle,
+ * SCOPE in systems/synoptics.ts), PASS OXY switch / lens (GTC ECS page, SCOPE), FIRE WARN TEST and ANNUN TEST (GTC
+ * Aircraft Systems > Tests page, OG Fig 9-7-1), windshield wipers (OG 12-3: none), windshield-heat switches
+ * (automatic), storm lights (FLOOD at full is the thunderstorm setting; SCOPE).
  *
- * Geometry (EST from flight-deck photographs): 0.40 m wide x 0.30 m long
- * console from x 7.96 aft to 7.66, following the 12 deg headliner slope, set
- * ~55 mm below the headliner in a light-grey trimmed housing. Panel
- * convention (facing down): +x = right, +y = aft (label tops toward the tail,
- * as read when looking up; docs/modules/cockpit.md §1).
+ * Headliner fixtures (L31, a18_002): the two large round fixtures either side of the strip carry the flood lights
+ * (speaker / outlet rings), sun-visor rails above the side windows with sliding visors (SCOPE: shading state).
+ *
+ * Panel convention (facing down): +x = right, +y = aft (label tops toward the tail, as read when looking up;
+ * docs/modules/cockpit.md §1). In the photograph the titles sit on the aft edge, which is the upper edge in a
+ * pilot's-eye view of a strip facing down and aft.
  */
 import * as THREE from 'three';
-import { AnnunciatorLight, GuardedSwitch, PushButton, RotaryKnob, ToggleSwitch } from '../../../../cockpit/controls';
+import { PushButton, RotaryKnob, ToggleSwitch } from '../../../../cockpit/controls';
 import type { Panel } from '../../../../cockpit/CockpitBuilder';
 import { LON_VARS as V } from '../../vars';
-import { seg, type LonCockpitContext } from '../context';
+import { lonMaterials, seg, type LonCockpitContext } from '../context';
+import { SunVisor } from '../controls';
 
-/** Overhead panel frame (EST). Kept inside the headliner: centre 55 mm below the skin inset at x 7.77. */
+/** Overhead LIGHTS strip frame (EST from c_oh / a18_002): centre just aft of the windshield header, ~35 mm below the lining. */
 export const OVERHEAD = {
-  center_m: [7.81, 0, -1.03] as [number, number, number],
-  tiltDeg: 12, // + = forward end lower here (verified with placePanel: -12 raised the front into the windshield header)
-  width: 0.4,
-  height: 0.3, // 0.36 left a 60 mm empty band aft of the PASS SAFETY row (screenshot review)
+  center_m: [7.93, 0, -1.012] as [number, number, number],
+  tiltDeg: 12, // + = forward end lower (headliner slope at the header)
+  width: 0.56,
+  height: 0.11,
 };
 
-/** Dome light: centre of the headliner aft of the overhead console (EST 6 cd LED fixture: ~4 lux at the floor, ~6 lux at the seat pans). */
+/** Dome light: centre of the headliner aft of the strip (EST 6 cd LED fixture: ~4 lux at the floor, ~6 lux at the seat pans). */
 export const DOME_LIGHT = { position_m: [7.35, 0, -1.12] as [number, number, number], target_m: [7.45, 0, 0.62] as [number, number, number], candela: 6 };
 
-const fmtPct = (v: number): string => (v <= 0.001 ? 'OFF' : `${Math.round(v * 100)} %`);
+const fmtPct = (v: number): string => (v <= 0.001 ? 'MIN' : `${Math.round(v * 100)} %`);
 
-/** Korry lighting button: white ON legend when selected (EST legend colour, same convention as the ice buttons, OG 12-3). */
-function lightButton(c: LonCockpitContext, p: Panel, id: string, name: string, v: string, x: number, y: number): PushButton {
+/** Lighting switchlight (~30 x 28 mm, c_oh), cyan ON when selected (OG oh_b). */
+function lightButton(c: LonCockpitContext, p: Panel, id: string, name: string, v: string, x: number): PushButton {
   const btn = p.add(
     new PushButton(c.env, {
       id,
@@ -59,186 +50,116 @@ function lightButton(c: LonCockpitContext, p: Panel, id: string, name: string, v
       var: v,
       mode: 'toggle',
       style: 'korry',
-      width: 0.0175,
-      height: 0.0175,
+      width: 0.028,
+      height: 0.026,
       layout: 'stack',
-      segments: [seg.eq('ON', 'white', v, 1)],
+      unlitTint: 0.04,
+      segments: [seg.eq('ON', 'cyan', v, 1)],
     }),
     x,
-    y,
+    -0.012,
   );
-  p.label(name, x, y + 0.0158, { height: 0.0031 });
+  const lines = name.split(' ');
+  if (lines.length > 1 && name.length > 9) {
+    p.label(lines[0], x, 0.0235, { height: 0.0032 });
+    p.label(lines.slice(1).join(' '), x, 0.0185, { height: 0.0032 });
+  } else p.label(name, x, 0.0205, { height: 0.0032 });
   return btn;
 }
 
-/** Dimmer knob (0..1, pointer, OFF at the stop). */
-function dimKnob(c: LonCockpitContext, p: Panel, id: string, name: string, v: string, x: number, y: number, format = fmtPct): void {
+/** Dimmer knob with the engraved arc (MIN at the stop, DAY at full for PANEL). */
+function dimKnob(c: LonCockpitContext, p: Panel, id: string, name: string, v: string, x: number, format = fmtPct, dayLabel = false): void {
   p.add(
     new RotaryKnob(c.env, {
       id,
       label: name,
       cap: 'dimmer',
-      diameter: 0.016,
+      diameter: 0.017,
       outer: { var: v, min: 0, max: 1, step: 0.05, angleRange: [-140, 140], label: name, format },
     }),
     x,
-    y,
+    -0.012,
   );
-  p.label(name, x, y + 0.019, { height: 0.0032 });
-  p.label('OFF', x - 0.0135, y - 0.0125, { height: 0.0019 });
+  p.label(name, x, 0.0205, { height: 0.0032 });
+  p.label('MIN', x - 0.011, -0.03, { height: 0.0022 });
+  if (dayLabel) p.label('DAY', x + 0.013, -0.03, { height: 0.0022 });
+  // Engraved range arc on the left of the knob (c_oh).
+  for (let k = 0; k < 5; k++) {
+    const a0 = THREE.MathUtils.degToRad(130 + k * 22);
+    const a1 = THREE.MathUtils.degToRad(130 + (k + 1) * 22 - 4);
+    const r = 0.0145;
+    p.line(x + r * Math.cos(a0), -0.012 + r * Math.sin(a0), x + r * Math.cos(a1), -0.012 + r * Math.sin(a1), 0.0006 + k * 0.00025);
+  }
 }
 
 export function buildOverhead(c: LonCockpitContext): void {
   const { b, env } = c;
+  const M = lonMaterials(env);
   const O = OVERHEAD;
-  const p = b.panel({ name: 'overhead', center_m: O.center_m, facing: 'down', tiltDeg: O.tiltDeg, width: O.width, height: O.height, material: 'panel', radius: 0.01, screws: { kind: 'dzus', diameter: 0.007, inset: 0.008 } });
-
-  // Housing: light-grey trim box from the panel edge up into the headliner (hides the panel back).
-  const housing = new THREE.Mesh(new THREE.BoxGeometry(O.width + 0.03, O.height + 0.03, 0.1), env.materials.get('headliner'));
+  const p = b.panel({ name: 'overhead', center_m: O.center_m, facing: 'down', tiltDeg: O.tiltDeg, width: O.width, height: O.height, material: M.deck, radius: 0.008, screws: { kind: 'hex', diameter: 0.004, inset: 0.008, positions: [[-O.width / 2 + 0.01, O.height / 2 - 0.01], [O.width / 2 - 0.01, O.height / 2 - 0.01], [-O.width / 2 + 0.01, -O.height / 2 + 0.01], [O.width / 2 - 0.01, -O.height / 2 + 0.01]] } });
+  // Housing: trim box from the strip up into the headliner (hides the panel back).
+  const housing = new THREE.Mesh(new THREE.BoxGeometry(O.width + 0.02, O.height + 0.02, 0.05), env.materials.get('headliner'));
   b.trackGeometry(housing.geometry);
   housing.userData.cockpitStatic = true;
   housing.name = 'overhead_housing';
-  p.addObject(housing, 0, 0, { z: -0.052 });
+  p.addObject(housing, 0, 0, { z: -0.027 });
 
-  // ---------------------------------------------------------------- EXTERIOR LIGHTS (forward row, OG 16-3 Fig 16-3-2)
-  const yExt = -0.1;
-  p.bracket('EXTERIOR LIGHTS', 0, yExt + 0.033, 0.34);
-  const ext: [string, string, string][] = [
+  // Single "LIGHTS" title with the long bracket lines along the aft edge (c_oh).
+  p.label('LIGHTS', 0, 0.041, { height: 0.0036 });
+  p.line(-0.262, 0.041, -0.022, 0.041, 0.0009);
+  p.line(0.022, 0.041, 0.262, 0.041, 0.0009);
+  const left: [string, string, string][] = [
     ['lon.oh.ldg_l', 'L LDG', V.ltLdgL],
     ['lon.oh.ldg_r', 'R LDG', V.ltLdgR],
+    ['lon.oh.taxi', 'TAXI', V.ltTaxi],
     ['lon.oh.recog', 'RECOG', V.ltRecog],
     ['lon.oh.pulse', 'PULSE', V.ltPulse],
-    ['lon.oh.taxi', 'TAXI', V.ltTaxi],
-    ['lon.oh.wing_insp', 'WING INSP', V.ltWingInsp],
-    ['lon.oh.tail_flood', 'TAIL FLOOD', V.ltTailFlood],
-    ['lon.oh.anti_coll', 'ANTI COLL', V.ltAntiColl],
   ];
-  ext.forEach(([id, name, v], i) => lightButton(c, p, id, name, v, -0.1505 + i * 0.043, yExt));
-
-  // ---------------------------------------------------------------- COCKPIT LIGHTS (OG 16-2 Fig 16-2-1)
-  const yCk = -0.015;
-  p.bracket('COCKPIT LIGHTS', -0.075, yCk + 0.037, 0.2);
-  dimKnob(c, p, 'lon.oh.panel', 'PANEL', V.ltPanel, -0.14, yCk, (v) => (v >= 0.999 ? 'DAY' : fmtPct(v)));
-  p.label('DAY', -0.14 + 0.0135, yCk - 0.0125, { height: 0.0019 });
-  dimKnob(c, p, 'lon.oh.flood', 'FLOOD', V.ltFlood, -0.075, yCk);
-  dimKnob(c, p, 'lon.oh.aux', 'AUX', V.ltAux, -0.01, yCk);
-  p.add(
-    new ToggleSwitch(env, {
-      id: 'lon.oh.dome',
-      var: V.ltDome,
-      label: 'DOME',
-      positions: ['OFF', 'ON'],
-      labels: { name: 'DOME', positions: true, height: 0.0026 },
-    }),
-    0.055,
-    yCk - 0.002,
-  );
-  // EMER LTS: OFF / ARM / ON (OG 17-2). ARM lights the emergency lights when both emergency buses lose power (lighting.ts).
+  left.forEach(([id, name, v], i) => lightButton(c, p, id, name, v, -0.24 + i * 0.034));
+  dimKnob(c, p, 'lon.oh.panel', 'PANEL', V.ltPanel, -0.064, (v) => (v >= 0.999 ? 'DAY' : fmtPct(v)), true);
+  dimKnob(c, p, 'lon.oh.flood', 'FLOOD', V.ltFlood, -0.024);
+  dimKnob(c, p, 'lon.oh.aux', 'AUX', V.ltAux, 0.018);
+  // EMER LTS: OFF (down) / ON (centre, engraved at the side) / ARM (up) in a ring guard (c_oh). ARM lights the
+  // emergency lights when both emergency buses lose power (lighting.ts). OFF is lever-locked (EST).
   p.add(
     new ToggleSwitch(env, {
       id: 'lon.oh.emer_lts',
       var: V.ltEmer,
       label: 'EMER LTS',
-      positions: ['OFF', 'ARM', 'ON'],
-      values: [0, 1, 2],
-      initial: 1,
+      positions: ['OFF', 'ON', 'ARM'],
+      values: [0, 2, 1],
+      initial: 2,
       handle: 'lever-lock',
       leverLock: [0],
-      labels: { name: 'EMER LTS', positions: true, height: 0.0026 },
+      fence: 'wire',
+      labels: { name: false, positions: false },
     }),
-    0.13,
-    yCk - 0.002,
+    0.065,
+    -0.012,
   );
-
-  // ---------------------------------------------------------------- PASS SAFETY / OXYGEN / TEST (aft row)
-  const yAft = 0.08;
-  p.add(
-    new ToggleSwitch(env, {
-      id: 'lon.oh.pass_safety',
-      var: V.ltSeatBelt,
-      label: 'PASS SAFETY',
-      positions: ['OFF', 'SEAT BELT', 'PASS SAFETY'],
-      values: [0, 1, 2],
-      labels: { name: false, positions: true, height: 0.0026 },
-    }),
-    -0.145,
-    yAft,
-  );
-  p.bracket('OXYGEN', -0.04, yAft + 0.04, 0.1);
-  // PASS OXY: guarded NORM / MAN DEPLOY (dossier §4.8 / §7.7; masks also deploy automatically at 14,000 ft cabin).
-  p.add(
-    new GuardedSwitch(env, {
-      id: 'lon.oh.pass_oxy',
-      var: V.oxyPax,
-      label: 'PASS OXY',
-      positions: ['NORM', 'MAN DEPLOY'],
-      values: [0, 1],
-      labels: { name: false, positions: true, height: 0.0022 },
-      guard: { color: 'red', guardedPosition: 0, close: 'returns' },
-    }),
-    -0.06,
-    yAft,
-  );
-  p.add(
-    new AnnunciatorLight(env, {
-      id: 'lon.oh.pass_oxy_on',
-      label: 'PASS OXY ON',
-      width: 0.02,
-      height: 0.013,
-      layout: 'stack',
-      segments: [seg.on(['PASS OXY', 'ON'], 'white', 'oxy.pax_on')],
-    }),
-    -0.018,
-    yAft,
-  );
-  p.bracket('TEST', 0.1, yAft + 0.04, 0.1);
-  p.add(
-    new PushButton(env, {
-      id: 'lon.oh.fire_test',
-      label: 'FIRE WARN TEST',
-      var: V.fireTest,
-      mode: 'momentary',
-      style: 'korry',
-      width: 0.0175,
-      height: 0.0175,
-      layout: 'stack',
-      segments: [seg.on(['FIRE', 'TEST'], 'white', 'fire.test')],
-    }),
-    0.075,
-    yAft,
-  );
-  p.label('FIRE WARN', 0.075, yAft + 0.0155, { height: 0.0024 });
-  p.add(
-    new PushButton(env, {
-      id: 'lon.oh.annun_test',
-      label: 'ANNUN TEST',
-      var: V.lampTest,
-      mode: 'momentary',
-      style: 'korry',
-      width: 0.0175,
-      height: 0.0175,
-      layout: 'stack',
-      segments: [seg.on(['LAMP', 'TEST'], 'white', V.lampTest)],
-    }),
-    0.125,
-    yAft,
-  );
-  p.label('ANNUN', 0.125, yAft + 0.0155, { height: 0.0024 });
-
-  // Placard (EST): the emergency-light arming note.
-  p.placard({ text: 'EMER LTS - ARM BEFORE FLIGHT', height: 0.0021, style: 'engraved' }, 0.1, yCk - 0.034);
+  p.label('EMER LTS', 0.065, 0.0235, { height: 0.0032 });
+  p.label('ARM', 0.065, 0.0185, { height: 0.0032 });
+  p.label('O', 0.049, -0.009, { height: 0.0028 });
+  p.label('N', 0.049, -0.0135, { height: 0.0028 });
+  const right: [string, string, string][] = [
+    ['lon.oh.anti_coll', 'ANTI COLL', V.ltAntiColl],
+    ['lon.oh.wing_insp', 'WING INSP', V.ltWingInsp],
+    ['lon.oh.tail_flood', 'TAIL FLOOD', V.ltTailFlood],
+    ['lon.oh.pax_safety', 'PAX SAFETY', V.ltPaxSafety],
+    ['lon.oh.seat_belts', 'SEAT BELTS', V.ltSeatBelts],
+  ];
+  right.forEach(([id, name, v], i) => lightButton(c, p, id, name, v, 0.104 + i * 0.034));
 
   buildFixtures(c);
 }
 
-/** Dome, flood and emergency-light fixtures in the headliner (lighting zones and one real light). */
+/** Dome, flood and emergency-light fixtures in the headliner (lighting zones and one real light), sun visors. */
 function buildFixtures(c: LonCockpitContext): void {
   const { b, env } = c;
+  const M = lonMaterials(env);
   b.zone({ id: 'dome', intensityVar: 'ac.light.dome', lagS: 0, color: 0xfff4e6 });
   // Cockpit emergency light lens: follows light.emer (lighting.ts; own battery packs, EST).
   b.zone({ id: 'emer_lt', intensityVar: 'light.emer', lagS: 0, color: 0xffffff });
-  // Spot aimed down from just below the lens: the fixture's reflector keeps the light off the headliner around it
-  // (a point light on the ceiling washes the headliner out).
   env.lighting.addLight({ id: 'dome', kind: 'spot', zone: 'dome', position_m: [DOME_LIGHT.position_m[0], 0, DOME_LIGHT.position_m[2] + 0.03], target_m: DOME_LIGHT.target_m, color: 0xfff4e6, candela: DOME_LIGHT.candela, distance: 3, angleDeg: 65, penumbra: 0.6 }, b.root);
 
   const lens = (zone: string, gain: number, r: number, pos: [number, number, number], name: string) => {
@@ -248,19 +169,36 @@ function buildFixtures(c: LonCockpitContext): void {
     const g = new THREE.CylinderGeometry(r, r * 1.1, 0.008, 28);
     b.structureMesh(g, m, pos, undefined, false).name = name;
   };
-  // Dome light lens (round LED fixture), emergency light lens aft of it.
   lens('dome', 2.2, 0.05, [DOME_LIGHT.position_m[0], 0, DOME_LIGHT.position_m[2] - 0.004], 'dome_lens');
   lens('emer_lt', 3, 0.022, [7.2, 0, -1.135], 'emer_lens');
-  // Flood-light eyeballs over each seat (the lights themselves are created in cockpit/index.ts).
-  const eyeG = new THREE.SphereGeometry(0.018, 16, 10);
-  const bezelG = new THREE.CylinderGeometry(0.026, 0.026, 0.006, 20);
+  // Large round headliner fixtures either side of the strip (a18_002): grille ring (speaker / outlet) with the flood
+  // light eyeball in its centre (the lights are created in cockpit/index.ts).
+  const ringG = new THREE.TorusGeometry(0.05, 0.007, 10, 36);
+  ringG.rotateX(Math.PI / 2);
+  const grilleG = new THREE.CylinderGeometry(0.048, 0.048, 0.004, 32);
+  const eyeG = new THREE.SphereGeometry(0.016, 16, 10);
   for (const y of [-0.42, 0.42]) {
-    b.structureMesh(bezelG.clone(), 'bezel', [7.95, y, -1.03], undefined, false).name = 'flood_bezel';
+    b.structureMesh(ringG.clone(), M.fixture, [7.93, y, -1.03], undefined, false).name = 'headliner_ring';
+    b.structureMesh(grilleG.clone(), M.trim, [7.93, y, -1.034], undefined, false).name = 'headliner_grille';
     const m = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, emissive: 0xfff1dc, emissiveIntensity: 0, roughness: 0.4 });
     env.materials.track(m);
     env.lighting.registerBacklight(m, 'flood', 1.5);
-    b.structureMesh(eyeG.clone(), m, [7.95, y, -1.02], undefined, false).name = 'flood_eyeball';
+    b.structureMesh(eyeG.clone(), m, [7.93, y, -1.022], undefined, false).name = 'flood_eyeball';
   }
+  ringG.dispose();
+  grilleG.dispose();
   eyeG.dispose();
-  bezelG.dispose();
+  // Sun-visor rails above the side windows and the sliding visors (L31; SCOPE: shading state only).
+  const visorMat = new THREE.MeshStandardMaterial({ color: 0x3a3a30, roughness: 0.2, transparent: true, opacity: 0.7 });
+  env.materials.track(visorMat);
+  for (const side of [-1, 1] as const) {
+    // Top edge of the forward side window at x 7.7: interior (y, z) ~ (0.63, -0.9) (shell loft, SIDE_WINDOWS.roof).
+    const y = side * 0.655;
+    const rail = new THREE.CylinderGeometry(0.006, 0.006, 0.5, 10);
+    rail.rotateX(Math.PI / 2);
+    b.structureMesh(rail, M.fixture, [7.7, y, -0.875], undefined, false).name = 'visor_rail';
+    // Visor face parallel to the glazing (inboard normal ~ (-sin 0.7, cos 0.7) in the section plane).
+    const mount = b.panel({ name: `visor_mount_${side < 0 ? 'l' : 'r'}`, center_m: [7.78, y - side * 0.012, -0.862], normal: [0, -side * 0.64, 0.77], up: [0, -side * 0.77, -0.64], width: 0.27, height: 0.02, invisible: true });
+    mount.add(new SunVisor(env, { id: `lon.oh.visor_${side < 0 ? 'l' : 'r'}`, label: `${side < 0 ? 'PILOT' : 'COPILOT'} SUN VISOR`, var: side < 0 ? V.visorL : V.visorR, material: visorMat }), 0, 0);
+  }
 }

@@ -60,8 +60,10 @@ export interface PushButtonOptions extends ControlOptions {
   /** Annunciator legend segments on the cap face. */
   segments?: LegendSegment[];
   layout?: 'stack' | 'split';
-  /** MCP-style light bar lit by a var. */
-  lightBar?: { var?: string; whenOn?: boolean; color?: LampColor };
+  /** MCP-style light bar lit by a var. `unlitTint`: diffuse tint of the dark bar (fraction of the lamp colour, default 0.18; ~0.03 = near black). */
+  lightBar?: { var?: string; whenOn?: boolean; color?: LampColor; unlitTint?: number };
+  /** Diffuse tint of unlit legend lenses (LegendFace `unlitTint`; default 0.2 legend / 0.16 field). */
+  unlitTint?: number;
   /** Lamp emissive intensity (default 1.4). */
   intensity?: number;
   /** Engraved name above the button (panel text). */
@@ -260,7 +262,7 @@ export class PushButton extends ControlBase {
     if (o.segments && o.segments.length) {
       const fw = round ? w * 0.68 : w * 0.86;
       const fh = round ? h * 0.68 : h * 0.86;
-      const face = new LegendFace(env, o.segments, fw, fh, o.layout ?? 'stack', { intensity: o.intensity, own: (m) => this.own(m) });
+      const face = new LegendFace(env, o.segments, fw, fh, o.layout ?? 'stack', { intensity: o.intensity, own: (m) => this.own(m), unlitTint: o.unlitTint });
       face.group.position.z = faceZ;
       this.cap.add(face.group);
       this.faceRef = face;
@@ -276,7 +278,7 @@ export class PushButton extends ControlBase {
     }
     // Light bar.
     if (o.lightBar) {
-      const m = this.own(env.materials.lens(o.lightBar.color ?? 'green', null, 0.18));
+      const m = this.own(env.materials.lens(o.lightBar.color ?? 'green', null, o.lightBar.unlitTint ?? 0.18));
       this.barMat = m;
       const bar = new THREE.Mesh(this.geo(`pb.bar.${w}`, () => new THREE.PlaneGeometry(w * 0.62, h * 0.16)), m);
       bar.position.set(0, o.engraved ? -h * 0.2 : 0, faceZ);

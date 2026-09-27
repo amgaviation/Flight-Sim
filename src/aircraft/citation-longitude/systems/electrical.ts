@@ -120,6 +120,8 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): ElectricalNetwo
     load('cabin_r', 'int_r', 18, {}, 30),
     // ---- STANDBY
     load('stby_inst', 'stby', 1.5, {}, 5),
+    // ---- EMER R: cockpit voice recorder (pedestal CVR panel; EST 0.6 A solid-state CVR with ULB).
+    load('cvr', 'emer_r', 0.6, {}, 3),
     // ---- HOT BATT L: cockpit dome light (EST: Citation-family entry/dome lighting on the hot battery bus so it
     // works with the batteries off; ~30 W LED fixture). Added with the overhead panel.
     load('dome_lt', 'hot_l', 1.2, { enabled: V.ltDome, model: 'resistive' }, 5),

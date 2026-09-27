@@ -191,6 +191,7 @@ export class SteamCabinExtras implements Subsystem {
   private wind: Loop | null = null;
   private coImpair = 0;
   private prevGpu = 0;
+  private prevKeyDisc = false;
   constructor(
     private readonly vars: SimContext['vars'],
     private readonly audio?: AudioApi,
@@ -206,6 +207,14 @@ export class SteamCabinExtras implements Subsystem {
     // trim is the KAP 140 split switch on the control wheel).
     const rate = v.get(INPUT.pitchTrimRate);
     if (rate !== 0) v.set(C172.trimPosition, clamp(v.get(C172.trimPosition) + rate * STEAM_EXTRAS.manualTrimUnitsPerS * dt, -1, 1));
+    // The simulator's AP-disconnect key / hardware button (INPUT.apDisconnect, Shift+Z) is the pilot's thumb on the
+    // A/P DISC / TRIM INT switch (Supplement 15 Fig 2 item 12): held while the key is held (edges only, so the
+    // cockpit button keeps working).
+    const keyDisc = v.get(INPUT.apDisconnect) > 0.5;
+    if (keyDisc !== this.prevKeyDisc) {
+      this.prevKeyDisc = keyDisc;
+      v.set(ST.apDisc, keyDisc ? 1 : 0);
+    }
     // Throttle creep (engine vibration) with the friction lock backed off.
     if (v.get(C172.throttleFriction) < STEAM_EXTRAS.creepFrictionBelow && v.get(ENG.running(1)) > 0.5 && v.get(INPUT.throttleBound) === 0) {
       const t = v.get(C172.throttle);

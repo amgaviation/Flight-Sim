@@ -159,7 +159,9 @@ export function createC172Exterior(vars: SimVars, opts: C172ExteriorOptions = {}
   // Blade tip markings as on N146TC (photographs): a white tip with a red band inboard of it.
   const tipMat = std(0xf2f2ee, 0.4, 0.1, THREE.DoubleSide);
   const tipBandMat = std(0xc8202a, 0.4, 0.1, THREE.DoubleSide);
-  const discMat = track(new THREE.MeshBasicMaterial({ color: 0x33363a, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }));
+  // Blur disc alpha comes from a per-vertex radial profile (vertexColors RGBA, see propDiscGeometry): a
+  // turning prop has no crisp outer rim, it fades out towards the tip.
+  const discMat = track(new THREE.MeshBasicMaterial({ color: 0x33363a, vertexColors: true, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }));
 
   const mesh = (g: THREE.BufferGeometry, m: THREE.Material, name: string, parent: THREE.Object3D = root): THREE.Mesh => {
     track(g);
@@ -263,7 +265,7 @@ export function createC172Exterior(vars: SimVars, opts: C172ExteriorOptions = {}
     // Blade pitch twist (visual): ~18 deg at 3/4 radius.
     b.rotateOnAxis(new THREE.Vector3(1, 0, 0), (k === 0 ? 1 : -1) * 18 * D2R);
   }
-  const disc = mesh(track(new THREE.CircleGeometry(R, 40)), discMat, 'prop_disc', prop);
+  const disc = mesh(track(propDiscGeometry(R)), discMat, 'prop_disc', prop);
   disc.castShadow = false;
   disc.receiveShadow = false;
   // Seen from the seat the turning prop is only a faint flicker: the blur disc is much fainter when
@@ -277,7 +279,7 @@ export function createC172Exterior(vars: SimVars, opts: C172ExteriorOptions = {}
     discPos.setFromMatrixPosition(disc.matrixWorld);
     camPos.setFromMatrixPosition(camera.matrixWorld);
     camNear = discPos.distanceToSquared(camPos) < 3.5 * 3.5;
-    discMat.opacity = (camNear ? 0.08 : 0.35) * discBlur;
+    discMat.opacity = (camNear ? PROP_DISC_OPACITY_COCKPIT : PROP_DISC_OPACITY_EXTERIOR) * discBlur;
   };
 
   // ---------------------------------------------------------------- wings, struts, flaps, ailerons
@@ -639,7 +641,7 @@ export function createC172Exterior(vars: SimVars, opts: C172ExteriorOptions = {}
     blades.rotation.z = -propAngle; // clockwise seen from the cockpit
     const blur = Math.max(0, Math.min(1, (rpm - 500) / 900));
     discBlur = blur;
-    discMat.opacity = (camNear ? 0.08 : 0.35) * blur;
+    discMat.opacity = (camNear ? PROP_DISC_OPACITY_COCKPIT : PROP_DISC_OPACITY_EXTERIOR) * blur;
     const showBlades = (blur < 0.98 || dt === 0) && !(camNear && rpm > 800);
     for (const b of blades.children) b.visible = showBlades;
 
@@ -719,4 +721,40 @@ export function createC172Exterior(vars: SimVars, opts: C172ExteriorOptions = {}
       root.removeFromParent();
     },
   };
+}
+
+/**
+ * Peak opacity of the prop blur disc seen from the seat / from outside. EST: from the seat at approach or cruise
+ * power in daylight the arc is almost invisible, a faint flicker with no crisp rim (pilot observation); from
+ * outside the blur reads more strongly against the airframe.
+ */
+export const PROP_DISC_OPACITY_COCKPIT = 0.035;
+export const PROP_DISC_OPACITY_EXTERIOR = 0.35;
+
+/**
+ * Radial alpha profile of the blur disc (0..1 of radius -> alpha): full inboard, easing out from half radius to
+ * zero at the tip, so the disc has no hard outer edge (EST: the blade's swept area thins towards the tip and the
+ * tip markings are all that is seen there).
+ */
+export function propDiscAlpha(rOverR: number): number {
+  if (rOverR <= 0.5) return 1;
+  if (rOverR >= 1) return 0;
+  const t = (rOverR - 0.5) / 0.5;
+  return 1 - t * t * (3 - 2 * t);
+}
+
+/** Flat ring-segmented disc in the local x-y plane with an RGBA vertex colour carrying propDiscAlpha. */
+export function propDiscGeometry(R: number, seg = 40, rings = 6): THREE.BufferGeometry {
+  const g = new THREE.RingGeometry(0, R, seg, rings);
+  const pos = g.getAttribute('position');
+  const col = new Float32Array(pos.count * 4);
+  for (let i = 0; i < pos.count; i++) {
+    const r = Math.hypot(pos.getX(i), pos.getY(i)) / R;
+    col[i * 4] = 1;
+    col[i * 4 + 1] = 1;
+    col[i * 4 + 2] = 1;
+    col[i * 4 + 3] = propDiscAlpha(r);
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(col, 4));
+  return g;
 }

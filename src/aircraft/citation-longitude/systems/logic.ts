@@ -37,6 +37,8 @@ const N = {
   dryMotorReq: ['', V.dryMotorReq(1), V.dryMotorReq(2)],
   lastShutdown: ['', V.lastShutdown(1), V.lastShutdown(2)],
   gsAccFail: ['fail.hyd.gs_accum1', 'fail.hyd.gs_accum2', 'fail.hyd.gs_accum3', 'fail.hyd.gs_accum4'],
+  n1: ['', ENG.n1(1), ENG.n1(2)],
+  engFail: ['', V.engFail(1), V.engFail(2)],
   hydTempA: V.hydTempC('a'),
   hydTempB: V.hydTempC('b'),
 };
@@ -79,6 +81,10 @@ export class LongitudeLogic implements Subsystem {
   private hydTb = 20;
   private readonly gsAccVars = [V.gsAccum(1), V.gsAccum(2), V.gsAccum(3), V.gsAccum(4)];
   private readonly tlaEff = ['ac.lon.tla_eff1', 'ac.lon.tla_eff2'];
+  // POWER RESERVE auto trigger latch, flap fault latch
+  private aprAutoLatch = false;
+  private flapFault = false;
+  private prevFlapReset = false;
 
   constructor(vars: SimVars) {
     this.v = vars;
@@ -98,8 +104,27 @@ export class LongitudeLogic implements Subsystem {
     const ias = v.get('adc1.ias_kt');
     const revFrac = ias >= 85 ? 1 : ias <= 45 ? 0 : (ias - 45) / 40;
     v.set(V.revMaxFrac, revFrac);
+    // ---------------- POWER RESERVE (glareshield lower tier, AOPA 2021 / Textron photographs: MANUAL and AUTO switchlights).
+    // EST (AFM text not public; HTF7000-family APR practice): AUTO armed + takeoff thrust + one engine failing (N1 split
+    // > 15 % or the FADEC engine-failure latch) triggers APR on the operating engine; MANUAL commands it on both. APR =
+    // the TO/APR N1 rating (OG 1-3: TO/APR limit 96.79 %), applied to any lever in the CLB..TO range. Latched until
+    // both levers come back below CRU or AUTO is disarmed.
+    const n1a = v.get(N.n1[1]);
+    const n1b = v.get(N.n1[2]);
+    const toBoth = tla1 >= TLA.toRange || tla2 >= TLA.toRange;
+    const engOut = v.get(N.engFail[1]) !== 0 || v.get(N.engFail[2]) !== 0 || (n1a > 40 || n1b > 40 ? Math.abs(n1a - n1b) > 15 : false);
+    if (v.get(V.aprAuto) === 0) this.aprAutoLatch = false;
+    else if (toBoth && engOut) this.aprAutoLatch = true;
+    if (tla1 < TLA.cru && tla2 < TLA.cru) this.aprAutoLatch = false;
+    const apr = this.aprAutoLatch || v.get(V.aprManual) !== 0;
+    v.set(V.aprActive, apr ? 1 : 0);
+    // CONTROL LOCK (pedestal aft left): the gust-lock linkage keeps the thrust levers at idle (EST interlock, Citation-
+    // family practice); the logic clamps the effective lever too so keyboard / hardware throttles obey it.
+    const locked = v.get(V.controlLock) !== 0;
     for (let i = 0; i < 2; i++) {
-      const t = i === 0 ? tla1 : tla2;
+      let t = i === 0 ? tla1 : tla2;
+      if (locked && t > TLA.idle) t = TLA.idle;
+      if (apr && t >= TLA.clb - 0.02) t = TLA.to;
       // Keep a small reverse command so the doors stay deployed at reverse idle below 45 kt.
       v.set(this.tlaEff[i], t >= 0 ? t : Math.min(-0.03, t * revFrac));
     }
@@ -188,7 +213,12 @@ export class LongitudeLogic implements Subsystem {
     const rssOn = v.get(V.rudderStby) !== 0 && aLow && (!ground || !enginesOff) && v.get('fail.hyd.rss_pump') === 0;
     v.set(V.rssActive, rssOn ? 1 : 0);
     const rudderAvail = aPsi > 1500 || v.get('hyd.rss_psi') > 1500;
-    const yd = !ground && rudderAvail && v.get('elec.rudder_ctl_powered') !== 0 && v.get('fail.yd') === 0;
+    // STANDBY YAW DAMP switchlight (pedestal forward left, Textron photograph): EST, a standby yaw-damper channel in the
+    // rudder control unit on the R emergency bus that engages with the button when the normal channel has failed
+    // (fail.yd) or lost its power; it needs rudder hydraulics like the normal channel.
+    const stbyYd = v.get(V.stbyYd) !== 0 && v.get('elec.emer_r_powered') !== 0;
+    const normYd = v.get('elec.rudder_ctl_powered') !== 0 && v.get('fail.yd') === 0;
+    const yd = !ground && rudderAvail && (normYd || stbyYd);
     v.set(V.ydAuto, yd ? 1 : 0);
     v.set('ap.yd_engaged', yd ? 1 : 0);
 
@@ -218,7 +248,9 @@ export class LongitudeLogic implements Subsystem {
     let accOk = 0;
     for (let k = 0; k < 4; k++) if (this.gsAcc[k] > 1500) accOk++;
     v.set('ac.lon.gs_accum_ok', accOk);
-    v.set(V.gsArmed, accOk >= 3 ? 1 : 0);
+    // AUTO GROUND SPOILERS switchlight (pedestal forward left, Textron photograph): OFF disarms the automatic ground
+    // spoilers (EST: OG 15-4 describes the fully automatic system; the button removes the arming).
+    v.set(V.gsArmed, accOk >= 3 && v.get(V.autoGndSplr) !== 0 ? 1 : 0);
 
     // ---------------- bleed isolation / wing crossflow (OG 9-3/9-4)
     const xflow = v.get(V.bleedIsolate) !== 0;
@@ -266,18 +298,32 @@ export class LongitudeLogic implements Subsystem {
     v.set(N.hydTempA, this.hydTa);
     v.set(N.hydTempB, this.hydTb);
 
+    // ---------------- flap fault / FLAP RESET (pedestal aft right, Textron photograph "FLAP RESET" under the flap
+    // lever). EST (AFM text not public; Citation-family flap control unit practice): a flap disagree (the drive stops
+    // short of the command for 3 s: drive failure, power loss) or asymmetry latches a fault that holds the flap drive
+    // off (createSystems.ts Flaps power); FLAP RESET clears the latch, and the fault latches again if the cause remains.
+    const flapReset = v.get(V.flapReset) !== 0;
+    if (flapReset && !this.prevFlapReset) this.flapFault = false;
+    else if (v.get('flaps.asym') !== 0 || v.get('flaps.disagree') !== 0) this.flapFault = true;
+    this.prevFlapReset = flapReset;
+    v.set(V.flapFault, this.flapFault ? 1 : 0);
+
     // ---------------- NO TAKEOFF (OG 3-5, 14-3, 15-2/15-3): pre-flight conditions not met
     const flapsTo = flaps > 5 && flaps < 17; // flaps 1 or 2
     const trimOk = v.get('trim.pitch_to_ok') !== 0 && v.get('trim.roll_to_ok') !== 0 && v.get('trim.yaw_to_ok') !== 0;
     const sbOk = v.get('surf.spoiler_left') < 0.05 && v.get('surf.spoiler_right') < 0.05;
     const park = v.get('brakes.parking_set') !== 0;
-    const bad = !flapsTo || !trimOk || !sbOk || park || v.get(V.bleedIsolate) !== 0;
+    // CONTROL LOCK engaged and a latched flap fault are no-takeoff conditions too (EST).
+    const bad = !flapsTo || !trimOk || !sbOk || park || v.get(V.bleedIsolate) !== 0 || locked || v.get(V.flapFault) !== 0;
     v.set(V.noTakeoff, ground && bad ? 1 : 0);
   }
 
   reset(): void {
     const v = this.v;
     this.sbStowed = false;
+    this.aprAutoLatch = false;
+    this.flapFault = false;
+    this.prevFlapReset = v.get(V.flapReset) !== 0;
     this.tieManual = false;
     this.prevTieBtn = v.get(V.busTieBtn);
     this.prevBattCount = (v.get(V.battL) ? 1 : 0) + (v.get(V.battR) ? 1 : 0);

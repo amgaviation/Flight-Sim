@@ -81,6 +81,7 @@ export class C172G1000Logic implements Subsystem {
   readonly name = 'c172-g1000-logic';
   private prevArm = false;
   private prevApDisc = false;
+  private prevKeyDisc = false;
   private armOnlyS = 0;
   private dirOnlyS = 0;
   private metFault = false;
@@ -114,6 +115,7 @@ export class C172G1000Logic implements Subsystem {
     const v = this.vars;
     this.prevArm = Math.round(v.get(C172G.met)) !== 0 && Math.round(v.get(C172G.metHalf)) !== 2;
     this.prevApDisc = v.get(C172G.apDisc) > 0.5;
+    this.prevKeyDisc = v.get(INPUT.apDisconnect) > 0.5;
     this.armOnlyS = this.dirOnlyS = 0;
     this.metFault = false;
     this.prevGpu = v.get(C172G.gpuRequest);
@@ -134,6 +136,14 @@ export class C172G1000Logic implements Subsystem {
     const v = this.vars;
 
     // ---------------------------------------------------------------- GFC 700 electric trim / A/P TRIM DISC
+    // The simulator's AP-disconnect key / hardware button (INPUT.apDisconnect, Shift+Z) is the pilot's thumb on
+    // A/P TRIM DISC: press sends 'ap.disc' as the cockpit button does, holding keeps the trim interrupt.
+    const keyDisc = v.get(INPUT.apDisconnect) > 0.5;
+    if (keyDisc !== this.prevKeyDisc) {
+      this.prevKeyDisc = keyDisc;
+      v.set(C172G.apDisc, keyDisc ? 1 : 0);
+      if (keyDisc) this.hooks.emit?.('ap.disc');
+    }
     const apDisc = v.get(C172G.apDisc) > 0.5;
     // Release of A/P TRIM DISC ends the ESP interrupt (the cockpit button also sends it; keyboard / scripted users
     // that only write the var get it here).

@@ -17,20 +17,21 @@ For personal and internal use by AMG Aviation Group.
 | Gulfstream G800 | Honeywell Symmetry (touch screens, active sidesticks) | flyable | [docs/aircraft/g800.md](docs/aircraft/g800.md) |
 | Bombardier Global 6000 | Collins Pro Line Fusion (Global Vision) | flyable | [docs/aircraft/global6000.md](docs/aircraft/global6000.md) |
 | Boeing 737-800 (winglets) | 737NG common display system, FMC/CDU, MCP, autoland | flyable | [docs/aircraft/b737-800.md](docs/aircraft/b737-800.md) |
-| Cessna 172S Skyhawk (steam gauges) | Analog six-pack, KX 155A, KAP 140 | not built yet (greyed out in the menu) | |
-| Cessna 172S Skyhawk (G1000 NXi) | Garmin G1000 NXi, GFC 700 | not built yet (greyed out in the menu) | |
+| Cessna 172S Skyhawk (steam gauges) | Analog six-pack, Bendix/King NAV II stack (KMA 28, KLN 94, 2x KX 155A, KT 76C, KAP 140, KR 87) | flyable | [docs/aircraft/c172s.md](docs/aircraft/c172s.md) |
+| Cessna 172S Skyhawk (G1000 NXi) | Garmin G1000 NXi (GDU PFD/MFD, GMA 1360), GFC 700 | flyable | [docs/aircraft/c172s.md](docs/aircraft/c172s.md) |
 
 An aircraft becomes selectable as soon as its module exists
 (`src/aircraft/<id>/index.ts`). If none exists, the menu offers a development
 **Test Jet** instead (it is still reachable with `?aircraft=_test-jet`; the
 smoke test flies it).
 
-Each jet has a complete, clickable 3D flight deck in which every modelled
+Each aircraft has a complete, clickable 3D flight deck in which every modelled
 switch, knob, lever, button and breaker drives a system, and every
 annunciator shows real system state. Each one has been flown headless from
 cold & dark to cold & dark through its cockpit controls only (engine start,
 FMS route and approach, takeoff, autopilot climb, cruise, VNAV descent, ILS,
-landing, shutdown); see "Checks" below. Every number (weights, speeds,
+landing, shutdown; for the two Skyhawks: POH start, run-up, KAP 140 / GFC 700
+climb and approach, landing and securing); see "Checks" below. Every number (weights, speeds,
 limits, thrust, fuel, electrical, hydraulic and pneumatic values, CAS
 messages, AFCS modes) carries its public source in a code comment, and
 estimates are marked `// EST:`. The dossier of each aircraft lists its
@@ -119,6 +120,7 @@ npm run test:long   # long flight tests: six check rides + six performance fligh
 npm run build       # production bundle in dist/
 npm run smoke       # headless browser flight, ~40 numeric checks, screenshots in tests/output/
 npm run jets-qa     # every jet in every start state in the real app, screenshots in tests/output/jets/
+node scripts/c172-qa.mjs  # the same for both 172S variants, screenshots in tests/output/c172/
 ```
 
 The check rides (`tests/aircraft/<id>/verify/fullFlight.test.ts`) fly each
@@ -181,6 +183,56 @@ the cockpit with the mouse: click, drag or scroll the control. Hover over a
 control to see its name. `C` cycles each cockpit's preset views (overhead,
 pedestal, FMS, side panels), which makes the small legends readable.
 `K` opens the aircraft's normal checklists, with live ticks.
+
+### Cessna 172S specifics
+
+The two Skyhawks share the airframe, engine (Lycoming IO-360-L2A, fuel
+injected) and systems core; only the panel differs. Everything follows the
+POH (172SPHUS for the steam airplane, 172SPHBUS for the G1000 NXi).
+
+- **Throttle and mixture**: F1-F4 move the black throttle knob, Ctrl+F1..F4
+  the red mixture knob (cut-off / leaner / richer / full rich). In the
+  cockpit both are push-pull knobs: drag down pulls out, drag up pushes in
+  (the mixture's lock button presses as you drag); the wheel turns the
+  vernier for fine adjustment. Lean on the ground and in cruise by the EGT
+  (steam EGT / fuel flow gauge, G1000 LEAN page). There is **no carburettor heat**: the IO-360 is fuel injected,
+  and an alternate air door opens by itself if the induction filter blocks
+  (failure `c172.air_filter`).
+- **Ignition key and magnetos**: the key switch has OFF / R / L / BOTH / START
+  (START springs back to BOTH). The key must be inserted first: middle click
+  the switch (steam) or click the red key tag (G1000). Left click / wheel up
+  turns it clockwise; hold left click on START to crank. The run-up magneto
+  check (R and L against BOTH at 1800 rpm) is checked by the checklists.
+- **Priming**: there is no separate primer; the auxiliary **FUEL PUMP**
+  primes the engine (POH Sec 4 Starting Engine): throttle open 1/4 inch,
+  mixture IDLE CUTOFF, FUEL PUMP ON, mixture FULL RICH until the fuel flow
+  is stable (3-5 s), mixture back to IDLE CUTOFF, FUEL PUMP OFF, key to START
+  and advance the mixture smoothly to RICH when the engine fires. Omit the
+  priming when the engine is warm; a flooded engine is cleared with the
+  pump off, mixture cut-off and the throttle 1/2 to full open while cranking.
+- **Fuel**: the fuel selector on the floor at the foot of the pedestal (LEFT / BOTH /
+  RIGHT, click or wheel) and the red FUEL SHUTOFF knob on the pedestal (pull =
+  OFF). Cold & dark starts on LEFT (POH Securing Airplane); the preflight
+  sets BOTH.
+- **Takeoff start**: lined up at about 900 rpm (POH "1000 RPM or LESS") with
+  the brakes off, so the airplane starts creeping forward; hold `.` to wait.
+- **Before starting**: remove the red control wheel lock (click its pin), set
+  MASTER (BAT and ALT halves) ON; on the G1000 airplane also test STBY BATT;
+  AVIONICS switches OFF for the start.
+- **Flaps**: F5-F8 or `[` `]` step the flap switch UP / 10 / 20 / FULL (30).
+- **Trim**: Home / End turn the elevator trim wheel (steam) or act as the
+  yoke electric trim switch (G1000); the wheel on the pedestal can also be
+  dragged.
+- **Autopilot**: `Z` presses the KAP 140 AP button (steam) or the GFC 700 AP
+  key (G1000); Shift+Z is the red disconnect switch on the pilot's yoke (A/P
+  DISC / TRIM INT on the steam airplane, A/P TRIM DISC on the G1000), held
+  as long as the key is held.
+- **Brakes and steering**: toe brakes on `.`; the parking brake handle is
+  Ctrl+`.`. The nose wheel steers with the rudder pedals.
+- `K` shows the POH checklists, preflight to securing, and the Section 3
+  emergency lists, with live ticks; several items (magneto drop, annunciator
+  test, KAP 140 trim test, STBY BATT test) check that the action was really
+  done.
 
 ## Known limitations
 
@@ -249,7 +301,21 @@ aircraft dossier (`docs/aircraft/<id>.md`) has the full list.
   on the aircraft; the FMA keeps ROLLOUT/FLARE after the aircraft stops with
   the flight directors on; the VNAV descent has no 250 kt deceleration
   (use SPD INTV).
-- *Cessna 172S (both):* not built yet.
+- *Cessna 172S (both):* the seats do not move fore and aft (the eye point is
+  fixed); leaning at run-up rpm gives only a small rpm rise; walk-around
+  items with no sim state (pitot cover, tiedowns, sump contamination, oil
+  quantity) are read-and-do; cabin temperature has no readout (only
+  windshield fogging shows it); fire and smoke dynamics are estimates.
+  Hands off, both presets roll into a slow left bank (about 7° after 12 s
+  in cruise, 12° in the approach preset), so fly the airplane or engage
+  the autopilot soon after an in-air start.
+- *Cessna 172S steam:* the KMA 28 emergency list comes from the Supplement 20
+  description (no Section 3 page found); the cabin door handle writes
+  the door state directly (no door-handle spring model as on the G1000).
+- *Cessna 172S G1000:* no KR 87 ADF / DME receiver (optional, not fitted), so
+  the GMA 1360 ADF and DME keys only select audio; a lost glideslope or GP
+  signal does not yet use the flashing 10 s revert that lateral modes use;
+  the external power receptacle is a click spot on the left cowl.
 
 ## Data sources and licences
 

@@ -15,6 +15,8 @@ export const LONGITUDE_CHECKLISTS: Checklist[] = [
     title: 'Cockpit Inspection',
     phase: 'Preflight',
     items: [
+      // EST item (the OG does not model the control lock; photograph: CONTROL LOCK lever, UNLOCK up / LOCK down).
+      { challenge: 'CONTROL LOCK lever', response: 'UNLOCK', check: off(V.controlLock) },
       { challenge: 'STBY PWR switch', response: 'TEST and hold (green light min 10 s) / ON', check: eq(V.stbyPwr, 1) },
       { challenge: 'EMER LTS switch', response: 'ARM', check: eq(V.ltEmer, 1) },
       { challenge: 'LANDING GEAR handle', response: 'DOWN', check: eq(V.gearHandle, 1) },
@@ -70,6 +72,9 @@ export const LONGITUDE_CHECKLISTS: Checklist[] = [
       { challenge: 'Flaps', response: 'Set for takeoff (1 or 2)', check: (v) => v.get('surf.flaps_deg') > 5 && v.get('surf.flaps_deg') < 17 },
       { challenge: 'Flight instruments / avionics', response: 'Aligned / no flags; altimeters within 75 ft of field, 50 ft of each other', check: (v) => v.get('ahrs1.valid') !== 0 && v.get('ahrs2.valid') !== 0 },
       { challenge: 'ENGINE ICE PROTECTION buttons', response: 'As required' },
+      // EST items from the pedestal / glareshield switchlights in the photographs (AFM text not public).
+      { challenge: 'AUTO GROUND SPOILERS button', response: 'NORM (armed)', check: on(V.autoGndSplr) },
+      { challenge: 'POWER RESERVE', response: 'AUTO (armed)', check: (v) => v.get(V.aprAuto) !== 0 && v.get(V.aprManual) === 0 },
     ],
   },
   {

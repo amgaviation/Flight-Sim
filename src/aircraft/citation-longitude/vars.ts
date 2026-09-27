@@ -192,7 +192,42 @@ export const LON_VARS = {
   lampTest: 'alert.annun_test', // overhead ANNUN TEST button (momentary), read by the CAS and every lens
 
   // ---------------- Check-ride pass: controls from the DGAC-published Longitude abnormal checklist card
-  pitchRollDisc: `${P}fc.pitch_roll_disc`, // PITCH/ROLL DISCONNECT T-handle: 0 stowed, 1 pulled and latched
+  pitchRollDisc: `${P}fc.pitch_roll_disc`, // PITCH/ROLL DISCONNECT handle: 0 NORM, 1 PULLED (both axes split), 2 PITCH RECONNECT, 3 ROLL RECONNECT
+
+  // ---------------- Fix round 1 (layout audit, AOPA 2021 / Textron flight-deck photographs): controls the
+  // photographs show that the first build lacked. Behaviour EST where the AFM text is not public (see systems/logic.ts).
+  fireApu: `${P}fire.apu`, // APU FIRE switchlight (glareshield, right of ENG FIRE R): 1 pushed (APU shutdown, APU fuel shutoff, APU bottle discharge)
+  aprAuto: `${P}eng.apr_auto`, // POWER RESERVE AUTO switchlight (yellow frame): 1 armed (APR on an engine failure), 0 disarmed
+  aprManual: `${P}eng.apr_manual`, // POWER RESERVE MANUAL switchlight: 1 APR commanded on both engines
+  aprActive: `${P}eng.apr_active`, // derived: APR thrust rating in force (auto-triggered or manual)
+  stabChan: `${P}trim.stab_chan`, // STABILIZER PRIMARY TRIM CHANNEL SELECT: 1 / 2 = active primary channel (each press alternates)
+  stabSecArm: `${P}trim.stab_sec_arm`, // SECONDARY TRIM switchlight (yellow guard frame): 1 secondary channel engaged (primary disengaged)
+  autoGndSplr: `${P}fc.auto_gnd_splr`, // AUTO GROUND SPOILERS switchlight: 1 NORM (armed), 0 OFF (disarmed)
+  stbyYd: `${P}fc.stby_yd`, // STANDBY YAW DAMP switchlight: 1 standby yaw damper engaged
+  flapReset: `${P}fc.flap_reset`, // FLAP RESET pushbutton, momentary: 1 while pressed (clears a latched flap fault)
+  flapFault: `${P}fc.flap_fault`, // derived: flap system fault latched (flaps frozen until FLAP RESET)
+  controlLock: `${P}fc.control_lock`, // CONTROL LOCK lever: 1 LOCK (down), 0 UNLOCK (up)
+  cvrTest: `${P}cvr.test`, // CVR TEST pushbutton, momentary
+  cvrErase: `${P}cvr.erase`, // CVR ERASE pushbutton, momentary
+  cvrTestOk: `${P}cvr.test_ok`, // derived: CVR status light (green) after TEST held 5 s with the CVR powered
+  cvrErased: `${P}cvr.erased`, // derived: last ERASE accepted (on the ground with the parking brake set)
+  eventMarker: `${P}fdr.event_marker`, // EVENT MARKER pushbutton, momentary
+  eventCount: `${P}fdr.event_count`, // derived: flight-data-recorder events marked this power-up
+  pttL: `${P}yoke.ptt_l`, // control-wheel PTT (back of the grip), momentary: 1 while held (COM transmit)
+  pttR: `${P}yoke.ptt_r`,
+  yokeIcsL: `${P}yoke.ics_l`, // control-wheel intercom (ICS) push, momentary
+  yokeIcsR: `${P}yoke.ics_r`,
+  transmitting: `${P}com.transmitting`, // derived: 1 while either PTT keys the selected COM
+  gasperL: `${P}ecs.gasper_l`, // pilot gasper (upper outboard PFD corner): 0 closed .. 1 open
+  gasperR: `${P}ecs.gasper_r`,
+  ltPaxSafety: `${P}lt.pax_safety_btn`, // overhead PAX SAFETY switchlight: 1 ON (cabin NO SMOKING / safety signs)
+  ltSeatBelts: `${P}lt.seat_belts`, // overhead SEAT BELTS switchlight: 1 ON (cabin FASTEN SEAT BELT signs)
+  visorL: `${P}visor_l`, // sun visor (rail above the side window): 0 stowed .. 1 deployed
+  visorR: `${P}visor_r`,
+  thrustMode: (i: number) => `${P}eng${i}.thrust_mode`, // derived string: governing FADEC rating label for the EIS (TO / CLB / CRU / APR / T/R)
+  ltStby: `${P}lt.stby`, // standby display brightness knob (right of the standby unit, c_top21; EST function) 0..1
+  altFine: `${P}gmc.alt_fine`, // GMC ALT knob PUSH FINE state: 1 = 100 ft steps, 0 = 1000 ft steps (EST)
+  stabSecCmd: `${P}trim.stab_sec_cmd`, // derived: secondary stab trim rocker command while SECONDARY TRIM is engaged
 } as const;
 
 /** Every cockpit control var (inputs), for the "every control is consumed" audit test. */
@@ -218,6 +253,10 @@ export const LON_CONTROL_VARS: string[] = [
   LON_VARS.yokeTrimL, LON_VARS.yokeTrimR, LON_VARS.yokeDiscL, LON_VARS.yokeDiscR, LON_VARS.tiller3d,
   LON_VARS.ltDome, LON_VARS.oxyModeR, LON_VARS.oxyTestL, LON_VARS.oxyTestR, LON_VARS.lampTest,
   LON_VARS.pitchRollDisc,
+  LON_VARS.fireApu, LON_VARS.aprAuto, LON_VARS.aprManual, LON_VARS.stabChan, LON_VARS.stabSecArm, LON_VARS.autoGndSplr,
+  LON_VARS.stbyYd, LON_VARS.flapReset, LON_VARS.controlLock, LON_VARS.cvrTest, LON_VARS.cvrErase, LON_VARS.eventMarker,
+  LON_VARS.pttL, LON_VARS.pttR, LON_VARS.yokeIcsL, LON_VARS.yokeIcsR, LON_VARS.gasperL, LON_VARS.gasperR,
+  LON_VARS.ltPaxSafety, LON_VARS.ltSeatBelts, LON_VARS.visorL, LON_VARS.visorR, LON_VARS.ltStby,
 ];
 
 /** Events emitted by cockpit buttons (momentary commands). */

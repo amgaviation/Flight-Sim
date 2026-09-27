@@ -5,7 +5,7 @@
  *
  *  - Preflight Cabin 14 "Annunciator Panel Switch - PLACE AND HOLD IN TST POSITION and ensure all
  *    annunciators illuminate" (POH 172SPHUS Sec 4): TST held with all six lamps (OIL PRESS, L LOW
- *    FUEL R, L VAC R, VOLTS) lit for 1 s.
+ *    FUEL R, L VAC R, VOLTS) each seen lit during a hold of at least 1 s (they flash while TST is held).
  *  - Preflight Cabin 11 "Avionics Cooling Fan - CHECK AUDIBLY FOR OPERATION": the fan was heard
  *    (SteamCabinExtras fan gain > 0).
  *  - Before Takeoff 10a "Magnetos - CHECK (RPM drop should not exceed 150 RPM on either magneto or
@@ -61,6 +61,7 @@ const LAMP_VARS: readonly string[] = LAMPS.map((l) => ANN.lamp(l));
 export class SteamProcedureMonitor implements Subsystem {
   readonly name = 'c172s-procedures';
   private annS = 0;
+  private annSeen = 0;
   private securedS = 0;
   private prevOnGround = true;
   private magRef = 0;
@@ -140,10 +141,15 @@ export class SteamProcedureMonitor implements Subsystem {
     }
 
     // ---------------------------------------------------------------- annunciator TST (Preflight 14)
-    let allLit = v.get(ST.annTest) > 0.5;
-    for (let i = 0; i < LAMP_VARS.length && allLit; i++) if (v.get(LAMP_VARS[i]) < 0.5) allLit = false;
-    this.annS = allLit ? this.annS + dt : 0;
-    if (this.annS >= 1) v.set(STEAM_PROC.annTestOk, 1);
+    // The lamps flash while TST is held (POH 4-8 NOTE), so each lamp only has to have lit during the hold.
+    if (v.get(ST.annTest) > 0.5) {
+      this.annS += dt;
+      for (let i = 0; i < LAMP_VARS.length; i++) if (v.get(LAMP_VARS[i]) > 0.5) this.annSeen |= 1 << i;
+      if (this.annS >= 1 && this.annSeen === (1 << LAMP_VARS.length) - 1) v.set(STEAM_PROC.annTestOk, 1);
+    } else {
+      this.annS = 0;
+      this.annSeen = 0;
+    }
     // Avionics cooling fan heard (Preflight 11).
     if (v.get(ST.avnFanGain) > 0) v.set(STEAM_PROC.avnFanHeard, 1);
 

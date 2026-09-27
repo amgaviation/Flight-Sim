@@ -50,6 +50,8 @@ import { createLighting } from './systems/lighting';
 import { LONGITUDE_TOLD } from './performance';
 import { LONGITUDE_CHECKLISTS } from './checklists';
 import { LONGITUDE_SYNOPTICS } from './systems/synoptics';
+import { LongitudeCrewControls, LongitudeControlLock, LongitudeGmcAltKnob } from './systems/crewControls';
+import { GcuController } from '../../avionics/garmin-g3000/state/Gcu';
 
 export interface LongitudeSystemsOptions {
   /** Headless: build the G5000 suite without canvases (tests). */
@@ -97,6 +99,9 @@ export interface LongitudeSystems {
   cas: CasManager;
   lights: LightingSystem;
   suite: G3000Suite | null;
+  crew: LongitudeCrewControls;
+  /** Display controllers (GCU key logic), null without the suite. */
+  gcu: GcuController | null;
 }
 
 /**
@@ -229,11 +234,13 @@ export function createLongitudeSystems(ctx: SimContext, opts: LongitudeSystemsOp
     // OG 1-7: AP minimum engage 400 ft AGL after takeoff (engagement is the crew's job; enforced in the doc/checklist).
     gains: { gainRefKt: 250 },
     // PITCH/ROLL DISCONNECT pulled: the AP disconnects and cannot be engaged (EST, systems/pitchRollDisconnect.ts).
-    disconnect: { ...AFCS_GFC_G5000.disconnect, auto: `${V.pitchRollDisc} != 0`, engageInhibit: `${V.pitchRollDisc} != 0` },
+    // CONTROL LOCK engaged: no engagement either (EST).
+    disconnect: { ...AFCS_GFC_G5000.disconnect, auto: `${V.pitchRollDisc} != 0 || ${V.controlLock} != 0`, engageInhibit: `${V.pitchRollDisc} != 0 || ${V.controlLock} != 0` },
   });
   const yd = new YawDamper(ctx, {
     engagedVar: 'ap.yd_engaged',
-    power: `elec.rudder_ctl_powered && (${hydFrac('a')} > 0.5 || ${hydFrac('rss')} > 0.5)`,
+    // Normal channel (rudder control unit) or the STANDBY YAW DAMP channel (R emergency bus, logic.ts, EST).
+    power: `(elec.rudder_ctl_powered || (${V.stbyYd} && elec.emer_r_powered)) && (${hydFrac('a')} > 0.5 || ${hydFrac('rss')} > 0.5)`,
     gain: { x: [100, 200, 300], y: [0.05, 0.03, 0.02] }, // EST rudder per deg/s
     nyGain: 0.3,
     authority: 0.2,
@@ -268,10 +275,12 @@ export function createLongitudeSystems(ctx: SimContext, opts: LongitudeSystemsOp
     neutral: STAB_NEUTRAL,
     increasingPositive: false, // more negative stab incidence = nose up
     electric: {
-      power: 'elec.emer_l_powered || elec.emer_r_powered',
-      // Keyboard/hardware trim, the 3D control-wheel trim switches (merged), the secondary stab trim switch.
-      switchVars: [V.pitchTrimYoke, V.yokeTrimCmd, V.stabSecSw],
-      enable: `!${V.discHeld}`, // AP/TRIM DISC held interrupts electric trim
+      // STABILIZER PRIMARY TRIM CHANNEL SELECT (pedestal, Textron photograph): EST, channel 1 on the L emergency bus,
+      // channel 2 on the R emergency bus; the secondary channel (SECONDARY TRIM engaged) runs from either.
+      power: `(${V.stabSecArm} != 0 && (elec.emer_l_powered || elec.emer_r_powered)) || (${V.stabSecArm} == 0 && (${V.stabChan} == 2 ? elec.emer_r_powered && !fail.trim.stab_ch2 : elec.emer_l_powered && !fail.trim.stab_ch1))`,
+      // Primary (wheel switches + keyboard/hardware, merged and gated by AP/TRIM DISC and SECONDARY TRIM in
+      // cockpitInputs.ts) and the secondary rocker (only while SECONDARY TRIM is engaged).
+      switchVars: [V.yokeTrimCmd, V.stabSecCmd],
       rate: { x: [0, 150, 300], y: [0.5, 0.3, 0.15] }, // EST deg/s
     },
     autopilot: { power: 'elec.afcs_powered', rate: { x: [0, 150, 300], y: [0.3, 0.2, 0.1] } },
@@ -296,7 +305,8 @@ export function createLongitudeSystems(ctx: SimContext, opts: LongitudeSystemsOp
   const flaps = new Flaps(ctx, {
     leverVar: V.flapLever,
     detents: FLAP_DETENTS,
-    normal: { power: 'elec.flaps_powered', rateDegPerS: 2.4 }, // EST: ~15 s UP -> FULL
+    // A latched flap fault holds the drive off until FLAP RESET (logic.ts, EST).
+    normal: { power: `elec.flaps_powered && !${V.flapFault}`, rateDegPerS: 2.4 }, // EST: ~15 s UP -> FULL
   });
   const spoilers = new Spoilers(ctx, {
     leverVar: V.sbCmd,
@@ -360,6 +370,11 @@ export function createLongitudeSystems(ctx: SimContext, opts: LongitudeSystemsOp
   const disc = new DisconnectAlerts(ctx, { apToneMaxS: 2 });
   const post = new LongitudePostLogic(ctx.vars);
   const prDisc = new LongitudePitchRollDisconnect(ctx.vars);
+  const crew = new LongitudeCrewControls(ctx.vars);
+  const controlLock = new LongitudeControlLock(ctx.vars);
+  // Display controllers above the PFDs (GCU-style keys and knobs; avionics/garmin-g3000/state/Gcu.ts).
+  const gcu = suite ? new GcuController(suite.system, [1, 2]) : null;
+  const gmcAlt = new LongitudeGmcAltKnob(ctx.vars, ctx.events);
   const lights = createLighting(ctx);
 
   const list: Subsystem[] = [
@@ -380,15 +395,19 @@ export function createLongitudeSystems(ctx: SimContext, opts: LongitudeSystemsOp
     ra,
     gear,
     ...(suite ? suite.systems : []),
+    ...(gcu ? [gcu] : []),
+    gmcAlt,
     eng.ratings,
     afcs,
     eng.at,
     eng.fadec,
+    crew,
     ...eng.starts,
     yd,
     stall,
     fcs,
     prDisc,
+    controlLock,
     stab,
     ailTrim,
     rudTrim,
@@ -422,6 +441,9 @@ export function createLongitudeSystems(ctx: SimContext, opts: LongitudeSystemsOp
     { id: 'ice.wshld_ctl', name: 'Windshield heat controller', category: 'ice' },
     { id: 'fuel.recirc_l', name: 'Left fuel recirculation pump', category: 'fuel' },
     { id: 'fuel.recirc_r', name: 'Right fuel recirculation pump', category: 'fuel' },
+    // Primary stabilizer trim channels (STAB PRI TRIM CHANNEL SELECT swaps to the other one; EST).
+    { id: 'trim.stab_ch1', name: 'Stab trim primary channel 1', category: 'flight controls' },
+    { id: 'trim.stab_ch2', name: 'Stab trim primary channel 2', category: 'flight controls' },
   ]);
 
   return {
@@ -463,6 +485,8 @@ export function createLongitudeSystems(ctx: SimContext, opts: LongitudeSystemsOp
     cas,
     lights,
     suite,
+    crew,
+    gcu,
   };
 }
 

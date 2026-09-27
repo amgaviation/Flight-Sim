@@ -28,7 +28,7 @@ import { LeverLogic, type LeverDetent } from './logic/LeverLogic';
 import { LegendFace } from './Annunciator';
 import { SelectorKnob, type SelectorKnobOptions } from './RotaryKnob';
 import { cylinderZ, merge, revolve, roundedBox, torusZ, transform } from '../geometry/primitives';
-import { escutcheon, knobGeometry } from '../geometry/knobs';
+import { escutcheon, knobGeometry, type KnobCap } from '../geometry/knobs';
 import { nowS, smoothTo } from '../anim';
 
 export type TBarStyle = 'tbar' | 'ring' | 'fire' | 'knob' | 'lever';
@@ -328,6 +328,8 @@ export interface PushPullKnobOptions extends ControlOptions {
   dragPxFull?: number;
   /** Number of flutes on a 'throttle' / 'mixture' (fluted) cap (default: knob library default). Appended. */
   ridges?: number;
+  /** Knob cap geometry override (default: 'fluted' for throttle / mixture, 'smooth' otherwise). Appended. */
+  cap?: KnobCap;
 }
 
 /** Cessna-style push-pull control. Internally `logic.value` = fraction pulled out (0 = in, 1 = out). */
@@ -361,7 +363,8 @@ export class PushPullKnob extends ControlBase {
     this.mesh(this.geo(`pp.shaft.${travel}`, () => cylinderZ(0.0032, 0.0032, -travel, 0.006, 16)), 'chrome', this.spin);
     const mat = o.material ?? (style === 'mixture' ? 'knobRed' : 'knob');
     const ridges = o.ridges ?? 20;
-    const knob = this.mesh(this.geo(`pp.knob.${style}.${d}${ridges === 20 ? '' : `.r${ridges}`}`, () => knobGeometry({ style: style === 'throttle' || style === 'mixture' ? 'fluted' : 'smooth', diameter: d, height: d * 0.55, ridges })), typeof mat === 'string' ? env.materials.get(mat) : mat, this.spin);
+    const cap: KnobCap = o.cap ?? (style === 'throttle' || style === 'mixture' ? 'fluted' : 'smooth');
+    const knob = this.mesh(this.geo(`pp.knob.${style}.${d}${ridges === 20 ? '' : `.r${ridges}`}${o.cap ? `.${o.cap}` : ''}`, () => knobGeometry({ style: cap, diameter: d, height: d * 0.55, ridges })), typeof mat === 'string' ? env.materials.get(mat) : mat, this.spin);
     knob.position.z = 0.005;
     const faceZ = 0.005 + d * 0.55 * 1.02 + 0.0001;
     if (o.lockButton ?? style === 'mixture') {

@@ -43,10 +43,16 @@ export class LongitudeCockpitInputs implements Subsystem {
     const l = v.get(V.yokeTrimL);
     const r = v.get(V.yokeTrimR);
     const cmd = l !== 0 ? l : r;
-    v.set(V.yokeTrimCmd, cmd);
     // The keyboard / hardware AP DISC (input.ap_disc) is the same MASTER DISCONNECT button.
     const held = v.get(V.yokeDiscL) !== 0 || v.get(V.yokeDiscR) !== 0 || v.get(INPUT.apDisconnect) !== 0;
     v.set(V.discHeld, held ? 1 : 0);
+    // Primary (wheel / keyboard) and secondary stabilizer trim (pedestal SECONDARY TRIM switchlight + NOSE DOWN / NOSE
+    // UP rocker, Textron photograph). EST (AFM text not public; Citation-family dual-channel trim practice): engaging
+    // SECONDARY TRIM disengages the primary channel; AP/TRIM DISC held interrupts the primary channel only.
+    const sec = v.get(V.stabSecArm) !== 0;
+    const primary = cmd !== 0 ? cmd : v.get(INPUT.pitchTrimRate);
+    v.set(V.yokeTrimCmd, sec || held ? 0 : primary);
+    v.set(V.stabSecCmd, sec ? v.get(V.stabSecSw) : 0);
     // A wheel trim actuation (rising edge) disconnects an engaged autopilot.
     if (cmd !== 0 && this.prevTrim === 0 && v.get(AP.engaged) !== 0) this.events?.emit('ap.disc');
     this.prevTrim = cmd;

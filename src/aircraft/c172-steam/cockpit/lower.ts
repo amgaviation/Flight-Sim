@@ -227,7 +227,7 @@ export function buildLowerPanel(b: CockpitBuilder, panel: Panel): LowerParts {
   // VH-SPQ: "THROT / PUSH / OPEN" left of the throttle, "MIX / PULL / LEAN" left of the mixture.
   text(panel, 'THROT\nPUSH\nOPEN', POS.throttle.X - 1.0, POS.throttle.Z - 0.1, 0.0012);
   // POH Sec 7: the mixture is "a red knob with raised points around the circumference" and a lock button.
-  panel.add(new PushPullKnob(env, { id: 'c172s.mixture', label: 'MIXTURE (pull lean; center button unlocks)', var: C172.mixture, valueIn: 1, valueOut: 0, style: 'mixture', travel: 0.095, lockButton: true, vernierStep: 0.008, ridges: 10 }), px(POS.mixture.X), py(POS.mixture.Z));
+  panel.add(new PushPullKnob(env, { id: 'c172s.mixture', label: 'MIXTURE (pull lean; center button unlocks)', var: C172.mixture, valueIn: 1, valueOut: 0, style: 'mixture', travel: 0.095, lockButton: true, vernierStep: 0.008, cap: 'star', ridges: 12 }), px(POS.mixture.X), py(POS.mixture.Z));
   text(panel, 'MIX\nPULL\nLEAN', POS.mixture.X - 0.9, POS.mixture.Z - 0.55, 0.0011);
   panel.add(new PushPullKnob(env, { id: 'c172s.alt_static', label: 'ALT STATIC AIR (pull ON)', var: C172.altStatic, valueIn: 0, valueOut: 1, style: 'plain', travel: 0.025, material: 'knobRed' }), px(POS.altStatic.X), py(POS.altStatic.Z));
   text(panel, 'ALT\nSTATIC AIR\nPULL ON', POS.altStatic.X - 1.25, POS.altStatic.Z, 0.0011);
@@ -547,7 +547,9 @@ export function buildPedestal(b: CockpitBuilder): PedestalParts {
       // POH placard: LEFT / RIGHT 26.5 gal LEVEL FLIGHT ONLY; BOTH 53.0 gal TAKEOFF LANDING ALL FLIGHT ATTITUDES.
       sublabels: ['26.5 GAL\nLEVEL FLIGHT\nONLY', '53.0 GAL\nTAKEOFF LANDING\nALL FLIGHT ATTITUDES', '26.5 GAL\nLEVEL FLIGHT\nONLY'],
       placardDiameter: 0.12,
-      diameter: 0.07,
+      // VH-SPQ photograph: a small cream pointer about a quarter of the plate width. The shared 'wing' cap is
+      // 2.03 x diameter long and 0.56 x diameter wide, so 0.0375 m gives the EST 3 in x 0.8 in tapered pointer.
+      diameter: 0.0375,
       labelHeight: 0.0034,
       material: mats.custom('plastic', '#e8e2d2', 0.45),
     }),

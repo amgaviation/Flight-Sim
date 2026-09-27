@@ -35,7 +35,9 @@
  * sounds. SCOPE: the real AFCS changes the vertical mode to armed; here the
  * pitch / VS reference is stepped nose-down (NOSE DN, 2 steps/s) while USP
  * is active, then the reference is left for the pilot. USP ACTIVE is also a
- * CAS warning on the NXi (Appendix A).
+ * CAS warning on the NXi (Appendix A). Like ESP, USP works only in flight
+ * (GPS ground speed > 30 kt or TAS > 50 kt): nothing fires during the POH
+ * on-ground autopilot check (172SPHBUS-02 Before Takeoff items 13-15).
  */
 import type { SimVars } from '../../../core/SimVars';
 import type { EventBus } from '../../../core/EventBus';
@@ -188,9 +190,13 @@ export class Esp {
       this.events?.emit('ap.lvl');
     }
 
-    this.updateUsp(dt, available && apOn, ias, stallWarning);
+    // USP is an in-flight protection like the rest of ESP (PG §7.5 / §8.11): on the ground (IAS 0,
+    // POH 172SPHBUS-02 Before Takeoff items 13-15 AP engage / overpower / A/P TRIM DISC check) the
+    // real airplane gives no MINSPD, no USP ACTIVE and no "AIRSPEED" aural.
+    this.updateUsp(dt, available && apOn && inFlight, ias, stallWarning);
   }
 
+  /** `apOn`: AP engaged, AFCS available and in flight (same in-flight test as ESP). */
   private updateUsp(dt: number, apOn: boolean, ias: number, stallWarning: boolean): void {
     const v = this.vars;
     const u = this.cfg.usp;

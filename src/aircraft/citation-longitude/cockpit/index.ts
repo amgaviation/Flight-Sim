@@ -19,7 +19,7 @@ import type { G3000Suite } from '../../../avionics/garmin-g3000';
 import type { LongitudeSystems } from '../createSystems';
 import { LON_VARS as V } from '../vars';
 import { CK, type LonCockpitContext } from './context';
-import { EYE_L, EYE_R, MOUNTS } from './layout';
+import { EYE_L, EYE_R, GLARE_HOOD, MOUNTS } from './layout';
 import { buildShell } from './shell';
 import { buildGlareshield } from './glareshield';
 import { buildMainPanel } from './mainPanel';
@@ -50,18 +50,21 @@ export function buildLongitudeCockpit(ctx: SimContext, sys: LongitudeSystems, su
     eyePosition_m: EYE_L,
     views: [
       { name: 'Copilot', position_m: EYE_R, yawDeg: 0, pitchDeg: -8 },
-      { name: 'Glareshield (GMC 710)', position_m: [7.86, -0.12, -0.44], yawDeg: 6, pitchDeg: -12, fovDeg: 42 },
-      { name: 'Pilot lower panel', position_m: [7.86, -0.42, -0.24], yawDeg: -2, pitchDeg: -32, fovDeg: 50 },
+      { name: 'Glareshield (GMC 710)', position_m: [7.95, -0.06, -0.45], yawDeg: 4, pitchDeg: -15, fovDeg: 44 },
+      { name: 'Lower glareshield tier (display controllers, standby)', position_m: [7.95, -0.05, -0.4], yawDeg: 3, pitchDeg: -19, fovDeg: 52 },
+      { name: 'Pilot lower panel (electrical)', position_m: [7.97, -0.33, -0.13], yawDeg: 0, pitchDeg: -36, fovDeg: 44 },
+      { name: 'Copilot lower panel (gear, ice protection)', position_m: [7.97, 0.33, -0.13], yawDeg: 0, pitchDeg: -36, fovDeg: 44 },
       { name: 'Pedestal', position_m: [7.42, -0.22, -0.36], yawDeg: 24, pitchDeg: -66, fovDeg: 60 },
       { name: 'MFD GTCs (FMS)', position_m: [7.9, -0.06, -0.22], yawDeg: 6, pitchDeg: -40, fovDeg: 45 },
-      { name: 'Overhead', position_m: [7.55, 0, -0.6], yawDeg: 0, pitchDeg: 62, fovDeg: 50 },
+      { name: 'Overhead', position_m: [7.55, 0, -0.62], yawDeg: 0, pitchDeg: 48, fovDeg: 55 },
       { name: 'Tiller / left console', position_m: [7.62, -0.45, -0.4], yawDeg: -40, pitchDeg: -45, fovDeg: 55 },
       // Added with the side consoles (cockpit/side): oxygen masks and circuit-breaker panels.
       { name: 'Left console (O2, breakers)', position_m: [7.5, -0.5, -0.3], yawDeg: -80, pitchDeg: -30, fovDeg: 62 },
       { name: 'Right console (O2, breakers)', position_m: [7.5, 0.5, -0.3], yawDeg: 80, pitchDeg: -30, fovDeg: 62 },
       // Close-ups added by the verification pass so the pedestal legends are legible at 1280 x 720.
-      { name: 'Pedestal forward (fuel, hydraulics, levers)', position_m: [7.74, 0, -0.24], yawDeg: 0, pitchDeg: -62, fovDeg: 46 },
-      { name: 'Pedestal aft (engines, ECS, pressurization, APU)', position_m: [7.4, 0, -0.2], yawDeg: 0, pitchDeg: -80, fovDeg: 46 },
+      { name: 'Pedestal forward (fuel, hydraulics, levers)', position_m: [7.74, 0, -0.26], yawDeg: 0, pitchDeg: -60, fovDeg: 50 },
+      { name: 'Pedestal aft (engines, ECS, pressurization, APU)', position_m: [7.52, 0, -0.26], yawDeg: 0, pitchDeg: -82, fovDeg: 52 },
+      { name: 'Pedestal aft face (PITCH/ROLL DISCONNECT)', position_m: [6.95, 0.05, -0.12], yawDeg: 0, pitchDeg: -38, fovDeg: 40 },
     ],
   });
   const env = b.env;
@@ -89,9 +92,9 @@ export function buildLongitudeCockpit(ctx: SimContext, sys: LongitudeSystems, su
   b.zone({ id: 'map_l', intensityVar: 'ac.light.map_l', lagS: 0, color: 0xfff1dc });
   b.zone({ id: 'map_r', intensityVar: 'ac.light.map_r', lagS: 0, color: 0xfff1dc });
   env.lighting.setAnnunciatorDimming(CK.annunBright, 0.3, false, CK.annunPower);
-  // Flood lights in the headliner over each seat, aimed at the main panel (EST 4 cd LED floods).
-  env.lighting.addFloodLight('flood.l', 'flood', [7.95, -0.42, -1.02], [8.34, -0.45, -0.05], b.root, 4, 55);
-  env.lighting.addFloodLight('flood.r', 'flood', [7.95, 0.42, -1.02], [8.34, 0.45, -0.05], b.root, 4, 55);
+  // Flood lights in the headliner fixtures either side of the overhead strip, aimed at the main panel (EST 4 cd LED floods).
+  env.lighting.addFloodLight('flood.l', 'flood', [7.93, -0.42, -1.01], [8.34, -0.42, 0.0], b.root, 4, 55);
+  env.lighting.addFloodLight('flood.r', 'flood', [7.93, 0.42, -1.01], [8.34, 0.42, 0.0], b.root, 4, 55);
   // Map lights on the side-window header, aimed at each pilot's lap (EST 3 cd).
   env.lighting.addMapLight('map.l', 'map_l', [7.55, -0.82, -0.72], [7.7, -0.45, 0.2], b.root, 3);
   env.lighting.addMapLight('map.r', 'map_r', [7.55, 0.82, -0.72], [7.7, 0.45, 0.2], b.root, 3);
@@ -101,7 +104,8 @@ export function buildLongitudeCockpit(ctx: SimContext, sys: LongitudeSystems, su
   const stripMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, emissive: 0xfff1dc, emissiveIntensity: 0, roughness: 0.6 });
   env.materials.track(stripMat);
   env.lighting.registerBacklight(stripMat, 'aux', 1.2);
-  b.structureMesh(new THREE.BoxGeometry(1.7, 0.004, 0.006), stripMat, [8.226, 0, -0.277], undefined, false).name = 'aux_strip';
+  // Under the glareshield brow lip, just aft of the GMC-tier face top (layout.ts GLARE_HOOD).
+  b.structureMesh(new THREE.BoxGeometry(1.7, 0.004, 0.006), stripMat, [GLARE_HOOD.aftX - 0.036, 0, GLARE_HOOD.topZ + 0.034], undefined, false).name = 'aux_strip';
 
   buildMainPanel(c);
   buildGlareshield(c);

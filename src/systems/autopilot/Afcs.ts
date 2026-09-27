@@ -65,6 +65,13 @@ import {
   type VerticalMode,
 } from './types';
 
+/**
+ * Authority (deg of intercept) of the cross-track integral when a course datum is used (KAP 140). EST: the
+ * crosswind correction a light single needs, asin(20 kt / 105 KTAS) ~ 11 deg; no public figure for the real
+ * computer's residual with a mis-set bug exists.
+ */
+export const COURSE_DATUM_INTEGRAL_DEG = 10;
+
 export const DEFAULT_GAINS: AfcsGains = {
   pitchKp: 0.05,
   pitchKi: 0.02,
@@ -1515,7 +1522,11 @@ export class Afcs implements Subsystem {
     const kxDegPerNm = 57.29578 / (vNmps * tau);
     const maxInt = kind === 'VOR' ? this.cfg.nav?.maxInterceptVorDeg ?? 45 : this.cfg.nav?.maxInterceptLocDeg ?? 30;
     // Slow integral trims out a steady offset when flying on heading (no GPS track).
-    if (!this.trkOk && !os) this.xtkIntegral = clampAbs(this.xtkIntegral + xtk * dt * 0.02, 1);
+    // With a course datum (KAP 140: the DG heading bug is the course, Supplement 15 Fig 2 items 14/15) the
+    // integral may only supply a crosswind-sized correction, not wash out a mis-set bug: its authority is
+    // limited to COURSE_DATUM_INTEGRAL_DEG of intercept, so a mis-set bug leaves a lasting tracking error.
+    const iLim = this.courseDatum ? Math.min(1, COURSE_DATUM_INTEGRAL_DEG / kxDegPerNm) : 1;
+    if (!this.trkOk && !os) this.xtkIntegral = clampAbs(this.xtkIntegral + xtk * dt * 0.02, iLim);
     const intercept = clampAbs(kxDegPerNm * (xtk + (this.trkOk ? 0 : this.xtkIntegral)), maxInt);
     return this.headingLaw(norm360(course + intercept), this.trackOrHeading());
   }

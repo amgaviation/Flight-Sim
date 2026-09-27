@@ -26,7 +26,6 @@ describe('Citation Longitude overhead / side consoles: control coverage', () => 
     const reads = systemReads(r);
     const mine = build.controls.filter((c) => MINE.test(c.id));
     const INDICATORS: Record<string, string[]> = {
-      'lon.oh.pass_oxy_on': ['oxy.pax_on'],
       'lon.sc.oxy_flow_l': ['oxy.pilot_flowing'],
       'lon.sc.oxy_flow_r': ['oxy.copilot_flowing'],
     };
@@ -65,8 +64,8 @@ describe('Citation Longitude overhead / side consoles: control coverage', () => 
     off();
     const unbound = report.filter((x) => !x.bound).map((x) => x.id);
     console.log(`Longitude overhead / side consoles: ${report.length} controls, ${report.length - unbound.length} bound.\n${report.map((x) => `  ${x.bound ? 'OK ' : '-- '} ${x.id.padEnd(28)} ${x.via}`).join('\n')}`);
-    // 8 exterior-light buttons, 3 dimmers, dome, EMER LTS, PASS SAFETY, PASS OXY (+lens), 2 tests, 2 x (mask, regulator, test, flow), breakers.
-    expect(mine.filter((c) => c.id.startsWith('lon.oh.')).length).toBe(18);
+    // LIGHTS strip (c_oh): 10 switchlights, 3 dimmers, EMER LTS; 2 sun visors; 2 x (mask, regulator, test, flow); breakers.
+    expect(mine.filter((c) => c.id.startsWith('lon.oh.')).length).toBe(16);
     expect(mine.filter((c) => c.id.startsWith('lon.sc.')).length).toBe(8);
     expect(mine.filter((c) => c.id.startsWith('lon.cb.')).length).toBeGreaterThan(50);
     expect(unbound).toEqual([]);

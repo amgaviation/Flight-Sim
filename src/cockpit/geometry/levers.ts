@@ -35,7 +35,8 @@ export type LeverKnobStyle =
   | 'start' // start/fuel cutoff lever knob
   | 'condition' // tapered handle
   | 'reverser' // small piggyback reverse lever grip
-  | 'ball';
+  | 'ball'
+  | 'cylinder-grip'; // horizontal cylindrical grip across the lever top (Citation Longitude thrust levers)
 
 /** Knob geometry for a lever tip, centred on the mounting point (arm tip at origin, knob extends +Z). */
 export function leverKnobGeometry(style: LeverKnobStyle, scale = 1): THREE.BufferGeometry {
@@ -134,6 +135,26 @@ export function leverKnobGeometry(style: LeverKnobStyle, scale = 1): THREE.Buffe
     case 'ball': {
       const g = sphere(0.011 * s, 24, 16);
       g.translate(0, 0, 0.009 * s);
+      return g;
+    }
+    case 'cylinder-grip': {
+      // Horizontal cylinder (axis across the lever, X), 66 mm long x 33 mm diameter at scale 1, rounded ends; sits on
+      // the arm tip. EST from the Longitude pedestal photographs (grips of both levers form a bar).
+      const r = 0.0165 * s;
+      const len = 0.066 * s;
+      const body = cylinderZ(r, r, -len / 2 + r * 0.35, len / 2 - r * 0.35, 28);
+      const e0 = sphere(r, 20, 12);
+      e0.scale(0.35, 1, 1);
+      e0.translate(-len / 2 + r * 0.35, 0, 0);
+      const e1 = sphere(r, 20, 12);
+      e1.scale(0.35, 1, 1);
+      e1.translate(len / 2 - r * 0.35, 0, 0);
+      body.rotateY(Math.PI / 2);
+      const g = merge([body, e0, e1]);
+      body.dispose();
+      e0.dispose();
+      e1.dispose();
+      g.translate(0, 0, r * 0.9);
       return g;
     }
   }

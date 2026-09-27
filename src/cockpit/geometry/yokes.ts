@@ -15,7 +15,7 @@
 import * as THREE from 'three';
 import { cylinderZ, merge, roundedBox, sphere, transform, tube } from './primitives';
 
-export type YokeStyle = 'cessna' | 'bizjet' | 'gulfstream' | 'boeing';
+export type YokeStyle = 'cessna' | 'bizjet' | 'gulfstream' | 'boeing' | 'ramshorn';
 
 export interface YokeAnchor {
   position: [number, number, number];
@@ -173,6 +173,45 @@ export function yokeParts(style: YokeStyle, scale = 1): YokeParts {
           { w: W * 0.6, h: 0.05 * s, d: 0.04 * s, x: 0, y: -0.02 * s, z: 0, rz: 0 },
         ],
         anchors: anchorsFor(-W / 2 + 0.012 * s, 0.085 * s, 0.05 * s, r, 0.022 * s, 0.035 * s),
+        width: W,
+      };
+    }
+    case 'ramshorn': {
+      // Citation Longitude ram's-horn wheel (Textron flight-deck photograph, AOPA 2021 a21_004 / c_yokeL21): two tall,
+      // near-vertical grips (~0.14 m) rising from a wide flat hub block that carries the logo. Sizes EST.
+      const W = 0.34 * s;
+      const r = 0.0175 * s;
+      const xg = W / 2 - 0.016 * s;
+      const gl = gripTube(-xg, -0.02 * s, 0.12 * s, r, -0.012 * s);
+      const gr = gripTube(xg, -0.02 * s, 0.12 * s, r, 0.012 * s);
+      const bar = tube(
+        [
+          new THREE.Vector3(-xg, -0.018 * s, 0),
+          new THREE.Vector3(-xg + 0.02 * s, -0.045 * s, 0.004 * s),
+          new THREE.Vector3(-0.07 * s, -0.052 * s, 0.006 * s),
+          new THREE.Vector3(0.07 * s, -0.052 * s, 0.006 * s),
+          new THREE.Vector3(xg - 0.02 * s, -0.045 * s, 0.004 * s),
+          new THREE.Vector3(xg, -0.018 * s, 0),
+        ],
+        r * 0.9,
+        48,
+        12,
+      );
+      const hub = roundedBox(0.17 * s, 0.07 * s, 0.05 * s, 0.014 * s, 4);
+      transform(hub, 0, -0.035 * s, 0.014 * s);
+      const grips = merge([gl, gr]);
+      gl.dispose();
+      gr.dispose();
+      return {
+        frame: bar,
+        grips,
+        hub,
+        gripBoxes: [
+          { w: 0.045 * s, h: 0.16 * s, d: 0.045 * s, x: -xg, y: 0.05 * s, z: 0, rz: 0.08 },
+          { w: 0.045 * s, h: 0.16 * s, d: 0.045 * s, x: xg, y: 0.05 * s, z: 0, rz: -0.08 },
+          { w: W * 0.6, h: 0.07 * s, d: 0.05 * s, x: 0, y: -0.035 * s, z: 0, rz: 0 },
+        ],
+        anchors: anchorsFor(-xg - 0.01 * s, 0.12 * s, 0.085 * s, r, 0.04 * s, 0.0),
         width: W,
       };
     }

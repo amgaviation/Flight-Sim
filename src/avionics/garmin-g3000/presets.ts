@@ -154,7 +154,8 @@ const LON_ITT_START: GaugeScale = { ...LON_ITT, redlines: [650], amberlines: [],
 export const LONGITUDE_EIS: EisConfig = {
   engines: 2,
   sections: [
-    { kind: 'n1', scale: LON_N1, reverserVar: (e) => `eng${e}.reverser_pos` },
+    // Thrust mode: the governing FADEC rating (aircraft/citation-longitude/systems/crewControls.ts), magenta under the A/T (OG 7-7).
+    { kind: 'n1', scale: LON_N1, reverserVar: (e) => `eng${e}.reverser_pos`, detentVar: (e) => `ac.lon.eng${e}.thrust_mode`, modeColorByAt: true },
     { kind: 'itt', scale: LON_ITT, startScale: LON_ITT_START, digitsOnlyWhenNotRunning: true, startPsiVar: 'pneu.start_psi' },
     {
       kind: 'digital',
@@ -167,7 +168,8 @@ export const LONGITUDE_EIS: EisConfig = {
     },
     { kind: 'oat', showRat: true },
     { kind: 'fuel', tanks: ['fuel.tank0_kg', 'fuel.tank1_kg'], unit: 'lb', imbalance: 500, lowLevel: 600 }, // imbalance: OG p.1-3; low level EST
-    { kind: 'flaps', var: 'surf.flaps_deg', maxDeg: 35, detents: [{ deg: 0, label: '0' }, { deg: 10, label: '1' }, { deg: 20, label: '2' }, { deg: 35, label: 'FULL' }], speedbrakeVar: 'surf.speedbrake', speedbrakeLabel: 'SPOILERS', gearVars: ['gear.pos0', 'gear.pos1', 'gear.pos2'] }, // detent angles EST
+    // OG 15-5: flap detents UP 0, 1 = 7 deg, 2 = 15 deg, FULL = 35 deg; the selected position is a cyan bug (flap lever).
+    { kind: 'flaps', var: 'surf.flaps_deg', maxDeg: 35, detents: [{ deg: 0, label: '0' }, { deg: 7, label: '1' }, { deg: 15, label: '2' }, { deg: 35, label: 'FULL' }], speedbrakeVar: 'surf.speedbrake', speedbrakeLabel: 'SPOILERS', gearVars: ['gear.pos0', 'gear.pos1', 'gear.pos2'], selectedVar: 'ac.lon.flap_lever', selectedDeg: [0, 7, 15, 35] },
     { kind: 'trim', pitch: { var: 'surf.pitch_trim', min: -1, max: 1, takeoffBand: [0.05, 0.4] }, roll: { var: 'surf.aileron_trim', min: -1, max: 1 }, yaw: { var: 'surf.rudder_trim', min: -1, max: 1 } },
   ],
 };

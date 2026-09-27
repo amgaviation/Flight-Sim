@@ -175,6 +175,24 @@ export function setLongitudeSwitches(ctx: Pick<SimContext, 'vars'>, sys: Longitu
   v.set(V.oxyTestR, 0);
   v.set(V.ltDome, 0);
   v.set(V.lampTest, 0);
+  // ---- fix round 1 controls (glareshield lower tier, pedestal, overhead, wheels)
+  v.set(V.fireApu, 0);
+  v.set(V.aprAuto, 1); // POWER RESERVE AUTO armed for every takeoff (EST normal position)
+  v.set(V.aprManual, 0);
+  v.set(V.stabChan, 1);
+  v.set(V.stabSecArm, 0);
+  v.set(V.autoGndSplr, 1);
+  v.set(V.stbyYd, 0);
+  v.set(V.flapReset, 0);
+  // CONTROL LOCK: engaged while parked cold & dark, released in the preflight (checklists.ts).
+  v.set(V.controlLock, s === 'cold_dark' ? 1 : 0);
+  for (const k of [V.cvrTest, V.cvrErase, V.eventMarker, V.pttL, V.pttR, V.yokeIcsL, V.yokeIcsR, V.visorL, V.visorR]) v.set(k, 0);
+  v.set(V.gasperL, 0.5);
+  v.set(V.gasperR, 0.5);
+  v.set(V.ltStby, night ? 0.7 : 1);
+  v.set(V.altFine, 0);
+  v.set(V.ltSeatBelts, moving ? 1 : 0);
+  v.set(V.ltPaxSafety, moving ? 1 : 0);
 }
 
 /**

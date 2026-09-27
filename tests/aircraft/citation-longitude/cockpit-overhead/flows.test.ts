@@ -6,7 +6,9 @@
  *   -> EXT PWR (AVAIL -> ON, automatic bus tie CLOSED)
  *   -> APU start, APU GEN on, EXT PWR off (tie stays closed: single primary source)
  *   -> both engines, generators on line (tie OPEN, generator CAS clear)
- * plus EMER LTS ARM logic, PASS SAFETY signs, FIRE WARN TEST, PASS OXY and the crew masks.
+ * plus EMER LTS ARM logic, the SEAT BELTS / PAX SAFETY switchlights, the GTC tests (fire warning, annunciator lamp
+ * test), passenger oxygen deploy and the crew masks. Layout-audit fix round 1: the lamp test, fire test, dome light
+ * and pax-oxygen deploy are GTC controls (the real overhead strip has none of them), set here through their vars.
  */
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
@@ -78,16 +80,20 @@ describe('Citation Longitude overhead flows', () => {
     // Cold & dark: no annunciator power, the lamp test lights nothing, the CAS is dark.
     expect(v.get('elec.emer_l_powered')).toBe(0);
     expect(shows('lon.lp.batt_l')).toBe('');
-    let release = hold('lon.oh.annun_test');
-    expect(v.get(V.lampTest)).toBe(1);
+    // GTC Tests page ANNUN toggle (no overhead ANNUN TEST button on the Longitude).
+    const lampTest = (on: boolean) => {
+      v.set(V.lampTest, on ? 1 : 0);
+      tick(0.3);
+    };
+    lampTest(true);
     expect(glow('lon.lp.batt_l')).toBe(0);
     expect(v.get('alert.master_warning')).toBe(0);
-    release();
-    // Dome light works on the hot battery bus with the batteries off.
-    click('lon.oh.dome');
+    lampTest(false);
+    // Dome light (GTC Lights page CKPT DOME) works on the hot battery bus with the batteries off.
+    v.set(V.ltDome, 1);
     tick(0.5);
     expect(v.get('ac.light.dome')).toBeGreaterThan(0.9);
-    click('lon.oh.dome');
+    v.set(V.ltDome, 0);
 
     // BATT L / R ON (OG 17-2): emergency buses powered, the BATT OFF legends go out, lenses powered.
     click('lon.lp.batt_l');
@@ -96,15 +102,19 @@ describe('Citation Longitude overhead flows', () => {
     tick(3);
     expect(v.get('elec.emer_l_powered')).toBe(1);
     expect(v.get('elec.emer_r_powered')).toBe(1);
-    expect(shows('lon.lp.batt_l')).toBe('');
+    // Normal-state cyan legends (OG 5-4..5-6, c_lowL21): BATT ON, MAIN ON, ELEC / INTERIOR NORM; no OFF / EMER.
+    expect(shows('lon.lp.batt_l')).toBe('ON');
+    expect(shows('lon.lp.main_l')).toBe('ON');
+    expect(shows('lon.lp.elec_l')).toBe('NORM');
+    expect(shows('lon.lp.interior')).toBe('NORM');
     expect(shows('lon.lp.bus_tie')).toMatch(/OPEN|CLOSED/);
     // Lamp test: every lens and the MASTER WARNING / CAUTION light while held.
-    release = hold('lon.oh.annun_test');
+    lampTest(true);
     tick(0.3);
-    for (const id of ['lon.lp.batt_l', 'lon.oh.ldg_l', 'lon.oh.pass_oxy_on', 'lon.sc.oxy_flow_l', 'lon.oh.annun_test']) expect(glow(id), id).toBeGreaterThan(0.2);
+    for (const id of ['lon.lp.batt_l', 'lon.oh.ldg_l', 'lon.oh.seat_belts', 'lon.sc.oxy_flow_l', 'lon.gs.mw_l', 'lon.gs.apr_auto']) expect(glow(id), id).toBeGreaterThan(0.2);
     expect(v.get('alert.master_warning')).toBe(1);
     expect(v.get('alert.master_caution')).toBe(1);
-    release();
+    lampTest(false);
     tick(0.5);
     expect(v.get(V.lampTest)).toBe(0);
     expect(glow('lon.oh.ldg_l')).toBeLessThan(0.05);
@@ -165,7 +175,7 @@ describe('Citation Longitude overhead flows', () => {
     expect(cas()).not.toContain('GEN OFF APU');
   });
 
-  it('EMER LTS ARM, PASS SAFETY, FIRE WARN TEST, PASS OXY and the crew masks', { timeout: 120_000 }, () => {
+  it('EMER LTS ARM, SEAT BELTS / PAX SAFETY, fire warning test, pax oxygen and the crew masks', { timeout: 120_000 }, () => {
     const { r, get, tick, click, hold, shows } = setup('ready_to_taxi');
     const v = r.vars;
     tick(1);
@@ -176,14 +186,23 @@ describe('Citation Longitude overhead flows', () => {
     v.set(V.ltEmer, 2);
     tick(0.5);
     expect(v.get('light.emer')).toBeGreaterThan(0.9);
-    // EMER LTS is lever-locked out of OFF: right-click steps down ON -> ARM -> OFF.
+    // EMER LTS toggle (c_oh): ARM up, ON centre, OFF down (lever-locked). Right-click steps down ARM -> ON -> OFF.
+    v.set(V.ltEmer, 1);
+    tick(0.3);
     const emer = get('lon.oh.emer_lts');
     const p = { button: 2 as const, shift: false, ctrl: false, alt: false, point: new THREE.Vector3(), object: emer.hitTargets[0] };
     emer.onPointerDown?.(p);
     emer.onPointerUp?.(p);
     tick(0.5);
-    expect(v.get(V.ltEmer)).toBe(1);
+    expect(v.get(V.ltEmer)).toBe(2); // ON
+    expect(v.get('light.emer')).toBeGreaterThan(0.9);
+    emer.onPointerDown?.(p);
+    emer.onPointerUp?.(p);
+    tick(1);
+    expect(v.get(V.ltEmer)).toBe(0); // OFF
     expect(v.get('light.emer')).toBe(0);
+    v.set(V.ltEmer, 1); // back to ARM
+    tick(0.3);
     // ARM + total loss of the emergency buses (every source and both batteries off): the emergency lights come on.
     const saved = [V.battL, V.battR, V.genL, V.genR, V.genApu, V.extPwr].map((k) => [k, v.get(k)] as const);
     for (const [k] of saved) v.set(k, 0);
@@ -195,42 +214,37 @@ describe('Citation Longitude overhead flows', () => {
     tick(2);
     expect(v.get('light.emer')).toBe(0);
 
-    // PASS SAFETY: SEAT BELT then PASS SAFETY (both cabin signs).
-    v.set(V.ltSeatBelt, 0);
+    // SEAT BELTS then PAX SAFETY switchlights (c_oh): cabin belt sign, then the no-smoking / safety sign; cyan ON legend.
+    for (const k of [V.ltSeatBelt, V.ltSeatBelts, V.ltPaxSafety]) v.set(k, 0);
     tick(0.2);
-    const ps = get('lon.oh.pass_safety');
-    ps.onWheel?.(1, { button: 0, shift: false, ctrl: false, alt: false, point: new THREE.Vector3(), object: ps.hitTargets[0] }); // one step up
+    click('lon.oh.seat_belts');
     tick(0.5);
-    expect(v.get(V.ltSeatBelt)).toBe(1);
+    expect(v.get(V.ltSeatBelts)).toBe(1);
+    expect(v.get('ac.light.seatbelt')).toBeGreaterThan(0.9);
     expect(v.get('ac.light.no_smoking')).toBe(0);
-    ps.onWheel?.(1, { button: 0, shift: false, ctrl: false, alt: false, point: new THREE.Vector3(), object: ps.hitTargets[0] });
+    expect(shows('lon.oh.seat_belts')).toContain('ON');
+    click('lon.oh.pax_safety');
     tick(0.5);
     expect(v.get('ac.light.no_smoking')).toBeGreaterThan(0.9);
-    expect(v.get(V.ltSeatBelt)).toBeGreaterThanOrEqual(1);
-    expect(v.get('ac.light.seatbelt')).toBeGreaterThan(0.9);
+    click('lon.oh.seat_belts');
+    tick(0.5);
+    expect(v.get('ac.light.seatbelt')).toBe(0);
 
-    // FIRE WARN TEST: fire warnings, MASTER WARNING and the ENG FIRE switchlights while held.
-    const release = hold('lon.oh.fire_test');
+    // Fire warning test (GTC Tests page FIRE WARN toggle): fire warnings and MASTER WARNING while on.
+    v.set(V.fireTest, 1);
     tick(1);
     expect(v.get('fire.test')).toBe(1);
     expect(v.get('fire.eng1_warn')).toBe(1);
     expect(v.get('alert.master_warning')).toBe(1);
-    expect(shows('lon.oh.fire_test')).toContain('FIRE TEST');
-    release();
+    v.set(V.fireTest, 0);
     tick(1);
     expect(v.get('fire.eng1_warn')).toBe(0);
 
-    // PASS OXY: guarded; first click opens the guard, the next deploys the masks; closing the guard returns it to NORM.
-    click('lon.oh.pass_oxy', 1); // switch blocked while the guard is closed
-    expect(v.get(V.oxyPax)).toBe(0);
-    click('lon.oh.pass_oxy'); // open the guard
-    click('lon.oh.pass_oxy', 1); // MAN DEPLOY
+    // Passenger oxygen manual deploy (GTC ECS page PAX OXY DEPLOY).
+    v.set(V.oxyPax, 1);
     tick(2);
-    expect(v.get(V.oxyPax)).toBe(1);
     expect(v.get('oxy.pax_on')).toBe(1);
-    expect(shows('lon.oh.pass_oxy_on')).toContain('PASS OXY ON');
-    click('lon.oh.pass_oxy'); // closing the guard returns the switch to NORM
-    expect(v.get(V.oxyPax)).toBe(0);
+    v.set(V.oxyPax, 0);
 
     // Crew masks: stowed = no flow; PRESS TO TEST = flow blinker; donned = flow, 100 % on the regulator.
     expect(v.get('oxy.pilot_flowing')).toBe(0);

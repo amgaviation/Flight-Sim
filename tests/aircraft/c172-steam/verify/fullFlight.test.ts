@@ -168,7 +168,9 @@ describe.runIf(LONG)('Cessna 172S steam (NAV II, KAP 140) check ride (KICT 01L -
       log(r, 'cold & dark');
       v.set(C172.controlLock, 0); // Control wheel lock - REMOVE
       v.set(C172.keyIn, 1); // ignition key in (OFF)
-      expect(v.get(C172.fuelSelector)).toBe(1); // BOTH
+      // Securing Airplane left the selector on LEFT (POH 4-17 item 8); preflight cabin 16: Fuel Selector Valve - BOTH.
+      expect(v.get(C172.fuelSelector)).toBe(0); // LEFT
+      v.set(C172.fuelSelector, 1); // BOTH
       expect(v.get(C172.fuelShutoff)).toBe(1); // ON (push full in)
       expect(v.get(C172.parkingBrake)).toBe(1);
       expect(v.get(C172.avionicsBus1)).toBe(0); // AVIONICS switch OFF for the start

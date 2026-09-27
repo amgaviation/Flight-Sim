@@ -20,7 +20,8 @@ export type KnobCap =
   | 'wing' // large flat flap-shaped handle (fuel/bleed selectors)
   | 'key' // ignition/magneto key bow
   | 'ring' // outer ring of a concentric pair (fluted, with a centre hole)
-  | 'dimmer'; // small skirted rheostat knob
+  | 'dimmer' // small skirted rheostat knob
+  | 'star'; // flat round cap with raised points round its rim (Cessna mixture: POH Sec 7 "a red knob with raised points around the circumference")
 
 export interface KnobGeometryOptions {
   style: KnobCap;
@@ -149,6 +150,36 @@ export function knobGeometry(o: KnobGeometryOptions): THREE.BufferGeometry {
       bow.applyMatrix4(new THREE.Matrix4().set(0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1));
       bow.computeVertexNormals();
       return bow;
+    }
+    case 'star': {
+      // Round cap whose rim carries `ridges` (default 12) pointed teeth; EST tooth depth 14 % of the radius
+      // (photographs of the Cessna mixture knob), bevelled so the teeth read as raised points.
+      const n = o.ridges ?? 12;
+      const ro = r;
+      const ri = r * 0.86;
+      const s = new THREE.Shape();
+      for (let i = 0; i < n * 2; i++) {
+        const a = (i / (n * 2)) * Math.PI * 2;
+        const rr = i % 2 === 0 ? ro : ri;
+        if (i === 0) s.moveTo(Math.sin(a) * rr, Math.cos(a) * rr);
+        else s.lineTo(Math.sin(a) * rr, Math.cos(a) * rr);
+      }
+      s.closePath();
+      const teeth = extrude(s, { depth: h * 0.92, bevel: Math.min(h * 0.1, 0.0012), bevelSegments: 2, curveSegments: 1 });
+      const dome = revolve(
+        [
+          [0, h * 0.9],
+          [ri * 0.98, h * 0.9],
+          [ri * 0.9, h * 0.97],
+          [ri * 0.5, h * 1.01],
+          [0, h * 1.02],
+        ],
+        40,
+      );
+      const g = merge([teeth, dome]);
+      teeth.dispose();
+      dome.dispose();
+      return g;
     }
     case 'ring': {
       const ri = o.innerRadius ?? r * 0.62;

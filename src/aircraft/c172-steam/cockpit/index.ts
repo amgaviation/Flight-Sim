@@ -42,9 +42,11 @@ export const C172_STEAM_PALETTE: PaletteDef = {
   ...PALETTES.cessna172,
   name: 'Cessna 172S NAV II (grey panel)',
   // EST: VH-SPQ (Commons, straight-on) panel samples #6b7376 .. #81888e, N146TC #5f5f61 (shade) ..
-  // #868782 (lit): a neutral, very slightly blue medium grey. Base chosen so the daylight render
-  // samples ~#6e787d (the cockpit's cool daylight fill multiplies it by ~0.87 / 0.92 / 0.95).
-  panel: '#7e8284',
+  // #868782 (lit), VH-SPQ lit #808483 / #848d92, shade #3e4346: a neutral, slightly blue medium grey
+  // (B >= R). The scene light tints the panel (warm/mauve on the ground under a low sun), so the base is
+  // biased blue-green. Render samples (KSEA): 15:00 cold_dark #7a777b, 15:00 approach ~#686c76,
+  // 20:00 approach ~#687a86 (base #727c87 gave #7c757a / #696b73 / #6a7985).
+  panel: '#707e88',
   panelRoughness: 0.75,
   panelFinish: 'textured',
   panelDark: '#161618',
@@ -84,6 +86,9 @@ export function buildSteamCockpit(ctx: SimContext, sys: C172SteamSystems, opts: 
       { name: 'Engine controls / flaps', position_m: [0.36, 0.1, hz(1.25)], yawDeg: 0, pitchDeg: -25, fovDeg: 72 },
       { name: 'Pedestal / fuel selector', position_m: [EYE[0] + 0.2, 0, hz(1.5)], yawDeg: 0, pitchDeg: -62, fovDeg: 60 },
       { name: 'Overhead console', position_m: [sta(58), 0, hz(1.55)], yawDeg: 0, pitchDeg: 89, fovDeg: 90 },
+      // The pilot glancing up at the magnetic compass and its correction card at the windshield top centre
+      // (POH Sec 4 checklists: DG set to the compass): from the design eye, head turned right and up.
+      { name: 'Compass', position_m: EYE, yawDeg: 40, pitchDeg: 14, fovDeg: 50 },
       { name: 'Left door', position_m: [EYE[0] + 0.05, EYE[1] + 0.12, hz(1.55)], yawDeg: -90, pitchDeg: -38, fovDeg: 65 },
     ],
   });
@@ -140,8 +145,14 @@ export function buildSteamCockpit(ctx: SimContext, sys: C172SteamSystems, opts: 
     cabin.fog.visible = fogV > 0.01;
     (cabin.fog.material as THREE.MeshBasicMaterial).opacity = 0.75 * fogV;
     const co = vars.get(ST.coImpair);
-    cabin.coShade.visible = co > 0.01;
-    (cabin.coShade.material as THREE.MeshBasicMaterial).opacity = 0.6 * co;
+    // Cabin smoke (C172Fire: electrical / cabin fire, engine fire through CABIN HT / AIR) greys the same
+    // eye shade (EST visual cue; POH Sec 3 fire procedures ventilate it away once the fire is out).
+    const smoke = Math.min(1, Math.max(0, vars.get(C172.cabinSmoke)));
+    const shade = Math.max(0.6 * co, 0.7 * smoke);
+    cabin.coShade.visible = shade > 0.006;
+    const shadeMat = cabin.coShade.material as THREE.MeshBasicMaterial;
+    shadeMat.opacity = shade;
+    shadeMat.color.setScalar(0.7 * smoke > 0.6 * co ? 0.45 : 0);
   });
 
   const build = b.build();

@@ -144,6 +144,7 @@ export function applyC172SteamState(ctx: SimContext, sys: C172SteamSystems, s: I
   // avionics fan and the KAP 140 preflight test (Supplement 15 Sec 4 A); the takeoff preset stands for
   // "Before takeoff" complete (magnetos checked).
   sys.fire.reset();
+  sys.tires.reset();
   sys.procedures.reset();
   if (cold) sys.procedures.clearAll();
   else sys.procedures.markPreflightDone();

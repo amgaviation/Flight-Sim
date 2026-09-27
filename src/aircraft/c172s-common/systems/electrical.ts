@@ -291,8 +291,12 @@ export function c172ElectricalConfig(variant: C172Variant, opts: C172ElectricalO
         drive: `eng1.rpm * (1 - fail.${C172_FAIL.altBelt}) * (1 + 2 * (fail.elec.alt.regulator ?? 0))`,
         minDrive: 450,
         // EST: Lycoming alternator pulley ~3.2:1; output limited at idle (POH Sec 3: LOW VOLTS may
-        // come on below 1000 rpm with electrical load; full 60 A above ~2000 rpm).
-        maxAmpsVsDrive: { x: [450, 600, 800, 1000, 1300, 1600, 2000, 2800, 4800], y: [0, 14, 26, 36, 46, 54, 60, 60, 75] },
+        // come on below 1000 rpm with electrical load; full 60 A above ~2000 rpm). At idle (~600-650 rpm)
+        // the output (~8-10 A) is below the base load plus the landing and taxi lights, so the ammeter
+        // reads a discharge there and a charge at ~1500 rpm: POH 172SPHUS 4-14 "Electrical system check"
+        // c-f ("Minimum alternator output occurs at idle ... The ammeter should indicate in the negative
+        // direction ... [at 1500 RPM] in the positive direction").
+        maxAmpsVsDrive: { x: [450, 600, 800, 1000, 1300, 1600, 2000, 2800, 4800], y: [0, 8, 20, 36, 46, 54, 60, 60, 75] },
         field: { bus: 'xfeed', minV: 8 },
         ovTripV: ELEC_DATA.acuOvTripV, // POH NAV III Sec 3: ACU disconnects at ~31.75 V
         ovTripDelayS: 0.3,

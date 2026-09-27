@@ -150,12 +150,13 @@ export function createIce(ctx: Pick<SimContext, 'vars'>): IceProtection {
 
 export function createApu(ctx: Pick<SimContext, 'vars'>): Apu {
   return new Apu(ctx.vars, {
-    master: `${V.apuKnob} >= 1 && (elec.emer_l_powered || elec.emer_r_powered)`,
+    // APU FIRE switchlight pushed: APU shutdown (EST, Citation-family APU fire switch function).
+    master: `${V.apuKnob} >= 1 && !${V.fireApu} && (elec.emer_l_powered || elec.emer_r_powered)`,
     start: `${V.apuKnob} == 2`,
     starterVolts: 'elec.emer_l_v',
     starterNominalV: 26,
     starterPeakA: 450, // EST: 36-150 starter-generator class inrush
-    fuelAvailable: 'fuel.apu_on',
+    fuelAvailable: `fuel.apu_on && !${V.fireApu}`, // APU FIRE closes the APU fuel shutoff valve (EST)
     fire: 'fire.apu_warn',
     bleedLoad: 'clamp01(pneu.apu_flow_kgs / 0.5)',
     genLoad: 'clamp01(elec.apu_gen_load_pct / 100)',
@@ -187,7 +188,17 @@ export function createFire(ctx: Pick<SimContext, 'vars'>): FireProtection {
         power: 'elec.fire_det_powered',
       },
       // APU: unattended operation; automatic shutdown and bottle discharge (BCA). Delay EST 5 s.
-      { id: 'apu', loops: 1, handle: 'fire.apu_warn', autoDischarge: { bottle: 'apu_bottle', condition: 'fire.apu_warn', delayS: 5 }, power: 'elec.fire_det_powered' },
+      // APU FIRE switchlight (glareshield right of ENG FIRE R, AOPA 2021 photograph): pushing it arms the squib and
+      // discharges the APU bottle (EST: single-shot APU bottle), in addition to the automatic shutdown / discharge.
+      {
+        id: 'apu',
+        loops: 1,
+        handle: `fire.apu_warn || ${V.fireApu}`,
+        discharge: [{ bottle: 'apu_bottle', command: V.fireApu }],
+        fuelCut: `fire.apu_warn || ${V.fireApu}`,
+        autoDischarge: { bottle: 'apu_bottle', condition: 'fire.apu_warn', delayS: 5 },
+        power: 'elec.fire_det_powered',
+      },
     ],
     bottles: [
       { id: 'bottle1', chargePsi: 600, tempC: 'fdm.sat_c' }, // EST Halon 1301 bottle charge

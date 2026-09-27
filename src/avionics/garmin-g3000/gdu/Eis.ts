@@ -375,7 +375,7 @@ export class EisRenderer {
           const tw = TF.width(ctx, txt, 13 * scale) + 6;
           box(ctx, cx - tw / 2, cy - r - 22 * scale, tw, 16 * scale, rev ? P.green : P.amber, '');
           TF.draw(ctx, txt, cx, cy - r - 14 * scale, 13 * scale, '#000000', 'center', 'middle');
-        } else if (detent && detent !== 'IDLE') TF.draw(ctx, detent, cx + r * 0.1, cy - r * 0.2, 16 * scale, P.green, 'center', 'middle');
+        } else if (detent && detent !== 'IDLE') TF.draw(ctx, detent, cx + r * 0.1, cy - r * 0.2, 16 * scale, sec.modeColorByAt && v.get(sec.atVar ?? 'ap.at_engaged') >= 0.5 ? P.magenta : P.green, 'center', 'middle');
       } else {
         const st = v.get(sec.startingVar ? sec.startingVar(e + 1) : ev.start);
         if (st >= 1 && st <= 3) TF.draw(ctx, 'START', cx + (e === 0 ? -r - 2 : r + 2), cy + r * 0.2, 13 * scale, P.green, e === 0 ? 'right' : 'left', 'middle');
@@ -519,6 +519,13 @@ export class EisRenderer {
     return h + 2;
   }
 
+  /** Selected flap angle (deg) from the optional flap-lever var, NaN when not configured. */
+  private selectedFlapDeg(sec: EisFlapsSection): number {
+    if (!sec.selectedVar || !sec.selectedDeg) return NaN;
+    const i = Math.round(this.vars.get(sec.selectedVar));
+    return i >= 0 && i < sec.selectedDeg.length ? sec.selectedDeg[i] : NaN;
+  }
+
   private drawFlaps(ctx: Ctx2D, sec: EisFlapsSection, x: number, y: number, w: number): number {
     const v = this.vars;
     const h = 84;
@@ -535,6 +542,12 @@ export class EisRenderer {
       TF.draw(ctx, d.label, dx, sy + 18, 13, P.white, 'center', 'middle');
     }
     const px = sx + clamp(deg / sec.maxDeg, 0, 1) * sw;
+    const sel = this.selectedFlapDeg(sec);
+    if (Number.isFinite(sel)) {
+      const bx = sx + clamp(sel / sec.maxDeg, 0, 1) * sw;
+      triangle(ctx, bx - 6, sy + 4, bx + 6, sy + 4, bx, sy + 1, P.cyan);
+      line(ctx, bx, sy - 6, bx, sy + 6, P.cyan, 3);
+    }
     triangle(ctx, px - 7, sy - 18, px + 7, sy - 18, px, sy - 3, P.white);
     TF.draw(ctx, fmtInt(deg), x + w - 8, sy, 20, P.green, 'right', 'middle');
     if (sec.speedbrakeVar) {
@@ -565,6 +578,8 @@ export class EisRenderer {
       TF.draw(ctx, d.label, sx + 12, dy, 12, P.white, 'left', 'middle');
     }
     const py = top + clamp(deg / sec.maxDeg, 0, 1) * bh;
+    const sel = this.selectedFlapDeg(sec);
+    if (Number.isFinite(sel)) line(ctx, sx - 6, top + clamp(sel / sec.maxDeg, 0, 1) * bh, sx + 6, top + clamp(sel / sec.maxDeg, 0, 1) * bh, P.cyan, 3);
     triangle(ctx, sx - 16, py - 6, sx - 16, py + 6, sx - 4, py, P.white);
     TF.draw(ctx, fmtInt(deg), x + w - 6, y + h - 10, 17, P.green, 'right', 'middle');
     if (sec.speedbrakeVar && v.get(sec.speedbrakeVar) > 0.05) {

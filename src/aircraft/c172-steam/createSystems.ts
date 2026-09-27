@@ -46,6 +46,7 @@ import { ReceiverIdentAudio } from './avionics/receiverAudio';
 import { CdiSourceMux, SteamCabinExtras, SteamDirectionalGyro } from './systems';
 import { SteamProcedureMonitor, STEAM_PROC } from './procedures';
 import { C172Fire } from '../c172s-common/systems/fire';
+import { C172Tires } from '../c172s-common/systems/tires';
 
 /**
  * Pitch trim rates (trim units per second, full travel = 2 units).
@@ -114,6 +115,8 @@ export interface C172SteamSystems {
   procedures: SteamProcedureMonitor;
   /** Engine / start / electrical / cabin / wing fires and cabin smoke (POH Sec 3 fire procedures). */
   fire: C172Fire;
+  /** Flat tyre failures (POH Sec 3 "Landing with a flat main / nose tire"). */
+  tires: C172Tires;
   /** Update-ordered list for AircraftInstance.systems. */
   list: Subsystem[];
 }
@@ -203,13 +206,14 @@ export function createC172SteamSystems(ctx: SimContext, opts: C172SteamSystemsOp
   const extras = new SteamCabinExtras(v, ctx.audio);
   const procedures = new SteamProcedureMonitor(v);
   const fire = new C172Fire(v, { extDischarging: STEAM_PROC.extDischarging });
+  const tires = new C172Tires(v);
 
   const list = core.compose({
-    sensors: [dg, kapSensors],
+    sensors: [dg, kapSensors, tires],
     avionics: [kx1, kx2, kr, encoder, kt, radios, kma, identAudio, fms, kln, mux],
     afcs: [kap, afcs, kap.post],
     warnings: [altAlert, disc],
     late: [extras, procedures, fire],
   });
-  return { core, radios, fms, kx1, kx2, kma, kt, encoder, identAudio, kr, kln, mux, dg, kapSensors, afcs, kap, altAlert, disc, extras, procedures, fire, list };
+  return { core, radios, fms, kx1, kx2, kma, kt, encoder, identAudio, kr, kln, mux, dg, kapSensors, afcs, kap, altAlert, disc, extras, procedures, fire, tires, list };
 }

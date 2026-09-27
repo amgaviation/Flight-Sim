@@ -55,7 +55,7 @@ describe('c172-steam cockpit layout', async () => {
 
   it('windshield defroster knobs open the outlets; the icing checklist item needs them open', () => {
     const icing = C172_STEAM_CHECKLISTS.find((l) => l.title.includes('Inadvertent Icing'))!;
-    const item = icing.items.find((i) => i.challenge === 'Cabin Heat')!;
+    const item = icing.items.find((i) => /defroster outlets/i.test(i.challenge))!;
     r.vars.set(C172.cabinHeat, 1);
     r.vars.set(C172.defrostLeft, 0);
     r.vars.set(C172.defrostRight, 0);

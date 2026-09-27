@@ -142,6 +142,9 @@ export const LONGITUDE_SYNOPTICS: SynopticPageDef[] = [
       { label: 'LDG ELEV', kind: 'number', var: V.pressLdgElevFt, min: -1000, max: 14000, step: 10, unit: 'FT' },
       { label: 'LDG ELEV SRC', kind: 'cycle', var: V.pressLdgElevFt, values: [-9999], valueLabels: ['FMS'] },
       { label: 'CABIN ALT SEL', kind: 'number', var: V.pressSelCabinFt, min: 0, max: 8000, step: 100, unit: 'FT' },
+      // SCOPE: passenger-oxygen manual deploy. Its real location is not in the reference set (the overhead strip carries
+      // no PASS OXY switch, c_oh photograph), so the manual deploy lives here; masks also deploy automatically.
+      { label: 'PAX OXY', kind: 'cycle', var: V.oxyPax, values: [0, 1], valueLabels: ['AUTO', 'DEPLOY'] },
     ],
   },
   {
@@ -181,6 +184,28 @@ export const LONGITUDE_SYNOPTICS: SynopticPageDef[] = [
       { label: 'NAV', kind: 'toggle', var: V.ltNav }, // OG 16-3: on automatically at G5000 power-up
       { label: 'BEACON', kind: 'cycle', var: V.ltBeaconMode, values: [0, 1, 2], valueLabels: ['OFF', 'NORM', 'ON'] },
       { label: 'AUTO PULSE', kind: 'toggle', var: V.ltAutoPulse }, // pulse lights on a TCAS TA/RA
+      // SCOPE: cockpit dome / entry light (hot battery bus). The overhead LIGHTS strip has no DOME control (c_oh photograph);
+      // on the aircraft the entry lighting is part of the cabin lighting system, reduced here to this GTC toggle.
+      { label: 'CKPT DOME', kind: 'toggle', var: V.ltDome },
+    ],
+  },
+  {
+    // GTC Aircraft Systems > Tests (OG Fig 9-7-1 lists the "pneumatic relevant tests" on a GTC page; the Longitude
+    // overhead has no test buttons, c_oh photograph). Each test runs while its toggle is ON.
+    id: 'tests',
+    title: 'SYSTEM TESTS',
+    label: 'Tests',
+    elements: [
+      { type: 'indicator', x: 250, y: 120, label: 'FIRE WARN TEST', on: 'fire.test', color: 'white' },
+      { type: 'indicator', x: 120, y: 200, label: 'L ENG FIRE', on: 'fire.eng1_warn', color: 'red' },
+      { type: 'indicator', x: 380, y: 200, label: 'R ENG FIRE', on: 'fire.eng2_warn', color: 'red' },
+      { type: 'indicator', x: 250, y: 260, label: 'APU FIRE', on: 'fire.apu_warn', color: 'red' },
+      { type: 'indicator', x: 250, y: 360, label: 'ANNUNCIATOR TEST', on: V.lampTest, color: 'white' },
+      { type: 'indicator', x: 250, y: 460, label: 'CVR TEST OK', on: V.cvrTestOk, color: 'green' },
+    ],
+    controls: [
+      { label: 'FIRE WARN', kind: 'toggle', var: V.fireTest },
+      { label: 'ANNUN', kind: 'toggle', var: V.lampTest },
     ],
   },
 ];

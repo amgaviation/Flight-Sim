@@ -55,6 +55,9 @@ export const LON_LIMITS = {
   vfe2Kt: 230, // flaps 2 (15 deg)
   vfeFullKt: 180, // flaps FULL (35 deg)
   vleKt: 230,
+  // Glareshield lower-tier placard "MAX AIRSPEED LIMITS" (AOPA 2021 photograph c_top21): TURBULENT AIR 235 KIAS / 0.75M.
+  vTurbKt: 235,
+  mTurb: 0.75,
   vloKt: 230,
   maxTireGsKt: 195,
   vmcaF1Kt: 100, // FPG p.3

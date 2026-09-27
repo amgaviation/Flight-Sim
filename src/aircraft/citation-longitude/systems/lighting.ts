@@ -64,8 +64,11 @@ export function createLighting(ctx: Pick<SimContext, 'vars'>): LightingSystem {
       { id: 'gtc_c', knob: V.ltGtcC, min: 0.05, output: ['display.gtc2.brt', 'display.gtc3.brt'] },
       { id: 'pfd_r', knob: V.ltPfdR, min: 0.05, output: ['display.pfd2.brt'] },
       { id: 'gtc_r', knob: V.ltGtcR, min: 0.05, output: ['display.gtc4.brt'] },
-      { id: 'pass_safety', knob: `${V.ltSeatBelt} >= 1`, power: 'elec.int_l_powered || elec.int_r_powered', output: ['ac.light.seatbelt'] },
-      { id: 'no_smoking', knob: `${V.ltSeatBelt} == 2`, power: 'elec.int_l_powered || elec.int_r_powered', output: ['ac.light.no_smoking'] },
+      { id: 'stby', knob: V.ltStby, min: 0.05, output: ['display.stby.brt'] }, // standby display knob (EST function)
+      // Overhead SEAT BELTS / PAX SAFETY switchlights (c_oh photograph; OG oh_b). `V.ltSeatBelt` is the legacy 3-position
+      // state (0 / 1 belts / 2 belts + safety), still honoured for saved states and scripts.
+      { id: 'pass_safety', knob: `${V.ltSeatBelts} || ${V.ltSeatBelt} >= 1`, power: 'elec.int_l_powered || elec.int_r_powered', output: ['ac.light.seatbelt'] },
+      { id: 'no_smoking', knob: `${V.ltPaxSafety} || ${V.ltSeatBelt} == 2`, power: 'elec.int_l_powered || elec.int_r_powered', output: ['ac.light.no_smoking'] },
     ],
   });
 }

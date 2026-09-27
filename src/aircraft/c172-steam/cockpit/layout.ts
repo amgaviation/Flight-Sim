@@ -155,8 +155,14 @@ export const CABIN = {
   floorRatio: 34 / 39.5,
 };
 
-/** Windshield: base at FS 12.5 (glareshield), top edge FS 41 at the roof; A-pillars from (FS 15, 1.60 m) to (FS 41, 1.96 m). */
-export const WINDSHIELD = { baseFs: 12.5, baseH: 1.605, topFs: 41, topH: 1.965, pillarBaseFs: 15, pillarTopFs: 41.5 };
+/**
+ * Windshield: base at FS 12.5 (glareshield), top edge at FS 30 where it meets the cabin roof (CABIN.roofH 1.90 m
+ * at FS 30) and the forward door-frame top (DOOR.fwdFsTop 30); A-pillars from (FS 15, 1.60 m) to (FS 30.5, 1.90 m).
+ * EST from the VH-SPQ / N146TC photographs, where the magnetic compass at the windshield top centre is seen from
+ * the seat some 15-20 deg above the nose, and matching the G1000 variant of the same airframe (c172-g1000
+ * layout.ts WINDSHIELD top FS 29). (Round 1 had the top at FS 41, straight over the pilot's head.)
+ */
+export const WINDSHIELD = { baseFs: 12.5, baseH: 1.605, topFs: 30, topH: 1.9, pillarBaseFs: 15, pillarTopFs: 30.5 };
 
 /** Cabin doors (POH Fig 6-4): opening FS 26 (bottom) / 30 (top) to FS 65.3, sill 0.80 m, top 1.83 m. */
 export const DOOR = { fwdFsBottom: 26, fwdFsTop: 30, aftFs: 65.3, sillH: 0.8, topH: 1.83 };
@@ -167,7 +173,7 @@ export const REAR_WINDOW = { fs0: 68, fs1: 95, h0: 1.46, h1: 1.79 };
 /**
  * Overhead console (POH Sec 7 "Interior lighting": the two front flood lights and the rear dome light
  * "are contained in the overhead console", with a push switch near each light; "the overhead speaker
- * is located in the center overhead console"). EST from photographs: from the windshield top (FS 41) aft to FS 76, 0.2 m wide, following the headliner.
+ * is located in the center overhead console"). EST from photographs: from above the front seats (FS 41.5, aft of the windshield top) aft to FS 76, 0.2 m wide, following the headliner.
  */
 export const OVERHEAD = { fs0: 41.5, fs1: 76, width: 0.2, floodFs: 45, speakerFs: 57, domeFs: 70 };
 

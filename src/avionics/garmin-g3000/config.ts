@@ -80,6 +80,8 @@ export interface EisN1Section {
   syncVar?: string;
   /** Autothrottle engaged var (bugs magenta). Default ap.at_engaged. */
   atVar?: string;
+  /** Longitude OG 7-7: draw the thrust-mode label magenta while the autothrottle (`atVar`) is engaged (default false: green). */
+  modeColorByAt?: boolean;
 }
 
 export interface EisIttSection {
@@ -157,6 +159,9 @@ export interface EisFlapsSection {
   /** Speedbrake annunciation text ('SPD BRK'). */
   speedbrakeLabel?: string;
   gearVars?: [string, string, string];
+  /** Selected flap position (Longitude OG 15-5: cyan bug): flap-lever var and the detent angle (deg) per lever value 0, 1, 2... */
+  selectedVar?: string;
+  selectedDeg?: number[];
 }
 
 export interface EisCabinSection {

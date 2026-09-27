@@ -22,7 +22,8 @@ function rigFor(variant: 'steam' | 'g1000', s: InitialState): Rig {
 function item(lists: Checklist[], title: string, challenge: string) {
   const l = lists.find((c) => c.title === title);
   if (!l) throw new Error(`no checklist ${title}`);
-  const it = l.items.find((i) => i.challenge.trim().startsWith(challenge) && i.check);
+  // The steam lists carry the POH item numbers ("4. Parking Brake", "   b. Vacuum Gage"): match without them.
+  const it = l.items.find((i) => i.challenge.trim().replace(/^([0-9]+|[a-z])\.\s+/, '').startsWith(challenge) && i.check);
   if (!it?.check) throw new Error(`no checked item ${challenge} in ${title}`);
   return it.check;
 }
@@ -51,7 +52,8 @@ describe('Cessna 172S initial states', () => {
             expect(v.get('elec.pfd_powered')).toBe(0);
           }
           expect(v.get(SURF.flapsDeg)).toBe(0);
-          expect(v.get(C172.fuelSelector)).toBe(g ? FUEL_SEL.left : FUEL_SEL.both); // G1000: POH Securing Airplane 10
+          // POH Securing Airplane (172SPHUS item 8, 172SPHBUS-02 item 10): LEFT or RIGHT to prevent cross feeding.
+          expect(v.get(C172.fuelSelector)).toBe(FUEL_SEL.left);
           expect(v.get(C172.fuelShutoff)).toBe(1);
           // A cold airplane stays cold.
           r.run(10);
@@ -131,7 +133,7 @@ describe('Cessna 172S checklists', () => {
   it('cold & dark: the preflight cabin checks read the cockpit (lock installed, parking brake set)', () => {
     const r = rigFor('steam', 'cold_dark');
     const lists = c172Checklists('steam');
-    const t = 'Preflight Inspection — Cabin';
+    const t = 'Preflight Inspection — 1 Cabin';
     expect(item(lists, t, 'Parking Brake')(r.vars)).toBe(true);
     expect(item(lists, t, 'Control Wheel Lock')(r.vars)).toBe(false);
     r.vars.set(C172.controlLock, 0);

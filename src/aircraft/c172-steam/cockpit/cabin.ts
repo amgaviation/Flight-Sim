@@ -13,7 +13,7 @@
  *  - wing-root fresh-air vents (pull and rotate) in the upper forward door-post corners;
  *  - cabin door handles (OPEN / CLOSE / LOCK) and the openable storm windows (the lower aft pane of
  *    each door window) with the pane swinging open with the latch;
- *  - magnetic compass on the glareshield centre (Sec 7 "Magnetic compass"), OAT probe through the
+ *  - magnetic compass hanging at the windshield top centre (Sec 7 "Magnetic compass"), OAT probe through the
  *    windshield, portable fire extinguisher between the front seats (Sec 7 "Portable fire
  *    extinguisher"), the sun visors (swing down / up).
  *
@@ -185,7 +185,7 @@ export function buildCabin(b: CockpitBuilder, ctx: SimContext): CabinParts {
       b.addStructure(esc, undefined, { occluder: false });
     }
     // A-pillar.
-    const pts = [bl(sta(WINDSHIELD.pillarBaseFs), side * 0.47, hz(WINDSHIELD.baseH)), bl(sta(28), side * 0.47, hz(1.8)), bl(sta(WINDSHIELD.pillarTopFs), side * 0.44, hz(WINDSHIELD.topH))];
+    const pts = [bl(sta(WINDSHIELD.pillarBaseFs), side * 0.47, hz(WINDSHIELD.baseH)), bl(sta(23), side * 0.465, hz(1.79)), bl(sta(WINDSHIELD.pillarTopFs), side * 0.44, hz(WINDSHIELD.topH))];
     b.structureMesh(pillarGeometry(pts, 0.045, 0.03), lining, undefined, undefined, true);
   }
 
@@ -478,14 +478,25 @@ export function buildCabin(b: CockpitBuilder, ctx: SimContext): CabinParts {
   }
 
   // ---------------------------------------------------------------- compass, OAT probe, visors, extinguisher
-  // Black compass case (VH-SPQ / N146TC photographs); the housing uses the cockpit's own plastic.
+  // Black compass case (VH-SPQ / N146TC photographs); the housing uses the cockpit's own plastic. It hangs
+  // from a bracket at the top centre of the windshield (POH Sec 7 "Magnetic compass"; VH-SPQ photograph: the
+  // compass is at the windshield top centre, above and clear of the glareshield, as in the G1000 variant).
   const compassCase = mats.custom('plastic', '#0f0f10', 0.75);
   compassCase.side = THREE.DoubleSide;
   const compass = new MagneticCompass({ id: 'c172s.compass', vars: ctx.vars, lightVar: 'ac.light.glareshield', housingMaterial: compassCase });
-  b.place(compass, { center_m: [sta(PANEL.fs - 4), 0, hz(GLARE.topH + 0.045)], facing: 'aft', tiltDeg: 8 });
+  b.place(compass, { center_m: [sta(WINDSHIELD.topFs + 1.2), 0, hz(WINDSHIELD.topH - 0.075)], facing: 'aft', tiltDeg: -10 });
   {
+    // Mounting bracket from the windshield top / cabin roof down to the compass case (EST 1.2 x 2 x 0.8 in).
+    const bracket = new THREE.Mesh(env.geometry.get('c172s.compass_bracket', () => roundedBox(0.03, 0.05, 0.02, 0.004)), compassCase);
+    bracket.position.copy(bl(sta(WINDSHIELD.topFs + 1.4), 0, hz(WINDSHIELD.topH - 0.022)));
+    b.addStructure(bracket, undefined, { occluder: false });
+  }
+  {
+    // OAT probe through the upper left windshield (POH Sec 7), on the glass at FS 26.
     const probe = new THREE.Mesh(env.geometry.get('c172s.oat_probe', () => cylinderZ(0.004, 0.003, 0, 0.05, 12)), mats.get('chrome'));
-    probe.position.copy(bl(sta(34), -0.3, hz(1.9)));
+    const pFs = 26;
+    const pH = WINDSHIELD.baseH + ((WINDSHIELD.topH - WINDSHIELD.baseH) * (pFs - WINDSHIELD.baseFs)) / (WINDSHIELD.topFs - WINDSHIELD.baseFs);
+    probe.position.copy(bl(sta(pFs), -0.3, hz(pH)));
     probe.rotation.set(-Math.PI / 2, 0, 0);
     b.addStructure(probe, undefined, { occluder: false });
   }
