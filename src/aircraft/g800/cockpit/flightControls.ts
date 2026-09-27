@@ -10,7 +10,8 @@
  *    test: "the red inboard button"; event ap.disc + hold var for the FBW trim-speed sync),
  *    pitch trim "coolie hat" on top (ac.g800.ss_trim{s}: +1 nose up = slower FBW trim speed),
  *    HUD / EVS rocker on the outboard side (FSB App. 4; ac.g800.hud_rocker{s}).
- *    SCOPE: no push-to-talk trigger (no radio-transmit / intercom model to drive), no force feel.
+ *    PTT trigger on the front of the grip (ac.g800.ptt{s}, momentary) keys the MIC-selected
+ *    transmitter (systems/audio.ts). SCOPE: no force feel.
  *  - NOSEWHEEL STEERING guarded switch on the left pod aft of the stick (BJT500: "pedal steering
  *    switchlight and tiller are in the normal place on the left side ledge, aft of the sidestick").
  *  - Hanging rudder pedals with toe brakes (brake-by-wire) at each station.
@@ -66,6 +67,11 @@ export function buildFlightControls(c: G800CockpitContext): void {
               initial: 1,
               springs: { 0: 1, 2: 1 },
             },
+          },
+          {
+            anchor: 'trigger',
+            kind: 'button',
+            options: { id: `g800.fc.ptt_${lc}`, label: `PTT / MIC (${s})`, var: V.ptt(n), mode: 'momentary', style: 'small', width: 0.012 },
           },
           {
             anchor: 'side',

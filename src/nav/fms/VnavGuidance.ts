@@ -32,6 +32,11 @@ export interface SpeedSchedule {
   approachKt: number;
   /** Altitude (ft) at and above which Mach targets are used. EST default 28,000 ft (typical IAS/Mach crossover for 250-300 kt / M0.74-0.80). */
   machTransitionFt?: number;
+  /**
+   * Descent only: height above the 10,000 ft speed-limit altitude at which the 250 KIAS limit already applies,
+   * so the aircraft has decelerated when it crosses 10,000 ft (the FMS deceleration segment). Default 0.
+   */
+  speedLimitDecelFt?: number;
 }
 
 /** Generic defaults; aircraft should supply their own schedule. EST: typical light-jet figures. */
@@ -147,7 +152,8 @@ export class VnavGuidance {
       kt = sp.approachKt;
       mach = 0;
     }
-    if (alt < SPEED_LIMIT_ALT_FT && this.phase !== 'APR') kt = Math.min(kt, SPEED_LIMIT_KT);
+    const limitAlt = SPEED_LIMIT_ALT_FT + (this.phase === 'DES' ? (sp.speedLimitDecelFt ?? 0) : 0);
+    if (alt < limitAlt && this.phase !== 'APR') kt = Math.min(kt, SPEED_LIMIT_KT);
     // Next speed constraint ahead (at / at-or-below caps the target).
     for (let k = Math.max(0, activeIdx); k < legs.length; k++) {
       const l = legs[k];

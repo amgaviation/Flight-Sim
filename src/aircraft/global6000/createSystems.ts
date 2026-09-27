@@ -43,7 +43,7 @@ import { createFusionSuite, GLOBAL6000_AIRFRAME, BR710A2_20_ENGINES, type Fusion
 import { ALPHA_STALL, CL_SLATS } from './fdm';
 import { FLAP_DETENTS, G6K_LIMITS, VMO_SCHEDULE, mmoAt } from './data';
 import { G6K_VARS as V } from './vars';
-import { createElectrical, BusPowerControl } from './systems/electrical';
+import { createElectrical, BusPowerControl, PowerHoldup } from './systems/electrical';
 import { createFuel } from './systems/fuel';
 import { createHydraulics, hydFrac } from './systems/hydraulic';
 import { createPneumatics, createPressurization, createIce, createApu, createFire, createOxygen } from './systems/environment';
@@ -184,6 +184,7 @@ export function createSystems(ctx: SimContext, opts: G6kSystemsOptions = {}): G6
   const elecPkg = createElectrical(ctx);
   const elec = elecPkg.net;
   const busControl = new BusPowerControl(elecPkg.selectors);
+  const holdup = new PowerHoldup(v); // avionics ride through the ACPC / DCPC transfer breaks (electrical.ts)
   const apu = createApu(ctx);
   const fuel = createFuel(ctx);
   const hyd = createHydraulics(ctx);
@@ -536,6 +537,7 @@ export function createSystems(ctx: SimContext, opts: G6kSystemsOptions = {}): G6
     logic,
     busControl,
     elec,
+    holdup,
     apu,
     fuel,
     hyd,
@@ -586,6 +588,8 @@ export function createSystems(ctx: SimContext, opts: G6kSystemsOptions = {}): G6
     if (s !== failures && typeof f === 'function') failures.register(f.call(s));
   }
   failures.register([
+    { id: 'eng1.flameout', name: 'Left engine failure (flameout)', category: 'engine', description: 'Combustor flameout with ENG RUN at RUN: L ENG FLAMEOUT, VFG 1 / 2 and EDP 1A lost.' },
+    { id: 'eng2.flameout', name: 'Right engine failure (flameout)', category: 'engine', description: 'Combustor flameout with ENG RUN at RUN: R ENG FLAMEOUT, VFG 3 / 4 and EDP 2A lost.' },
     { id: 'fire.eng1', name: 'Left engine fire', category: 'fire' },
     { id: 'fire.eng2', name: 'Right engine fire', category: 'fire' },
     { id: 'fire.apu', name: 'APU fire', category: 'fire' },

@@ -135,6 +135,7 @@ export class Pressurization implements Subsystem {
   private readonly dump: () => boolean;
   private readonly masksManual: () => boolean;
   private readonly masksReset: () => boolean;
+  private readonly safetyHeldOpen: () => boolean;
   private readonly onGround: () => boolean;
   private readonly pAmb: Evaluator;
   private readonly altFt: Evaluator;
@@ -169,6 +170,7 @@ export class Pressurization implements Subsystem {
     this.dump = compileCondition(vars, cfg.dump, false);
     this.masksManual = compileCondition(vars, cfg.masksManual, false);
     this.masksReset = compileCondition(vars, cfg.masksReset, false);
+    this.safetyHeldOpen = compileCondition(vars, cfg.safetyValveOpen, false);
     this.onGround = compileCondition(vars, cfg.onGround ?? FDM.onGround, true);
     this.pAmb = compileBinding(vars, cfg.staticPressurePa ?? FDM.staticPressPa, 101325);
     this.altFt = compileBinding(vars, cfg.pressureAltitudeFt ?? FDM.pressAlt, 0);
@@ -348,9 +350,10 @@ export class Pressurization implements Subsystem {
     let outTotal = 0;
     this.safetyOpen = false;
     this.negOpen = false;
+    const heldOpen = this.safetyHeldOpen();
     for (let s = 0; s < SUBSTEPS; s++) {
       const pc = (this.mass * R_AIR * Tk) / this.V;
-      const aValve = this.valve.position * this.maxArea;
+      const aValve = this.valve.position * this.maxArea + (heldOpen ? this.safetyArea : 0);
       let out = 0;
       let inn = inflow;
       if (pc >= pa) {
@@ -397,7 +400,7 @@ export class Pressurization implements Subsystem {
     vars.set(o.ldg_elev_ft, ldg);
     vars.set(o.cabin_alt_warn, this.warn.update(cabinAlt) ? 1 : 0);
     vars.set(o.pax_masks, this.masks ? 1 : 0);
-    vars.set(o.safety_valve, this.safetyOpen ? 1 : 0);
+    vars.set(o.safety_valve, this.safetyOpen || heldOpen ? 1 : 0);
     vars.set(o.neg_relief, this.negOpen ? 1 : 0);
     vars.set(o.excess_diff, diffPsi > cfg.maxDiffPsi + 0.25 ? 1 : 0);
     vars.set(o.mode, mode);

@@ -157,8 +157,12 @@ export function applyM2State(ctx: SimContext, sys: M2Systems, s: InitialState): 
     for (const a of sys.ahrs) a.reset(false);
     for (const a of sys.adc) a.reset();
     sys.suite.applyState(s);
-    sys.press.settle();
+    // Cabin temperature first (snap() publishes it on the next update): settle() computes the cabin air mass
+    // at 'pneu.cabin_temp_c', and a stale 0 degC gave a cabin 1.2 psi above ambient on the ramp.
     sys.pneu.snap(15);
+    v.set('pneu.cabin_temp_c', 15);
+    v.set('gear.air_ground', 1); // squat switch (the gear system republishes it next frame): ground-mode settle, outflow valve open
+    sys.press.settle();
     sys.afcs.reset();
     sys.cas.reset();
     return;
@@ -215,8 +219,10 @@ export function applyM2State(ctx: SimContext, sys: M2Systems, s: InitialState): 
   for (const a of sys.ahrs) a.reset(true);
   for (const a of sys.adc) a.reset();
   sys.suite.applyState(s);
+  sys.pneu.snap(22); // cabin temperature first (see the cold branch)
+  v.set('pneu.cabin_temp_c', 22);
+  if (!inAir) v.set('gear.air_ground', 1); // squat switch, as in the cold branch
   sys.press.settle();
-  sys.pneu.snap(22);
   sys.afcs.reset();
   sys.yd.reset?.();
   sys.cas.reset();

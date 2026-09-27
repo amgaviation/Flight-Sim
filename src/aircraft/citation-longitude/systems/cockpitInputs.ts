@@ -15,7 +15,9 @@
  *    emitted by the button itself); while held, electric pitch trim and
  *    the stick pusher are interrupted (`V.discHeld`, EST: Citation-family
  *    AP/TRIM DISC function, used by the stall-warning pusher `enabled` and
- *    the trim `enable` bindings in createSystems.ts).
+ *    the trim `enable` bindings in createSystems.ts) and nosewheel steering
+ *    is disengaged (DGAC-published Longitude abnormal card: "NOSEWHEEL
+ *    STEERING MALFUNCTION - MASTER DISCONNECT button push and hold").
  *  - Tiller: the larger of the hardware axis (`input.tiller`) and the
  *    left-console handle (`V.tiller3d`) -> `V.tillerCmd` for the NWS.
  *
@@ -42,7 +44,8 @@ export class LongitudeCockpitInputs implements Subsystem {
     const r = v.get(V.yokeTrimR);
     const cmd = l !== 0 ? l : r;
     v.set(V.yokeTrimCmd, cmd);
-    const held = v.get(V.yokeDiscL) !== 0 || v.get(V.yokeDiscR) !== 0;
+    // The keyboard / hardware AP DISC (input.ap_disc) is the same MASTER DISCONNECT button.
+    const held = v.get(V.yokeDiscL) !== 0 || v.get(V.yokeDiscR) !== 0 || v.get(INPUT.apDisconnect) !== 0;
     v.set(V.discHeld, held ? 1 : 0);
     // A wheel trim actuation (rising edge) disconnects an engaged autopilot.
     if (cmd !== 0 && this.prevTrim === 0 && v.get(AP.engaged) !== 0) this.events?.emit('ap.disc');

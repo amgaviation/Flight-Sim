@@ -302,6 +302,9 @@ describe('Citation M2 check ride KICT -> KOKC (full normal procedure)', () => {
       LOG.push(`lined up ${xt.toFixed(1)} m off the centre line, hdg ${v.get(FDM.headingTrue).toFixed(1)}`);
       expect(xt).toBeLessThan(15);
       expect(v.get('fdm.crashed')).toBe(0);
+      // Unpressurised on the ground (outflow + safety valve open through the squat switch), LFE = destination (FMS).
+      expect(Math.abs(v.get('press.diff_psi'))).toBeLessThan(0.08);
+      expect(Math.abs(v.get('press.ldg_elev_ft') - kokc.elevationFt)).toBeLessThan(5);
       log(r, 'lined up 19R');
 
       // ================================================================ 7. before takeoff / takeoff (dossier §10 steps 6-7)
@@ -367,7 +370,7 @@ describe('Citation M2 check ride KICT -> KOKC (full normal procedure)', () => {
       gmc(r, 'nav'); // LNAV (FMS) on the departure track
       r.run(40, () => v.getString('ap.lat_active') === 'FMS');
       expect(v.getString('ap.lat_active')).toBe('FMS');
-      // Flaps UP at V2 + 10, CLB detent, FLC 200 KIAS then 240 (dossier §10: 240 KIAS / M0.64).
+      // Flaps UP at V2 + 10, CLB detent, FLC 200 KIAS then 220 (dossier §10: 220 KIAS / M0.60 cruise climb).
       r.run(60, () => v.get(FDM.ias) > v2 + 10);
       v.set(M2.flapHandle, 0);
       v.set(M2.tla(1), TLA.clb);
@@ -382,7 +385,7 @@ describe('Citation M2 check ride KICT -> KOKC (full normal procedure)', () => {
       expect(v.getString('fadec.eng1.detent')).toBe('CLB');
       // Cleared FL230: VNAV armed (the GFC 700 climbs in FLC; VNAV provides the descent path).
       v.set('ap.sel_alt_ft', 23000);
-      v.set('ap.sel_spd_kt', 240);
+      v.set('ap.sel_spd_kt', 220);
       gmc(r, 'vnav');
       r.run(2);
       log(r, 'cleared FL230, VNAV');
@@ -393,9 +396,9 @@ describe('Citation M2 check ride KICT -> KOKC (full normal procedure)', () => {
       r.run(1500, () => {
         maxBank = Math.max(maxBank, Math.abs(v.get(FDM.bank)));
         maxIas = Math.max(maxIas, v.get(FDM.ias));
-        if (!machSwitched && v.get('adc1.mach') >= 0.64) {
+        if (!machSwitched && v.get('adc1.mach') >= 0.6) {
           gmc(r, 'spd'); // SPD knob: IAS -> Mach
-          v.set('ap.sel_mach', 0.64);
+          v.set('ap.sel_mach', 0.6);
           machSwitched = true;
         }
         if (v.get(FDM.altMsl) > 18000 && v.get('adc1.baro_std') === 0) r.events.emit('g3k.baro1.push'); // transition altitude: STD
@@ -643,6 +646,7 @@ describe('Citation M2 check ride KICT -> KOKC (full normal procedure)', () => {
       stopOnGround(r);
       log(r, 'parked');
       expect(Math.abs(clCross())).toBeGreaterThan(150); // clear of the runway
+      expect(Math.abs(v.get('press.diff_psi'))).toBeLessThan(0.08); // cabin depressurised after landing
       v.set(M2.parkBrake, 1);
       v.set(INPUT.brakeLeft, 0);
       v.set(INPUT.brakeRight, 0);

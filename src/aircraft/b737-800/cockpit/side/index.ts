@@ -29,9 +29,27 @@ import type { B738CockpitContext } from '../context';
 import { FLOOR_Z, MOUNTS, X_AFT } from '../layout';
 import { B738_P18, B738_P6, type CbGroup } from './breakers';
 
-/** CB panel geometry (EST): face 1.23 m outboard, x 12.66-13.10, z -0.60..-0.08. */
-export const CB_PANEL = { x: 12.88, y: 1.23, z: -0.34, w: 0.44, h: 0.52 } as const;
-const CB_GRID = { dx: 0.0305, dy: 0.044, title: 0.013, gap: 0.01, margin: 0.012, maxCols: 13 } as const;
+/**
+ * CB panel geometry (EST from NG photographs): face 1.23 m outboard, aft of the No. 3 window
+ * (x 12.66-13.10), top edge at about the seated eye height (z -0.47, CB_TOP_Z); the
+ * sidewall cabinet continues down to the floor behind a plain access cover. The panel height
+ * follows its breaker rows (cbPanelHeight).
+ */
+export const CB_PANEL = { x: 12.88, y: 1.23, w: 0.44 } as const;
+const CB_GRID = { dx: 0.0305, dy: 0.034, title: 0.016, gap: 0.008, margin: 0.012, maxCols: 13 } as const;
+/** Top of the breaker panels (body z, about the seated eye height; EST). */
+const CB_TOP_Z = -0.47;
+
+/** Height of one breaker group box (title band + rows). */
+function cbGroupHeight(n: number, width: number): number {
+  const G = CB_GRID;
+  const cols = Math.min(G.maxCols, Math.max(1, Math.floor((width - 2 * G.margin) / G.dx)), n);
+  return G.title + (Math.ceil(n / cols) - 1) * G.dy + 0.026;
+}
+/** Panel height that fits its groups (first group at y0, bottom margin 0.014). */
+function cbPanelHeight(groups: CbGroup[], width: number, y0: number): number {
+  return y0 + groups.reduce((h, g) => h + cbGroupHeight(g.items.length, width) + CB_GRID.gap, 0) - CB_GRID.gap + 0.014;
+}
 
 export function buildSideConsoles(c: B738CockpitContext): void {
   const { b, env, ctx } = c;
@@ -197,9 +215,26 @@ function buildMaskBox(c: B738CockpitContext, p: Panel, s: Side, x: number, y: nu
 function buildCbPanel(c: B738CockpitContext, s: Side, groups: CbGroup[], ratings: ReadonlyMap<string, number>): void {
   const { b, env } = c;
   const sg = s === 1 ? -1 : 1;
-  const P = CB_PANEL;
-  // Cabinet behind the panel (to the sidewall).
-  b.structureMesh(new THREE.BoxGeometry(0.2, P.h + 0.03, P.w + 0.03), 'panelDark', [P.x, sg * (P.y + 0.1 + 0.003), P.z]).name = 'cb_cabinet';
+  // Each panel is as tall as its breakers need, hanging from CB_TOP_Z (P6 carries more breakers than P18).
+  const h = cbPanelHeight(groups, CB_PANEL.w, 0.024);
+  const P = { ...CB_PANEL, h, z: CB_TOP_Z + h / 2 };
+  // Cabinet behind the panel (to the sidewall), from just above the panel down to the floor.
+  const cabTop = P.z - P.h / 2 - 0.015;
+  // Cabinet sides in the sidewall lining grey (same paint as the overhead housing, EST).
+  b.structureMesh(new THREE.BoxGeometry(0.2, FLOOR_Z - cabTop, P.w + 0.03), b.env.materials.custom('paint', 0xb9bab5, 0.75), [P.x, sg * (P.y + 0.1 + 0.003), (FLOOR_Z + cabTop) / 2]).name = 'cb_cabinet';
+  // Lower access cover (no controls; EST: the NG P6 / P18 lower sections are closed equipment bays).
+  const lowTop = P.z + P.h / 2 + 0.008;
+  const lowH = FLOOR_Z - 0.03 - lowTop;
+  b.panel({
+    name: `b738.cb.${s === 1 ? 'p18' : 'p6'}_lower`,
+    center_m: [P.x, sg * P.y, lowTop + lowH / 2],
+    facing: s === 1 ? 'right' : 'left',
+    width: P.w,
+    height: lowH,
+    origin: 'top-left',
+    material: 'panel',
+    screws: { kind: 'dzus', diameter: 0.007, pitch: 0.2 },
+  });
   const panel = b.panel({
     name: `b738.cb.${s === 1 ? 'p18' : 'p6'}`,
     center_m: [P.x, sg * P.y, P.z],
@@ -236,9 +271,8 @@ export function fillCbPanel(env: CockpitEnv, panel: Panel, width: number, groups
   let y = y0;
   for (const g of groups) {
     const cols = Math.min(G.maxCols, Math.max(1, Math.floor((width - 2 * G.margin) / G.dx)), g.items.length);
-    const rows = Math.ceil(g.items.length / cols);
     const w = width - 2 * G.margin;
-    const h = G.title + rows * G.dy + 0.004;
+    const h = cbGroupHeight(g.items.length, width);
     const x0 = G.margin;
     const x1 = x0 + w;
     const yt = y + 0.004;
@@ -259,10 +293,11 @@ export function fillCbPanel(env: CockpitEnv, panel: Panel, width: number, groups
         panel.add(
           new CircuitBreaker(env, {
             id: `b738.cb.${name}`,
-            label: `CB ${legend.replace('\n', ' ')} (${g.title})`,
+            label: `CB ${legend.replace('\n', ' ')}${rating !== undefined ? ` ${rating} A` : ''} (${g.title})`,
             var: `cb.${name}`,
             trippedVar: `cb.${name}_tripped`,
-            rating: rating ?? '',
+            // The rating is engraved on the panel above the collar (static text, merged with the other
+            // legends) instead of on the moving button: saves one draw call per breaker (123).
             diameter: 0.0095,
             collar: 'round',
           }),
@@ -270,6 +305,7 @@ export function fillCbPanel(env: CockpitEnv, panel: Panel, width: number, groups
           by,
         ),
       );
+      if (rating !== undefined) panel.label(String(rating), bx + 0.0085, by - 0.0075, { height: 0.0021, weight: 800, zone: 'cb' });
       legend.split('\n').forEach((ln, k) => panel.label(ln, bx, by + 0.011 + k * 0.0034, { height: 0.0023, weight: 700, zone: 'cb' }));
     });
     y += h + G.gap;

@@ -191,10 +191,10 @@ export function addGmc710(c: LonCockpitContext, panel: Panel, cx: number, cy: nu
   knob('gmc.alt', 'ALT SEL', 0.358, 0.044, 0.023, 'knurled');
   knob('gmc.crs2', 'CRS2', 0.386, 0.044, 0.016);
   const nose = need(hw, 'gmc.nose');
-  const [nx, ny] = P(0.33, 0.04);
+  const [nx, ny] = P(0.33, 0.036);
   g.add(new Thumbwheel(c.env, { id: 'lon.g5k.gmc.nose', label: 'NOSE UP / DN', orientation: 'vertical', diameter: 0.03, width: 0.01, channel: { incEvent: nose.incEvent, decEvent: nose.decEvent, label: 'NOSE' } }), nx, ny);
   g.label('UP', nx, ny - 0.024, { height: 0.0026 });
-  g.label('DN', nx, ny + 0.026, { height: 0.0026 });
+  g.label('DN', nx, ny + 0.023, { height: 0.0026 }); // kept clear of the glareshield lip (label-occlusion test)
 }
 
 /**

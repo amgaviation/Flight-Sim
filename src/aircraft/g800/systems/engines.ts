@@ -79,7 +79,12 @@ export function createEngines(ctx: SimContext): G800Engines {
       climb: 'CLB',
       goAround: 'GA',
       goAroundWhen: 'gear.air_ground == 0 && surf.flaps_deg > 25', // EST: landing flaps selected in the air arm the GA rating
-      climbWhen: 'gear.air_ground == 0 && ra1.alt_ft > 1500',
+      // Automatic TO -> CLB only (above 1,500 ft RA, or with the RA out of range). Found by the check-airman pass: a
+      // level condition ('airborne && RA > 1,500') re-selected CLB every frame, so the TSC TRS page could not select
+      // CRZ or MCT in flight. Manual selections now stick until the next automatic transition (EST: Primus Epic TRS
+      // auto-sequences TO -> CLB after takeoff; CRZ / MCT are crew selections).
+      climbWhen: (v) =>
+        v.get('gear.air_ground') === 0 && v.getString('fadec.rating') === 'TO' && (v.get('ra1.valid') === 0 || v.get('ra1.alt_ft') > 1500) ? 1 : 0,
     },
   });
   const fadec = new ThrustLeverFadec(

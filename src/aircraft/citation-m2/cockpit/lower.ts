@@ -31,13 +31,13 @@ function tiltPanel(b: CockpitBuilder, name: string, y0: number, y1: number): Pan
 }
 
 const tog = (env: Env, id: string, v: string, name: string, positions: string[], values?: number[], extra: Partial<ConstructorParameters<typeof ToggleSwitch>[1]> = {}) =>
-  new ToggleSwitch(env, { id, var: v, label: name, positions, values, labels: { name, positions: true, height: 0.0024 }, scale: 0.85, ...extra });
+  new ToggleSwitch(env, { id, var: v, label: name, positions, values, labels: { name, positions: true, height: 0.0028 }, scale: 0.85, ...extra });
 
 const dimmer = (env: Env, id: string, v: string, name: string) =>
   new RotaryKnob(env, { id, label: name, cap: 'dimmer', diameter: 0.013, outer: { var: v, min: 0, max: 1, step: 0.05, angleRange: [-140, 140], format: (x) => (x <= 0.001 ? 'OFF' : `${Math.round(x * 100)} %`) } });
 
 function bracket(p: Panel, title: string, x0: number, x1: number): void {
-  p.bracket(title, (x0 + x1) / 2, 0.011, x1 - x0, { height: 0.0024 });
+  p.bracket(title, (x0 + x1) / 2, 0.011, x1 - x0, { height: 0.0028 });
 }
 
 export function buildTiltPanels(b: CockpitBuilder, displays: Map<string, CockpitDisplay>): void {
@@ -55,7 +55,7 @@ export function buildTiltPanels(b: CockpitBuilder, displays: Map<string, Cockpit
       label: 'PRESS SOURCE',
       cap: 'pointer',
       diameter: 0.016,
-      labelHeight: 0.0019,
+      labelHeight: 0.0022,
       positions: [
         { value: 0, label: 'OFF', angle: -80 },
         { value: 1, label: 'L', angle: -40 },
@@ -79,7 +79,7 @@ export function buildTiltPanels(b: CockpitBuilder, displays: Map<string, Cockpit
       positions: ['NORM', 'DUMP'],
       values: [0, 1],
       scale: 0.85,
-      labels: { name: 'CABIN DUMP', positions: true, height: 0.0021 },
+      labels: { name: 'CABIN DUMP', positions: true, height: 0.0025 },
       guard: { color: 'red', guardedPosition: 0, hinge: 'top' },
     }),
     0.091,
@@ -103,7 +103,7 @@ export function buildTiltPanels(b: CockpitBuilder, displays: Map<string, Cockpit
       label: 'W/S ALCOHOL',
       positions: ['OFF', 'ON'],
       scale: 0.85,
-      labels: { name: 'ALCOHOL', positions: true, height: 0.0021 },
+      labels: { name: 'ALCOHOL', positions: true, height: 0.0025 },
       guard: { color: 'black', guardedPosition: 0 },
     }),
     0.276,
@@ -120,7 +120,7 @@ export function buildTiltPanels(b: CockpitBuilder, displays: Map<string, Cockpit
       label: 'FUEL TRANSFER',
       cap: 'pointer',
       diameter: 0.015,
-      labelHeight: 0.0019,
+      labelHeight: 0.0022,
       positions: [
         { value: -1, label: 'L TANK', angle: -55 },
         { value: 0, label: 'OFF', angle: 0 },
@@ -225,7 +225,7 @@ export function buildTiltPanels(b: CockpitBuilder, displays: Map<string, Cockpit
   dims.forEach(([id, v, name], i) => {
     const x = 0.022 + i * 0.031;
     R.add(dimmer(env, id, v, `${name} LIGHTS`), x, r2);
-    R.label(name, x, r2 - 0.014, { height: 0.0021 });
+    R.label(name, x, r2 - 0.014, { height: 0.0025 });
   });
   R.add(tog(env, 'm2.cabin_lt', M2.cabinLt, 'CABIN', ['OFF', 'ON']), 0.2, r2);
   // SYSTEM TEST rotary (CJ1+ S&D "rotary test switch"; positions EST).
@@ -295,7 +295,7 @@ export function buildTiltPanels(b: CockpitBuilder, displays: Map<string, Cockpit
       label: 'EMER COMM (COM 1 121.5)',
       positions: ['NORM', 'EMER'],
       scale: 0.85,
-      labels: { name: 'EMER COMM', positions: true, height: 0.0021 },
+      labels: { name: 'EMER COMM', positions: true, height: 0.0025 },
       guard: { color: 'red', guardedPosition: 0 },
     }),
     0.465,

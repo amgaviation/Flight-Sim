@@ -374,6 +374,11 @@ export const B738 = {
   /** Pedestal lights rheostats: PANEL, FLOOD (0..1). */
   pedestalPanelLt: `${P}pedestal_panel_lt`,
   pedestalFlood: `${P}pedestal_flood`,
+  /**
+   * ELT remote switch (aft overhead): ARM (0, guarded) / ON (1). EST: 737NG FCOM 1.30 aft overhead
+   * ELT panel (remote control of the fixed ELT); ON transmits, ARM transmits after an impact.
+   */
+  eltSw: `${P}elt_sw`,
 
   // ================================================================ OUTPUTS: annunciator lights (0/1; 2 = dim/blue bright)
   lt: {
@@ -507,6 +512,8 @@ export const B738 = {
     clockChrS: (s: Side) => `${P}clock_chr_s${s}`,
     isduText: (line: 'l' | 'r') => `${P}isdu_${line}`,
     yawDamperInd: `${P}yd_ind`,
+    /** ELT transmitting light (aft overhead ELT panel). */
+    elt: `${L}elt`,
   },
 
   // ================================================================ derived / internal (systems)

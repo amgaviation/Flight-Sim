@@ -162,7 +162,10 @@ export function buildShell(b: CockpitBuilder): void {
   // Centre pedestal: sloped forward section (MFD GTCs) and the main box.
   const P = PEDESTAL;
   const topLen = P.topFwd[0] - P.topAft[0];
-  add(pedestalGeometry(P.width, topLen, FLOOR_Z - P.topAft[1], FLOOR_Z - P.topFwd[1], 0.012), 'panelDark', 'pedestal').position.copy(bl((P.topFwd[0] + P.topAft[0]) / 2, 0, FLOOR_Z));
+  // Body top 3 mm below the control-panel plate: coplanar (bevelled) it covered the forward engraved legends
+  // (FUEL, HYDRAULICS, SPEED BRAKE, FLAPS...) by up to 0.7 mm (check-ride visual pass).
+  const PED_INSET = 0.003;
+  add(pedestalGeometry(P.width, topLen, FLOOR_Z - P.topAft[1] - PED_INSET, FLOOR_Z - P.topFwd[1] - PED_INSET, 0.012), 'panelDark', 'pedestal').position.copy(bl((P.topFwd[0] + P.topAft[0]) / 2, 0, FLOOR_Z));
   const fwdLen = P.fwdTop[0] - P.fwdBottom[0];
   add(pedestalGeometry(P.width, fwdLen + 0.02, FLOOR_Z - P.fwdBottom[1], FLOOR_Z - P.fwdTop[1], 0.008), 'panelDark', 'pedestal_fwd').position.copy(bl((P.fwdTop[0] + P.fwdBottom[0]) / 2, 0, FLOOR_Z));
 

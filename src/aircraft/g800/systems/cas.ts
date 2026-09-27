@@ -104,6 +104,7 @@ export const G800_CAS: CasMessageDef[] = [
   { id: 'apu_gen_on', text: 'APU Generator On', level: 'advisory', when: 'elec.apu_gen_online && (eng1.running || eng2.running)' }, // [C450]
   { id: 'isolation_valve_open', text: 'Isolation Valve Open', level: 'advisory', when: `pneu.iso_open && ${V.startMaster} == 0` }, // [EPIC]
   { id: 'gnd_spoiler_unarm', text: 'Ground Spoiler Unarm', level: 'advisory', when: `${V.gndSplrArm} == 0 && gear.air_ground && (eng1.running || eng2.running)` }, // [EPIC]
+  { id: 'stuck_mic', text: 'Stuck Mic', level: 'advisory', when: V.stuckMic }, // [EST] Honeywell-style stuck-microphone message (systems/audio.ts)
   { id: 'pedal_steering_off', text: 'Pedal Steering Off', level: 'advisory', when: `${V.nwsSw} == 0` }, // [EPIC]
   { id: 'parking_brake_on', text: 'Parking Brake On', level: 'advisory', when: 'brakes.parking_set' }, // [EPIC]
   { id: 'main_door', text: 'Main Door', level: 'advisory', when: 'ac.door.main > 0.02' }, // [EPIC]

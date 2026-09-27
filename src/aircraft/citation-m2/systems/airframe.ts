@@ -106,8 +106,9 @@ export function createPressurization(ctx: Pick<SimContext, 'vars' | 'nav'>): Pre
     schedule: { x: [0, 41000], y: [0, 8000] },
     cabinVolumeM3: 7.5, // FPG: passenger cabin 198 ft^3 (5.6 m^3) + cockpit (EST)
     inflowKgs: 'pneu.pack_flow_kgs',
-    landingElevation: M2.landingElevFt,
-    landingElevationAuto: `${M2.landingElevFt} < -1000`, // GTC entry cleared -> FMS destination elevation
+    // GTC entry; cleared (< -1000) -> FMS destination elevation, or with no destination the takeoff field (EST, CJ family).
+    landingElevation: `${M2.landingElevFt} < -1000 ? ${M2.takeoffFieldElevFt} : ${M2.landingElevFt}`,
+    landingElevationAuto: `${M2.landingElevFt} < -1000`,
     destinationElevation: (id) => ctx.nav?.airport?.(id)?.elevationFt,
     mode: `${M2.pressMode} == 2 ? 2 : 0`,
     manualCommand: M2.pressManual,
@@ -115,6 +116,9 @@ export function createPressurization(ctx: Pick<SimContext, 'vars' | 'nav'>): Pre
     masksDeployFt: 13500, // EST: CJ-family passenger mask auto deployment
     masksManual: `${M2.paxOxy} == 2`,
     onGround: 'gear.air_ground',
+    // EST (CJ family): the ground solenoid opens the safety valve through the squat switch, so the cabin stays
+    // unpressurised on the ground (the outflow valve alone left ~0.16 psi with both packs flowing at idle).
+    safetyValveOpen: 'gear.air_ground',
     cabinTempC: 'pneu.cabin_temp_c',
   });
 }

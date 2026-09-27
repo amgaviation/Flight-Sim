@@ -116,7 +116,13 @@ export function createPressurization(ctx: Pick<SimContext, 'vars' | 'nav'>): Pre
     // AUTO 0 / MAN 2 (MAN ALT toggle on the outflow valves); both OUTFLOW VALVE CLOSED or DITCHING -> manual, closing.
     mode: `(${closed}) ? 2 : ${V.pressAutoMan}`,
     manualCommand: `(${closed}) ? -1 : ${V.pressManAlt} * (0.3 + 0.7 * ${V.pressManRate})`,
-    dump: `${V.emerDepress} == 1 && !(${V.ditching} == 1)`,
+    // EMER DEPRESS drives the outflow valves open until the outflow valves' pneumatic cabin-altitude limiter takes
+    // over. EST: 14,500 ft (the Bombardier CRJ / Challenger FCOMs give EMER DEPRESS "cabin altitude limited to
+    // 14,500 ft"; 14 CFR 25.841(a)(2) keeps the cabin below 15,000 ft after any probable failure). Without the limiter
+    // the dump took the cabin to ~38,600 ft at FL410 (found by verify/abnormal.test.ts).
+    // The limiter anticipates with the cabin rate over the ~5 s outflow valve travel (EST) so the cabin does not
+    // overshoot while the valves close.
+    dump: `${V.emerDepress} == 1 && !(${V.ditching} == 1) && press.cabin_alt_ft + max(0, press.cabin_rate_fpm) * 5 / 60 < ${G6K_LIMITS.cabinLimiterFt}`,
     cabinAltWarnFt: 10000, // EST: CABIN ALT warning at 10,000 ft (14 CFR 25.841(b)(6))
     masksDeployFt: G6K_LIMITS.paxMaskFt,
     masksManual: `${V.paxOxy} == 2`,

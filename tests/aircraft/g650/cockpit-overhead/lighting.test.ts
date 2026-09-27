@@ -1,7 +1,7 @@
 /**
  * G650 COCKPIT LIGHTS through the 3D controls against the real systems (G650 training material, dossier §13):
- *  - MASTER CONTROL OFF = day: annunciators full bright, integral panel backlighting off;
- *  - night range: annunciators dimmed, backlighting on at the PANEL knob level;
+ *  - MASTER CONTROL OFF = day: annunciators full bright;
+ *  - night range: annunciators dimmed (backlighting at the PANEL knob level: SCOPE, not gated by MASTER);
  *  - full clockwise: annunciators full bright; ORIDE: overhead dome and side-console floods (map lights) full;
  *  - the CKPT LTS breaker removes the backlighting; VEST LTS ORIDE turns the vestibule lights off.
  */
@@ -49,13 +49,12 @@ describe('G650 cockpit lighting', () => {
     const annun = () => build.env.lighting.annunciatorLevel();
     step(1);
 
-    // Day (state default): MASTER OFF -> annunciators full bright, no backlighting although PANEL is up.
+    // Day (state default): MASTER OFF -> annunciators full bright.
     expect(v.get(V.ltMaster)).toBe(0);
     expect(v.get(V.ltPanel)).toBeGreaterThan(0.5);
     expect(annun()).toBe(1);
-    expect(v.get('ac.light.panel')).toBe(0);
 
-    // Night setting: annunciators dim, panel backlighting on.
+    // Night setting: annunciators dim, panel backlighting on at the PANEL level.
     turn(4);
     expect(v.get(V.ltMaster)).toBeGreaterThan(0.1);
     expect(v.get(V.ltMaster)).toBeLessThan(0.5);
@@ -93,8 +92,9 @@ describe('G650 cockpit lighting', () => {
     // Back to OFF: day mode.
     turn(-40);
     expect(v.get(V.ltMaster)).toBe(0);
-    expect(v.get('ac.light.panel')).toBe(0);
+    expect(annun()).toBe(1);
     expect(v.get('ac.light.dome')).toBe(0);
+    expect(v.get('ac.light.map_l')).toBe(0);
 
     // VEST LTS ORIDE: vestibule lights (cabin power) off, blue ON legend.
     expect(v.get('ac.light.vestibule')).toBe(1);

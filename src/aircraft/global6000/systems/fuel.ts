@@ -60,8 +60,10 @@ export function createFuel(ctx: Pick<SimContext, 'vars'>): FuelSystem {
     ],
     consumers: [
       // Engine fuel SOV (DC EMER, GXFU CB) closed by the fire handle; FADEC fuel command from the ENG RUN switch.
-      { id: 'eng1', node: 'l_feed', flowPph: 'eng1.ff_pph', engine: 1, run: `fadec.eng1.fuel_cmd && !${V.fireHandle('l')} && elec.eng_sov1_powered`, suction: { tank: 'l_main', ceilingFt: 20000 } },
-      { id: 'eng2', node: 'r_feed', flowPph: 'eng2.ff_pph', engine: 2, run: `fadec.eng2.fuel_cmd && !${V.fireHandle('r')} && elec.eng_sov2_powered`, suction: { tank: 'r_main', ceilingFt: 20000 } },
+      // `fail.eng<n>.flameout` (registered in createSystems.ts) is the instructor's engine failure: the combustor
+      // flames out with the ENG RUN switch at RUN, so the FADEC latch posts L / R ENG FLAMEOUT (logic.ts).
+      { id: 'eng1', node: 'l_feed', flowPph: 'eng1.ff_pph', engine: 1, run: `fadec.eng1.fuel_cmd && !${V.fireHandle('l')} && elec.eng_sov1_powered && !fail.eng1.flameout`, suction: { tank: 'l_main', ceilingFt: 20000 } },
+      { id: 'eng2', node: 'r_feed', flowPph: 'eng2.ff_pph', engine: 2, run: `fadec.eng2.fuel_cmd && !${V.fireHandle('r')} && elec.eng_sov2_powered && !fail.eng2.flameout`, suction: { tank: 'r_main', ceilingFt: 20000 } },
       // APU from the right feed line through the APU fire SOV (DC EMER); boost pressure required (GXAPU).
       { id: 'apu', node: 'r_feed', flowPph: 'apu.ff_pph', run: `(apu.fuel_cmd || (apu.state >= 1 && apu.state <= 4)) && !${V.fireHandle('apu')} && elec.apu_fire_sov_powered`, minPressPsi: 5 },
     ],

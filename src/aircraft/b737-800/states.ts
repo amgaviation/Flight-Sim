@@ -164,6 +164,7 @@ export function setB738Switches(ctx: Pick<SimContext, 'vars'>, s: InitialState):
   v.set(B738.fdrSw, 0);
   v.set(B738.leDevTest, 0);
   v.set(B738.svcInterphone, 0);
+  v.set(B738.eltSw, 0); // ARM
   for (const d of DOORS) v.set(B738.door(d), 0);
   v.set(B738.fdDoorLock, 0);
   // ------------------------------------------------ FORWARD PANELS

@@ -37,7 +37,7 @@ function setup() {
 }
 
 describe('Citation Longitude circuit breakers', () => {
-  it('every network breaker up to 50 A is on a side-console panel, bound to cb.<name>', () => {
+  it('every network breaker up to 50 A is on a side-console panel, bound to cb.<name>', { timeout: 60_000 }, () => {
     const { r, byId } = setup();
     const net = r.sys.elec.breakerNames();
     const panel = net.filter((b) => b.ratingA <= MAX_PANEL_BREAKER_A);

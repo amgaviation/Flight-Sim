@@ -89,8 +89,12 @@ export function createEngines(ctx: SimContext): G6kEngines {
       climb: 'CLB',
       cruise: 'CRZ',
       goAround: 'GA',
-      // EST: GA with the slats out and the gear down in the air; CRZ once level above FL250 (FMS phase).
-      goAroundWhen: `gear.air_ground == 0 && surf.slats > 0.5 && gear.down_locked`,
+      // EST: GA in the air with the slats out and the gear down, and held through the go-around while the AFCS
+      // vertical mode is GA (ap.vert_code 15 = VERTICAL_MODES 'GA'; the gear comes up in the go-around); CRZ once level
+      // above FL250 (FMS phase). TO is held after lift-off through the take-off thrust phase (logic.ts `V.toPhase`),
+      // CLB after it.
+      goAroundWhen: `gear.air_ground == 0 && !${V.toPhase} && ((surf.slats > 0.5 && gear.down_locked) || ap.vert_code == 15)`,
+      climbWhen: `!${V.toPhase}`,
       // ap.vert_code: VERTICAL_MODES index (3 ALT, 11 VALT: level at altitude in ALT hold or VNAV altitude hold).
       cruiseWhen: `adc1.alt_ft > 25000 && abs(adc1.vs_fpm) < 300 && (ap.vert_code == 3 || ap.vert_code == 11)`,
     },

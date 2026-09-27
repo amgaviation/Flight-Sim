@@ -298,4 +298,45 @@ describe('737-800 overhead flows', () => {
     expect(lit('b738.aovhd.door.flt_deck')).toBe('FLT DECK');
     build.dispose?.();
   });
+
+  it('aft overhead: LANDING GEAR greens, ELT, observer ACP 3 receivers and push-to-talk', { timeout: 120_000 }, () => {
+    const { v, ctl, step, lit, build } = setup('ready_to_taxi');
+    step(1);
+    // Gear down and locked on the ground: the aft overhead greens follow the gear sensing.
+    for (const leg of [0, 1, 2]) expect(lit(`b738.aovhd.gear.green${leg}`)).toMatch(/GEAR$/);
+    // ELT: ARM (guarded) -> dark; ON -> transmitting light.
+    expect(lit('b738.aovhd.elt.lt')).toBe('');
+    const elt = ctl<GuardedSwitch>('b738.aovhd.elt.sw');
+    openGuard(elt);
+    wheel(elt, 1);
+    step(0.5);
+    expect(v.get(B738.eltSw)).toBe(1);
+    expect(v.get('ac.b738.elt_transmitting')).toBe(1);
+    expect(lit('b738.aovhd.elt.lt')).toBe('ELT');
+    wheel(elt, -1);
+    click(elt, 0); // close the guard at ARM
+    step(0.5);
+    expect(v.get(B738.eltSw)).toBe(0);
+    expect(lit('b738.aovhd.elt.lt')).toBe('');
+    // ACP 3: VHF 2 receiver on (push) and volume (wheel) -> mixer level; MIC VHF 2 + R/T keys COM 2.
+    const rx = ctl<RotaryKnob>('b738.aovhd.acp3.rx_vhf2');
+    v.set(B738.acpRxOn(3, 'vhf2'), 0);
+    step(0.1);
+    rx.onWheel?.(4, P(rx.hitTargets[0]));
+    step(0.2);
+    expect(v.get('ac.b738.acp3.lvl_vhf2')).toBe(0);
+    click(rx, 0, 1); // middle click = push
+    step(0.2);
+    expect(v.get(B738.acpRxOn(3, 'vhf2'))).toBe(1);
+    expect(v.get('ac.b738.acp3.lvl_vhf2')).toBeGreaterThan(0);
+    click(ctl('b738.aovhd.acp3.mic1'));
+    step(0.2);
+    expect(v.get(B738.acpMic(3))).toBe(1);
+    const ptt = ctl('b738.aovhd.acp3.ptt');
+    ptt.onPointerDown?.(P(ptt.hitTargets[0]));
+    wheel(ptt, 1);
+    step(0.1);
+    expect(v.get('ac.b738.acp3.keyed_tx')).toBe(2);
+    build.dispose?.();
+  });
 });

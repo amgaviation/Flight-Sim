@@ -7,7 +7,7 @@
  */
 import type { SimContext } from '../../../core/SimContext';
 import type { Subsystem } from '../../types';
-import { ENV, ICE, NAV } from '../../../core/vars';
+import { ENV, FDM, ICE, NAV } from '../../../core/vars';
 import { EdgeDetector, OffDelay } from '../../../systems/util';
 import { M2, TEST_SEL } from '../vars';
 
@@ -33,6 +33,8 @@ export class M2Logic implements Subsystem {
   update(dt: number): void {
     const v = this.ctx.vars;
     const lock = v.get(M2.controlLock) !== 0;
+    // Takeoff field elevation for the pressurization controller (landing elevation fallback).
+    if (v.get('gear.air_ground') !== 0) v.set(M2.takeoffFieldElevFt, v.get(FDM.altMsl));
 
     // ---- FADEC lever inputs: CUTOFF below idle is a fuel-off gate, not thrust; control lock holds the throttles at idle.
     for (const i of [1, 2]) {

@@ -18,7 +18,12 @@
  * bright; ORIDE = also the overhead dome light and the side-console floodlights
  * (modelled by the map lights, which light the consoles) at full, the Gulfstream
  * equivalent of a thunderstorm light. EST: the annunciator dimming is two-level
- * (dim / full) and the backlighting follows the PANEL knob, not the master itself.
+ * (dim / full). SCOPE: the integral backlighting follows the PANEL knob in every
+ * MASTER position (the real one lights only in the night range): by day the cockpit
+ * renderer washes the backlight out (Lighting.daylightWashout) and it stands in for
+ * the sunlit white legends, which the scene lighting under-lights on the overhead;
+ * and the initial state cannot tell day from night (env.ambient_light is written by
+ * the renderer after applyState), so gating it would leave night starts unlit.
  * VEST LTS ORIDE (side console) forces the vestibule lights off; SCOPE: the cabin is
  * not rendered, the vestibule light is state only (`ac.light.vestibule`).
  */
@@ -46,7 +51,7 @@ export function createLighting(ctx: Pick<SimContext, 'vars'>): LightingSystem {
       { name: 'emer', on: `${V.ltEmer} == 2 || (${V.ltEmer} == 1 && !elec.l_ess_dc_powered && !elec.r_ess_dc_powered) ? 1 : 0`, tech: 'led' },
     ],
     dimmers: [
-      { id: 'panel', knob: V.ltPanel, master: `${V.ltMaster} > 0.005 ? 1 : 0`, power: 'elec.panel_lts_powered', output: ['ac.light.panel'] },
+      { id: 'panel', knob: V.ltPanel, power: 'elec.panel_lts_powered', output: ['ac.light.panel'] },
       { id: 'flood', knob: V.ltFlood, power: 'elec.panel_lts_powered', output: ['ac.light.flood'] },
       { id: 'dome', knob: `${V.ltDome} == 1 || ${ORIDE} ? 1 : 0`, power: 'elec.panel_lts_powered || elec.emer_dc_powered', output: ['ac.light.dome'] },
       { id: 'map_l', knob: `max(${V.ltMapL}, ${ORIDE} ? 1 : 0)`, power: 'elec.l_ess_dc_powered', output: ['ac.light.map_l'] },

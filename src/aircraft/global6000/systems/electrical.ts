@@ -314,3 +314,72 @@ export class BusPowerControl implements Subsystem {
     for (const s of this.selectors) s.reset?.();
   }
 }
+
+/**
+ * Avionics power-interrupt ride-through. The ACPC / DCPC transfers are
+ * break-power transfers: when a VFG drops (engine failure) the AC bus, its TRU
+ * and the DC bus behind it are dead for one or two steps until the next source
+ * contactor closes (and the emergency tie contactor puts the batteries on DC
+ * ESS). The avionics boxes carry hold-up capacitance for exactly such
+ * transfers (RTCA DO-160 section 16 power-interrupt categories), so a
+ * transfer must not reboot the air data computers, drop the AFCS or blank the
+ * AFDs. EST: 0.2 s hold-up (DO-160 section 16 interrupt tests go up to
+ * 200 ms); anything longer is a real power loss.
+ *
+ * Runs right after the network: while a listed load has been powered within
+ * the hold-up time, its `elec.<id>_powered` stays 1 and `elec.<id>_v` keeps
+ * the last good voltage. Motors, lights and heaters are not listed (they drop
+ * with the bus). No per-step allocation.
+ */
+export const HOLDUP_S = 0.2;
+export const HOLDUP_LOADS = [
+  'afd1', 'afd2', 'afd3', 'afd4', 'ctp1', 'ctp2', 'ccp1', 'ccp2', 'mkp1', 'mkp2', 'fcp',
+  'adc1', 'adc2', 'irs1', 'irs2', 'irs3', 'afcs1', 'afcs2', 'fadec1', 'fadec2',
+  'sfcu1', 'sfcu2', 'fcu1', 'fcu2', 'lgecu_a', 'lgecu_b', 'bcu_a', 'bcu_b', 'nws1', 'nws2', 'spc',
+  'fideex_a', 'fideex_b', 'fuel_cmptr_a', 'fuel_cmptr_b', 'bmc1', 'bmc2', 'cpc1', 'cpc2', 'hbmu',
+  'com1', 'com2', 'com3', 'nav1', 'nav2', 'gps1', 'gps2', 'iac1', 'iac2',
+  'ra1', 'ra2', 'taws', 'xpdr1', 'xpdr2', 'tcas', 'adf1', 'adf2', 'fms',
+] as const;
+
+export class PowerHoldup implements Subsystem {
+  readonly name = 'g6k.power_holdup';
+  private readonly pw: string[];
+  private readonly vv: string[];
+  private readonly off: Float64Array;
+  private readonly lastV: Float64Array;
+
+  constructor(
+    private readonly vars: SimContext['vars'],
+    loads: readonly string[] = HOLDUP_LOADS,
+  ) {
+    this.pw = loads.map((l) => `elec.${l}_powered`);
+    this.vv = loads.map((l) => `elec.${l}_v`);
+    this.off = new Float64Array(loads.length).fill(HOLDUP_S);
+    this.lastV = new Float64Array(loads.length);
+  }
+
+  update(dt: number): void {
+    const v = this.vars;
+    for (let i = 0; i < this.pw.length; i++) {
+      if (v.get(this.pw[i]) !== 0) {
+        this.off[i] = 0;
+        this.lastV[i] = v.get(this.vv[i]);
+      } else if (this.off[i] < HOLDUP_S) {
+        this.off[i] += dt;
+        if (this.off[i] < HOLDUP_S) {
+          v.set(this.pw[i], 1);
+          v.set(this.vv[i], this.lastV[i]);
+        }
+      }
+    }
+  }
+
+  reset(): void {
+    const v = this.vars;
+    for (let i = 0; i < this.pw.length; i++) {
+      const on = v.get(this.pw[i]) !== 0;
+      this.off[i] = on ? 0 : HOLDUP_S;
+      this.lastV[i] = on ? v.get(this.vv[i]) : 0;
+    }
+  }
+}

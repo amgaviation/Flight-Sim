@@ -186,6 +186,7 @@ export const G6K_VARS = {
   idleBoth: `${P}idle_both`,
   idleAny: `${P}idle_any`,
   toThrust: `${P}to_thrust`,
+  toPhase: `${P}to_phase`, // take-off thrust phase: TO rating held from the take-off roll to the thrust reduction (logic.ts)
   tlaEff: (i: 1 | 2) => `${P}tla_eff${i}`,
   parkSet: `${P}park_set`, // handle at the locked (parking) position
   emerBrake: `${P}emer_brake`, // proportional emergency brake demand (handle below the lock)

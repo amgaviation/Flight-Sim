@@ -16,6 +16,7 @@
  *
  * Every step asserts annunciations / CAS / FMA and physically sensible numbers.
  */
+import { writeFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { NavDatabaseImpl } from '../../../../src/nav/NavDatabase';
 import { createFileLoader } from '../../../../src/nav/data/nodeLoader';
@@ -352,9 +353,11 @@ describe('Citation Longitude check ride KICT -> KMCI (full normal procedure)', (
       log(r, 'VNAV climb');
       let maxBank = 0;
       let maxIas = 0;
+      let maxIasBelow10k = 0;
       r.run(1500, () => {
         maxBank = Math.max(maxBank, Math.abs(v.get(FDM.bank)));
         maxIas = Math.max(maxIas, v.get(FDM.ias));
+        if (v.get(FDM.altMsl) < 9800) maxIasBelow10k = Math.max(maxIasBelow10k, v.get(FDM.ias));
         if (v.get(FDM.altMsl) > 18000 && v.get('adc1.baro_std') === 0) {
           r.events.emit('g3k.baro1.push'); // baro sync ON: both sides follow
         }
@@ -364,6 +367,7 @@ describe('Citation Longitude check ride KICT -> KMCI (full normal procedure)', (
       expect(Math.abs(v.get('adc1.alt_ft') - 28000)).toBeLessThan(150);
       expect(maxBank).toBeLessThan(30);
       expect(maxIas).toBeLessThan(LON_LIMITS.vmoKt);
+      expect(maxIasBelow10k).toBeLessThan(256); // 14 CFR 91.117: the FMS climb speed is capped at 250 KIAS
       expect(Math.abs(v.get('fms.xtk_nm'))).toBeLessThan(1);
       expect(v.get('adc1.baro_std')).toBe(1);
       // Climb checks: pressurization scheduled, no cautions.
@@ -395,6 +399,7 @@ describe('Citation Longitude check ride KICT -> KMCI (full normal procedure)', (
       if (!(sys.afcs.vertArmed & 16)) gmc(r, 'vnav');
       let pathSeen = false;
       let maxDesIas = 0;
+      let decelTgt = NaN;
       r.run(1800, () => {
         const vert = v.getString('ap.vert_active');
         if (vert === 'PATH') pathSeen = true;
@@ -423,8 +428,14 @@ describe('Citation Longitude check ride KICT -> KMCI (full normal procedure)', (
       const vapp = ldg.vspeeds.VAPP;
       LOG.push(`landing TOLD ${JSON.stringify(ldg)}`);
       // ~35 nm out: MAN speed 210 kt, flaps 1 below 220 kt (VFE 250), landing lights; APR near CYPRE.
-      r.run(900, () => v.get('fms.dist_to_dest_nm') < 35);
+      r.run(900, () => {
+        // FMS deceleration segment: the 250 KIAS limit already applies 3,000 ft above 10,000 ft (createSystems).
+        if (isNaN(decelTgt) && v.get(FDM.altMsl) < 12800) decelTgt = v.get('fms.vnav_tgt_speed_kt');
+        return v.get('fms.dist_to_dest_nm') < 35;
+      });
       log(r, '35 nm');
+      LOG.push(`FMS target speed at 12,800 ft: ${decelTgt}`);
+      expect(decelTgt).toBeLessThanOrEqual(250);
       r.events.emit('g3k.gmc.spd_push'); // MAN speed
       r.run(0.2);
       expect(v.get('g3k.spd_fms')).toBe(0);
@@ -627,6 +638,8 @@ describe('Citation Longitude check ride KICT -> KMCI (full normal procedure)', (
     } finally {
       // eslint-disable-next-line no-console
       console.log(LOG.join('\n'));
+      // Vitest hides console output of passing tests: AMG_FLIGHT_LOG=<file> keeps the log for review.
+      if (process.env.AMG_FLIGHT_LOG) writeFileSync(process.env.AMG_FLIGHT_LOG, LOG.join('\n') + '\n');
     }
   });
 });

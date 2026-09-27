@@ -59,7 +59,9 @@ export function buildForwardOverhead(c: B738CockpitContext, root: Panel): void {
   const lcd = (o: Ovhd, id: string, power: string, watch: string[], fields: ConstructorParameters<typeof LcdDisplay>[4], x: number, y: number, w: number, h: number, width = 320) => {
     if (c.headless) return;
     const d = new LcdDisplay(vars, id, power, watch, fields, width);
-    o.p.display(d, x, y, w, h, { bezel: { border: 0.0025, depth: 0.003 } });
+    // Border >= 4 mm: the library bezel has an 8 mm outer corner radius; a thinner frame around these short
+    // windows makes the extruded hole touch the outer contour and the triangulation fills the window.
+    o.p.display(d, x, y, w, h, { bezel: { border: 0.004, depth: 0.003 } });
     c.onDispose(() => d.dispose());
   };
   const L = B738.lt;
@@ -200,11 +202,11 @@ export function buildForwardOverhead(c: B738CockpitContext, root: Panel): void {
       { diameter: 0.012, labelHeight: 0.0014, labelRadius: 0.0125 },
     );
     const f0 = (x: number) => x.toFixed(0);
-    lcd(o, 'b738_elec_dc_lcd', 'elec.batt_bus_powered', [L.dcVolts, L.dcAmps], [{ text: () => f0(vars.get(L.dcAmps)), x: 80, size: 38 }, { text: () => f0(vars.get(L.dcVolts)), x: 240, size: 38 }], 0.073, 0.02, 0.042, 0.011);
-    lcd(o, 'b738_elec_ac_lcd', 'elec.batt_bus_powered', [L.acVolts, L.acAmps, L.acHz], [{ text: () => f0(vars.get(L.acAmps)), x: 60, size: 34 }, { text: () => f0(vars.get(L.acHz)), x: 160, size: 34 }, { text: () => f0(vars.get(L.acVolts)), x: 260, size: 34 }], 0.073, 0.042, 0.042, 0.011);
-    o.label('AMPS   VOLTS', 0.073, 0.0105, 0.0014);
-    o.label('AMPS  CPS  VOLTS', 0.073, 0.0325, 0.0014);
-    o.button({ id: id('maint'), label: 'ELEC MAINT', mode: 'momentary', var: B738.elecMaint, engraved: 'MAINT', engravedHeight: 0.0013, width: 0.008 }, 0.073, 0.064);
+    lcd(o, 'b738_elec_dc_lcd', 'elec.batt_bus_powered', [L.dcVolts, L.dcAmps], [{ text: () => f0(vars.get(L.dcAmps)), x: 80, size: 38 }, { text: () => f0(vars.get(L.dcVolts)), x: 240, size: 38 }], 0.073, 0.024, 0.042, 0.011);
+    lcd(o, 'b738_elec_ac_lcd', 'elec.batt_bus_powered', [L.acVolts, L.acAmps, L.acHz], [{ text: () => f0(vars.get(L.acAmps)), x: 60, size: 34 }, { text: () => f0(vars.get(L.acHz)), x: 160, size: 34 }, { text: () => f0(vars.get(L.acVolts)), x: 260, size: 34 }], 0.073, 0.051, 0.042, 0.011);
+    o.label('AMPS   VOLTS', 0.073, 0.0115, 0.0014);
+    o.label('AMPS  CPS  VOLTS', 0.073, 0.0385, 0.0014);
+    o.button({ id: id('maint'), label: 'ELEC MAINT', mode: 'momentary', var: B738.elecMaint, engraved: 'MAINT', engravedHeight: 0.0013, width: 0.008 }, 0.073, 0.068);
     o.annun(id('bat_discharge'), 'BAT DISCHARGE', [seg.on(['BAT', 'DISCHARGE'], 'amber', L.batDischarge)], 0.026, 0.084);
     o.annun(id('tr_unit'), 'TR UNIT', [seg.on(['TR', 'UNIT'], 'amber', L.trUnit)], 0.073, 0.084);
     o.annun(id('elec_lt'), 'ELEC', [seg.on('ELEC', 'amber', L.elec)], 0.12, 0.084);
@@ -488,7 +490,7 @@ export function buildForwardOverhead(c: B738CockpitContext, root: Panel): void {
   // ============================================================== column 6: CABIN ALTITUDE, PRESSURIZATION
   const c6 = stack(5);
   {
-    const o = c6('cabin_alt', 0.2);
+    const o = c6('cabin_alt', 0.15);
     const id = (s: string) => `b738.ovhd.cab.${s}`;
     dial(
       o,
@@ -505,11 +507,11 @@ export function buildForwardOverhead(c: B738CockpitContext, root: Panel): void {
           { var: L.cabinDiffPsi, scale: 1, width: 6, length: 64, color: '#e8e8e8' },
         ],
         title: ['CABIN ALT', 'DIFF PRESS'],
-        titleY: 186,
+        titleY: 196,
       }),
-      0.042,
-      0.06,
-      0.058,
+      0.04,
+      0.052,
+      0.066,
     );
     dial(
       o,
@@ -522,27 +524,27 @@ export function buildForwardOverhead(c: B738CockpitContext, root: Panel): void {
         title: ['CABIN CLIMB', '1000 FT/MIN'],
         titleY: 162,
       }),
-      0.108,
+      0.11,
+      0.052,
       0.06,
-      0.046,
     );
-    o.button({ id: id('horn_cutout'), label: 'ALT HORN CUTOUT', mode: 'momentary', var: B738.altHornCutout, engraved: 'ALT HORN CUTOUT', engravedHeight: 0.0012, width: 0.012 }, 0.108, 0.13);
-    o.label('CABIN ALTITUDE', 0.042, 0.13, 0.0019);
-    o.label('ALT HORN', 0.108, 0.145, 0.0017);
-    o.label('CUTOUT', 0.108, 0.15, 0.0017);
+    o.button({ id: id('horn_cutout'), label: 'ALT HORN CUTOUT', mode: 'momentary', var: B738.altHornCutout, engraved: 'ALT HORN CUTOUT', engravedHeight: 0.0012, width: 0.012 }, 0.11, 0.108);
+    o.label('CABIN ALTITUDE', 0.04, 0.101, 0.0019);
+    o.label('ALT HORN', 0.11, 0.123, 0.0017);
+    o.label('CUTOUT', 0.11, 0.129, 0.0017);
   }
   {
-    const o = c6('press', 0.313);
+    const o = c6('press', 0.363);
     const id = (s: string) => `b738.ovhd.press.${s}`;
-    o.annun(id('auto_fail'), 'AUTO FAIL', [seg.on(['AUTO', 'FAIL'], 'amber', L.autoFail)], 0.026, 0.02);
-    o.annun(id('off_sched'), 'OFF SCHED DESCENT', [seg.on(['OFF SCHED', 'DESCENT'], 'amber', L.offSchedDescent)], 0.073, 0.02);
-    o.annun(id('altn'), 'ALTN', [seg.on('ALTN', 'green', L.altn)], 0.12, 0.02);
-    o.annun(id('manual'), 'MANUAL', [seg.on('MANUAL', 'green', L.manual)], 0.12, 0.036);
+    o.annun(id('auto_fail'), 'AUTO FAIL', [seg.on(['AUTO', 'FAIL'], 'amber', L.autoFail)], 0.026, 0.035);
+    o.annun(id('off_sched'), 'OFF SCHED DESCENT', [seg.on(['OFF SCHED', 'DESCENT'], 'amber', L.offSchedDescent)], 0.073, 0.035);
+    o.annun(id('altn'), 'ALTN', [seg.on('ALTN', 'green', L.altn)], 0.12, 0.035);
+    o.annun(id('manual'), 'MANUAL', [seg.on('MANUAL', 'green', L.manual)], 0.12, 0.051);
     // FLT ALT / LAND ALT windows (LCD) and knobs.
     const alt = (x: number, which: 'flt' | 'land') => {
       const v = which === 'flt' ? B738.fltAltFt : B738.landAltFt;
-      lcd(o, `b738_${which}_alt_lcd`, which === 'flt' ? 'elec.press_auto_powered' : 'elec.press_auto_powered', [v], [{ text: () => String(Math.round(vars.get(v))), x: 160, size: 42 }], x, 0.066, 0.046, 0.013, 320);
-      o.label(which === 'flt' ? 'FLT ALT' : 'LAND ALT', x, 0.054, 0.0019);
+      lcd(o, `b738_${which}_alt_lcd`, which === 'flt' ? 'elec.press_auto_powered' : 'elec.press_auto_powered', [v], [{ text: () => String(Math.round(vars.get(v))), x: 160, size: 42 }], x, 0.081, 0.046, 0.013, 320);
+      o.label(which === 'flt' ? 'FLT ALT' : 'LAND ALT', x, 0.066, 0.0019);
       o.p.add(
         new RotaryKnob(env, {
           id: id(`${which}_alt`),
@@ -556,7 +558,7 @@ export function buildForwardOverhead(c: B738CockpitContext, root: Panel): void {
               : { var: v, min: -1000, max: 14000, step: 50, initial: 0, accel: { fastStep: 500, slow: 6, fast: 14 }, label: 'LAND ALT', format: (x) => `${Math.round(x)} FT` },
         }),
         x,
-        0.088,
+        0.106,
       );
     };
     alt(0.042, 'flt');
@@ -573,13 +575,13 @@ export function buildForwardOverhead(c: B738CockpitContext, root: Panel): void {
         titleY: 160,
       }),
       0.036,
-      0.16,
+      0.195,
       0.034,
     );
-    o.toggle({ id: id('outflow'), label: 'OUTFLOW VALVE', var: B738.outflowSw, positions: ['OPEN', '', 'CLOSE'], values: [1, 0, -1], initial: 1, springs: { 0: 1, 2: 1 } }, 0.036, 0.232, 'VALVE', 0.75);
-    o.selector(id('mode'), 'PRESSURIZATION MODE SELECTOR', B738.pressMode, [{ value: 0, label: 'AUTO' }, { value: 1, label: 'ALTN' }, { value: 2, label: 'MAN' }], 0.106, 0.2, { diameter: 0.016, cap: 'bar', labelHeight: 0.0019 });
-    o.line(0.012, 0.29, 0.134, 0.29);
-    o.label('PRESSURIZATION', 0.073, 0.298, 0.0022);
+    o.toggle({ id: id('outflow'), label: 'OUTFLOW VALVE', var: B738.outflowSw, positions: ['OPEN', '', 'CLOSE'], values: [1, 0, -1], initial: 1, springs: { 0: 1, 2: 1 } }, 0.036, 0.267, 'VALVE', 0.75);
+    o.selector(id('mode'), 'PRESSURIZATION MODE SELECTOR', B738.pressMode, [{ value: 0, label: 'AUTO' }, { value: 1, label: 'ALTN' }, { value: 2, label: 'MAN' }], 0.106, 0.235, { diameter: 0.016, cap: 'bar', labelHeight: 0.0019 });
+    o.line(0.012, 0.34, 0.134, 0.34);
+    o.label('PRESSURIZATION', 0.073, 0.348, 0.0022);
   }
 
   // ============================================================== bottom row (next to the windshield)

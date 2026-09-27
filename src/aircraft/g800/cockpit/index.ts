@@ -51,7 +51,7 @@ export const G800_VIEWS = [
   { name: 'Pedestal', position_m: [12.45, -0.2, -0.55] as [number, number, number], yawDeg: 22, pitchDeg: -58, fovDeg: 62 },
   { name: 'Pedestal TSCs (FMS)', position_m: [12.72, -0.12, -0.5] as [number, number, number], yawDeg: 10, pitchDeg: -52, fovDeg: 44 },
   { name: 'Overhead', position_m: [12.3, -0.3, -0.85] as [number, number, number], yawDeg: 14, pitchDeg: 62, fovDeg: 62 },
-  { name: 'Left console / sidestick', position_m: [12.45, -0.5, -0.6] as [number, number, number], yawDeg: -55, pitchDeg: -50, fovDeg: 58 },
+  { name: 'Left console / sidestick', position_m: [12.52, -0.62, -0.3] as [number, number, number], yawDeg: -50, pitchDeg: -34, fovDeg: 50 },
   { name: 'Fire handles', position_m: [12.6, -0.15, -0.85] as [number, number, number], yawDeg: 6, pitchDeg: 40, fovDeg: 45 },
   // Views of the overhead / side-console builders (cockpit/overhead, cockpit/side).
   { name: 'Overhead touch screens', position_m: [12.35, 0, -0.9] as [number, number, number], yawDeg: 0, pitchDeg: 72, fovDeg: 70 },

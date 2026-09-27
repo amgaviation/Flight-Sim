@@ -107,7 +107,7 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): ElectricalNetwo
     dc('nav_lts', 'l_main_dc', 2, 5, { enabled: V.ltNav }),
     dc('beacon', 'l_main_dc', 2, 5, { enabled: V.ltBeacon }),
     dc('wing_insp', 'l_main_dc', 2, 5, { enabled: V.ltWing }),
-    dc('panel_lts', 'l_main_dc', `3 * ${V.ltPanel} * (${V.ltMaster} > 0.005 ? 1 : 0) + 2 * ${V.ltFlood} + 0.5 * max(${V.ltDome}, ${V.ltMaster} > 1.05 ? 1 : 0)`, 7.5, { model: 'resistive' }), // backlighting only in the MASTER CONTROL night range
+    dc('panel_lts', 'l_main_dc', `3 * ${V.ltPanel} + 2 * ${V.ltFlood} + 0.5 * max(${V.ltDome}, ${V.ltMaster} > 1.05 ? 1 : 0)`, 7.5, { model: 'resistive' }), // + dome with MASTER CONTROL ORIDE
     // ------------------------------------------------ R MAIN DC
     dc('du3', 'r_main_dc', 6.5, 10), // DU 3 (MFD)
     dc('alt_r', 'r_main_dc', 'fuel.alt_r_amps', 25),

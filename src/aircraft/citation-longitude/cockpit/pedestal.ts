@@ -15,7 +15,7 @@
  * Detailed positions are EST from photographs.
  */
 import * as THREE from 'three';
-import { GuardedButton, GuardedSwitch, Lever, PushButton, RotaryKnob, SelectorKnob, ToggleSwitch } from '../../../cockpit/controls';
+import { GuardedButton, GuardedSwitch, Lever, PushButton, RotaryKnob, SelectorKnob, TBarHandle, ToggleSwitch } from '../../../cockpit/controls';
 import type { Panel } from '../../../cockpit/CockpitBuilder';
 import { INPUT } from '../../../core/vars';
 import { LON_VARS as V } from '../vars';
@@ -268,7 +268,7 @@ export function buildPedestal(c: LonCockpitContext): void {
     0.3,
     0.3,
   );
-  ped.label('FLAPS', 0.3, 0.232, { height: 0.0030 });
+  ped.label('FLAPS', 0.255, 0.232, { height: 0.0030 }); // left of RUDDER STBY (was under its cap)
 
   // ---- trims (aft of the flap lever)
   const ty = 0.405;
@@ -323,6 +323,27 @@ export function buildPedestal(c: LonCockpitContext): void {
     0.3,
     ty + 0.07,
   );
+
+  // ---- PITCH/ROLL DISCONNECT T-handle (DGAC-published Longitude abnormal card: "JAMMED PITCH OR ROLL CONTROL
+  // SYSTEM - PITCH/ROLL DISCONNECT handle - pull until latched"; AOPA 2021; Cessna patent US7229047: cable handle
+  // within reach of both pilots). Position EST: left side of the pedestal, opposite the trims. Latches when pulled;
+  // push back in to reconnect (SCOPE: a maintenance reset on the aircraft). systems/pitchRollDisconnect.ts.
+  ped.add(
+    new TBarHandle(env, {
+      id: 'lon.ped.pitch_roll_disc',
+      var: V.pitchRollDisc,
+      label: 'PITCH / ROLL DISCONNECT',
+      style: 'tbar',
+      legend: 'P/R DISC',
+      material: 'knobRed',
+      pullLength: 0.04,
+      scale: 0.9,
+    }),
+    0.065,
+    ty + 0.02,
+  );
+  ped.label('PITCH/ROLL', 0.065, ty + 0.047, { height: 0.0024 });
+  ped.label('DISCONNECT', 0.065, ty + 0.053, { height: 0.0024 });
 
   // ---- ENGINE: RUN/STOP (guarded) and STARTER (OG 7-3)
   const ey = 0.53;

@@ -133,6 +133,7 @@ export function setLongitudeSwitches(ctx: Pick<SimContext, 'vars'>, sys: Longitu
   v.set(V.rudTrimSw, 0);
   v.set(V.stabSecSw, 0);
   v.set(V.stabSecGuard, 0);
+  v.set(V.pitchRollDisc, 0); // PITCH/ROLL DISCONNECT stowed (columns connected)
   sys.ailTrim.setPosition(0);
   sys.rudTrim.setPosition(0);
   // OG 17-3 chart: ~-4.5 deg for a mid CG (EST) -> inside the takeoff band.

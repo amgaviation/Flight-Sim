@@ -440,7 +440,14 @@ describe('G800 check ride KSAV -> KATL (full normal procedure)', () => {
       expect(casActive(r, 'caution')).toEqual([]);
 
       // ================================================================ 9. cruise FL300
+      // TRS CRZ (TSC Display Control > TRS page, key 4). The rating stays CRZ (it used to snap back to CLB).
+      expect(v.getString('fadec.rating')).toBe('CLB');
+      suite.dc.page(1, 'TRS');
+      suite.dc.lsk(1, 4);
+      r.run(1);
+      expect(v.getString('fadec.rating')).toBe('CRZ');
       r.run(120);
+      expect(v.getString('fadec.rating')).toBe('CRZ');
       log(r, 'cruise');
       expect(v.getString('ap.lat_active')).toBe('LNAV');
       expect(Math.abs(v.get('adc1.alt_ft') - 30000)).toBeLessThan(60); // RVSM

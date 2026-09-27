@@ -140,6 +140,11 @@ export const G800_VARS = {
   // frame from the keyboard/hardware, so the 3D buttons write these; the grip button also emits 'ap.disc' (AFCS DISC).
   ssDisc: (s: 1 | 2) => `${P}ss_disc${s}`,
   hudRocker: (s: 1 | 2) => `${P}hud_rocker${s}`, // HUD/EVS rocker: +1 cycles SVS/EVS/CVS video, -1 clears video (FSB App. 4); spring to 0
+  ptt: (s: 1 | 2) => `${P}ptt${s}`, // PTT trigger on the front of the grip, momentary 1 = MIC keyed (systems/audio.ts)
+  micSel: (s: 1 | 2) => `${P}mic_sel${s}`, // TSC audio MIC select: 1 VHF1, 2 VHF2, 3 VHF3, 4 HF1, 5 HF2, 6 PA (SCOPE: no touch UI)
+  micKeyed: (s: 1 | 2) => `${P}mic_keyed${s}`, // derived: transmitter keyed by that side (0 none)
+  comTx: (r: 1 | 2 | 3) => `${P}com${r}_tx`, // derived: VHF r transmitting
+  stuckMic: `${P}stuck_mic`, // derived: continuous keying past the stuck-mic timeout (CAS "Stuck Mic")
 
   // =============================================================== SIDE CONSOLES
   tiller: `${P}tiller`, // NOSEWHEEL STEERING tiller (left console only, FSB 9.4 b): -1..1

@@ -78,9 +78,18 @@ export function createAvionics(ctx: SimContext, opts: AvionicsOptions = {}): Avi
     },
     gmcPower: 'elec.gmc_powered',
     radioPower: { nav1: 'elec.gia1_powered', nav2: 'elec.gia2_powered', gps: 'elec.gia1_powered || elec.gia2_powered', marker: 'elec.audio1_powered || elec.audio2_powered' }, // marker receiver in each GMA 36 (S&D15 §10.3.H)
-    fmsOptions: { speeds: { climbKt: 240, cruiseKt: 263, cruiseMach: 0.7, descentKt: 250, approachKt: 130 } }, // EST: FPG cruise-climb / high-speed descent
+    // Climb 220 KIAS / M0.60 (EST: AOPA Pilot 2014 M2 flight test "the VNAV profile defaults to 200 or 220 KIAS"; with the
+    // CLB detent this schedule reproduces the FPG p.21 cruise-climb time / fuel / distance to within ~5 %, see performance.test.ts).
+    fmsOptions: { speeds: { climbKt: 220, climbMach: 0.6, cruiseKt: 263, cruiseMach: 0.7, descentKt: 250, approachKt: 130, machTransitionFt: 30000 } }, // EST: FPG high-speed descent; 220 KIAS = M0.60 near FL300
   };
   const suite = new G3000Suite(ctx, suiteCfg, { noDisplays: opts.noDisplays });
+  // Navigation-map terrain: Absolute (topographic) on the MFD and PFD inset maps, as the crew normally sets them
+  // (G3000 PG map settings Off / Absolute / Relative). EST: the suite's TAWS-B default (Relative) paints every map
+  // red on the ground (terrain within 100 ft of the aircraft); the TAWS pane stays Relative.
+  for (const k of ['mfd1', 'mfd2', 'pfd1', 'pfd2', 'inset1', 'inset2'] as const) {
+    const m = suite.system.maps[k];
+    if (m) m.terrain = 'topo';
+  }
 
   const afcs = new Afcs(ctx, {
     ...AFCS_GFC700_G3000,

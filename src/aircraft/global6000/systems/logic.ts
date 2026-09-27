@@ -95,6 +95,8 @@ export class G6kLogic implements Subsystem {
   private lowBank = false;
   // BTMS
   private btmsLatch = false;
+  // take-off thrust phase
+  private toPhase = false;
   // hydraulic temperatures (EST first-order warm-up)
   private readonly hydT = [0, 20, 20, 20];
 
@@ -324,6 +326,18 @@ export class G6kLogic implements Subsystem {
     const sb = fsl <= 0.8 ? (fsl / 0.8) * 0.5 : flapsExt ? 0.5 : 0.5 + ((fsl - 0.8) / 0.2) * 0.5;
     v.set(V.sbCmd, sb);
 
+    // ---------------- take-off thrust phase (EST): the FADEC keeps the TO rating (EICAS target, A/T limit) from the
+    // take-off roll until the thrust reduction altitude (1,500 ft RA, the usual thrust-reduction / acceleration
+    // altitude) or until both levers come back below the take-off position; the generic automatic selection switched
+    // to CLB (or GA with the gear still down) at lift-off, which let the A/T pull take-off thrust back to the climb
+    // rating at 400 ft (found in the OEI take-off check, tests/aircraft/global6000/verify/abnormal.test.ts).
+    {
+      const bothBelow = tla1 < TLA.toMin && tla2 < TLA.toMin;
+      if (ground) this.toPhase = v.get(V.toThrust) !== 0;
+      else if (bothBelow || v.get('ra1.valid') === 0 || v.get('ra1.alt_ft') > 1500) this.toPhase = false; // RA invalid: above its range
+      v.set(V.toPhase, this.toPhase ? 1 : 0);
+    }
+
     // ---------------- ground lift dumping (GXFC): auto-arm with the thrust levers at the minimum take-off position,
     // latched at 45 kt; MAN ARM arms; OFF disarms; auto-disarm 40 s after touchdown with wheel speed < 45 kt for 30 s.
     const wheelKt = Math.max(v.get('gear.wheel_speed1_kt'), v.get('gear.wheel_speed2_kt'));
@@ -397,6 +411,7 @@ export class G6kLogic implements Subsystem {
     this.slowT = 0;
     this.lowBank = v.get('fdm.press_alt_ft') > 35050;
     this.btmsLatch = false;
+    this.toPhase = false;
     const warm = v.get('eng1.running') !== 0 || v.get('eng2.running') !== 0;
     for (let i = 1; i <= 3; i++) this.hydT[i] = warm ? 45 : Math.min(30, v.get('fdm.sat_c', 15));
   }

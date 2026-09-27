@@ -134,6 +134,10 @@ Takeoff speeds, SL ISA dry (FPG p.4):
   95 (7,500) KIAS (FPG pp.26-31).
 - Stall speeds KCAS, 0° bank, gear up or down (FPG p.32): 10,700 lb 98 / 92 / 86 (flaps 0/15/35);
   9,900 lb 95 / 88 / 83; 8,500 lb 88 / 82 / 77; 7,500 lb 83 / 78 / 73.
+- Climb schedule (FPG "cruise climb"; speed not printed): **220 KIAS / M0.60, EST** — AOPA Pilot (Mar 2014) M2
+  flight test: "the VNAV profile defaults to 200 or 220 KIAS"; flown at the CLB detent this schedule matches the FPG
+  time/fuel/distance within ~5 % at every tabulated level (an earlier 240 / M0.64, the CJ4 schedule, gave +25 % fuel and
+  +30 % distance). The G3000 FMS speed schedule uses it (`systems/avionics.ts`).
 - Climb: 2-engine ROC 3,698 fpm, 1-engine 1,075 fpm (FPG p.3); time/fuel/distance to climb at
   MTOW: FL150 5 min/138 lb/19 nm, FL250 9/242/41, FL350 16/352/76, FL410 24/437/113 (FPG p.21).
 - High-speed cruise (max cruise thrust, ISA), 9,500 lb: FL250 377 KTAS/1,122 lb/h; FL310 403/1,071;
@@ -201,6 +205,10 @@ Takeoff speeds, SL ISA dry (FPG p.4):
   selector, cabin fan, air distribution (defog) knob.
 - PRESS SOURCE selector OFF / L / R / NORM / EMER, CABIN DUMP, manual pressure control (EST CJ family;
   CJ1+ S&D lists "Air Source Selection", "Emergency Cabin Pressure Dump" and "Manual Pressure Control").
+- On the ground the safety valve is held open by the ground solenoid through the squat switch (EST, CJ family),
+  so the cabin stays within ~0.05 psi of ambient with both packs flowing (`safetyValveOpen: 'gear.air_ground'`).
+- Landing field elevation: GTC entry, else the FMS destination, else the takeoff field elevation latched on the
+  ground (`ac.m2.to_field_elev_ft`, EST).
 - Sim schedule: cabin 0 ft at SL → 8,000 ft at FL410 (linear), 500 fpm climb / 300 fpm descent limits,
   relief 8.8 psi, cabin volume 7.5 m³ (EST), CABIN ALTITUDE warning 10,000 ft, pax masks 13,500 ft (EST).
 
@@ -503,7 +511,7 @@ EST (CJ-family single-pilot flow; AFM Vol. 2 525NPD not public).
    required (≤ 10 °C in visible moisture), XPDR ALT, landing lights ON, anti-coll ALL, CAS clear.
 7. **Takeoff**: throttles TO, VR, pitch ~10°, positive rate gear UP, flaps UP at V2+10, CLB detent,
    YD/AP as required.
-8. **Climb**: CLB detent, FLC 240 KIAS / M0.64 (EST schedule), pressurization check.
+8. **Climb**: CLB detent, FLC 220 KIAS / M0.60 (EST schedule, see §5.1), pressurization check.
 9. **Cruise**: CRU detent, fuel balance, ice protection.
 10. **Descent**: landing elevation on the GTC, altimeters, approach/minimums/VREF, PASS SAFETY BELT.
 11. **Approach**: flaps 15 below 200, gear DN below 186, flaps 35 below 161, VREF + wind.
@@ -523,15 +531,15 @@ EST (CJ-family single-pilot flow; AFM Vol. 2 525NPD not public).
 
 ## 11. Simulation model summary and verification
 - FDM (`fdm.ts`): CL tables tuned to FPG stall speeds (±2 %), drag/lapse/TSFC to the FPG
-  high-speed cruise table (TAS ±1 %, FF ±1 % at FL330-FL410), climb schedule to 24 min to FL410
-  (sim ~26 min), inertia from Roskam radii of gyration, gear at FS 264.7 (EST), tail strike ~13°.
+  high-speed cruise table (TAS ±1 %, FF ±1 % at FL330-FL410); climb at 220 KIAS / M0.60 matches the FPG
+  time/fuel/distance table (FL250 9.0 min / 241 lb / 41 nm vs 9 / 242 / 41; FL410 ~22 min / 456 lb / 115 nm vs
+  24 / 437 / 113, from 1,500 ft), inertia from Roskam radii of gyration, gear at FS 264.7 (EST), tail strike ~13°.
 - Tests (`tests/aircraft/citation-m2`): cold & dark start; takeoff (AEO ×1.15 ≈ 3,200 ft, OEI at V1
   ≈ 3,290 ft vs BFL 3,210); climb; cruise FL330/FL410; stall speeds; overspeed; coupled ILS to DA;
   generator / hydraulic / fire / decompression failures; state presets.
 
 ## 12. Known gaps / SCOPE
 - Exact AFM CAS wording, switch labels on the tilt panels, and several thresholds are EST (CJ family).
-- Climb fuel ~25 % above the FPG (single TSFC-vs-N1 curve cannot match both climb and cruise).
 - Control lock modelled as jammed primary controls; rain doors only drive a windshield-rain output.
 - No thrust attenuators/reversers (correct for the M2); no autothrottle (Gen2 option not modelled).
 - Vapor-cycle A/C is a heat sink in the cabin zone model; no pack/ACM temperature detail.
@@ -702,3 +710,36 @@ speed brakes on the ground only, GROUND FLAPS caution in flight; night detection
   legends in the glareshield's shadow are hard to read in daylight (every aircraft shows it).
 - G3000 (shared): the MFD navigation map defaults to relative terrain, which paints the whole map red
   on the ground.
+
+## 16. Check-airman pass (verification, second round)
+
+**Found and fixed**
+- *Climb schedule.* The FDM was not climbing 25 % "too hungry": the tests flew the CJ4 schedule (240 KIAS / M0.64). The
+  FPG "cruise climb" is matched within ~5 % in time, fuel and distance at every tabulated level by **220 KIAS / M0.60**
+  (AOPA: the M2 VNAV profile defaults to 200 or 220 KIAS). The G3000 FMS speed schedule, the performance test (now asserting
+  time / fuel / distance to FL150 ... FL410) and the check ride use it. Vmo-limited high-speed cruise at 5,000 / 15,000 /
+  25,000 ft is also asserted against FPG p.22 (fuel flow -6 / -2 / -1 %).
+- *Ramp pressurization.* On every ground preset the cabin started 1.2 psi above ambient (-2,100 ft cabin): `settle()` computed
+  the cabin air mass at a stale 0 degC cabin temperature and in the in-flight branch (squat switch not yet published). Even when
+  settled, the outflow valve alone left 0.16 psi with the packs flowing at idle. Fixed in `states.ts` (temperature and squat
+  switch before `settle()`) and by holding the safety valve open on the ground (shared additive option, below). The EIS LFE read
+  "-10000" with no destination because the "not entered" sentinel reached the controller as the landing elevation, which would
+  also have driven the descent schedule towards max differential; it now falls back to the takeoff field. New test
+  `pressurization.test.ts`; the check ride asserts < 0.08 psi on the ramp before takeoff and after landing.
+- *MFD map.* Navigation maps default to Absolute (topographic) terrain; the suite's TAWS-B default (Relative) painted the whole
+  map red on the ground (EST default; the TAWS pane stays Relative).
+- *Render budget.* Blank bezel softkeys no longer create a legend mesh (shared `KeyPad`): cockpit 601 -> 565 draw calls; the
+  guard is now < 600.
+- *Legibility.* Tilt-panel switch legends 2.4 -> 2.8 mm, group titles 2.4 -> 2.8 mm, knob position legends 1.9 -> 2.2 mm.
+
+**Shared-library changes (additive)**
+- `src/systems/pressurization/types.ts` / `Pressurization.ts`: optional `safetyValveOpen` binding (default false: no change for
+  other aircraft).
+- `src/cockpit/controls/KeyPad.ts`: a key whose legend is blank/whitespace gets no label mesh (nothing was drawn before either).
+
+**Still open**
+- Remaining ~565 draw calls are mostly moving parts: 63 breakers (cap + rating legend each), GMC 710 / softkeys. Instancing
+  them needs a shared `CircuitBreaker` / `KeyPad` instancing path.
+- Panel legends in the glareshield's shadow remain dim by day (shared renderer fill light, §15).
+- The HF-leg nav-library gap in §15 is unchanged (the check ride still removes the hold-in-lieu).
+

@@ -13,7 +13,7 @@
  *   FLIGHT RECORDER TEST / OFF; MACH AIRSPEED WARNING TEST 1 / 2, STALL
  *     WARNING TEST 1 / 2
  *   DOORS annunciator panel, PSEU light, SERVICE INTERPHONE
- *   Observer audio control panel (ACP 3)
+ *   Observer audio control panel (ACP 3), LANDING GEAR green lights, ELT
  *
  * The ISDU keyboard echoes the keyed digits in the ISDU window and ENT
  * sends the present-position entry to both IRSs (event `irs.pos_entry`,
@@ -23,7 +23,7 @@
  */
 import { AnnunciatorLight, KeyPad, PushButton, RotaryKnob } from '../../../../cockpit/controls';
 import type { Panel } from '../../../../cockpit/CockpitBuilder';
-import { B738, type Door } from '../../vars';
+import { B738, type AcpReceiver, type Door } from '../../vars';
 import type { B738CockpitContext } from '../context';
 import { seg } from '../context';
 import { IsduDisplay, ScaleDial, lin, ticks } from './gauges';
@@ -279,24 +279,38 @@ export function buildAftOverhead(c: B738CockpitContext, root: Panel): void {
     o.labels(['SERVICE', 'INTERPHONE'], 0.115, 0.009, 0.0017);
   }
 
-  // Blanking plates (unused module positions, as on the aircraft).
+  // Blanking plate (unused module position, as on the aircraft).
   mod('blank1', 0.48, 0.316, 0.17, 0.084);
-  mod('blank2', 0.67, 0.156, 0.2, 0.244);
 
   // ============================================================== observer audio control panel (ACP 3)
+  // Same unit as the Captain / F/O ACPs (FCOM 5.10): transmitter selectors (MIC lights), receiver switches
+  // (push on / off, turn for volume, lit when on), NAV / ADF / MKR receivers and SPKR, V-B-R filter,
+  // ALT-NORM, R/T - I/C push-to-talk (R/T spring-loaded; I/C latched, EST) and MASK-BOOM.
+  // SCOPE: no audio routing; the logic publishes the mixer levels and keying (systems/logic.ts ACP_TABLE).
   {
-    const o = mod('acp3', 0.67, 0.02, 0.2, 0.13);
+    const o = mod('acp3', 0.67, 0.02, 0.2, 0.15);
     const id = (s: string) => `b738.aovhd.acp3.${s}`;
-    o.label('AUDIO CONTROL - OBSERVER', 0.1, 0.009, 0.002);
+    o.label('AUDIO CONTROL - OBSERVER', 0.1, 0.008, 0.0019);
     const MICS = ['VHF 1', 'VHF 2', 'VHF 3', 'HF 1', 'HF 2', 'FLT', 'SERV', 'PA'];
+    const RX1: AcpReceiver[] = ['vhf1', 'vhf2', 'vhf3', 'hf1', 'hf2', 'flt', 'svc', 'pa'];
+    const RX2: [AcpReceiver, string][] = [
+      ['nav1', 'NAV 1'],
+      ['nav2', 'NAV 2'],
+      ['adf1', 'ADF 1'],
+      ['adf2', 'ADF 2'],
+      ['mkr', 'MKR'],
+      ['spkr', 'SPKR'],
+    ];
+    const pitch = 0.0215;
+    const x0 = 0.1 - 3.5 * pitch;
     MICS.forEach((m, k) => {
       o.p.add(
         new PushButton(env, {
           id: id(`mic${k}`),
           label: `ACP 3 MIC ${m}`,
           style: 'korry',
-          width: 0.03,
-          height: 0.016,
+          width: 0.018,
+          height: 0.0135,
           mode: 'momentary',
           var: `ac.b738.ck.acp3_mic_btn${k}`,
           zone: OZ,
@@ -304,27 +318,74 @@ export function buildAftOverhead(c: B738CockpitContext, root: Panel): void {
             if (x !== 0) vars.set(B738.acpMic(3), k);
           },
           // Transmitter selector: the MIC legend lights on the selected transmitter (FCOM 5.10).
-          segments: [{ text: [m, 'MIC'], color: 'white', var: B738.acpMic(3), test: (x) => x === k, style: 'legend' }],
+          segments: [{ text: ['MIC', m], color: 'white', var: B738.acpMic(3), test: (x) => x === k, style: 'legend' }],
         }),
-        0.033 + (k % 4) * 0.045,
-        0.032 + Math.floor(k / 4) * 0.024,
+        x0 + k * pitch,
+        0.026,
       );
     });
-    o.p.add(
-      new RotaryKnob(env, {
-        id: id('mkr'),
-        label: 'ACP 3 MKR VOLUME',
-        cap: 'fluted',
-        diameter: 0.012,
-        zone: OZ,
-        outer: { var: B738.acpMkrVol(3), min: 0, max: 1, step: 0.05, initial: 0.6, angleRange: [-140, 140], label: 'MKR', format: (x) => `${Math.round(x * 100)} %` },
-      }),
-      0.04,
-      0.104,
-    );
-    o.label('MKR', 0.04, 0.088, 0.0018);
-    o.toggle({ id: id('alt'), label: 'ACP 3 ALT-NORM', var: B738.acpAltNorm(3), positions: ['NORM', 'ALT'], values: [0, 1], initial: 0 }, 0.1, 0.104, 'ALT-NORM', 0.65);
-    o.toggle({ id: id('filter'), label: 'ACP 3 FILTER', var: B738.acpFilter(3), positions: ['V', 'B', 'R'], values: [-1, 0, 1], initial: 1 }, 0.155, 0.104, 'FILTER', 0.65);
+    const rxKnob = (rx: AcpReceiver, name: string, x: number, y: number) => {
+      const on = rx === 'spkr' ? null : B738.acpRxOn(3, rx);
+      o.p.add(
+        new RotaryKnob(env, {
+          id: id(`rx_${rx}`),
+          label: `ACP 3 ${name} RECEIVER${on ? ' (push on / off, turn volume)' : ' VOLUME'}`,
+          cap: 'fluted',
+          diameter: 0.011,
+          height: 0.009,
+          pointer: 'none',
+          zone: OZ,
+          outer: { var: B738.acpRxVol(3, rx), min: 0, max: 1, step: 0.05, angleRange: [-140, 140], label: `${name} VOL`, format: (x) => `${Math.round(x * 100)} %` },
+          push: on ? { var: on, mode: 'toggle', label: `${name} ON/OFF` } : undefined,
+        }),
+        x,
+        y,
+      );
+      // Receiver-on light (white segment above the control).
+      if (on) o.annun(id(`rxlt_${rx}`), `ACP 3 ${name} receiver on`, [seg.on('', 'white', on)], x, y - 0.0095, 0.011, 0.0028);
+    };
+    RX1.forEach((rx, k) => rxKnob(rx, MICS[k], x0 + k * pitch, 0.056));
+    RX2.forEach(([rx, name], k) => {
+      const x = x0 + k * pitch;
+      rxKnob(rx, name, x, 0.089);
+      o.label(name, x, 0.1, 0.0015);
+    });
+    const tg = (key: string, label: string, v: string, positions: string[], values: number[], initial: number, x: number, extra: { springs?: Record<number, number>; orientation?: 'horizontal' } = {}) => {
+      o.toggle({ id: id(key), label, var: v, positions, values, initial, ...extra }, x, 0.127, false, 0.6);
+    };
+    tg('filter', 'ACP 3 FILTER', B738.acpFilter(3), ['V', 'B', 'R'], [-1, 0, 1], 1, 0.04, { orientation: 'horizontal' });
+    o.label('FILTER', 0.04, 0.143, 0.0015);
+    tg('alt', 'ACP 3 ALT-NORM', B738.acpAltNorm(3), ['NORM', 'ALT'], [0, 1], 0, 0.08);
+    o.label('ALT-NORM', 0.08, 0.143, 0.0015);
+    tg('ptt', 'ACP 3 PUSH TO TALK R/T - I/C', B738.acpPtt(3), ['I/C', 'OFF', 'R/T'], [-1, 0, 1], 1, 0.12, { springs: { 2: 1 } });
+    o.label('R/T - I/C', 0.12, 0.143, 0.0015);
+    tg('mask', 'ACP 3 MASK-BOOM', B738.acpMaskBoom(3), ['BOOM', 'MASK'], [0, 1], 0, 0.16);
+    o.label('MASK-BOOM', 0.16, 0.143, 0.0015);
   }
+
+  // ============================================================== LANDING GEAR indicator lights (aft overhead set)
+  // FCOM 14.10: the aft overhead carries a second set of green gear-down lights (lit when the gear is down and
+  // locked; no red lights). They show the same sensing as the centre-panel greens (systems/logic.ts gearGreen).
+  {
+    const o = mod('gear', 0.67, 0.176, 0.2, 0.066);
+    const id = (s: string) => `b738.aovhd.gear.${s}`;
+    o.label('LANDING GEAR', 0.1, 0.008, 0.0019);
+    const G: [0 | 1 | 2, string, number, number][] = [
+      [1, 'NOSE', 0.1, 0.025],
+      [0, 'LEFT', 0.058, 0.047],
+      [2, 'RIGHT', 0.142, 0.047],
+    ];
+    for (const [leg, name, x, y] of G) o.annun(id(`green${leg}`), `${name} GEAR (aft overhead)`, [seg.on([name, 'GEAR'], 'green', L.gearGreen(leg))], x, y, 0.028, 0.014);
+  }
+
+  // ============================================================== ELT
+  {
+    const o = mod('elt', 0.67, 0.248, 0.2, 0.06);
+    const id = (s: string) => `b738.aovhd.elt.${s}`;
+    o.label('ELT', 0.1, 0.008, 0.0022);
+    o.guarded({ id: id('sw'), label: 'ELT', var: B738.eltSw, positions: ['ARM', 'ON'], values: [0, 1], initial: 0, guard: { color: 'red', guardedPosition: 0 } }, 0.07, 0.034, false, 0.7);
+    o.annun(id('lt'), 'ELT', [seg.on('ELT', 'amber', L.elt)], 0.135, 0.032, 0.022, 0.012);
+  }
+  mod('blank2', 0.67, 0.314, 0.2, 0.086);
 }
 

@@ -70,7 +70,10 @@ describe('(b) takeoff at MTOW, flaps 15, sea level ISA', () => {
 });
 
 describe('(c) climb and cruise', () => {
-  it('climbs from 1,500 ft to FL410 in about 24 min at MTOW (CLB detent, AFCS FLC 240 KIAS / M0.64)', () => {
+  it('climbs from 1,500 ft to FL410 at MTOW on the FPG time / fuel / distance (CLB detent, AFCS FLC 220 KIAS / M0.60)', () => {
+    // FPG p.21 "cruise climb" from sea level: FL150 5 min / 138 lb / 19 nm ... FL410 24 min / 437 lb / 113 nm.
+    // Schedule 220 KIAS / M0.60 (EST, see systems/avionics.ts fmsOptions); the test starts at 1,500 ft / 200 KIAS,
+    // which the FPG counts from sea level (~0.5 min, ~15 lb, ~2 nm), so the bands are asymmetric.
     const r = makeM2({ state: 'cruise', fuelLb: 3236, payloadLb: 445, air: { altFtMsl: 1500, iasKt: 200 } });
     const v = r.vars;
     r.run(3.5); // ADC self test
@@ -79,26 +82,33 @@ describe('(c) climb and cruise', () => {
     v.set(AP.selAltitude, 41000);
     r.sys.afcs.press('AP');
     r.sys.afcs.press('FLC');
-    v.set('ap.sel_spd_kt', 240);
+    v.set('ap.sel_spd_kt', 220);
     let mach = false;
-    const times: Record<number, number> = {};
+    const at: Record<number, { min: number; lb: number; nm: number }> = {};
+    const fuel0 = v.get('fuel.total_kg');
     let t = 0;
+    let nm = 0;
     r.run(2400, () => {
       t += 1 / 60;
-      if (!mach && v.get('adc1.mach') >= 0.64) {
+      nm += v.get('adc1.tas_kt') / 3600 / 60;
+      if (!mach && v.get('adc1.mach') >= 0.6) {
         r.sys.afcs.press('SPD_MACH');
-        v.set('ap.sel_mach', 0.64);
+        v.set('ap.sel_mach', 0.6);
         mach = true;
       }
-      for (const c of CLIMB_MTOW) if (times[c.altFt] === undefined && v.get(FDM.altMsl) >= c.altFt - 100) times[c.altFt] = t / 60;
+      for (const c of CLIMB_MTOW) if (at[c.altFt] === undefined && v.get(FDM.altMsl) >= c.altFt - 100) at[c.altFt] = { min: t / 60, lb: (fuel0 - v.get('fuel.total_kg')) / LB, nm };
       expect(v.get(AP.engaged)).toBe(1);
       return v.get(FDM.altMsl) > 40950;
     });
-    // FPG: 5 / 9 / 16 / 24 min to FL150 / 250 / 350 / 410 from sea level (the test starts at 1,500 ft).
     for (const c of CLIMB_MTOW) {
-      expect(times[c.altFt], `FL${c.altFt / 100}`).toBeDefined();
-      expect(times[c.altFt], `FL${c.altFt / 100}`).toBeLessThan(c.min * 1.2 + 0.5);
-      expect(times[c.altFt], `FL${c.altFt / 100}`).toBeGreaterThan(c.min * 0.75 - 0.5);
+      const m = at[c.altFt];
+      expect(m, `FL${c.altFt / 100}`).toBeDefined();
+      expect(m.min, `FL${c.altFt / 100} min`).toBeLessThan(c.min * 1.1 + 0.5);
+      expect(m.min, `FL${c.altFt / 100} min`).toBeGreaterThan(c.min * 0.85 - 0.5);
+      expect(m.lb, `FL${c.altFt / 100} lb`).toBeLessThan(c.lb * 1.1);
+      expect(m.lb, `FL${c.altFt / 100} lb`).toBeGreaterThan(c.lb * 0.85 - 15);
+      expect(m.nm, `FL${c.altFt / 100} nm`).toBeLessThan(c.nm * 1.12);
+      expect(m.nm, `FL${c.altFt / 100} nm`).toBeGreaterThan(c.nm * 0.85 - 2);
     }
     // Cabin on schedule: 8,000 ft cabin at FL410 (S&D15 §9.5).
     r.run(120);
@@ -135,6 +145,45 @@ describe('(c) climb and cruise', () => {
       expect(Math.abs(tas / pub.ktas - 1)).toBeLessThan(0.08);
       expect(Math.abs(ff / pub.pph - 1)).toBeLessThan(0.08);
       expect(v.get('adc1.mach')).toBeLessThan(0.715);
+    }, 60000);
+  }
+});
+
+describe('(c2) Vmo-limited high-speed cruise below FL290 (FPG p.22, 9,500 lb)', () => {
+  // Below ~FL290 the FPG high-speed cruise is Vmo-limited (e.g. FL150 323 KTAS = 260 KCAS): the pilot trims the
+  // levers to hold the published speed; the fuel flow needed must match the FPG within 8 %.
+  for (const [altFt, ktas, pph] of [
+    [5000, 279, 1163],
+    [15000, 323, 1122],
+    [25000, 377, 1122],
+  ] as const) {
+    it(`FL${altFt / 100}: ${ktas} KTAS at ~${pph} lb/h`, () => {
+      const H = altFt * 0.3048;
+      const cas = casFromTas(ktas * 0.514444, isaPressure(H), isaTemperature(H)) / 0.514444;
+      const r = makeM2({ state: 'cruise', fuelLb: 9500 - EMPTY_PLUS_PILOT_LB, air: { altFtMsl: altFt, iasKt: cas } });
+      const v = r.vars;
+      r.run(3.5);
+      v.set(AP.selAltitude, altFt);
+      r.sys.afcs.press('AP');
+      r.sys.afcs.press('ALT');
+      let integ = 0.6;
+      const hand = () => {
+        const e = cas - v.get('adc1.ias_kt');
+        integ += 0.0002 * e;
+        const tla = Math.max(TLA.idle, Math.min(TLA.cru, integ + 0.02 * e));
+        v.set(M2.tla(1), tla);
+        v.set(M2.tla(2), tla);
+      };
+      r.run(300, hand);
+      let ff = 0;
+      let n = 0;
+      r.run(60, () => {
+        hand();
+        ff += v.get('eng1.ff_pph') + v.get('eng2.ff_pph');
+        n++;
+      });
+      expect(Math.abs(v.get('adc1.ias_kt') - cas)).toBeLessThan(3);
+      expect(Math.abs(ff / n / pph - 1)).toBeLessThan(0.08);
     }, 60000);
   }
 });

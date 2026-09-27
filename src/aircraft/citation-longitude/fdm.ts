@@ -34,11 +34,13 @@ export const SPAN_M = 21.0;
  */
 export const MAC_M = 2.61;
 /**
- * Empty CG EST at 30 % MAC (the OG stab-trim chart covers 24-40 % MAC; a typically
- * equipped super-midsize with aft engines sits in the aft half at empty weight).
+ * Empty CG EST at 35 % MAC. The OG 17-3 takeoff stab-trim chart covers 24-40 % MAC (the certified CG
+ * range); with the stations below (crew 7.4 m, club seats 4.6 / 2.2 m ahead of the datum, fuel 0.2 m
+ * ahead), an empty CG at 30 % put every realistic loading at 19-23 % MAC, forward of the chart. At 35 %
+ * the loadings fall at 24-29 % MAC (check-ride pass, docs §13). Aft-engine jets sit aft when empty.
  */
-export const EMPTY_CG_PCT_MAC = 30;
-export const MAC_LE_X = (EMPTY_CG_PCT_MAC / 100) * MAC_M; // 0.78 m ahead of the datum
+export const EMPTY_CG_PCT_MAC = 35;
+export const MAC_LE_X = (EMPTY_CG_PCT_MAC / 100) * MAC_M; // 0.91 m ahead of the datum
 /** Low wing: chord plane ~0.6 m below the fuselage centreline/datum (EST, cabin floor above the wing box). */
 const WING_Z = 0.6;
 
@@ -251,9 +253,12 @@ export const CITATION_LONGITUDE_FDM: FdmConfig = {
     Cl_beta: -0.1, // sweep + low-wing dihedral effect (EST)
     Cl_p: -0.45,
     Cl_r: 0.14,
-    Cl_da: 0.05, // cable ailerons (OG 15-3)
+    // Cable ailerons (OG 15-3) + roll spoilers (OG 15-3, BCA). EST: combined full-wheel pb/2V ~0.11 with Cl_p -0.45
+    // (Roskam Part VI business-jet class: Cl_da ~0.15 /rad over ~+/-12 deg effective; roll spoilers about 3/4 of the
+    // aileron). Was 0.05 + 0.05 (pb/2V 0.22, 100 deg/s at 150 KIAS); retuned in the check-ride pass.
+    Cl_da: 0.028,
     Cl_dr: -0.008,
-    Cl_spoiler: 0.05, // roll spoilers augment the ailerons (OG 15-3, BCA)
+    Cl_spoiler: 0.022,
     Cl_trim: 0.004, // electric aileron trim tab (OG 15-3)
     // Static margin EST 25 % MAC between the 25 % MAC ref point and the neutral point.
     Cm_alpha: { x: [-30, -14, 0, 13, 16, 20, 30, 45, 90], y: [0.55, 0.28, 0, -0.26, -0.33, -0.44, -0.62, -0.8, -1.0] },

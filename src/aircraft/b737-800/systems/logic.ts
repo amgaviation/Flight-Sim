@@ -385,6 +385,8 @@ export class B738LogicLate implements Subsystem {
   private prevFire = false;
   private hornOn = false;
   private altHornCut = false;
+  /** ELT g-switch latch (impact with the switch at ARM); reset by selecting ON. */
+  private eltImpact = false;
   private readonly acMeter: Evaluator[][];
   private readonly dcMeter: Evaluator[][];
 
@@ -512,6 +514,14 @@ export class B738LogicLate implements Subsystem {
     const lit = (x: boolean): number => (powered && (x || test) ? 1 : 0);
     v.set(L.takeoffConfig, lit(v.get('alert.takeoff_config') !== 0));
     v.set(L.cabinAltitude, lit(cabAlt));
+    // ---- ELT (aft overhead remote switch): ON transmits; ARM transmits after an impact (g-switch, modelled as
+    // the FDM crash), latched until the switch is cycled through ON. SCOPE: no 121.5 / 406 MHz signal model.
+    const eltOn = v.get(B738.eltSw) !== 0;
+    if (eltOn) this.eltImpact = false;
+    else if (v.get('fdm.crashed') !== 0) this.eltImpact = true;
+    const eltTx = eltOn || this.eltImpact;
+    v.set('ac.b738.elt_transmitting', eltTx ? 1 : 0);
+    v.set(L.elt, lit(eltTx));
 
     // ---- Electrical panel lights (non-caution: blue / white).
     v.set(L.grdPwrAvail, lit(v.get('elec.gpu_avail') !== 0));
@@ -664,5 +674,6 @@ export class B738LogicLate implements Subsystem {
     }
     this.bellSilenced = false;
     this.prevFire = false;
+    this.eltImpact = false;
   }
 }

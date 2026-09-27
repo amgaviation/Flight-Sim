@@ -193,6 +193,7 @@ export const G6K_LIMITS = {
   taxiDiffPsi: 0.1, // GX_01_018 placard: "pressure differential shall not exceed 0.1 psi during taxi"
   landingDiffPsi: 1.0, // "... and 1.0 psi upon initial landing"
   paxMaskFt: 14000, // EST: Part 25 typical (25.1447)
+  cabinLimiterFt: 14500, // EST: outflow-valve cabin altitude limiter (Bombardier CRJ / Challenger EMER DEPRESS figure; 25.841(a)(2))
   // ---------------- crosswind
   maxDemoCrosswindKt: 29, // EST: Global AFM demonstrated crosswind (not in a public source); common operator figure
 } as const;

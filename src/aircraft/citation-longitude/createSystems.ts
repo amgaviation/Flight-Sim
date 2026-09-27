@@ -44,6 +44,7 @@ import { createPneumatics, createPressurization, createIce, createApu, createFir
 import { createEngines } from './systems/engines';
 import { LongitudeLogic, LongitudePostLogic, TLA } from './systems/logic';
 import { LongitudeCockpitInputs } from './systems/cockpitInputs';
+import { LongitudePitchRollDisconnect } from './systems/pitchRollDisconnect';
 import { LONGITUDE_CAS } from './systems/cas';
 import { createLighting } from './systems/lighting';
 import { LONGITUDE_TOLD } from './performance';
@@ -97,6 +98,20 @@ export interface LongitudeSystems {
   lights: LightingSystem;
   suite: G3000Suite | null;
 }
+
+/**
+ * Pilot column / wheel gearing vs IAS (surface per unit input), EST. Without it the constant-authority surfaces
+ * gave 3.7 g for 30 % column and 191 deg/s roll rate at 250 KIAS (check-ride pass, 2026-09).
+ *  - Pitch: full authority to 130 KIAS (rotation, flare, stall recovery unchanged), then (130/V)^2, i.e. the
+ *    full-column load-factor increment stays ~3.6 g (34,000 lb) and 10 % column is ~0.35 g at any higher speed.
+ *  - Roll: full authority to 180 KIAS (full wheel ~40-50 deg/s at approach speeds, pb/2V ~0.11), then (180/V)^2:
+ *    ~40 deg/s at 250 KIAS, ~30 deg/s at 320 KIAS at 15,000 ft (typical business-jet full-wheel rates).
+ */
+function blowdown(vFull: number): { x: number[]; y: number[] } {
+  const x = [0, vFull, ...[160, 180, 200, 220, 250, 280, 310, 340, 400].filter((k) => k > vFull)];
+  return { x, y: x.map((k) => (k <= vFull ? 1 : (vFull / k) ** 2)) };
+}
+export const PILOT_GEARING = { pitch: blowdown(130), roll: blowdown(180) };
 
 /** Stabilizer trim display units: degrees of stabilizer incidence (OG 17-3 chart: -7..0 deg with CG). */
 export const STAB_RANGE: [number, number] = [-9, 1.5];
@@ -175,7 +190,7 @@ export function createLongitudeSystems(ctx: SimContext, opts: LongitudeSystemsOp
         synoptics: LONGITUDE_SYNOPTICS, // MFD synoptics + GTC system controls (lights, temperature, cabin pressure)
         speedTape: { vmoKt: LON_LIMITS.vmoKt, shakerNorm: 1.0, cautionNorm: 0.8, approachRefNorm: 0.66 }, // OG 4-6: amber 0.8-1.0, VAPP at 0.66
         // FPG p.15-19: 270 KIAS / M0.80 climb, M0.80-0.82 cruise, 3,000 fpm high-speed descent (EST 300 KIAS / M0.80).
-        fmsOptions: { engineCount: 2, speeds: { climbKt: 270, climbMach: 0.8, cruiseKt: 300, cruiseMach: 0.82, descentKt: 300, descentMach: 0.8, approachKt: 140, machTransitionFt: 29000 } },
+        fmsOptions: { engineCount: 2, speeds: { climbKt: 270, climbMach: 0.8, cruiseKt: 300, cruiseMach: 0.82, descentKt: 300, descentMach: 0.8, approachKt: 140, machTransitionFt: 29000, speedLimitDecelFt: 3000 } },
       },
       { noDisplays: opts.noDisplays },
     );
@@ -206,6 +221,8 @@ export function createLongitudeSystems(ctx: SimContext, opts: LongitudeSystemsOp
     yawDamper: { withAp: false, requiredForAp: false },
     // OG 1-7: AP minimum engage 400 ft AGL after takeoff (engagement is the crew's job; enforced in the doc/checklist).
     gains: { gainRefKt: 250 },
+    // PITCH/ROLL DISCONNECT pulled: the AP disconnects and cannot be engaged (EST, systems/pitchRollDisconnect.ts).
+    disconnect: { ...AFCS_GFC_G5000.disconnect, auto: `${V.pitchRollDisc} != 0`, engageInhibit: `${V.pitchRollDisc} != 0` },
   });
   const yd = new YawDamper(ctx, {
     engagedVar: 'ap.yd_engaged',
@@ -226,6 +243,11 @@ export function createLongitudeSystems(ctx: SimContext, opts: LongitudeSystemsOp
 
   // ---- primary flight controls: cable elevator/ailerons; FBW hydraulic rudder (A, RSS backup; no manual reversion).
   const fcs = new MechanicalFlightControls(ctx, {
+    // Cable elevator and ailerons (OG 15-2/15-3): the deflection a pilot can hold is force-limited (hinge moments
+    // grow with dynamic pressure; elevator/aileron blow-down), so a spring-centred sim column/wheel maps to about
+    // constant stick-force-per-g and roll rate above manoeuvring speed. See PILOT_GEARING (EST).
+    pitch: { gearing: PILOT_GEARING.pitch },
+    roll: { gearing: PILOT_GEARING.roll },
     yaw: {
       actuators: [hydFrac('a'), hydFrac('rss')],
       manualReversion: null,
@@ -294,6 +316,8 @@ export function createLongitudeSystems(ctx: SimContext, opts: LongitudeSystemsOp
     pedals: { maxDeg: 7.5 }, // BCA 7.5 deg
     power: `max(hyd.a_psi, hyd.b_psi) > 1000`,
     rateDegPerS: 30,
+    // DGAC Longitude abnormal card: NOSEWHEEL STEERING MALFUNCTION - MASTER DISCONNECT button push and hold.
+    engage: `!${V.discHeld}`,
   });
   const brakes = new Brakes(ctx, {
     // Brake-by-wire (BCA), inboard on A / outboard on B (OG 14-2).
@@ -328,6 +352,7 @@ export function createLongitudeSystems(ctx: SimContext, opts: LongitudeSystemsOp
   });
   const disc = new DisconnectAlerts(ctx, { apToneMaxS: 2 });
   const post = new LongitudePostLogic(ctx.vars);
+  const prDisc = new LongitudePitchRollDisconnect(ctx.vars);
   const lights = createLighting(ctx);
 
   const list: Subsystem[] = [
@@ -356,6 +381,7 @@ export function createLongitudeSystems(ctx: SimContext, opts: LongitudeSystemsOp
     yd,
     stall,
     fcs,
+    prDisc,
     stab,
     ailTrim,
     rudTrim,

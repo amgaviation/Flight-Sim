@@ -154,6 +154,7 @@ export function setG800Switches(ctx: Pick<SimContext, 'vars'>, sys: G800Systems,
     v.set(V.ssTrim(side), 0);
     v.set(V.ssDisc(side), 0);
     v.set(V.hudRocker(side), 0);
+    v.set(V.ptt(side), 0);
     v.set(V.oxyMask(side), 0);
     v.set(V.oxyMode(side), 0);
   }

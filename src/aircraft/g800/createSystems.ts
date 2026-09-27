@@ -48,6 +48,7 @@ import { createPneumatics, createPressurization, createIce, createApu, createFir
 import { createEngines } from './systems/engines';
 import { G800Logic, G800PostLogic } from './systems/logic';
 import { G800_CAS } from './systems/cas';
+import { G800Audio } from './systems/audio';
 import { createLighting } from './systems/lighting';
 import { G800_CHECKLISTS } from './checklists';
 
@@ -63,6 +64,7 @@ export interface G800Systems {
   failures: FailureManager;
   logic: G800Logic;
   post: G800PostLogic;
+  audio: G800Audio;
   elec: ElectricalNetwork;
   fuel: FuelSystem;
   hyd: HydraulicSystem;
@@ -162,7 +164,9 @@ export function createG800Systems(ctx: SimContext, opts: G800SystemsOptions = {}
       { vars: ctx.vars, events: ctx.events, nav: ctx.nav, world: ctx.world, fms, canvas: opts.canvas },
       {
         variant: 'symmetry',
-        airframe: G800_AIRFRAME,
+        // PFD flap-limit placards from the G800 limits (FSB App. 4: flaps 39 190 KCAS; the shared G800_AIRFRAME
+        // default carries the G650 180 kt value).
+        airframe: { ...G800_AIRFRAME, flapPlacardKt: [NaN, G800_LIMITS.vfe10Kt, G800_LIMITS.vfe20Kt, G800_LIMITS.vfe39Kt], vleKt: G800_LIMITS.vleKt },
         // Engine display: TRS rating bug = selected rating N1 limit (fadec.n1_limit_pct).
         engines: { ...PEARL700_ENGINES, vars: { ...DEFAULT_ENGINE_VARS, target: () => 'fadec.n1_limit_pct' } },
         power: {
@@ -333,6 +337,7 @@ export function createG800Systems(ctx: SimContext, opts: G800SystemsOptions = {}
   });
   const disc = new DisconnectAlerts(ctx, {});
   const post = new G800PostLogic(ctx.vars);
+  const audio = new G800Audio(ctx.vars);
   const lights = createLighting(ctx);
 
   const list: Subsystem[] = [
@@ -372,6 +377,7 @@ export function createG800Systems(ctx: SimContext, opts: G800SystemsOptions = {}
     taws,
     tcas,
     tocw,
+    audio,
     cas,
     disc,
     post,
@@ -394,6 +400,7 @@ export function createG800Systems(ctx: SimContext, opts: G800SystemsOptions = {}
     failures,
     logic,
     post,
+    audio,
     elec,
     fuel,
     hyd,

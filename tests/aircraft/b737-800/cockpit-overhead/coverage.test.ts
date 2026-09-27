@@ -250,7 +250,7 @@ describe('Boeing 737-800 overhead / side consoles: control coverage', () => {
     build.dispose?.();
     const unbound = report.filter((x) => !x.bound).map((x) => x.id);
     console.log(`737-800 overhead / side: ${report.length} controls, ${report.length - unbound.length} bound.\n${report.map((x) => `  ${x.bound ? 'OK ' : '-- '} ${x.id.padEnd(32)} ${x.via}`).join('\n')}`);
-    expect(report.length).toBeGreaterThan(330);
+    expect(report.length).toBeGreaterThan(420);
     expect(unbound).toEqual([]);
   });
 });

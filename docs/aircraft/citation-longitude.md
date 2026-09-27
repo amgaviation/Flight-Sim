@@ -21,6 +21,8 @@ Tests are in `tests/aircraft/citation-longitude/` (about 40 tests; the full-flig
 | **AOPA** | "Citation Longitude: Super-mid standout", *AOPA Pilot*, March 2021. |
 | **AW** | Aviation Week, "Aircraft Overview: Cessna Citation Longitude" (TCDS summary). |
 | **WIKI** | Wikipedia, "Cessna Citation Longitude" (wing area, sweep, certification dates). |
+| **DGAC** | DGAC Chile, type-rating evaluation form "Textron Citation Longitude C700 CC-DRA" (2021, dgac.gob.cl): limitations card (weights, speeds, altitudes, external power 1,500 A / 26-30 V) and the emergency/abnormal checklist card (PITCH/ROLL DISCONNECT handle, MASTER DISCONNECT button). |
+| **PAT** | Cessna patent US7229047 B1, "Aircraft roll disconnect mechanism": cable-operated disconnect handle within reach of both pilots. |
 | **EST** | Estimate. The reasoning is given next to the number in the code. |
 
 The FAA TCDS for the Model 700 was not available publicly on DRS during this work. The AW article quotes its key entries: engine AS907-2-1S, 7,665 lbf, 13 seats, 2,166 gal usable, Mmo 0.84 above 29,375 ft, FL450.
@@ -42,7 +44,7 @@ The FAA TCDS for the Model 700 was not available publicly on DRS during this wor
 | Payload | Max 2,400 lb; 1,600 lb with full fuel | FPG p.3 |
 | Min weight in RVSM | 24,400 lb | OG 1-3 |
 
-**FDM geometry (EST, `fdm.ts`).** The datum is the empty-weight CG, placed at 30 % MAC.
+**FDM geometry (EST, `fdm.ts`).** The datum is the empty-weight CG, placed at 35 % MAC (was 30 % until the check-ride pass of §13: with the modelled stations every realistic loading then fell at 19-23 % MAC, forward of the 24-40 % MAC range of the OG 17-3 takeoff-trim chart; at 35 % loadings fall at 24-29 % MAC).
 - MAC is 2.61 m (taper 0.30). The 25 % MAC reference point is 0.13 m ahead of the datum.
 - Main gear x −0.85 m, nose gear +8.77 m, contact 1.88 m below the datum with the struts extended.
 - Nacelles at x −4.3 m, y ±2.1 m, z −0.75 m. Wing tanks at (0.2, ±3.3, 0.6) m.
@@ -81,7 +83,7 @@ FDM model (EST unless noted):
 - Max maneuvering speed: 22,400 lb: 156 (ground) / 164 (FL250) / 178 (FL450). 39,500 lb: 222 / 241 / 264 KIAS.
 
 **Other limits**
-- Altitudes: max operating FL450. Max flaps/gear extension altitude FL180. Max takeoff/landing altitude 14,000 ft. Max tailwind 10 kt.
+- Altitudes: max operating FL450. Max flaps/gear extension altitude FL180. Max takeoff/landing altitude 14,000 ft (the DGAC card for CC-DRA says 10,000 ft; probably an airframe without the high-altitude option). Max tailwind 10 kt (DGAC agrees).
 - Load factor: flaps up −1.0/+2.6 g; flaps extended 0/+2.0 g; ≤ 0 g for no more than 7 s. Max landing sink rate 600 fpm.
 - AFCS minimums: 400 ft AGL after takeoff and on the missed approach, 160 ft AGL on approach, 1,000 ft AGL en route.
 - Autothrottle: not armed during taxi. Prohibited at or below 50 ft on a touch-and-go.
@@ -287,6 +289,13 @@ The STANDBY bus is fed from the standby battery (24 V 10.4 Ah lead-acid, charged
 - **Flaps.** Electric, lever on the right of the pedestal. UP / 1 (7°) / 2 (15°) / FULL (35°).
 - **Stall protection.** Stick shaker (AoA 0.82 normalized, EST; the gauge is amber from 0.8) and stick pusher (0.97, EST) (BCA).
 - **FBW limits.** No envelope protection overrides the pilot. The A/T gives min/max speed protection (BCA).
+- **PITCH/ROLL DISCONNECT** (DGAC abnormal card, AOPA, PAT). A T-handle splits the pilot's and copilot's columns and wheels, so each drives its own half of the elevator and ailerons after a jam. Model (`systems/pitchRollDisconnect.ts`): pulled, the surface is ½ operative half (the flying pilot's input) + ½ other half (frozen at the jam, or trailing at neutral). The AP disconnects and cannot be engaged while it is latched (EST). SCOPE: it is reset in the cockpit (a maintenance action on the aircraft). The handle position on the pedestal is EST.
+- **MASTER DISCONNECT** (the AP/TRIM DISC button on each wheel, and the hardware/keyboard AP DISC). Pressing it disconnects the AP. While it is held it interrupts electric trim and the pusher, and disengages nosewheel steering (DGAC abnormal card: "NOSEWHEEL STEERING MALFUNCTION: MASTER DISCONNECT push and hold").
+- **Pilot gearing (EST, `createSystems.ts` `PILOT_GEARING`).** The elevator and ailerons are cable driven, so the deflection a pilot can hold is force-limited (blow-down). The spring-centred sim column/wheel is geared with IAS:
+  - pitch: full to 130 KIAS, then (130/V)²;
+  - roll: full to 180 KIAS, then (180/V)².
+  - Results: 30 % column gives about 2 g at 250-320 KIAS; full wheel gives 45 / 43 / 34 °/s at 150 / 250 / 320 KIAS (`verify/handling.test.ts`).
+  - Roll authority `Cl_da` + `Cl_spoiler` was reduced from 0.05 + 0.05 to 0.028 + 0.022 (pb/2V ≈ 0.11).
 
 ### 4.11 Avionics: Garmin G5000 (OG 4; BCA; `src/avionics/garmin-g3000`)
 - **Displays.** Three 14 in GDUs (PFD L, MFD, PFD R), landscape 16:10. PFDs and MFD can be split.
@@ -530,6 +539,7 @@ The body frame is x forward, y right, z down, from the datum (fdm.ts).
 | BLEED ISOLATE | Pushbutton NORM / XFLOW | `ac.lon.bleed.isolate` | — |
 | PRESS SOURCE L / R | Pushbutton NORM / OFF | `ac.lon.bleed.press_src_l/_r` | — |
 | APU | 3-position rotary OFF / ON / START (spring to ON) | `ac.lon.apu.knob` (0 / 1 / 2) | Aft right corner |
+| PITCH/ROLL DISCONNECT | Red T-handle, pull to latch, push to reset (SCOPE) | `ac.lon.fc.pitch_roll_disc` (0 / 1) | Left side of the pedestal, opposite the trims (EST, DGAC / PAT) |
 
 ### 7.7 Overhead panel
 
@@ -545,7 +555,7 @@ The body frame is x forward, y right, z down, from the datum (fdm.ts).
 ### 7.8 Yokes, pedals, side consoles
 - **Yokes.** Pitch/roll through `input.pitch`/`input.roll` (cockpit yoke contract).
   - Pitch trim split switch: `input.pitch_trim_rate`.
-  - AP/TRIM DISC: `input.ap_disc` (hold).
+  - AP/TRIM DISC (MASTER DISCONNECT): `input.ap_disc` (hold). Held, it also disengages nosewheel steering (DGAC).
   - PTT: audio. Pusher interrupt: no var (EST, not modelled).
 - **Rudder pedals.** `input.yaw` and toe brakes `input.brake_left/right`.
 - **Tiller.** Left side console: `input.tiller` (±81°).
@@ -586,7 +596,6 @@ HYDRAULICS, ECS / PRESSURIZATION, ANTI-ICE, EXTERIOR LIGHTS; the GTC shows each 
   - Emergency Descent Mode.
   - A/T MIN SPD / MAX SPD protection modes and auto-engagement.
   - The 2-nm approach-speed reduction.
-  - Pitch/roll disconnect.
   - Secondary stab trim as a separate motor.
   - Windshield heat controller temperatures.
   - The CABIN ALT switch's two rates.
@@ -811,3 +820,45 @@ Numbers from the last run: liftoff 127 KIAS (VR 110, V2 123) 1,879 ft from brake
 - **Draw calls / triangles:** pilot view ~875 draw calls, cockpit 974 meshes / 354 k triangles (instanced bezel
   hardware 74 k, breaker panels 28 k), exterior 42 k triangles; SwiftShader runs ~4 fps (GPU-bound software rasteriser).
   No merge was done in this pass.
+
+## 13. Second check-ride pass (adversarial review, 2026-09)
+
+This pass re-walked the control inventory against the code (every `LON_VARS` control is written by a cockpit control or GTC page; the remaining vars are system outputs). It re-flew the check ride and probed the handling, loading and visuals.
+
+### 13.1 Defects found and fixed
+
+| # | Defect (how found) | Fix |
+|---|---|---|
+| 1 | **Handling.** 30 % aft column at 250 KIAS pitched the aircraft at 29 °/s (3.7 g) and fired the stick pusher. Full wheel rolled at 102 / 191 / 247 °/s at 150 / 250 / 320 KIAS (pb/2V 0.22). Found by a scripted step-input probe. | Roll authority reduced to `Cl_da` 0.028 + `Cl_spoiler` 0.022 (pb/2V ≈ 0.11, Roskam business-jet class). Pilot gearing vs IAS (`PILOT_GEARING`, EST blow-down of the cable elevator/ailerons). Now 30 % column ≈ 2 g at 250-320 KIAS and full wheel 45 / 43 / 34 °/s. Low-speed pitch authority is unchanged: full column still reaches the shaker at 150 KIAS. `verify/handling.test.ts`. |
+| 2 | **Loading.** Every realistic loading computed at 19-23 % MAC, forward of the 24-40 % MAC range of the OG 17-3 takeoff-trim chart. MTOW with full fuel was at 19.4 %. Found by the trim-vs-CG probe. | Empty-CG estimate moved from 30 % to 35 % MAC (`fdm.ts`). Loadings are now 24-29 % MAC. The FPG performance tests, stall speeds and the check ride are unchanged within their tolerances. |
+| 3 | **Missing control.** PITCH/ROLL DISCONNECT handle (DGAC abnormal card "Jammed pitch or roll control system"; AOPA; PAT). | Red T-handle on the pedestal (position EST), `ac.lon.fc.pitch_roll_disc`, and `systems/pitchRollDisconnect.ts` (§4.10). A jammed half stays frozen while the other half follows the operative wheel. The AP disconnects and is inhibited. `pitchRollDisconnect.test.ts`. |
+| 4 | **MASTER DISCONNECT did not affect steering.** The DGAC card uses it for a nosewheel steering malfunction. The keyboard/hardware AP DISC did not interrupt trim or the pusher either. | NWS `engage: !disc_held`. `disc_held` now includes `input.ap_disc`. Tested. |
+| 5 | **FMS 250 kt limit.** The FMS descent target stayed 300 KIAS until 10,000 ft, so the aircraft crossed 10,000 ft fast. | Opt-in `SpeedSchedule.speedLimitDecelFt` (shared VNAV, additive, default 0). The Longitude uses 3,000 ft (EST deceleration segment). The check ride asserts the target is ≤ 250 kt at 12,800 ft and IAS < 256 kt below 10,000 ft in the climb. |
+| 6 | **Visual: forward pedestal legends invisible** (FUEL, BOOST L/R, GRAV XFLOW, HYDRAULICS, PTCU, SPEED BRAKE, FLAPS, MFD GTC). The pedestal body's bevelled top was coplanar with the control plate, up to 0.7 mm above it at the forward end. Found in the pedestal-forward screenshot, then by raycasting every label. | Body top set 3 mm below the plate (`shell.ts`). `cockpit-main/labels.test.ts` raycasts all ~340 legends and fails on any opaque skin within 3 mm in front of one. |
+| 7 | **Visual:** the GMC NOSE "DN" legend was under the glareshield lip. | Wheel and legends moved up 3-4 mm. |
+| 8 | **Test infrastructure.** The check-ride log was invisible because vitest hides console output for passing tests. One breaker test had no timeout (it failed under load). | `AMG_FLIGHT_LOG=<file>` writes the log. The breaker test has an explicit timeout. |
+
+### 13.2 Shared-library change (additive)
+- `src/nav/fms/VnavGuidance.ts`: optional `SpeedSchedule.speedLimitDecelFt` (default 0, no change for other aircraft).
+
+### 13.3 Numbers from this pass
+- Check ride (KICT 01R → KMCI ILS 01L, 31,600 lb):
+  - Liftoff 127 KIAS, 1,872 ft from brake release.
+  - FL280 at 6.6 min.
+  - Cruise M0.76 / 452 KTAS / 2,450 pph.
+  - FMS target 250 kt at 12,800 ft in the descent.
+  - Touchdown 116 KIAS, −16 fpm, 1,232 ft past the threshold.
+  - 25 kt at 3,877 ft.
+- Rendering (SwiftShader, 1280×720, pilot view):
+  - 858 draw calls, 659 k triangles, all 8 displays at 14-16 Hz, ~4 fps.
+  - The cockpit alone has 702 visible meshes and 351 k triangles.
+
+### 13.4 Remaining gaps (honest list)
+- **Longitudinal trim model.** The FDM trims across the loading range with only ~0.12° of stab per % MAC. The OG chart implies ~0.44° (−7° at 24 %, 0° at 40 %). The modelled stabilizer (`Cm_trim` 0.55) and elevator (`Cm_de` 0.95) are about 3-4× more effective than the chart implies.
+  - The takeoff states therefore keep −4.5° (in the green band) instead of the chart value. The chart value would pitch the aircraft up hard at rotation in this model.
+  - A consistent re-tune (`Cm_trim` ≈ 0.12, `Cm0`, `Cm_de`, then the trim-dependent FPG checks) is still to do. The pilot gearing hides the elevator part for the pilot, but the stab trim rate still feels fast.
+- **Liftoff speed** is still VR + 14-17 kt with the scripted 3°/s rotation (unchanged by the CG move). All-engine distances meet the FPG.
+- **Draw calls.** The remaining ~700 cockpit meshes are per-control moving parts: 58 breakers × 3 meshes, and ~250 push-button caps, lenses and legends. Instancing them needs per-instance transforms in the shared control library (not an additive change). The panels' static parts are already consolidated (`merge.ts`).
+- **Toggle middle-position legends** (GEN OFF, STBY PWR ON) are partly under the switch nut: this is the shared ToggleSwitch layout. They are still readable.
+- **MFD terrain on the ground** paints the whole map red: shared G5000 relative-terrain behaviour.
+- The PITCH/ROLL DISCONNECT handle position, and whether the Longitude posts a CAS message for it, are not published. No CAS message was invented.

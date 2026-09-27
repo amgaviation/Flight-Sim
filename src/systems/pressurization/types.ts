@@ -42,6 +42,12 @@ export interface PressurizationConfig {
   leakAreaM2?: number;
   /** Safety valve full-open area (m²), default = outflow max area. */
   safetyAreaM2?: number;
+  /**
+   * (Appended by the citation-m2 aircraft.) Holds the safety valve fully open while true, in addition to its
+   * relief function, e.g. the Citation ground solenoid that opens the safety valve through the squat switch so
+   * the cabin cannot pressurise on the ground. Default false.
+   */
+  safetyValveOpen?: Binding;
   /** Structural breach area for `fail.press.decompression` (m²), default 0.1 (EST: door-seal / window-sized). */
   decompressionAreaM2?: number;
   /** Mode: 0 AUTO, 1 ALTN (standby controller), 2 MANUAL. Default 0. */

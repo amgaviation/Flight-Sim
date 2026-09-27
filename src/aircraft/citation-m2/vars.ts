@@ -76,6 +76,8 @@ export const M2 = {
   pressManual: `${P}press_manual`,
   /** Landing field elevation (ft) entered on the GTC (S&D15 §9.5). */
   landingElevFt: `${P}ldg_elev_ft`,
+  /** Takeoff field elevation (ft MSL), latched on the ground: the pressurization controller's landing elevation when none is entered and no FMS destination exists (EST, CJ family). */
+  takeoffFieldElevFt: `${P}to_field_elev_ft`,
   /** AIR COND (vapor cycle): OFF (0) / ON (1). */
   airCondSw: `${P}air_cond_sw`,
   /** CABIN FAN: OFF (0) / LOW (1) / HIGH (2). */

@@ -216,11 +216,14 @@ export class KeyPad extends ControlBase {
     const th = o.legendHeight ?? Math.min(0.0024, (h * 0.5) / lines);
     const zone = o.zone === undefined ? 'panel' : o.zone;
     const hasBar = !!k.lightVar;
-    const l = this.engrave(label, 0, hasBar ? h * 0.16 : 0, { height: th, font: KEY_FONT, weight: 700, zone, color: o.legendColor ?? '#f2f2ee', spacing: 0.02 }, group, true);
-    l.position.z = depth + 0.0001;
-    // Shrink long legends to fit the key.
-    const maxW = w * 0.86;
-    if (l.userData.width_m > maxW) l.scale.setScalar(maxW / l.userData.width_m);
+    // A blank legend (e.g. display bezel softkeys, label: '') draws nothing: skip its label mesh (one draw call per key).
+    if (label.trim() !== '') {
+      const l = this.engrave(label, 0, hasBar ? h * 0.16 : 0, { height: th, font: KEY_FONT, weight: 700, zone, color: o.legendColor ?? '#f2f2ee', spacing: 0.02 }, group, true);
+      l.position.z = depth + 0.0001;
+      // Shrink long legends to fit the key.
+      const maxW = w * 0.86;
+      if (l.userData.width_m > maxW) l.scale.setScalar(maxW / l.userData.width_m);
+    }
     let bar: KeyState['bar'] = null;
     if (hasBar) {
       const m = this.own(this.env.materials.lens('white', null, 0.15));
