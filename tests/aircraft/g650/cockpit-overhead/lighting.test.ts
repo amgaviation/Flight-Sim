@@ -78,7 +78,7 @@ describe('G650 cockpit lighting', () => {
     expect(v.get('ac.light.map_r')).toBe(1);
     expect(annun()).toBe(1);
     // The overhead / console lights draw current on the CKPT LTS breaker.
-    expect(v.get('elec.panel_lts_amps', v.get('elec.panel_lts_a', 1))).toBeGreaterThan(0);
+    expect(v.get('elec.panel_lts_amps')).toBeGreaterThan(0.4);
 
     // CKPT LTS breaker pulled: backlighting (and floods) lose power; the dome stays on the emergency bus.
     click(ctl('g650.cb.panel_lts'));
