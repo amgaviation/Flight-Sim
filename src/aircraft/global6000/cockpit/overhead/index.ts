@@ -181,8 +181,10 @@ const OFF_AUTO_ON = [
 
 export function buildOverhead(c: G6kCockpitContext): void {
   const { b, env } = c;
-  // INTEGRAL OVHD back-lighting (LED edge-lit: no lag, same gain as the main-panel zones).
-  b.zone({ id: Z, intensityVar: 'ac.light.panel_ovhd', lagS: 0, gain: 1.4 });
+  // INTEGRAL OVHD back-lighting (LED edge-lit: no lag). EST gain 1.9: the overhead legends are viewed from ~0.5 m
+  // further than the main panel; at 1.4 (main-panel gain) the full-bright night legends were barely legible in the
+  // night screenshots.
+  b.zone({ id: Z, intensityVar: 'ac.light.panel_ovhd', lagS: 0, gain: 1.9 });
   // Frame panel (no plate): every control is placed in the drawing's coordinates; the two painted modules and their
   // trim boxes up to the headliner follow the FCOM outline (layout.ts MODULES).
   const p = b.panel({

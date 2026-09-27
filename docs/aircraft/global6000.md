@@ -777,6 +777,7 @@ upper / lower beacons, wing-root landing lights and nose-gear landing lights (re
 | `cockpit/side/emsCdu.ts` | EMS CDU logic (SYS / BUS / STAT / CNTL / TEST / EMER CNTL pages, SSPC pull / reset, auto STATUS on a trip, 2 min blanking) and screen |
 | `cockpit/side/cbTable.ts` | every network breaker (`cb.<load>`) with its EMS name, system group, bus and location |
 | `cockpit/side/oxygenMask.ts` | quick-donning mask stowage box control |
+| `cockpit/side/auralTest.ts` | AURAL WARNING TEST 1 / 2 sequencer (IAC 1 / 2 generators) |
 | `tests/aircraft/global6000/cockpit-overhead/*` | coverage (0 unbound of 120), breakers (directory = network, CCBP pull, EMS SSPC pull / reset, thermal lock-out, trip + STATUS + reset), flows (power-up BATT -> EXT AC -> APU GEN -> VFGs with legends, fire test / handle / bottle, IAC mute, LDG ELEV slew, lamp test and INTEGRAL OVHD) |
 
 **Differences from the §12.1 / §12.5 inventory (FCOM drawing wins)**
@@ -802,6 +803,15 @@ upper / lower beacons, wing-root landing lights and nose-gear landing lights (re
   ASCA breakers are thermal breakers outside the flight deck: the EMS shows them but cannot change them (FCOM).
 - A trip (over-current, `fail.elec.<load>.short`) brings up the STATUS page on both CDUs with the trip highlighted.
 
+**AURAL WARNING TEST 1 / 2** (`cockpit/side/auralTest.ts`, FCOM CSP 700-5000-6 Rev 2A 03-10-16 / -17): the EMS CDU
+TEST page activation key starts (or terminates) IAC n's test sequence in the FCOM priority order ("AURAL WARNING TEST n",
+STALL + shaker, overspeed, triple chime, NO TAKEOFF, fire / smoke / cabin altitude / gear bay / reverser / brake voices,
+single chime, GEAR, cavalry charge, AUTOTHROTTLE, ALTITUDE, C-chord, double C-chord, chime, trim clacker, MINIMUMS,
+SELCAL). It is silent with that IAC muted on the overhead or its breaker out (`elec.iac<n>_powered`); step timing EST;
+`ac.g6k.ck.ems.aural_test<n>` = 1 while it runs. Test: `cockpit-overhead/auralTest.test.ts`.
+
+Overhead back-lighting gain 1.9 (EST, was 1.4 like the main panel): the night legends were barely legible from the seat.
+
 **Systems fixes made with the overhead build**
 
 - `logic.ts` G6kPostLogic: APU fuel supply ride-through (`V.apuFuelOk`, 2 s EST). Selecting APU GEN OFF with the APU
@@ -811,8 +821,8 @@ upper / lower beacons, wing-root landing lights and nose-gear landing lights (re
 **SCOPE / not built**
 
 AUX PRESS PBA and the pack LO / HIGH legend (function not in the public FCOM chapters), the "EMS" legend beside BATT
-MASTER, gasper, standby compass, CVR area microphone, clock, CVR panel, pitot-static SELECT VALVE, printer. EMS AURAL
-WARNING TEST 1 / 2 and RAT TEST are listed but inactive; the two EMS CDUs are not linked. No windshield wipers (none on
+MASTER, gasper, standby compass, CVR area microphone, clock, CVR panel, pitot-static SELECT VALVE, printer. RAT TEST
+(maintenance BIT) is not on the TEST page; the two EMS CDUs are not linked. No windshield wipers (none on
 the FCOM overhead). No cockpit-door control (the FCOM lists none). Map lights are emissive lamp heads only (the
 cockpit's real-light budget is used by the floods and dome light).
 

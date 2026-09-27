@@ -25,8 +25,9 @@
  * Power: EMS CDU 1 PWR B / EMS CDU 2 PWR B on the BATT BUS, EMS CDU 2 PWR A on
  * the APU BATT bus (07-20-30 / -38).
  *
- * SCOPE: AURAL WARNING TEST 1 / 2 and RAT TEST are listed but not active (no
- * aural-test / RAT BIT model); SWITCH CONTROL has only CABIN PWR (no
+ *  - AURAL WARNING TEST 1 / 2 (03-10-16): the IAC 1 / IAC 2 aural generator
+ *    plays its tone / voice sequence (auralTest.ts).
+ * SCOPE: RAT TEST (maintenance BIT) is not on the page; SWITCH CONTROL has only CABIN PWR (no
  * humidifier / footwarmer / STALL WARN ADVANCE model); the two units are not
  * linked (each keeps its own page, both show "M"); LOCKED (maintenance)
  * breakers are not modelled. Screen colours and fonts are EST.
@@ -39,6 +40,8 @@ import { KeyPad } from '../../../../cockpit/controls';
 import type { Panel } from '../../../../cockpit/CockpitBuilder';
 import type { CockpitEnv } from '../../../../cockpit/env';
 import { G6K_VARS as V } from '../../vars';
+import type { AudioApi } from '../../../../core/SimContext';
+import { G6kAuralTest } from './auralTest';
 import { CB_TABLE, EMS_BUSES, EMS_SYSTEMS, cbStatus, type CbEntry } from './cbTable';
 
 export const EMS_SIDE_EVENTS = {
@@ -73,10 +76,15 @@ export class EmsShared {
     return this.tripSeq;
   }
 
+  /** AURAL WARNING TEST 1 / 2 sequencers (IAC 1 / 2 generators). */
+  readonly aural: G6kAuralTest;
+
   constructor(
     readonly vars: SimVars,
     breakerNames: string[],
+    audio: AudioApi | null = null,
   ) {
+    this.aural = new G6kAuralTest(vars, audio);
     const known = new Set(breakerNames);
     this.entries = CB_TABLE.filter((e) => known.has(e.id)).map((e) => ({ e, vIn: `cb.${e.id}`, vTrip: `cb.${e.id}_tripped`, lastTrip: 0 }));
   }
@@ -130,6 +138,7 @@ export class EmsShared {
   }
 
   tick(dt: number): void {
+    this.aural.tick(dt);
     let changed = false;
     for (let k = 0; k < 4; k++) {
       if (this.tests[k] > 0) {
@@ -311,7 +320,7 @@ export class EmsCduUnit {
         const t = map[row];
         this.sel = row;
         if (t >= 0) s.startTest(t);
-        else this.message = 'TEST NOT AVAILABLE';
+        else s.aural.toggle(row === 2 ? 1 : 2);
         return;
       }
       case 'EMER': {
@@ -445,8 +454,8 @@ export class EmsCduScreen extends CanvasDisplay {
         for (let i = 0; i < ROWS; i++) {
           const map = [0, 1, -1, -1, 2, 3];
           const t = map[i];
-          const running = t >= 0 && s.tests[t] > 0;
-          text(TEST_ROWS[i], 8, EMS_ROW_Y(i), t >= 0 ? C.white : C.grey);
+          const running = t >= 0 ? s.tests[t] > 0 : s.aural.running(i === 2 ? 1 : 2);
+          text(TEST_ROWS[i], 8, EMS_ROW_Y(i), C.white);
           text(running ? 'TEST' : 'OFF', W - 8, EMS_ROW_Y(i), running ? C.green : C.white, 'right', 16);
           if (u.sel === i) hi(i);
         }

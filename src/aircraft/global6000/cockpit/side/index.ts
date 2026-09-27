@@ -63,7 +63,7 @@ export function buildSideConsoles(c: G6kCockpitContext): void {
   b.zone({ id: 'panel_cb', intensityVar: 'ac.light.panel_cb', lagS: 0, gain: 1.4 });
   for (const z of ['map_l', 'map_r']) b.zone({ id: z, intensityVar: `ac.light.${z}`, lagS: 0, color: 0xfff1dc, gain: 2 });
   const vars = c.ctx.vars;
-  const shared = new EmsShared(vars, c.sys.elec.breakerNames().map((x) => x.name));
+  const shared = new EmsShared(vars, c.sys.elec.breakerNames().map((x) => x.name), c.env.audio ?? null);
   // EMS CDU power (07-20-30 / -38): CDU 1 PWR B (BATT BUS); CDU 2 PWR A (APU BATT) / PWR B (BATT BUS).
   const units = [new EmsCduUnit(1, shared, c.ctx.events, 'ac.g6k.ck.ems1_pwr'), new EmsCduUnit(2, shared, c.ctx.events, 'ac.g6k.ck.ems2_pwr')];
   const canvas = c.canvas;
@@ -83,7 +83,10 @@ export function buildSideConsoles(c: G6kCockpitContext): void {
     }
   });
   // The cockpit build disposes controls and displays; the EMS key subscriptions are released with it.
-  c.disposers?.push(() => units.forEach((u) => u.dispose()));
+  c.disposers?.push(() => {
+    units.forEach((u) => u.dispose());
+    shared.aural.dispose();
+  });
 }
 
 function buildSide(c: G6kCockpitContext, side: 'left' | 'right', unit: EmsCduUnit, canvas: G6kCockpitContext['canvas']): void {

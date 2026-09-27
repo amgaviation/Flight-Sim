@@ -134,6 +134,9 @@ export function setG650Switches(ctx: Pick<SimContext, 'vars'>, sys: G650Systems,
   v.set(V.ltPanel, powered ? (night ? 0.6 : 1) : 0);
   v.set(V.ltFlood, powered && night ? 0.25 : 0);
   v.set(V.ltDome, 0);
+  // MASTER CONTROL: OFF (day mode) by day, night range (annunciators dimmed, backlighting on) at night.
+  v.set(V.ltMaster, powered && night ? 0.5 : 0);
+  v.set(V.vestOride, 0);
   v.set(V.ltMapL, 0);
   v.set(V.ltMapR, 0);
   for (const n of [1, 2, 3, 4] as const) v.set(V.duBrt(n), night ? 0.7 : 1);

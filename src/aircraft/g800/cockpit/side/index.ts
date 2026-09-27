@@ -42,10 +42,17 @@ export function buildSideConsoles(c: G800CockpitContext): void {
     const m = side === 1 ? MOUNTS.sideLeft : MOUNTS.sideRight;
     const s = side === 1 ? 'L' : 'R';
     const outb = side === 1 ? -1 : 1; // panel u toward the sidewall
-    const con = b.panel({ name: `g800.side_${s.toLowerCase()}`, ...m, material: 'panelDark', screws: { kind: 'dzus', diameter: 0.006, inset: 0.008 }, radius: 0.01 });
+    // The panel face stands 6 mm proud of the console body top built by the main cockpit (CONSOLE.topZ; body z down, so
+    // minus = up): at the same height the body top covered the flat legends, the O2 FLOW lamp and the regulator.
+    const center_m: [number, number, number] = [m.center_m[0], m.center_m[1], m.center_m[2] - 0.006];
+    const con = b.panel({ name: `g800.side_${s.toLowerCase()}`, ...m, center_m, material: 'panelDark', screws: { kind: 'dzus', diameter: 0.006, inset: 0.008 }, radius: 0.01 });
     // Oxygen mask stowage box (aft), regulator and flow indicator (dossier §9.4).
+    // Box aft; the regulator selector and the flow indicator in a row just forward of it, where the pilot sees them
+    // over the armrest (EST layout).
     const maskV = -0.12;
-    con.add(new MaskStowage(env, { id: `g800.side.mask${side}`, label: `${s} CREW O2 MASK`, var: V.oxyMask(side) }), 0.02 * -outb, maskV);
+    const maskU = 0.02 * -outb;
+    const ctlV = maskV + 0.12;
+    con.add(new MaskStowage(env, { id: `g800.side.mask${side}`, label: `${s} CREW O2 MASK`, var: V.oxyMask(side) }), maskU, maskV);
     con.add(
       new SelectorKnob(env, {
         id: `g800.side.oxy_mode${side}`,
@@ -61,8 +68,8 @@ export function buildSideConsoles(c: G800CockpitContext): void {
         labelHeight: 0.0028,
         title: 'O2 MASK',
       }),
-      outb * 0.1,
-      maskV + 0.02,
+      maskU + outb * 0.03,
+      ctlV,
     );
     const who = side === 1 ? 'pilot' : 'copilot';
     con.add(
@@ -70,11 +77,11 @@ export function buildSideConsoles(c: G800CockpitContext): void {
         id: `g800.side.oxy_flow${side}`,
         label: `${s} O2 FLOW`,
         segments: [{ text: 'O2 FLOW', color: 'green', var: `oxy.${who}_flow_lpm`, test: (f) => f > 0.1 }],
-        width: 0.02,
-        height: 0.011,
+        width: 0.024,
+        height: 0.013,
       }),
-      outb * 0.1,
-      maskV - 0.045,
+      maskU - outb * 0.035,
+      ctlV,
     );
     con.label('PULL MASK - SQUEEZE RED TABS', 0.02 * -outb, maskV - 0.085, { height: 0.0027, weight: 700 });
 

@@ -7,7 +7,8 @@
  *    and the audio control panel (ACP) outboard of it (EST position; the Primus Epic ACPs are on the
  *    emergency / flight-instrument buses, LUC electrical);
  *  - the map light dimmer (`ac.g650.light.map_l/_r`, the map light in the side-window header);
- *  - the crew oxygen mask stowage box with the mask regulator (N / 100 % / EMER) and the flow indicator.
+ *  - the crew oxygen mask stowage box with the mask regulator (N / 100 % / EMER) and the flow indicator;
+ *  - pilot side only: the VEST LTS ORIDE switchlight (vestibule / companionway lights off).
  * The pilot's console also has the nosewheel tiller at its forward end (built by the main cockpit).
  *
  * SCOPE / EST: positions and sizes from photographs; one mask regulator var (`ac.g650.oxy.mask_mode`) is
@@ -19,8 +20,8 @@ import type { Panel } from '../../../../cockpit/CockpitBuilder';
 import { addCcd } from '../../../../avionics/honeywell-epic/cockpit';
 import { ACP_CHANNELS, G650_VARS as V, type AcpChannel } from '../../vars';
 import { CONSOLE } from '../layout';
-import type { G650CockpitContext } from '../context';
-import { SwitchLight } from '../overhead/parts';
+import { seg, type G650CockpitContext } from '../context';
+import { SwitchLight, sl } from '../overhead/parts';
 import { G650MaskStowage } from './mask';
 
 /** Console top panel: inboard edge (|y|), outboard edge, forward / aft x (EST, clear of the armrest pad and tiller). */
@@ -129,6 +130,12 @@ function buildConsole(c: G650CockpitContext, side: 1 | 2): void {
   );
   p.label('MAP LT', X(0.07), 0.205, { height: 0.0024 });
   p.label('OFF     BRT', X(0.07), 0.245, { height: 0.0018 });
+
+  // ---- VEST LTS ORIDE (pilot console; G650 training material: "on the side console panel ... alternate means
+  // for turning off the vestibule or companionway lights ... blue ON"). EST: pilot side, between ACP and mask.
+  if (side === 1) {
+    sl(env, p, { id: 'g650.side.vest_oride', label: 'VEST LTS ORIDE (vestibule lights off)', var: V.vestOride, name: 'VEST LTS\nORIDE', segments: [seg.on('ON', 'cyan', V.vestOride)] }, X(0.2), 0.3);
+  }
 
   // ---- oxygen mask stowage, regulator, flow indicator.
   const mask = new G650MaskStowage(env, { id: `g650.side.mask_${tag}`, label: `${who} OXYGEN MASK`, var: side === 1 ? V.oxyMaskL : V.oxyMaskR });

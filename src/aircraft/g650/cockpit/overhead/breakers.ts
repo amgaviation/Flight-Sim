@@ -112,7 +112,9 @@ export const G650_CB_GROUPS: CbGroup[] = [
 ];
 
 /** Layout constants (m): breaker pitch, group title height, gaps. */
-export const CB_GRID = { dx: 0.024, dy: 0.035, title: 0.012, gap: 0.02, margin: 0.014, maxCols: 9 } as const;
+// Row pitch and shelf gap spread the three shelves over the full 0.37 m panel depth (EST, the photographed panel is
+// filled edge to edge).
+export const CB_GRID = { dx: 0.024, dy: 0.04, title: 0.012, gap: 0.034, margin: 0.014, maxCols: 9 } as const;
 
 /**
  * Fills the CB panel (origin 'top-left': x right, y down = forward). Groups are packed in shelves left to

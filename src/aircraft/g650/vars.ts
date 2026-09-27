@@ -135,6 +135,16 @@ export const G650_VARS = {
   ltMapL: `${P}light.map_l`, // pilot map light knob 0..1 (side console)
   ltMapR: `${P}light.map_r`,
   duBrt: (n: 1 | 2 | 3 | 4) => `${P}light.du${n}_brt`, // DU brightness knobs 0..1 (glareshield outboard / inboard)
+  // COCKPIT LIGHTS MASTER CONTROL knob (G650 training material: "rotated from OFF to the nighttime setting,
+  // annunciator lights dim and panel backlighting illuminates"; "full clockwise rotation brings all annunciator
+  // lights to full bright; further rotation to ORIDE illuminates the cockpit overhead dome light and side
+  // console floodlights"): 0 OFF (day) .. 1 full bright; >= 1.1 ORIDE.
+  ltMaster: `${P}light.master`,
+  // VEST LTS ORIDE switchlight (side console; training material: "alternate means for turning off the vestibule
+  // or companionway lights ... blue ON"): 1 = vestibule lights forced off.
+  vestOride: `${P}light.vest_oride`,
+  /** Lighting system output: 1 = annunciators full bright, 0 = dimmed (night range of MASTER CONTROL). */
+  annunBright: `${P}light.annun_bright`,
 
   // ======================================================== PEDESTAL / GLARESHIELD / YOKES
   tla: (i: number) => `ac.tla${i}`, // thrust lever 0 IDLE .. 1 MAX (TO/GA); -1..0 reverse (reverser levers lifted)
@@ -259,7 +269,7 @@ export const G650_CONTROL_VARS: string[] = [
   G650_VARS.crewOxy, G650_VARS.paxOxy, G650_VARS.paxShutoff, G650_VARS.oxyMaskL, G650_VARS.oxyMaskR, G650_VARS.oxyMaskMode,
   G650_VARS.ltNav, G650_VARS.ltBeacon, G650_VARS.ltStrobe, G650_VARS.ltLdgL, G650_VARS.ltLdgR, G650_VARS.ltTaxi, G650_VARS.ltRecog,
   G650_VARS.ltLogo, G650_VARS.ltWing, G650_VARS.ltEmer, G650_VARS.seatBelt, G650_VARS.noSmoke, G650_VARS.ltPanel, G650_VARS.ltFlood,
-  G650_VARS.ltDome, G650_VARS.ltMapL, G650_VARS.ltMapR, G650_VARS.duBrt(1), G650_VARS.duBrt(2), G650_VARS.duBrt(3), G650_VARS.duBrt(4),
+  G650_VARS.ltDome, G650_VARS.ltMaster, G650_VARS.vestOride, G650_VARS.ltMapL, G650_VARS.ltMapR, G650_VARS.duBrt(1), G650_VARS.duBrt(2), G650_VARS.duBrt(3), G650_VARS.duBrt(4),
   G650_VARS.tla(1), G650_VARS.tla(2), G650_VARS.fuelCtlL, G650_VARS.fuelCtlR,
   G650_VARS.fireHandleL, G650_VARS.fireHandleR, G650_VARS.fireDischL, G650_VARS.fireDischR,
   G650_VARS.flapLever, G650_VARS.speedbrake, G650_VARS.gndSpoiler, G650_VARS.flapOride, G650_VARS.fltCtrlReset,

@@ -37,7 +37,7 @@ import { placePanel } from '../../../../cockpit/frame';
 import { trimBoxGeometry } from '../../../../cockpit/geometry/structure';
 import { ALERT } from '../../../../core/vars';
 import { G650_VARS as V } from '../../vars';
-import { seg, type G650CockpitContext } from '../context';
+import { CK, seg, type G650CockpitContext } from '../context';
 import { OH_BREAKERS, OH_FORWARD, OH_SYSTEMS, SL, segmentPlacement, type OhSegment } from './layout';
 import { section, sl, G650Readout } from './parts';
 import { fillCbPanel } from './breakers';
@@ -299,17 +299,46 @@ export function buildOverhead(c: G650CockpitContext): void {
   sp.label('RAM AIR', 0.55, 0.0875, { height: 0.0024 });
 
   // ---------------------------------------------------------------- COCKPIT LIGHTS
+  // MASTER CONTROL (G650 training material): OFF = day; small tick = night setting (annunciators dim, panel
+  // backlighting on); full clockwise = annunciators full bright; ORIDE detent beyond = overhead dome and side-
+  // console floodlights on (the storm / override function). PANEL and FLOOD are the individual dimmers (EST
+  // names; the aircraft has dimming units for "glareshield and console" and "overhead and pedestal").
   section(sp, 'COCKPIT LIGHTS', 0.595, 0.012, W - 0.01, 0.135);
-  const dimmer = (id: string, v: string, label: string, x: number, y: number) => {
-    sp.add(new RotaryKnob(env, { id, label, cap: 'dimmer', diameter: 0.016, outer: { var: v, min: 0, max: 1, step: 0.05, angleRange: [-135, 135], format: (t) => (t < 0.01 ? 'OFF' : `${Math.round(t * 100)} %`) } }), x, y);
-    sp.label(label, x, y + 0.02, { height: 0.0024 });
-    sp.label('OFF', x - 0.012, y + 0.011, { height: 0.0015 });
-    sp.label('BRT', x + 0.012, y + 0.011, { height: 0.0015 });
+  const dimmer = (id: string, v: string, label: string, x: number, y: number, d: number) => {
+    sp.add(new RotaryKnob(env, { id, label, cap: 'dimmer', diameter: d, outer: { var: v, min: 0, max: 1, step: 0.05, angleRange: [-135, 135], format: (t) => (t < 0.01 ? 'OFF' : `${Math.round(t * 100)} %`) } }), x, y);
+    sp.label(label, x, y - d / 2 - 0.0045, { height: 0.0022 });
+    sp.label('OFF', x - d / 2 - 0.004, y + d / 2 + 0.002, { height: 0.0015 });
+    sp.label('BRT', x + d / 2 + 0.004, y + d / 2 + 0.002, { height: 0.0015 });
   };
-  dimmer('g650.oh.lt.panel', V.ltPanel, 'PANEL', 0.623, 0.045);
-  dimmer('g650.oh.lt.flood', V.ltFlood, 'FLOOD', 0.683, 0.045);
-  tog('g650.oh.lt.dome', V.ltDome, 'DOME LIGHT', 'DOME', 0.623, 0.108, sp);
-  sl(env, sp, { id: 'g650.oh.lt.lamp_test', label: 'LAMP TEST (annunciators)', var: ALERT.annunTest, name: 'LAMP TEST', mode: 'momentary', segments: [{ text: 'TEST', color: 'white', whenOn: true }] }, 0.683, 0.108);
+  const mx = 0.628;
+  const myc = 0.058;
+  sp.add(
+    new RotaryKnob(env, {
+      id: 'g650.oh.lt.master',
+      label: 'COCKPIT LIGHTS MASTER CONTROL (OFF day / night / BRT / ORIDE)',
+      cap: 'dimmer',
+      diameter: 0.019,
+      // 0 OFF .. 1 full bright over 270 deg, ORIDE detent (1.1) a further 30 deg clockwise.
+      outer: { var: V.ltMaster, min: 0, max: 1.1, step: 0.05, angleRange: [-135, 165], format: (t) => (t < 0.005 ? 'OFF (day)' : t > 1.05 ? 'ORIDE (dome + console floods)' : t > 0.97 ? 'BRT (annunciators full)' : `NIGHT ${Math.round(t * 100)} %`) },
+    }),
+    mx,
+    myc,
+  );
+  sp.label('MASTER CONTROL', mx, 0.029, { height: 0.0022, weight: 700 });
+  sp.label('OFF', mx - 0.016, myc + 0.012, { height: 0.0015 });
+  sp.label('BRT', mx + 0.017, myc + 0.004, { height: 0.0015 });
+  sp.label('ORIDE', mx + 0.014, myc + 0.016, { height: 0.0015 });
+  {
+    // Night-setting tick mark at the knob's 0.15 position (angle clockwise from up, panel y down).
+    const a = THREE.MathUtils.degToRad(-135 + (0.15 / 1.1) * 300);
+    sp.line(mx + 0.0115 * Math.sin(a), myc - 0.0115 * Math.cos(a), mx + 0.0145 * Math.sin(a), myc - 0.0145 * Math.cos(a), 0.0007);
+  }
+  dimmer('g650.oh.lt.panel', V.ltPanel, 'PANEL', 0.688, 0.036, 0.012);
+  dimmer('g650.oh.lt.flood', V.ltFlood, 'FLOOD', 0.688, 0.078, 0.012);
+  tog('g650.oh.lt.dome', V.ltDome, 'DOME LIGHT', 'DOME', 0.622, 0.112, sp);
+  sl(env, sp, { id: 'g650.oh.lt.lamp_test', label: 'LAMP TEST (annunciators)', var: ALERT.annunTest, name: 'LAMP TEST', mode: 'momentary', segments: [{ text: 'TEST', color: 'white', whenOn: true }] }, 0.688, 0.116);
+  // Annunciator dimming follows the MASTER CONTROL (lighting system output), powered as before.
+  env.lighting.setAnnunciatorDimming(V.annunBright, 0.3, false, CK.annunPower);
 
   // ---------------------------------------------------------------- middle band: EMERGENCY POWER / RAT / FCS BATT
   const my = 0.145;

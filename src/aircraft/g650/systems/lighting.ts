@@ -12,6 +12,15 @@
  * lose normal power (EST standard Part 25 arming logic).
  * Interior: PANEL (integral) and FLOOD knobs, DOME, pilot / copilot map lights,
  * DU brightness knobs, SEAT BELT / NO SMOKE signs (cabin power).
+ * COCKPIT LIGHTS MASTER CONTROL (G650 training material): OFF = day (annunciators
+ * full bright, integral panel backlighting off); night range = annunciators dimmed
+ * and panel backlighting on (PANEL knob level); full clockwise = annunciators full
+ * bright; ORIDE = also the overhead dome light and the side-console floodlights
+ * (modelled by the map lights, which light the consoles) at full, the Gulfstream
+ * equivalent of a thunderstorm light. EST: the annunciator dimming is two-level
+ * (dim / full) and the backlighting follows the PANEL knob, not the master itself.
+ * VEST LTS ORIDE (side console) forces the vestibule lights off; SCOPE: the cabin is
+ * not rendered, the vestibule light is state only (`ac.light.vestibule`).
  */
 import type { SimContext } from '../../../core/SimContext';
 import { LightingSystem, FLASH_PATTERNS } from '../../../systems/lighting';
@@ -19,6 +28,7 @@ import { G650_VARS as V } from '../vars';
 
 export function createLighting(ctx: Pick<SimContext, 'vars'>): LightingSystem {
   const on = (sw: string) => `${sw} == 1 ? 1 : 0`;
+  const ORIDE = `${V.ltMaster} > 1.05`;
   return new LightingSystem(ctx.vars, {
     exterior: [
       { name: 'nav', on: on(V.ltNav), power: 'elec.nav_lts_powered', tech: 'led' },
@@ -36,11 +46,15 @@ export function createLighting(ctx: Pick<SimContext, 'vars'>): LightingSystem {
       { name: 'emer', on: `${V.ltEmer} == 2 || (${V.ltEmer} == 1 && !elec.l_ess_dc_powered && !elec.r_ess_dc_powered) ? 1 : 0`, tech: 'led' },
     ],
     dimmers: [
-      { id: 'panel', knob: V.ltPanel, power: 'elec.panel_lts_powered', output: ['ac.light.panel'] },
+      { id: 'panel', knob: V.ltPanel, master: `${V.ltMaster} > 0.005 ? 1 : 0`, power: 'elec.panel_lts_powered', output: ['ac.light.panel'] },
       { id: 'flood', knob: V.ltFlood, power: 'elec.panel_lts_powered', output: ['ac.light.flood'] },
-      { id: 'dome', knob: `${V.ltDome} == 1 ? 1 : 0`, power: 'elec.panel_lts_powered || elec.emer_dc_powered', output: ['ac.light.dome'] },
-      { id: 'map_l', knob: V.ltMapL, power: 'elec.l_ess_dc_powered', output: ['ac.light.map_l'] },
-      { id: 'map_r', knob: V.ltMapR, power: 'elec.r_ess_dc_powered', output: ['ac.light.map_r'] },
+      { id: 'dome', knob: `${V.ltDome} == 1 || ${ORIDE} ? 1 : 0`, power: 'elec.panel_lts_powered || elec.emer_dc_powered', output: ['ac.light.dome'] },
+      { id: 'map_l', knob: `max(${V.ltMapL}, ${ORIDE} ? 1 : 0)`, power: 'elec.l_ess_dc_powered', output: ['ac.light.map_l'] },
+      { id: 'map_r', knob: `max(${V.ltMapR}, ${ORIDE} ? 1 : 0)`, power: 'elec.r_ess_dc_powered', output: ['ac.light.map_r'] },
+      // Annunciators full bright in day mode (MASTER OFF) and at full clockwise / ORIDE, dimmed in between.
+      { id: 'annun_bright', knob: `${V.ltMaster} < 0.005 || ${V.ltMaster} > 0.97 ? 1 : 0`, output: [V.annunBright] },
+      // Vestibule (entry area) lights: on with cabin power unless VEST LTS ORIDE (SCOPE: state only).
+      { id: 'vestibule', knob: `${V.cabinMaster} == 1 && ${V.vestOride} == 0 ? 1 : 0`, power: 'elec.cabin_dc_powered', output: ['ac.light.vestibule'] },
       // DU brightness (Epic display ids epic.du1..4), never fully dark (EST min 5 %).
       { id: 'du1_brt', knob: V.duBrt(1), min: 0.05, output: ['display.epic.du1.brt'] },
       { id: 'du2_brt', knob: V.duBrt(2), min: 0.05, output: ['display.epic.du2.brt'] },
