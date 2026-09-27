@@ -48,9 +48,12 @@ export interface G650Cockpit {
   context: G650CockpitContext;
 }
 
+/** Pitch of the default pilot view (deg, + up). */
+export const G650_EYE_PITCH_DEG = -15;
+
 /** Preset views (body metres). The pilot eye is the default view. */
 export const G650_VIEWS = [
-  { name: 'Copilot', position_m: EYE_R, yawDeg: 0, pitchDeg: -8 },
+  { name: 'Copilot', position_m: EYE_R, yawDeg: 0, pitchDeg: G650_EYE_PITCH_DEG },
   { name: 'Glareshield (guidance panel)', position_m: [14.08, 0, -1.0] as [number, number, number], yawDeg: 0, pitchDeg: -16, fovDeg: 46 },
   { name: 'Pilot displays', position_m: [14.0, -0.38, -0.95] as [number, number, number], yawDeg: 4, pitchDeg: -22, fovDeg: 58 },
   { name: 'Pedestal', position_m: [13.72, -0.22, -0.95] as [number, number, number], yawDeg: 18, pitchDeg: -58, fovDeg: 64 },
@@ -184,5 +187,8 @@ export function buildG650Cockpit(ctx: SimContext, sys: G650Systems, o: G650Cockp
   });
 
   const build = b.build();
+  // Default pilot view pitched down so the PFD (DU centre ~33 deg below the design eye line, layout.ts) is on
+  // screen with the windshield above it (the app default -8 deg shows only the top of the DUs).
+  build.eyePitchDeg = G650_EYE_PITCH_DEG;
   return { build, context: c };
 }

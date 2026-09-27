@@ -10,8 +10,10 @@
  * switch on the outboard horn top of each wheel): pitch trim (split rocker,
  * momentary NOSE UP / NOSE DN, -> V.yokeTrimL/R, merged by
  * systems/cockpitInputs.ts), AP / TRIM DISC (red button on the outboard horn:
- * event `ap.disc` + hold var interrupting the trim). SCOPE: the push-to-talk
- * / intercom switches are not built (no radio-transmit model to drive).
+ * event `ap.disc` + hold var interrupting the trim), MIC / INT rocker on the
+ * front of the outboard horn (-> V.acpPtt; systems/audio.ts keys the
+ * ACP-selected transmitter or the intercom; SCOPE: no radio audio is
+ * synthesised by the app).
  *
  * The wheels follow the pilot inputs (input.pitch / input.roll): with FBW the
  * autopilot does not back-drive the pitch of the yokes; the roll trim motor
@@ -52,6 +54,21 @@ export function buildFlightControls(c: G650CockpitContext): void {
               label: `PITCH TRIM (${s})`,
               var: side < 0 ? V.yokeTrimL : V.yokeTrimR,
               positions: ['NOSE UP', 'OFF', 'NOSE DN'],
+              values: [1, 0, -1],
+              initial: 1,
+              springs: { 0: 1, 2: 1 },
+            },
+          },
+          {
+            // MIC / INT rocker on the front of the outboard horn (index finger): MIC keys the transmitter
+            // selected on the side's ACP, INT the intercom (systems/audio.ts). Position EST.
+            anchor: `${outboard}Front`,
+            kind: 'rocker',
+            options: {
+              id: `g650.fc.ptt_${lo}`,
+              label: `MIC / INT (${s})`,
+              var: V.acpPtt(side < 0 ? 1 : 2),
+              positions: ['MIC', 'OFF', 'INT'],
               values: [1, 0, -1],
               initial: 1,
               springs: { 0: 1, 2: 1 },

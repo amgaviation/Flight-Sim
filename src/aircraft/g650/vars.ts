@@ -228,6 +228,10 @@ export const G650_VARS = {
   // Derived by systems/audio.ts
   acpTx: (n: 1 | 2) => `${P}acp${n}.tx`, // selected transmitter while the ACP is powered (0 = none)
   acpRx: (n: 1 | 2, ch: AcpChannel) => `${P}acp${n}.rx_${ch}`, // receiver audio level (volume x ACP and receiver power)
+  // Yoke MIC / INT rocker (added with the main cockpit build): +1 MIC (key the selected transmitter), 0 off, -1 INT.
+  acpPtt: (n: 1 | 2) => `${P}acp${n}.ptt`,
+  // Derived by systems/audio.ts: transmitter being keyed (1..6 as acpMic) while MIC is held, -1 intercom, 0 none.
+  acpKeyed: (n: 1 | 2) => `${P}acp${n}.keyed`,
 } as const;
 
 /** ACP receiver channels (EST Primus Epic ACP layout: VHF 1-3, NAV 1-2, ADF, MKR). */

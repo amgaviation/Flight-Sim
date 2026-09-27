@@ -115,6 +115,28 @@ describe('G650 cockpit: controls drive the systems', () => {
     disc.onPointerUp?.(p(disc));
   });
 
+  it('yoke MIC / INT rocker keys the ACP-selected transmitter or the intercom', { timeout: 120_000 }, async () => {
+    const { r, ctl, step } = await setup('ready_to_taxi');
+    r.vars.set(V.acpMic(1), 2); // VHF 2 selected on the pilot's ACP
+    step(1);
+    expect(r.vars.get(V.acpKeyed(1))).toBe(0);
+    const ptt = ctl('g650.fc.ptt_l');
+    // Positions bottom -> top: MIC, OFF, INT.
+    ptt.onPointerDown?.(p(ptt, 0, ptt.hitTargets[0], new THREE.Vector3(0, -0.006, 0.005)));
+    step(0.5);
+    expect(r.vars.get(V.acpPtt(1))).toBe(1);
+    expect(r.vars.get(V.acpKeyed(1))).toBe(2);
+    ptt.onPointerUp?.(p(ptt));
+    step(0.5);
+    expect(r.vars.get(V.acpKeyed(1))).toBe(0);
+    ptt.onPointerDown?.(p(ptt, 0, ptt.hitTargets[0], new THREE.Vector3(0, 0.006, 0.005)));
+    step(0.5);
+    expect(r.vars.get(V.acpKeyed(1))).toBe(-1);
+    ptt.onPointerUp?.(p(ptt));
+    step(0.5);
+    expect(r.vars.get(V.acpPtt(1))).toBe(0);
+  });
+
   it('tiller handle steers the nosewheel (NWS POWER on)', { timeout: 120_000 }, async () => {
     const { r, ctl, step } = await setup('ready_to_taxi');
     step(1);

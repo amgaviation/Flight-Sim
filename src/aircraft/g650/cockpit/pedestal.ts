@@ -115,7 +115,7 @@ export function buildPedestal(c: G650CockpitContext): void {
         armLength: 0.155,
         armWidth: 0.013,
         knob: 'throttle',
-        knobScale: 1.5,
+        knobScale: 1.25,
         detentLabels: i === 1 ? 'left' : 'right',
         axis: { var: INPUT.throttle(i), map: (a) => a },
         format: (v) => (v < -0.01 ? `REV ${Math.round(-v * 100)} %` : v <= TLA.idle ? 'IDLE' : `${Math.round(v * 100)} %`),
@@ -146,6 +146,16 @@ export function buildPedestal(c: G650CockpitContext): void {
     );
   }
   ped.label('THRUST', 0.21, 0.098, { height: 0.003 });
+  // Quadrant fences: raised black cheek plates between the speed brake, the thrust levers and the flap handle
+  // (G650 photographs: the lever slots sit in a raised quadrant; EST 30 mm high, 190 mm long).
+  const fenceGeo = new THREE.BoxGeometry(0.006, 0.19, 0.03);
+  b.trackGeometry(fenceGeo);
+  for (const fx of [0.112, 0.302]) {
+    const fence = new THREE.Mesh(fenceGeo, env.materials.get('panelDark'));
+    fence.name = 'quadrant_fence';
+    fence.userData.cockpitStatic = true;
+    ped.addObject(fence, fx, tlY, { z: 0.015 });
+  }
 
   // ---- speed brake handle (left): RETRACT forward .. EXTEND aft, continuous (LUC flight controls).
   ped.add(
