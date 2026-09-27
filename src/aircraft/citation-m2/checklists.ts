@@ -27,6 +27,10 @@ export const M2_CHECKLISTS: Checklist[] = [
       { challenge: 'Battery switch', response: 'BATT (no voltage indication)', check: (v) => v.get(M2.battSw) === 1 && v.get('elec.batt_bus_v') < 5 },
       { challenge: 'Battery disconnect switch', response: 'NORM (24 volts minimum)', check: (v) => v.get(M2.battDisc) === 0 && v.get(M2.battSw) === 1 && v.get('elec.batt_v') >= 24 },
       { challenge: 'STBY FLT DISPLAY switch', response: 'TEST / ON', check: (v) => v.get(M2.stbyDispSw) >= 1 },
+      // CJ-family AFM cockpit inspection (BATTERY EMER check) / M2 flows EMER BUS ITEMS: PFD 1 in reversion (AHRS 2,
+      // ADC 2, GPS 1), left GTC (COM 1, NAV 1, XPDR 1), audio, AFCS control panel, flood lights, gear lights.
+      { challenge: 'Battery switch', response: 'EMER (check emergency bus items)', check: (v) => v.get('elec.emer_powered') !== 0 && v.get('elec.pfd1_powered') !== 0 && v.get('elec.avn1_powered') === 0 },
+      { challenge: 'Battery switch', response: 'BATT', check: (v) => v.get(M2.battSw) === 1 },
       { challenge: 'EMER LIGHTS switch', response: 'ARMED', check: (v) => v.get(M2.emerLtsSw) === 1 },
       { challenge: 'System tests (GTC)', response: 'FIRE WARN - CHECKED' },
       { challenge: 'System tests (GTC)', response: 'ANNU - CHECKED' },
@@ -38,9 +42,14 @@ export const M2_CHECKLISTS: Checklist[] = [
     phase: 'Ground',
     items: [
       { challenge: 'Cabin door', response: 'CLOSED AND LOCKED', check: (v) => v.get(M2.doorOpen('cabin')) === 0 },
-      { challenge: 'Avionics', response: 'ON (DISPATCH for flight planning)', check: (v) => v.get(M2.avionicsSw) !== 0 },
+      // No avionics switch (AOPA Mar 2014): the BATTERY switch powers the avionics; DISPATCH (GTC 1 + MFD on the aux
+      // battery) is only for ground comm / flight planning before the battery is on.
+      { challenge: 'DISPATCH switch', response: 'OFF', check: (v) => v.get(M2.dispatchSw) === 0 },
+      { challenge: 'Avionics', response: 'ON (battery BATT)', check: (v) => v.get('elec.pfd1_powered') !== 0 && v.get('elec.mfd_powered') !== 0 && v.get('elec.pfd2_powered') !== 0 },
       { challenge: 'Generators', response: 'GEN', check: (v) => both((i) => v.get(M2.genSw(i)) === 1) },
       { challenge: 'Boost pumps', response: 'NORM', check: (v) => both((i) => v.get(M2.boostSw(i)) === 0) },
+      // 525AFM-06 p.3-88 Starting Engines step 6 checks these extinguish after the start.
+      { challenge: 'CAS', response: 'GEN OFF / OIL PRESS / FUEL LOW PRESS / HYD FLOW LOW displayed', check: (v) => v.get('cas.gen_off_l_stop') + v.get('cas.gen_off_r_stop') > 0 },
       { challenge: 'Ignition (GTC ENGINE page)', response: 'NORM', check: (v) => both((i) => v.get(M2.ignSw(i)) === 0) },
       { challenge: 'Beacon', response: 'ON', check: (v) => v.get(M2.antiColl) >= 1 },
       { challenge: 'Pass safety', response: 'BELT & NO SMOKE', check: (v) => v.get(M2.paxSafety) === 2 },
@@ -57,6 +66,12 @@ export const M2_CHECKLISTS: Checklist[] = [
       { challenge: 'L throttle', response: 'IDLE at 8-10 % N2', check: (v) => v.get(M2.tla(1)) >= TLA.idle - 0.01 },
       { challenge: 'L ITT / N2', response: 'MONITOR; stable idle', check: (v) => v.get(ENG.running(1)) !== 0 },
       { challenge: 'Generators', response: 'ON LINE (no GEN OFF)', check: (v) => v.get('elec.sg1_online') !== 0 && v.get('elec.sg2_online') !== 0 },
+      // 525AFM-06 p.3-88 step 6: "Fuel, Oil, Generator and Hydraulic Annunciators - EXTINGUISHED".
+      {
+        challenge: 'Fuel, oil, generator, hydraulic annunciations',
+        response: 'EXTINGUISHED',
+        check: (v) => ['gen_off', 'oil_press', 'fuel_press_low', 'hyd_flow_low'].every((m) => ['l', 'r'].every((s) => v.get(`cas.${m}_${s}`) === 0 && v.get(`cas.${m}_${s}_stop`) === 0)),
+      },
       { challenge: 'Oil pressure', response: 'CHECK', check: (v) => both((i) => v.get(ENG.oilPressPsi(i)) >= 23) },
     ],
   },
@@ -64,10 +79,17 @@ export const M2_CHECKLISTS: Checklist[] = [
     title: 'Before taxi',
     phase: 'Ground',
     items: [
+      // 525AFM-06 p.3-89.1 Before Taxi 6: electric trim check.
+      { challenge: 'Electric elevator trim', response: 'CHECK: each half alone no trim; AP/TRIM DISC stops trim; pilot overrides copilot' },
+      // 525AFM-06 p.3-89.1 Before Taxi 7: flap / speed brake check.
+      { challenge: 'GROUND FLAPS', response: 'SELECT: both speed brakes deploy', check: (v) => v.get(M2.flapHandle) >= 2.9 && v.get(SURF.speedbrake) > 0.95 },
+      { challenge: 'Throttles > 85 % N2', response: 'speed brakes RETRACT, FLAPS >35 displayed; IDLE: speed brakes redeploy' },
+      { challenge: 'Flaps', response: 'T.O. & APPR: speed brakes retract' },
+      // 525AFM-06 p.3-90: anti-skid self test completed while stationary.
+      { challenge: 'Anti-skid', response: 'ON, ANTISKID INOP out', check: (v) => v.get(M2.antiskidSw) !== 0 && v.get('cas.antiskid_inop') === 0 },
       { challenge: 'Flaps', response: '15', check: (v) => Math.abs(v.get(SURF.flapsDeg) - 15) < 1 },
       { challenge: 'Trim', response: 'SET FOR TAKEOFF', check: (v) => v.get('trim.pitch_to_ok') !== 0 },
       { challenge: 'Air source select', response: 'BOTH', check: (v) => v.get(M2.pressSource) === PRESS_SRC.both },
-      { challenge: 'Anti-skid', response: 'ON', check: (v) => v.get(M2.antiskidSw) !== 0 },
       { challenge: 'Avionics / FMS / TOLD', response: 'SET' },
       { challenge: 'Nav / taxi lights', response: 'ON', check: (v) => v.get(M2.navLt) !== 0 },
     ],
@@ -80,6 +102,9 @@ export const M2_CHECKLISTS: Checklist[] = [
       { challenge: 'Speed brakes', response: 'RETRACTED', check: (v) => v.get(SURF.speedbrake) < 0.02 },
       { challenge: 'Trim', response: 'TAKEOFF (3 axes)', check: (v) => v.get('trim.pitch_to_ok') !== 0 },
       { challenge: 'Pitot & static heat', response: 'ON', check: (v) => v.get(M2.pitotStaticSw) !== 0 },
+      // 525AFM-06 p.3-91 / M2 flows ICE PROTECTION CHECKS (N2 > 75 % / 70 %): WING/ENG ANTI-ICE ON; ENGINE and WING
+      // ANTI-ICE COLD L-R displayed then clear within 60 s; TAIL DE-ICE ON, no TAIL DE-ICE FAIL.
+      { challenge: 'Ice protection check (if icing expected)', response: 'WING/ENG and TAIL: COLD displayed then clear' },
       { challenge: 'Anti-ice', response: 'AS REQUIRED' },
       { challenge: 'Transponder', response: 'ALT', check: (v) => v.get('xpdr.mode') >= 3 },
       { challenge: 'Landing / anti-coll lights', response: 'ON', check: (v) => v.get(M2.landingLt) >= 1 && v.get(M2.antiColl) === 2 },
@@ -147,7 +172,6 @@ export const M2_CHECKLISTS: Checklist[] = [
     phase: 'Ground',
     items: [
       { challenge: 'Parking brake', response: 'SET', check: (v) => v.get(M2.parkBrake) !== 0 },
-      { challenge: 'Avionics', response: 'OFF', check: (v) => v.get(M2.avionicsSw) === 0 },
       { challenge: 'Throttles', response: 'OFF', check: (v) => both((i) => v.get(M2.tla(i)) < -0.05) },
       { challenge: 'Exterior lights', response: 'OFF', check: (v) => v.get(M2.navLt) === 0 && v.get(M2.antiColl) === 0 },
       { challenge: 'STBY FLT DISPLAY switch', response: 'OFF', check: (v) => v.get(M2.stbyDispSw) === 0 },
@@ -169,6 +193,27 @@ export const M2_CHECKLISTS: Checklist[] = [
     ],
   },
   {
+    // 525AFM-06 "Electric Elevator Trim Runaway" (CJ-family memory item: AUTOPILOT/TRIM DISENGAGE BUTTON - PRESS).
+    title: 'ELECTRIC ELEVATOR TRIM RUNAWAY',
+    phase: 'Abnormal',
+    items: [
+      { challenge: 'AP/TRIM DISC button', response: 'PRESS AND HOLD', check: (v) => v.get(M2.apTrimDisc(1)) !== 0 || v.get(M2.apTrimDisc(2)) !== 0 },
+      { challenge: 'Elevator trim', response: 'TRIM MANUALLY (trim wheel)' },
+      { challenge: 'PITCH TRIM circuit breaker (LH panel)', response: 'PULL', check: (v) => v.get('cb.trim_pitch') === 0 },
+      { challenge: 'AP/TRIM DISC button', response: 'RELEASE' },
+    ],
+  },
+  {
+    // 525AFM-06 p.3-26 GEN OFF L AND R (dual generator failure).
+    title: 'GEN OFF L-R',
+    phase: 'Abnormal',
+    items: [
+      { challenge: 'Generators', response: 'RESET, then GEN', check: (v) => both((i) => v.get(M2.genSw(i)) === 1) },
+      { challenge: 'If not restored: BATTERY switch', response: 'EMER (flight guidance incl. autopilot inoperative)', check: (v) => v.get(M2.battSw) === -1 },
+      { challenge: 'Land', response: 'AS SOON AS PRACTICAL' },
+    ],
+  },
+  {
     title: 'ENVIRONMENTAL SMOKE OR ODOR',
     phase: 'Abnormal',
     items: [
@@ -183,8 +228,10 @@ export const M2_CHECKLISTS: Checklist[] = [
     phase: 'Abnormal',
     items: [
       // CJ AFM limitations 525FM-15 p.2-11: boost pump OFF on the side receiving fuel.
-      { challenge: 'FUEL BOOST switch (receiving side)', response: 'OFF', check: (v) => (v.get(M2.fuelXfer) === -1 ? v.get(M2.boostSw(2)) : v.get(M2.boostSw(1))) === -1 },
-      { challenge: 'FUEL TRANSFER', response: 'SELECT (from the heavy tank)', check: (v) => v.get(M2.fuelXfer) !== 0 },
+      // CJ AFM limitations 525FM-15 p.2-11 / 525AFM-06 p.3-113: no transfer with the receiving tank's boost pump on.
+      { challenge: 'FUEL BOOST switch (receiving side)', response: 'OFF', check: (v) => (v.get(M2.fuelXfer) === 1 ? v.get(M2.boostSw(2)) : v.get(M2.boostSw(1))) === -1 },
+      // The arrow points to the receiving tank: R TANK moves fuel left -> right (525AFM-06 p.3-113).
+      { challenge: 'FUEL TRANSFER', response: 'SELECT (arrow toward the light tank)', check: (v) => v.get(M2.fuelXfer) !== 0 },
       { challenge: 'Fuel balance', response: 'MONITOR; TRANSFER OFF, BOOST NORM when balanced' },
     ],
   },

@@ -64,6 +64,9 @@ export function createAvionics(ctx: SimContext, opts: AvionicsOptions = {}): Avi
     aircraftId: 'citation-m2',
     aircraftName: 'Citation M2',
     casLocation: 'pfd', // S&D15 §10.3.E / S&D21 §10.3.9: CAS on the lower part of each PFD
+    // EST: on emergency power the MFD is unpowered and PFD 1 runs in reversion mode (M2 flows "EMER BUS ITEMS":
+    // "PFD 1 in reversion mode"): the GDUs revert automatically when the MFD / PFD 1 is lost.
+    autoReversion: true,
     eis: M2_EIS_CONFIG,
     synoptics: M2_SYNOPTICS,
     performance: M2_PERFORMANCE,
@@ -96,9 +99,12 @@ export function createAvionics(ctx: SimContext, opts: AvionicsOptions = {}): Avi
     // Flight director computers in the GIAs; servos on the AP servo breaker (AVN 1).
     power: 'elec.gia1_powered || elec.gia2_powered',
     servoPower: 'elec.ap_servos_powered',
-    sensors: { valid: 'ahrs1.valid && adc1.valid' },
+    // Coupled flight-director side (XFR): that side's AHRS and ADC (G3000 / GFC 700).
+    sensors: { valid: 'g3k.fd_side == 2 ? (ahrs2.valid && adc2.valid) : (ahrs1.valid && adc1.valid)' },
     disconnect: {
       ...AFCS_GFC700_G3000.disconnect,
+      // Manual electric trim from either yoke disengages the AP (GFC 700; preset trimDisconnects).
+      trimInputs: [M2.yokeTrimCmd],
       // AP disconnects at high speed beyond Vmo/Mmo is not automatic in the GFC 700; stall (shaker) disconnects the AP (EST, Garmin).
       auto: 'alert.stick_shaker',
     },
@@ -131,7 +137,8 @@ export function createAvionics(ctx: SimContext, opts: AvionicsOptions = {}): Avi
   });
   const tcas = new Tcas(ctx, { power: 'elec.tcas_powered' }); // GTS 855 TCAS I: TA only
   const tocw = new TakeoffConfigWarning(ctx, {
-    armed: `gear.air_ground && (${M2.tla(1)} > 0.9 || ${M2.tla(2)} > 0.9)`,
+    // Armed with either throttle above ~85 % N2 on the ground, as the 525AFM-06 p.3-89.1 flap check implies.
+    armed: 'gear.air_ground && (eng1.n2_pct > 85 || eng2.n2_pct > 85)',
     power: 'elec.gea_powered',
     checks: [
       { id: 'flaps', bad: 'surf.flaps_deg > 16 || (surf.flaps_deg > 1 && surf.flaps_deg < 14)', text: 'FLAPS', voice: 'FLAPS' },

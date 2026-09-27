@@ -152,7 +152,6 @@ describe('Citation M2 check ride KICT -> KOKC (full normal procedure)', () => {
       log(r, 'battery on, tests done');
 
       // ================================================================ 3. before start (dossier §10 step 2)
-      v.set(M2.avionicsSw, 1);
       v.set(M2.genSw(1), 1);
       v.set(M2.genSw(2), 1);
       v.set(M2.antiColl, 1); // BEACON
@@ -415,8 +414,11 @@ describe('Citation M2 check ride KICT -> KOKC (full normal procedure)', () => {
       expect(v.get('adc1.baro_std')).toBe(1);
       expect(casActive(r, 'warning')).toEqual([]);
       expect(casActive(r, 'caution')).toEqual([]);
-      // Auto schedule (dossier §6.4, EST): cabin 0 ft at SL -> 8,000 ft at FL410, linear; max 8.5 psid.
-      expect(Math.abs(v.get('press.cabin_alt_ft') - (23000 * 8000) / 41000)).toBeLessThan(700);
+      // Auto schedule (dossier §6.4, EST, fix round 1 M2-F25): differential-limited, sea-level / departure-field cabin
+      // to 22,000 ft, then toward 8,000 ft at FL410; max 8.5 psid.
+      // The controller climbs the cabin proportionally toward the schedule value of the FMS cruise altitude.
+      expect(v.get('press.cabin_alt_ft')).toBeGreaterThan(-300);
+      expect(v.get('press.cabin_alt_ft')).toBeLessThan(2000);
       expect(v.get('press.diff_psi')).toBeLessThan(M2_LIMITS.cabinDiffPsi + 0.1);
 
       // ================================================================ 9. cruise FL230, CRU detent (dossier §10 step 9)
@@ -654,14 +656,16 @@ describe('Citation M2 check ride KICT -> KOKC (full normal procedure)', () => {
       r.run(2);
       expect(casActive(r, 'advisory')).toContain('PARKING BRAKE');
       r.run(60); // engine cool-down at idle (EST 1 min)
-      v.set(M2.avionicsSw, 0);
       v.set(M2.tla(1), TLA.cutoff);
       v.set(M2.tla(2), TLA.cutoff);
       r.run(45);
       log(r, 'engines stopped');
       expect(v.get('eng1.running') + v.get('eng2.running')).toBe(0);
-      expect(casActive(r, 'warning')).toEqual([]); // OIL PRESS LOW inhibited on the ground
-      expect(v.get('display.pfd1.power')).toBe(0);
+      // Engines stopped on the ground: OIL PRESS L / R posted without the master (fix round 1 M2-F10/F11).
+      expect(casActive(r, 'warning').sort()).toEqual(['OIL PRESS L', 'OIL PRESS R']);
+      expect(v.get('alert.master_warning')).toBe(0);
+      // No avionics switch (AOPA Mar 2014): the displays stay up until the BATTERY switch is OFF.
+      expect(v.get('display.pfd1.power')).toBe(1);
       v.set(M2.antiColl, 0);
       v.set(M2.navLt, 0);
       v.set(M2.paxSafety, 0);
@@ -673,6 +677,7 @@ describe('Citation M2 check ride KICT -> KOKC (full normal procedure)', () => {
       log(r, 'cold & dark');
       expect(v.get('elec.batt_bus_powered')).toBe(0);
       expect(v.get('elec.emer_powered')).toBe(0);
+      expect(v.get('display.pfd1.power')).toBe(0);
       expect(v.get('fdm.crashed')).toBe(0);
       const fuelUsed = 2400 - v.get('fuel.total_kg') / 0.45359237;
       LOG.push(`fuel used ${fuelUsed.toFixed(0)} lb, block time ${(r.t / 60).toFixed(0)} min`);

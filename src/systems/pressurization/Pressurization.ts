@@ -133,6 +133,10 @@ export class Pressurization implements Subsystem {
   private readonly mode: Evaluator;
   private readonly manualCmd: Evaluator;
   private readonly dump: () => boolean;
+  private readonly dumpPower: () => boolean;
+  private readonly warnFt: (() => number) | null;
+  private readonly depField: (() => number) | null;
+  private warnLatched = false;
   private readonly masksManual: () => boolean;
   private readonly masksReset: () => boolean;
   private readonly safetyHeldOpen: () => boolean;
@@ -168,6 +172,9 @@ export class Pressurization implements Subsystem {
     this.mode = compileBinding(vars, cfg.mode, 0);
     this.manualCmd = compileBinding(vars, cfg.manualCommand, 0);
     this.dump = compileCondition(vars, cfg.dump, false);
+    this.dumpPower = compileCondition(vars, cfg.dumpPower, true);
+    this.depField = cfg.departureFieldFt !== undefined ? compileBinding(vars, cfg.departureFieldFt, 0) : null;
+    this.warnFt = cfg.cabinAltWarnFtBinding !== undefined ? compileBinding(vars, cfg.cabinAltWarnFtBinding, cfg.cabinAltWarnFt ?? 10000) : null;
     this.masksManual = compileCondition(vars, cfg.masksManual, false);
     this.masksReset = compileCondition(vars, cfg.masksReset, false);
     this.safetyHeldOpen = compileCondition(vars, cfg.safetyValveOpen, false);
@@ -279,6 +286,11 @@ export class Pressurization implements Subsystem {
         const f = clamp01((H - this.refAlt) / CLIMB_BLEND_FT);
         target = this.refCabin + (sched - this.refCabin) * f;
       }
+      // Differential-limited controllers hold the departure field until the limit (below) takes over.
+      if (this.depField) {
+        const df = this.depField();
+        if (target < df) target = df;
+      }
     } else {
       const lfeCabin = ldg + bias;
       const span = this.topAlt - ldg;
@@ -319,14 +331,15 @@ export class Pressurization implements Subsystem {
     const inflow = Math.max(0, this.inflow());
     const leakA = this.leakArea * (vars.get(this.f.leak) !== 0 ? 10 : 1) + (vars.get(this.f.decomp) !== 0 ? this.breachArea : 0);
     let valveCmd = this.valve.position;
-    if (this.dump() && mode !== 2) {
-      valveCmd = 1;
+    const limitClosed = cfg.dumpLimitFt !== undefined && cabinAlt0 >= cfg.dumpLimitFt;
+    if (this.dump() && this.dumpPower() && (mode !== 2 || cfg.dumpAllModes)) {
+      valveCmd = limitClosed ? 0 : 1;
       this.valve.travelS = this.autoTravel;
     } else if (mode === 2) {
       // Manual: the valve moves while the switch is held.
       const c = this.manualCmd();
       this.valve.travelS = this.manualTravel;
-      valveCmd = c > 0.05 ? 1 : c < -0.05 ? 0 : this.valve.position;
+      valveCmd = c > 0.05 ? (limitClosed ? 0 : 1) : c < -0.05 ? 0 : this.valve.position;
     } else if (controllerOk) {
       this.valve.travelS = this.autoTravel;
       if (onGround && !this.prepress() && this.cmdAlt >= H - 20) valveCmd = 1;
@@ -398,7 +411,11 @@ export class Pressurization implements Subsystem {
     vars.set(o.target_alt_ft, this.cmdAlt);
     vars.set(o.sched_alt_ft, target);
     vars.set(o.ldg_elev_ft, ldg);
-    vars.set(o.cabin_alt_warn, this.warn.update(cabinAlt) ? 1 : 0);
+    if (this.warnFt) {
+      const th = this.warnFt();
+      this.warnLatched = cabinAlt >= th || (this.warnLatched && cabinAlt >= th - 200);
+      vars.set(o.cabin_alt_warn, this.warnLatched ? 1 : 0);
+    } else vars.set(o.cabin_alt_warn, this.warn.update(cabinAlt) ? 1 : 0);
     vars.set(o.pax_masks, this.masks ? 1 : 0);
     vars.set(o.safety_valve, this.safetyOpen || heldOpen ? 1 : 0);
     vars.set(o.neg_relief, this.negOpen ? 1 : 0);
@@ -428,6 +445,7 @@ export class Pressurization implements Subsystem {
       this.valve.reset(1);
     } else {
       cabinAlt = Math.max(interp1(this.cfg.schedule, H), cabinAltitudeForDiff(H, this.cfg.maxDiffPsi));
+      if (this.depField) cabinAlt = Math.max(cabinAlt, Math.min(this.depField(), H)); // departure field hold (see update)
       this.phase = Phase.Climb;
       this.refAlt = H - 1;
       this.refCabin = cabinAlt;

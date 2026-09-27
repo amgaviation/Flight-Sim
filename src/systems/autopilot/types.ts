@@ -231,6 +231,11 @@ export interface AfcsConfig {
     overrideAction?: 'disconnect' | 'cws' | 'none';
     /** Pilot trim switch disconnects the AP. */
     trimDisconnects?: boolean;
+    /**
+     * (Appended by the citation-m2 aircraft.) Extra pilot trim-switch vars (-1..1) that count for `trimDisconnects`
+     * besides input.pitch_trim_rate (cockpit yoke switches). Default none.
+     */
+    trimInputs?: string[];
     /** Engagement prevented while true (737 stab trim AP cutout at CUTOUT, force on the column). */
     engageInhibit?: Binding;
     /** Additional automatic disconnect condition (stall warning, AHRS miscompare...). */

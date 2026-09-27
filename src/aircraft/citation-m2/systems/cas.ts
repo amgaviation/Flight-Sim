@@ -84,7 +84,7 @@ export const M2_CAS: CasMessageDef[] = [
   { id: 'ap_trim_fail', text: 'AP TRIM FAIL', level: 'warning', when: 'fail.trim.pitch.runaway || fail.trim.pitch.jam' },
   // Takeoff configuration (EST G3000 wording; CJ family aural "TRIM" / "SPEED BRAKES" / "PARKING BRAKE" with a
   // visual annunciation): any takeoff-configuration fault except flaps (FLAPS >35 caution) at takeoff thrust.
-  { id: 'to_config', text: 'T/O CONFIG', level: 'warning', when: 'alert.takeoff_config && tocw.flaps == 0' },
+  { id: 'to_config', text: 'T/O CONFIG', level: 'warning', when: 'tocw.speedbrake || tocw.trim || tocw.park' },
   // ------------------------------------------------------------ CAUTIONS (amber)
   ...both((i, s) => engMsg(i, { id: `gen_off_${s.toLowerCase()}`, text: `GEN OFF ${s}`, level: 'caution', when: `!elec.sg${i}_online && !(${genOffBoth})`, delayS: 1, inhibit: TL })),
   // EST (no CJ-family battery-discharge annunciator; 525AFM-06 p.3-86 battery-only avionics before start is normal):
@@ -119,8 +119,9 @@ export const M2_CAS: CasMessageDef[] = [
   { id: 'emer_brake', text: 'EMER BRAKE ON', level: 'caution', when: `${M2.emerBrake} > 0.05 && ${air}`, inhibit: TL },
   { id: 'park_brake', text: 'PARK BRAKE ON', level: 'caution', when: `${M2.parkBrake} && (${M2.tla(1)} > 0.5 || ${M2.tla(2)} > 0.5)` },
   { id: 'flaps_fail', text: 'FLAPS FAIL', level: 'caution', when: 'flaps.disagree || flaps.asym', inhibit: TL },
-  // 525AFM-06 p.3-104.1: FLAPS >35 with flaps beyond 38 deg and a throttle above ~85 % N2 on the ground (or in the air).
-  { id: 'flaps_35', text: 'FLAPS >35', level: 'caution', when: `surf.flaps_deg > 38 && (${air} || eng1.n2_pct > 85 || eng2.n2_pct > 85)` },
+  // 525AFM-06 p.3-104.1: FLAPS >35 with flaps beyond 38 deg and a throttle above ~85 % N2 (throttle switch,
+  // M2Logic ac.m2.thr_high) on the ground, or in the air (R squat switch).
+  { id: 'flaps_35', text: 'FLAPS >35', level: 'caution', when: `surf.flaps_deg > 38 && (${air} || ac.m2.thr_high)` },
   { id: 'gnd_flaps', text: 'GROUND FLAPS', level: 'caution', when: `${air} && ${M2.flapHandle} >= 2.9`, inhibit: TL },
   { id: 'spd_brk', text: 'SPEED BRAKE', level: 'caution', when: `surf.speedbrake > 0.1 && (surf.flaps_deg > 17 || ra1.valid && ra1.alt_ft < 500) && ${air}`, delayS: 2, inhibit: TL }, // EST
   ...both((i, s) => ({ id: `ps_cold_${s.toLowerCase()}`, text: `P/S HTR OFF ${s}`, level: 'caution', when: `${air} && !elec.pitot_${i === 1 ? 'l' : 'r'}_powered`, delayS: 2, inhibit: TL })),

@@ -214,19 +214,23 @@ export function buildPedestal(b: CockpitBuilder, displays: Map<string, CockpitDi
       label: 'FLAPS',
       min: 0,
       max: 3,
-      discrete: true,
+      // Follow-up handle: "Any intermediate position from zero to 35 degrees may be selected in flight" (S&D15 §9.1).
+      // "A slight downward pressure is required to move the handle beyond the TAKEOFF AND APPROACH gate to the landing
+      // position. The handle must be lifted at the landing gate before it can be moved aft to the GROUND FLAPS
+      // position" (525AFM-06 p.3-103): gates at 15 and 35 (extending), soft detents at 0 and 60.
       // Gate legends (flyradius quadrant photo): 0 / T.O. & APPR 15 / LAND 35 / GROUND FLAPS - GROUND USE ONLY 60.
+      step: 0.1,
       detents: [
         { value: 0, label: '0°' },
-        { value: 1, label: 'T.O. & APPR 15°' },
-        { value: 2, label: 'LAND 35°' },
-        { value: 3, label: 'GROUND FLAPS 60°\nGROUND USE ONLY', kind: 'gate' },
+        { value: 1, label: 'T.O. & APPR 15°', kind: 'gate', direction: 'increasing' },
+        { value: 2, label: 'LAND 35°', kind: 'gate', direction: 'increasing' },
+        { value: 3, label: 'GROUND FLAPS 60°\nGROUND USE ONLY' },
       ],
       travel: { kind: 'arc', minDeg: 28, maxDeg: -28, pivotDepth: 0.05 },
       armLength: 0.09,
       knob: 'flap',
       detentLabels: 'right',
-      format: (v) => ['UP', '15', '35', '60 GND'][Math.round(v)] ?? v.toFixed(0),
+      format: (v) => (v >= 2.9 ? '60 GND' : v > 2 ? '35 (GATE)' : `${Math.round(v <= 1 ? v * 15 : 15 + (v - 1) * 20)}°`),
     }),
     0.09,
     -0.02,

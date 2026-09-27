@@ -1072,7 +1072,7 @@ export class Afcs implements Subsystem {
     this.prevToga = toga;
 
     // ---- pilot trim switch / override
-    if (this.engaged && this.cfg.disconnect?.trimDisconnects && Math.abs(v.get(INPUT.pitchTrimRate)) > 0.1) this.disengage(false);
+    if (this.engaged && this.cfg.disconnect?.trimDisconnects && (Math.abs(v.get(INPUT.pitchTrimRate)) > 0.1 || this.trimInputActive())) this.disengage(false);
     this.overrides(dt);
 
     // ---- automatic transitions
@@ -1126,6 +1126,14 @@ export class Afcs implements Subsystem {
     this.trk = v.get(s.track);
     this.flaps = v.get(s.flaps);
     this.onGround = this.b.ground();
+  }
+
+  /** Any of `disconnect.trimInputs` (cockpit trim switches) deflected. */
+  private trimInputActive(): boolean {
+    const ins = this.cfg.disconnect?.trimInputs;
+    if (!ins) return false;
+    for (let i = 0; i < ins.length; i++) if (Math.abs(this.vars.get(ins[i])) > 0.1) return true;
+    return false;
   }
 
   private overrides(dt: number): void {

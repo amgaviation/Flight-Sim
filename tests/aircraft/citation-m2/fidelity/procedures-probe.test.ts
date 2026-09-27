@@ -49,7 +49,7 @@ function item(r: Rig, title: string, challenge: string): string {
 }
 
 const SW = [
-  M2.battSw, M2.genSw(1), M2.genSw(2), M2.avionicsSw, M2.tla(1), M2.tla(2), M2.ignSw(1), M2.boostSw(1), M2.pitotStaticSw, M2.engAiSw(1), M2.wingAiSw,
+  M2.battSw, M2.genSw(1), M2.genSw(2), M2.dispatchSw, M2.tla(1), M2.tla(2), M2.ignSw(1), M2.boostSw(1), M2.pitotStaticSw, M2.engAiSw(1), M2.wingAiSw,
   M2.tailDeiceSw, M2.wsBleedSw(1), M2.pressSource, M2.airCondSw, M2.cabinFan, M2.paxOxy, M2.gearHandle, M2.antiskidSw, M2.parkBrake, M2.controlLock,
   M2.flapHandle, M2.speedbrake, M2.pitchTrim, M2.navLt, M2.antiColl, M2.landingLt, M2.taxiLt, M2.logoLt, M2.paxSafety, M2.cabinLt, M2.landingElevFt,
   'ap.yd_engaged', 'ap.engaged', 'ap.fd1_on', 'xpdr.mode', 'adc1.baro_inhg', 'adc1.baro_std', M2.panelLt,
@@ -86,13 +86,11 @@ describe('M2 procedures probe', () => {
     r.run(3);
     log(`CP battery BATT: batt_v=${v.get('elec.batt_v').toFixed(2)} batt_bus_v=${v.get('elec.batt_bus_v').toFixed(2)} emer=${v.get('elec.emer_powered')} esi=${v.get(M2.esiPowered)} pfd1=${v.get('elec.pfd1_powered')} CAS: ${cas(r)}`);
     // Battery EMER check (CJ-family AFM cockpit inspection item 12; M2 flows BATTERY SWITCH EMER / ON).
-    v.set(M2.avionicsSw, 1);
     v.set(M2.battSw, -1);
     r.run(3);
-    const ids = ['emer', 'avn1', 'avn2', 'pfd1', 'mfd', 'pfd2', 'gtc1', 'gtc2', 'gia1', 'gia2', 'adc1', 'adc2', 'ahrs1', 'ahrs2', 'gmc', 'audio1', 'audio2', 'xpdr', 'flood_lts', 'gear_ctl', 'esi', 'pitot_r', 'panel_lts', 'stby_lts'];
+    const ids = ['emer', 'avn1', 'avn2', 'pfd1', 'mfd', 'pfd2', 'gtc1', 'gtc2', 'gia1', 'gia2', 'adc1', 'adc2', 'ahrs1', 'ahrs2', 'gmc', 'audio1', 'audio2', 'xpdr1', 'flood_lts', 'gear_ctl', 'esi', 'pitot_r', 'panel_lts', 'stby_lts'];
     log(`CP BATT EMER + AVIONICS ON: ${ids.map((i) => `${i}=${v.get(`elec.${i}_powered`)}`).join(' ')} CAS: ${cas(r)}`);
     v.set(M2.battSw, 1);
-    v.set(M2.avionicsSw, 0);
     r.run(2);
     // System tests.
     for (const [name, pos] of Object.entries(TEST_SEL)) {
@@ -107,7 +105,6 @@ describe('M2 procedures probe', () => {
     log(`CP fuel L/R lb ${(v.get('fuel.tank0_kg') * 2.2046).toFixed(0)}/${(v.get('fuel.tank1_kg') * 2.2046).toFixed(0)} oxy ${v.get('oxy.main_psi').toFixed(0)} psi`);
 
     // Before starting engines.
-    v.set(M2.avionicsSw, 1);
     for (const i of [1, 2]) v.set(M2.genSw(i), 1);
     v.set(M2.antiColl, 1);
     v.set(M2.paxSafety, 2);
@@ -231,7 +228,8 @@ describe('M2 procedures probe', () => {
     r.run(8);
     v.set(M2.engAiSw(1), 1);
     v.set(M2.engAiSw(2), 1);
-    v.set(M2.wingAiSw, 1);
+    v.set(M2.engAiSw(1), 2);
+    v.set(M2.engAiSw(2), 2);
     v.set(M2.tailDeiceSw, 1);
     let seen = '';
     r.run(70, () => {
@@ -262,7 +260,6 @@ describe('M2 procedures probe', () => {
     log(`AL [After landing] ${audit(g, 'After landing')}`);
     // Shutdown in the checklist order.
     w.set(M2.parkBrake, 1);
-    w.set(M2.avionicsSw, 0);
     g.run(1);
     log(`SD avionics OFF: pfd1 ${w.get('elec.pfd1_powered')} mfd ${w.get('elec.mfd_powered')} esi ${w.get(M2.esiPowered)} gtc1 ${w.get('elec.gtc1_powered')}`);
     w.set(M2.tla(1), TLA.cutoff);

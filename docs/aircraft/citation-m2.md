@@ -159,34 +159,45 @@ Takeoff speeds, SL ISA dry (FPG p.4):
 - Controls on the LH **power switch panel**; volts and generator amps on the MFD EIS.
 - LH and RH circuit-breaker panels on the cockpit sidewalls; junction box in the aft baggage area;
   external power receptacle below the LH engine pylon; 500 W inverter (110 V AC: 1 copilot + 2 cabin outlets).
-- AVIONICS switch **DISPATCH** position: limited avionics (radio calls, FMS planning) without the
-  whole suite (S&D15 §10.3.T).
-- Simulator topology (EST, CJ-family): HOT BATT → (BATT relay) → BATT BUS ⇄ (225-325 A limiters) ⇄
+- **No avionics switch**: "there is no avionics switch; a single battery switch controls both of the batteries and
+  the avionics master ... there is a dispatch switch that powers GTC number 1 and the multifunction display"
+  (AOPA Pilot, Mar 2014); the **DISPATCH** switch (S&D15 §10.3.T) runs them from the aux battery for ground
+  radio calls and flight planning; 60 min on the battery in EMER (AOPA).
+- Simulator topology (EST, CJ-family): HOT BATT → (BATT relay) → BATT BUS ⇄ (225-325 A limiters; the operating
+  generator's limiter opens in flight while the other starter runs, 525AFM-06 p.3-107 battery airstarts) ⇄
   L MAIN (gen 1) / R MAIN (gen 2); BATT BUS → (diode) → EMER BUS; HOT BATT → (EMER relay, BATTERY
-  switch EMER) → EMER BUS; L/R MAIN and BATT BUS → (diodes) → L/R XFEED; EMER → (AVIONICS relay) →
-  AVN 1; R XFEED → (AVIONICS relay, ON only) → AVN 2; AUX BATT → (diode while a starter runs) → AVN 1.
-- Load placement: AVN 1 = PFD1, GTC1, GIA1, GDC1, GRS1, GMC 710, AP servos, GMA 1; AVN 2 = MFD, PFD2,
-  GTC2, GIA2, GDC2, GRS2, GMA 2, radar, DME, RA, TCAS, XPDRs; EMER = ESI charge, GEA engine interface,
-  fire detection, gear and flap control, igniters, FADEC backup, standby panel lights; L MAIN = L pitot,
-  L boost pump, pitch trim, L landing light, nav, beacon, wing inspection, W/S alcohol, L bleed control,
-  stall warning; R MAIN = R pitot, AOA heat, R boost, R landing, taxi, strobes, logo, R bleed control,
-  pressurization controller, tail de-ice, anti-skid; L XFEED = panel / flood lights, avionics fans, temp
-  control; R XFEED = brake hydraulic pump, cabin fan, cabin lights, pax signs, inverter, vapor-cycle A/C.
-  Every load has a `cb.<load>` breaker (sidewall CB panels).
+  switch EMER) → EMER BUS; L/R MAIN and BATT BUS → (diodes) → L/R XFEED; BATT BUS → (avionics relay, BATTERY
+  BATT) → AVN 1; R XFEED → (avionics relay, BATT) → AVN 2; EMER → EMER-D and AVN 2 → AVN2-D (diodes); AUX BATT →
+  (DISPATCH relay) → EMER-D and AVN2-D; AUX BATT → (diodes while a starter runs) → EMER and AVN 2 (S&D15 §9.4).
+- Load placement: EMER = the M2 flows "EMER BUS ITEMS" (PFD 1 with ADC 2 / AHRS 2 in reversion, GTC 1, GIA 1
+  (COM 1 / NAV 1 / GPS 1), XPDR 1, audio 1 and 2, GMC 710, flood lights, gear control and lights) plus the CJ1+
+  list of CAE p.5-25 (flap control, R pitot-static heater, speed-brake control EST, ESI charge, GEA engine
+  interface / voltmeter, fire detection, igniters, FADEC backup, standby panel lights); AVN 1 = ADC 1, AHRS 1,
+  AP servos (lost on EMER: 525AFM-06 p.3-26 "flight guidance system, including autopilot, is inoperative");
+  AVN 2 = MFD, PFD 2, GTC 2, GIA 2, radar, DME, RA, TCAS, XPDR 2; L MAIN = L pitot, L boost pump, pitch trim,
+  L landing light, nav, beacon, wing inspection, W/S alcohol, L bleed control, stall warning; R MAIN = AOA heat,
+  R boost, R landing, taxi, strobes, logo, R bleed control, pressurization controller, tail de-ice, anti-skid;
+  L XFEED = panel lights, avionics fans, temp control; R XFEED = brake hydraulic pump, cabin fan, cabin lights,
+  pax signs, inverter (not in EMER, CAE p.5-26), vapor-cycle A/C. Every load has a `cb.<load>` breaker.
+- DISPATCH: MFD, GTC 1, GIA 1 and audio 1 (EST: the radio needs the audio panel) from the aux battery; PFD 1 off.
+- Generator load limits on the EIS (CAE p.5-21 CJ1+): 210 A on the ground, 300 A in flight below FL350, 250 A above.
 - Battery start (test): bus dips to ~15.6 V, starter current ~750 A peak, AVN 1 held at 25.5 V by the aux battery.
 
 ### 6.2 Fuel (S&D15 §9.2, S&D21 §9.2; `systems/fuel.ts`)
 - Two integral wing tanks; each engine fed from its own tank automatically.
 - Motive-flow **ejector pump** in each sump (driven by HP fuel returned from the FDU) + motive-flow
   scavenge pump; engine-driven pump and FADEC-controlled fuel delivery unit (FDU).
-- **Electric boost pump** in each tank: engine start, fuel transfer, low fuel pressure (NORM = auto;
-  ON = manual).
-- Tank-to-tank transfer (FUEL TRANSFER selector, EST CJ family: L TANK / OFF / R TANK = transfer from the
-  selected tank using its boost pump, sim 1,200 lb/h).
+- **Electric boost pump** in each tank, switch OFF / NORM / ON (CAE p.5-30): NORM = automatic for start,
+  transfer and low pressure; the low-pressure activation latches until OFF/ON and back to NORM (525AFM-06
+  p.3-115); OFF inhibits every automatic operation.
+- Tank-to-tank transfer: "Fuel is transferred in the direction of the arrow on the FUEL TRANSFER selector (i.e.
+  if the selector is turned clockwise, the arrow points to R TANK and fuel is transferred from the left tank)"
+  (525AFM-06 p.3-113): R TANK runs the LEFT pump; no transfer with the receiving tank's pump on; ~10 lb/min.
+- FUEL FLTR BYPASS L/R (filter ΔP ~10 psi, failure `fuel.filter_l/_r`).
 - Vented surge tank near each tip; 6 capacitance probes per wing, dual-channel conditioner; overwing
   gravity filling; fuel heated by oil/fuel heat exchanger (no additive needed).
 - Firewall shutoff valves closed by the ENG FIRE push buttons (EST CJ family).
-- Low-fuel caution 190 lb per tank, imbalance caution 200 lb (EST).
+- FUEL LOW LEVEL L/R 190 lb per tank (EST; CJ family 220 ± 10 lb), master caution after 4 s; imbalance 200 lb (EST).
 
 ### 6.3 Hydraulics (S&D15 §9.3, S&D21 §9.8; `systems/airframe.ts`)
 - Open-center main system, 1,500 psi on demand, two engine-driven pumps (either one sufficient) for
@@ -203,19 +214,34 @@ Takeoff speeds, SL ISA dry (FPG p.4):
   GTC; cabin altitude/rate/diff on the MFD.
 - Cockpit thermostat (auto) and five-position flow divider (S&D15) — sim: TEMP AUTO/MANUAL, temp
   selector, cabin fan, air distribution (defog) knob.
-- PRESS SOURCE selector OFF / L / R / NORM / EMER, CABIN DUMP, manual pressure control (EST CJ family;
-  CJ1+ S&D lists "Air Source Selection", "Emergency Cabin Pressure Dump" and "Manual Pressure Control").
+- AIR SOURCE SELECT OFF / L / BOTH / R / EMER / FRESH AIR, CABIN DUMP, manual pressure control (CJ family).
+  Source selection is electric: unpowered, the source valves fail open and the source reverts to BOTH (CAE p.5-24,
+  525AFM-06 p.3-26); PRESS SOURCE FAIL (EST) with no inflow in flight.
+- Automatic emergency pressurization on at 14,500 ft cabin, off ~1,000 ft lower (525AFM-06 p.3-23).
+- CABIN DUMP needs DC power, works in every mode, and the maximum-limit valves stop the cabin at ~14,500 ft
+  (525AFM-06 p.3-119). MANUAL: UP (+1) = cabin climbs (outflow opens), DN (−1) = cabin descends.
 - On the ground the safety valve is held open by the ground solenoid through the squat switch (EST, CJ family),
   so the cabin stays within ~0.05 psi of ambient with both packs flowing (`safetyValveOpen: 'gear.air_ground'`).
 - Landing field elevation: GTC entry, else the FMS destination, else the takeoff field elevation latched on the
   ground (`ac.m2.to_field_elev_ft`, EST).
-- Sim schedule: cabin 0 ft at SL → 8,000 ft at FL410 (linear), 500 fpm climb / 300 fpm descent limits,
-  relief 8.8 psi, cabin volume 7.5 m³ (EST), CABIN ALTITUDE warning 10,000 ft, pax masks 13,500 ft (EST).
+- Sim schedule (EST, differential-limited): cabin at the departure field / sea level to 22,000 ft, then toward
+  8,000 ft at FL410, 8.5 psid on top (≈5,500 ft cabin at FL350); 500 fpm climb / 300 fpm descent limits, relief
+  8.8 psi, cabin volume 7.5 m³ (EST). CABIN ALTITUDE 9,500 ft (14,500 ft high-altitude mode above 8,000 ft
+  field elevation, 525AFM-06 p.3-23 / p.3-118); pax masks 14,500 ft (525AFM-06 p.3-122). Ground: larger safety
+  valve area so the ramp differential stays < 0.01 psi. In-air presets take the field elevation from the nearest
+  airport (`presetFieldElevationFt`).
 
 ### 6.5 Ice and rain protection (S&D15 §9.7, S&D21 §9.7)
 - Bleed air: engine inlets, pylon inlet ducts, wing leading edges, windshields; pilot windshield
   alcohol back-up.
-- Horizontal stabilizer pneumatic boots on 23 psi service air, timer-controlled (AUTO cycle).
+- Horizontal stabilizer pneumatic boots on 23 psi service air: AUTO inflates L then R, repeats after 3 min;
+  MANUAL (momentary) inflates both while held; TAIL DE-ICE L/R advisories at inflation pressure; LOW TEMP caution
+  below −35 °C RAT (EST) (525AFM-06 p.3-100).
+- Per-side WING/ENG ANTI-ICE switches OFF / ENG / WING/ENG (525AFM-06 p.3-99); the wing valve closes below 75 %
+  N2; COLD cautions from selection until the surface is warm (EST ~35 s wing, ~20 s engine) and ~1 min after the
+  heat is lost; WING/ENG ANTI-ICE ON / ENG ANTI-ICE ON / TAIL DE-ICE ON advisories (M2 flows).
+- W/S bleed: EST temperature model with the overheat shut-off valve and W/S AIR O'HEAT (reset by OFF);
+  alcohol reservoir 10 min (525AFM-06 p.3-101).
 - Electric heat: pitot tubes, static ports, AOA vane.
 - Two windshield ice-detection lights on the glareshield; wing inspection light (LH fuselage).
 - Rain: windshield bleed air normally, mechanically actuated rain doors in heavy rain.
@@ -237,9 +263,12 @@ Takeoff speeds, SL ISA dry (FPG p.4):
 ### 6.8 Landing gear, brakes, steering (S&D15 §7, S&D21 §7)
 - Electrically controlled, hydraulically actuated, < 6 s cycle; trailing-link mains retract inboard;
   nose retracts forward with doors; chined nose tire.
-- Emergency: manual uplock release (free fall) + pneumatic blow-down.
-- Warning horn: gear not down, < 130 KIAS and either throttle below ~85 % N2; horn with flaps beyond
-  the approach setting not silenceable (EST CJ family).
+- Emergency: T-handle releases the uplocks (free fall); the blow-down knob only works after the T-handle
+  (525AFM-06 p.3-103).
+- Warning horn: gear not down, < 130 KIAS on the copilot's (ADC 2) airspeed and either throttle below ~85 % N2;
+  horn with flaps beyond the approach setting not silenceable (EST CJ family); SYSTEM TESTS LDG GEAR sounds it.
+- Anti-skid: ~3 s power-up self test (ANTISKID INOP lit; fails if moving, 525AFM-06 p.3-90); emergency brake
+  nitrogen bottle EST 1,800 psi, ~120 psi per application.
 - Nose wheel steered mechanically by the pedals ±20°; castering ±95° for towing.
 - Multi-disc anti-skid brakes (anti-skid above 12 kt) on the electric hydraulic system; pneumatic
   emergency brake; parking brake handle; emergency brake handle (below the panel).
@@ -251,10 +280,14 @@ Takeoff speeds, SL ISA dry (FPG p.4):
   (±20°), driven from pedestal trim wheels/knobs; elevator trim also electric (yoke switches; the AFCS
   pitch-trim servo) and autopilot trim.
 - Yaw damper (AFCS yaw servo; engages with the AP; not required for dispatch).
-- Flaps: handle detents 0 / 15 / 35 / 60 (ground flaps = lift dump, deploy the speed brakes
-  automatically); any position 0–35 selectable in flight.
-- Speed brakes: upper (0–49°) and lower (0–68°) panels on each wing, any speed, auto-retract with either
-  throttle at high thrust; electrically controlled, hydraulically actuated; designed for minimal pitch change.
+- Flaps: follow-up handle 0–35 with a push-down gate at T.O. & APPR and a lift gate at LAND (525AFM-06 p.3-103);
+  60 = ground flaps (deploy the speed brakes on the ground). 38° switch: no extension past 38° unless the handle
+  is full aft and both throttles are below ~85 % N2; FLAPS >35 caution (525AFM-06 p.3-104.1).
+- Speed brakes: upper (0–49°) and lower (0–68°) panels on each wing, any speed; handle or ground flaps, retracted
+  whenever either throttle is at high thrust (EST switch position just above CRU) and redeployed at idle
+  (525AFM-06 p.3-89.1); SPD BRK breaker; SPD BRK EXTEND when fully extended.
+- Electric trim: split yoke switch (both halves), pilot over copilot, AP/TRIM DISC held interrupts electric and
+  AP trim (525AFM-06 p.3-89.1); manual electric trim disconnects the AP (GFC 700).
 - Integral control lock below the pilot's panel (rudder, elevators, ailerons, throttles).
 
 ### 6.10 Avionics (S&D15 §10, S&D21 §10.3)
@@ -300,47 +333,56 @@ Texts/thresholds: **EST (CJ family / Garmin conventions)** unless the S&D states
 | Level | Message | Condition (sim) |
 |---|---|---|
 | W | ENG FIRE L / R | nacelle loop fire (`fire.engN_warn`); aural "ENGINE FIRE" |
-| W | OIL PRESS LOW L / R | N2 > 45 % and oil < 23 psi (TCDS min), 2 s |
-| W | CABIN ALTITUDE | cabin ≥ 10,000 ft; aural |
+| W | OIL PRESS L / R | oil < 23 psi (TCDS min), 2 s, all phases (525AFM-06 p.3-16); engine stopped on the ground: posted without master |
+| W | GEN OFF L-R | both generators off line, airborne or an engine running; aural "GENERATOR FAIL"; singles suppressed (525AFM-06 p.3-106) |
+| W | CABIN ALTITUDE | cabin ≥ 9,500 ft (14,500 ft above an 8,000 ft field); aural |
 | W | CABIN DIFF PRESS | diff above relief |
-| W | BATT O'TEMP | NiCd over-temperature |
+| W | BATT O'TEMP / BATT O'TEMP >160 | NiCd ≥ 63 °C / ≥ 71 °C; voice "BATTERY OVERTEMP", faster repeat above 71 °C (CAE p.5-25) |
 | W | DOOR UNLOCKED | cabin door / emergency exit open in flight |
 | W | AOA FAIL | AOA vane / stall warning failed |
 | W | GEAR UNSAFE | gear disagree / not down with a horn condition |
 | W | AP TRIM FAIL | pitch trim runaway / jam |
-| C | GEN OFF L / R | engine running, generator off line |
-| C | BATT DISCHARGE | battery discharging > 15 A (not starting), 10 s |
+| W | T/O CONFIG | takeoff thrust with speed brakes / trim / parking brake wrong (EST wording) |
+| C | GEN OFF L / R | generator off line (engine stopped on the ground: no master) |
+| C | BATT DISCHARGE | discharging > 15 A with an engine running or airborne, 10 s (EST) |
 | C | EMER BUS ON BATT | BATTERY switch EMER |
 | C | MAIN BUS VOLTS LOW | bus < 24.5 V (not starting) |
-| C | FUEL LEVEL LOW L / R | tank < 190 lb |
-| C | FUEL PRESS LOW L / R | engine running, feed pressure low |
+| C | FUEL LOW LEVEL L / R | tank < 190 lb (EST), 4 s |
+| C | FUEL LOW PRESS L / R | feed pressure low (engine stopped on the ground: no master) |
+| C | FUEL FLTR BYPASS L / R | clogged filter (~10 psi ΔP) |
 | C | FUEL IMBALANCE | > 200 lb |
 | C | FADEC FAULT L / R | FADEC failure |
 | C | START ABORT L / R | FADEC auto-abort (hot / hung / no light) |
-| C | HYD FLOW LOW L / R | pressure demanded, EDP flow low / failed |
-| C | HYD PRESS ON | main system pressurized > 25 s with no actuator demand |
+| C | HYD FLOW LOW L / R | EDP flow low: failed, N2 < 40 % or ENG FIRE pushed (no demand needed) |
+| C | HYD PRESS ON | main system still pressurized 30 s after the cycle |
 | C | HYD PRESS LOW | pressure demanded, < 1,000 psi |
 | C | BRAKE PRESS LOW | brake system and accumulator < 900 psi |
-| C | ANTISKID FAIL / ANTISKID OFF | anti-skid inop with switch ON / switch OFF |
+| C | ANTISKID INOP | switch OFF, self test running / failed, fault or unpowered (525AFM-06 p.3-90) |
 | C | EMER BRAKE ON | emergency brake pulled in flight |
 | C | PARK BRAKE ON | parking brake set with throttles advanced |
 | C | FLAPS FAIL | flap disagree / asymmetry |
+| C | FLAPS >35 | flaps > 38° with a throttle at high thrust on the ground, or airborne (525AFM-06 p.3-104.1) |
 | C | GROUND FLAPS | flap handle 60 in flight |
 | C | SPEED BRAKE | speed brakes out with flaps > 17° or below 500 ft RA |
 | C | P/S HTR OFF L / R, AOA HTR FAIL | heaters unpowered in flight |
-| C | ENG A/I COLD L / R, WING A/I COLD | anti-ice selected, insufficient bleed flow (30 / 60 s) |
-| C | TAIL DEICE FAIL | boots selected, no service air / power |
-| C | W/S AIR FAIL | W/S bleed selected, no flow |
-| C | EMER PRESS ON / PRESS SOURCE OFF / PRESS CTRL FAIL | PRESS SOURCE EMER / OFF in flight / controller fault |
+| C | ENGINE ANTI-ICE COLD L / R / L-R, WING ANTI-ICE COLD L / R / L-R | selected and not yet warm / heat lost (M2 flows wording) |
+| C | TAIL DE-ICE FAIL, TAIL DE-ICE LOW TEMP | no service air / power; RAT < −35 °C (EST) |
+| C | W/S AIR FAIL, W/S AIR O'HEAT | no flow; overheat shut-off (525AFM-06 p.3-101) |
+| C | EMER PRESS ON / PRESS SOURCE OFF / PRESS SOURCE FAIL / PRESS CTRL FAIL | EMER selected or automatic / OFF in flight / no inflow (EST) / controller fault |
 | C | OXYGEN LOW | bottle < 400 psi |
 | C | DOOR UNLOCKED (ground), BAGGAGE DOOR | doors open |
 | C | AFCS FAIL, YD FAIL, PITCH TRIM | AFCS / servo failure, YD failure, AP mistrim |
-| C | TAWS FAIL, CONTROL LOCK | TAWS inop; control lock engaged with an engine running |
-| A | START L / R, IGNITION L / R, BOOST PUMP ON L / R | start sequence, igniters, boost pump running |
+| C | TAWS FAIL, CONTROL LOCK | TAWS inop (with a GDU powered); control lock engaged with an engine running |
+| A | START L / R, FUEL BOOST ON L / R | start sequence, boost pump running (ignition: green IGN on the ITT scale) |
 | A | FUEL TRANSFER, GPU ON, AVIONICS DISPATCH, PASS OXY ON, W/S ALCOHOL ON | as named |
-| A | SPD BRK EXTEND, TAIL DEICE, RAIN DOOR OPEN, PARKING BRAKE | as named |
+| A | HYD PRESS ON | main system pressurized (normal during a gear / flap / speed-brake cycle, 525AFM-06 p.3-102) |
+| A | SPD BRK EXTEND | speed brakes fully extended |
+| A | WING/ENG ANTI-ICE ON, ENG ANTI-ICE ON, TAIL DE-ICE ON, TAIL DE-ICE L / R | M2 flows; boot at inflation pressure |
+| A | PARKING BRAKE | parking brake set |
 
-Flight-phase inhibits: takeoff 80 kt → 400 ft RA, landing < 200 ft RA (systems CasManager default).
+CAS power: GIA 1 or GIA 2 (the CAS is a G3000 function). Flight-phase inhibits (`inhibit: 'takeoff+landing'`)
+on every caution and advisory except fire, cabin altitude, gear, oil, doors, park brake, FLAPS >35, start abort
+and control lock: takeoff 80 kt → 400 ft RA, landing < 200 ft RA (FlightPhase defaults, EST CJ family).
 Aurals: master warning tone, caution chime, overspeed clacker (Vmo/Mmo), stick shaker, gear horn,
 AP disconnect (≈2 s Garmin tone), TAWS-B / TCAS I voices, altitude alerter (1,000 / 200 ft).
 
@@ -383,13 +425,17 @@ photos). Vars: `src/aircraft/citation-m2/vars.ts` (`M2.*`), plus standard vars w
 ### 9.1 LH instrument panel — registration plate, limitations placard, ELECTRICAL POWER panel
 Photos (pin1, listing 9525 #24, Jetcraft 525-0851): registration plate, black limitations placard, then the
 ~100 × 110 mm ELECTRICAL POWER panel on the lower LH edge. RH edge: registration plate only (EST "N0000").
+Layout (photos pin1, S&D figures; fix round 1 function lens M2-L13): top row **L GEN | BATTERY (red lever-lock
+cap) | R GEN**; second row **DISPATCH** (amber LED) and **STBY FLT DISPLAY** (STBY BATT light). The M2 has no
+AVIONICS switch (AOPA Mar 2014). EST: the third switch of the second row in the photos is not legible and is
+not modelled.
 | Control | Type | Positions / values | Var | Notes |
 |---|---|---|---|---|
-| BATTERY | 3-pos toggle (lever-lock out of BATT) | EMER −1 / OFF 0 / BATT 1 | `ac.m2.batt_sw` | |
-| AVIONICS | 3-pos toggle | DISPATCH −1 / OFF 0 / ON 1 | `ac.m2.avionics_sw` | |
-| STBY FLT DISPLAY | 3-pos toggle (TEST spring to ON) | OFF 0 / ON 1 / TEST 2 | `ac.m2.stby_disp_sw` | M2 flows prep "TEST/ON", shutdown "OFF"; ESI powered (bus, then its battery) only ON/TEST |
+| L GEN, R GEN (top row, outboard) | 3-pos toggle | RESET −1 (spring to OFF) / OFF 0 / GEN 1 | `ac.m2.gen1_sw`, `gen2_sw` | |
+| BATTERY (top row, centre) | 3-pos toggle, red lever-lock cap (lock out of BATT) | EMER −1 / OFF 0 / BATT 1 | `ac.m2.batt_sw` | BATT also closes the avionics relays |
+| DISPATCH (second row) + amber LED | 2-pos toggle | OFF 0 / DISPATCH 1 | `ac.m2.dispatch_sw`, LED `ac.m2.dispatch_lt` | MFD + GTC 1 + GIA 1 on the aux battery (AOPA Mar 2014) |
+| STBY FLT DISPLAY (second row) | 3-pos toggle (TEST spring to ON) | OFF 0 / ON 1 / TEST 2 | `ac.m2.stby_disp_sw` | M2 flows prep "TEST/ON", shutdown "OFF"; ESI powered (bus, then its battery) only ON/TEST |
 | STBY BATT light | amber indicator | ESI running on its battery (TEST or bus loss) | `ac.m2.stby_batt_lt` | EST legend |
-| L GEN, R GEN | 3-pos toggle | RESET −1 (spring to OFF) / OFF 0 / GEN 1 | `ac.m2.gen1_sw`, `gen2_sw` | |
 | BATTERY DISCONNECT (LH sidewall above the armrest) | guarded 2-pos toggle | NORMAL 0 / DISC 1 | `ac.m2.batt_disc` | CAE differences p.5-23; relay NiCd ↔ HOT BATT, coil drains the battery in DISC |
 | CB panels (side consoles) | pull breakers | in 1 / out 0 | `cb.<load>` for every load in §6.1 | inclined 45° console tops, coloured collars (EST) |
 EIS shows VOLTS L/R, GEN AMPS, BATT A/V (no separate meters).
@@ -426,7 +472,7 @@ card slots (no function). Displays from `sys.suite.displayList()` (`pfd1`, `mfd`
 | | AIR SOURCE SELECT | rotary | OFF 0 / L 1 / BOTH 3 / R 2 / EMER 4 / FRESH AIR 5 (EST) | `ac.m2.press_source` |
 | WINDSHIELD | W/S BLEED L, R | pointer rotaries (white arc) + green flow lights | OFF 0 / LOW 1 / HI 2 | `ac.m2.ws_bleed1_sw`, `ws_bleed2_sw`; lights `ac.m2.ws_bleed1_lt/2` |
 | | W/S ALCOHOL | guarded toggle | OFF 0 / ON 1 | `ac.m2.ws_alcohol_sw` |
-| ICE PROTECTION | P/S HEAT, ENG L, ENG R, WING | toggles + green lights | OFF 0 / ON 1 | `ac.m2.pitot_static_sw`, `eng_ai1/2_sw`, `wing_ai_sw`; lights `ac.m2.ps_heat_lt`, `eai1/2_lt`, `wai_lt` (EST mapping) |
+| ICE PROTECTION | P/S HEAT; L, R WING/ENG | toggles + green lights | P/S OFF 0 / ON 1; WING/ENG OFF 0 / ENG 1 / WING/ENG 2 (525AFM-06 p.3-99) | `ac.m2.pitot_static_sw`, `eng_ai1/2_sw`; lights `ac.m2.ps_heat_lt`, `ai1/2_lt` (EST mapping) |
 | | TAIL (de-ice) | 3-pos (MAN spring) | MAN −1 / OFF 0 / AUTO 1 | `ac.m2.tail_deice_sw` |
 | FUEL BOOST | L, R | 3-pos toggles | OFF −1 / NORM 0 / ON 1 (CAE p.5-30) | `ac.m2.boost1_sw`, `boost2_sw` |
 | TEMP (next to the gear module) | CONTROL | toggle | AUTO 0 / MAN 1 | `ac.m2.temp_mode` |
@@ -464,7 +510,7 @@ Map lights: a dimmer on each overhead reading-light fixture (`ac.m2.map_lt1/2`, 
 | ENGINE START L / DISENGAGE / R | three abutting square buttons on the sloped aft face of the shroud, legends above | momentary | `ac.m2.start1`, `start2` (lit `ac.m2.start1_lt/_2`), `start_diseng` |
 | Throttles L, R | short levers, horizontal grips; slots TO / CLB / CRU / IDLE / OFF | OFF −0.1 / IDLE 0 / CRU 0.62 / CLB 0.82 / TO 1.0 | `ac.m2.tla1`, `tla2` |
 | TO/GA | button on the LH throttle | momentary | `ap.toga` |
-| FLAPS handle | lever, gates 0° / T.O. & APPR 15° / LAND 35° / GROUND FLAPS 60° – GROUND USE ONLY | 0 / 1 / 2 / 3 | `ac.m2.flap_handle` |
+| FLAPS handle | follow-up lever 0–35 (push-down gate at T.O. & APPR 15°, lift gate at LAND 35°), GROUND FLAPS 60° – GROUND USE ONLY | 0 … 1 (15°) … 2 (35°) / 3 | `ac.m2.flap_handle` → `ac.m2.flap_lever_cmd` (38° switch) |
 | SPEED BRAKE | small lever in a fore-aft slot, LH lower quadrant face | RETRACT 0 / EXTEND 1 | `ac.m2.speedbrake` |
 | Elevator trim wheel + indicator | wheel | −1 ND … +1 NU | `ac.m2.pitch_trim` |
 | Rudder trim knob, aileron trim knob | pointer knobs on the aft face of the black lower pedestal (rudder above aileron, EST) | −1 … +1 | `ac.m2.rud_trim`, `ail_trim` |
@@ -473,8 +519,8 @@ No ignition switches on the pedestal (S&D15 §10.2.D; AOPA Mar 2014): see §9.10
 ### 9.8 Control wheels (both), pedals, armrests
 | Control | Var / event |
 |---|---|
-| Pitch trim switch (outboard horn top) | `ac.m2.yoke_trim1/2` (−1 / 0 / +1); keyboard `input.pitch_trim_rate` |
-| AP/TRIM DISC (red, outboard horn) | event `ap.disc` |
+| Pitch trim split switch (outboard horn top): ARM and direction halves | `ac.m2.yoke_trim_arm1/2`, `ac.m2.yoke_trim1/2` (−1 / 0 / +1) → `ac.m2.yoke_trim_cmd`; keyboard `input.pitch_trim_rate` |
+| AP/TRIM DISC (red, outboard horn) | event `ap.disc` + held `ac.m2.ap_trim_disc1/2` (interrupts electric / AP trim) |
 | CWS (white-ringed button on top of the inboard horn) | event `ap.cws` { pressed } |
 | Hub shroud with CITATION M2 plaque; hand microphone on each column | static (SCOPE: hand-mic key not modelled) |
 | PTT under each armrest | `ac.m2.ptt1/2` → `g3k.audio<n>.tx` (COM field shows TX; SCOPE: no transmission model) |
@@ -489,7 +535,7 @@ Handles on a narrow lip under the LH tilt panel (no knee panel; photos pin1 / S&
 | PARKING BRAKE | pull handle | 0 / 1 | `ac.m2.park_brake` |
 | EMERGENCY BRAKE | pull handle (proportional) | 0..1 | `ac.m2.emer_brake` |
 | CONTROL LOCK | handle below the pilot's panel | 0 stowed / 1 engaged | `ac.m2.control_lock` |
-| RAIN DOORS L / R | levers | 0 / 1 | `ac.m2.rain_door1/2` |
+| RAIN DOORS L / R | levers | 0 / 1 | `ac.m2.rain_door1/2` (EST: two levers per S&D21 §9.7.2 "rain doors"; CJ1 AFM describes one handle; no M2 photo; no CAS message) |
 | Crew O₂ masks | stowage doors / regulator | on 0/1; NORMAL 0 / 100 % 1 / EMER 2 | `ac.m2.mask1_on`, `mask1_mode` (…2) |
 | Doors (ground menu/exterior) | cabin, emergency exit, nose baggage L/R, tail baggage | 0 closed / 1 open | `ac.m2.door_<id>` |
 | GPU | ground-services menu | 0 / 1 | `ac.m2.gpu_connected` |
@@ -498,7 +544,7 @@ Handles on a narrow lip under the LH tilt panel (no knee panel; photos pin1 / S&
 | Page | Control | Values | Var / event |
 |---|---|---|---|
 | FUEL | L / R BOOST (mirror of the tilt switches), TRANSFER | OFF/NORM/ON; L TANK / OFF / R TANK | `ac.m2.boost1/2_sw`, `ac.m2.fuel_xfer` |
-| PRESSURIZATION / ECS | LDG ELEV, CABIN TEMP, TEMP MODE, A/C, CABIN FAN, DEFOG, PRESS MODE, CABIN UP / DN | … | `ac.m2.ldg_elev_ft`, `temp_sel`, `temp_mode`, `air_cond_sw`, `cabin_fan`, `air_distrib`, `press_mode`; events `ac.m2.press_man_up/dn` (1 s valve drive each) |
+| PRESSURIZATION / ECS | LDG ELEV, CABIN TEMP, TEMP MODE, A/C, CABIN FAN, DEFOG, PRESS MODE, CABIN UP / DN | … | `ac.m2.ldg_elev_ft`, `temp_sel`, `temp_mode`, `air_cond_sw`, `cabin_fan`, `air_distrib`, `press_mode`; events `ac.m2.press_man_up/dn` (1 s valve drive each; UP = cabin climbs, DN = cabin descends) |
 | CABIN | PASS SAFETY, CABIN LTS, PASS OXY | OFF/BELT/BELT & NS; on/off; CREW ONLY/NORM/MAN DROP | `ac.m2.pax_safety`, `cabin_lt`, `pax_oxy` |
 | ENGINE | L / R IGNITION | NORM 0 / ON 1 | `ac.m2.ign1_sw`, `ign2_sw` (SCOPE: page layout EST) |
 | SYSTEM TESTS | TEST (cycle), FIRE WARN, ANNU, TAWS | OFF 0 / FIRE WARN 1 / ANNU 2 / STALL 3 / O'SPEED 4 / LDG GEAR 5 / TAWS 6; returns to OFF after 10 s (EST) | `ac.m2.test_sel` |
@@ -510,16 +556,21 @@ EST (CJ-family single-pilot flow; AFM Vol. 2 525NPD not public).
    BATT DISC → BATTERY BATT (no voltage) → BATTERY DISCONNECT NORM (≥ 24 V) (AFM cockpit inspection 6-8),
    STBY FLT DISPLAY TEST/ON, EMER LIGHTS ARMED, system tests on the GTC (FIRE WARN, ANNU, STALL, O'SPEED,
    TAWS); fuel quantity.
-2. **Before start**: doors closed, AVIONICS ON (or DISPATCH for planning), GEN switches GEN, boost NORM,
+2. **Before start**: doors closed, DISPATCH OFF / avionics up on the battery, GEN switches GEN, boost NORM,
    ignition NORM (GTC ENGINE page), beacon ON, PASS SAFETY BELT & NO SMOKE, flight plan/TOLD on the GTC.
 3. **Engine start** (right first, EST): ENGINE START R → START R advisory, N2 rises on the starter;
    at 8–10 % N2 throttle IDLE → FADEC light-off (ITT rise within 10 s), starter cut-out ~45 % N2,
-   stabilized idle ~52 % N2 / 25 % N1 (EST) in ~30 s; GEN OFF R clears. Repeat left (generator-assisted).
+   stabilized idle ~52 % N2 / 25 % N1 (EST) in ~30 s; GEN OFF / OIL PRESS / FUEL LOW PRESS / HYD FLOW LOW R
+   extinguish (525AFM-06 p.3-88 step 6). Repeat left (generator-assisted; beacon flashes during START).
    Abort: START DISENGAGE / throttle CUTOFF (FADEC auto-aborts HOT/HUNG/NO LIGHT).
-4. **Before taxi**: flaps 15, trim T/O, AIR SOURCE SELECT BOTH, anti-skid ON, A/C as required, lights.
+4. **Before taxi**: electric trim check (each half alone no trim, AP/TRIM DISC stops it, pilot overrides
+   copilot), GROUND FLAPS check (speed brakes deploy; > 85 % N2 retract + FLAPS >35; idle redeploy; T.O. & APPR
+   retract) (525AFM-06 p.3-89.1), flaps 15, trim T/O, AIR SOURCE SELECT BOTH, anti-skid ON (INOP out after the
+   self test), A/C as required, lights.
 5. **Taxi**: brakes, steering (pedals ±20°), instruments.
-6. **Before takeoff**: flaps 15 (or 0), speed brakes retracted, trims set, P/S heat ON, anti-ice as
-   required (≤ 10 °C in visible moisture), XPDR ALT, landing lights ON, anti-coll ALL, CAS clear.
+6. **Before takeoff**: flaps 15 (or 0), speed brakes retracted, trims set, P/S heat ON, ice-protection check
+   if icing expected (WING/ENG and TAIL: COLD displayed then clear within 60 s), anti-ice as required
+   (≤ 10 °C in visible moisture), XPDR ALT, landing lights ON, anti-coll ALL, CAS clear.
 7. **Takeoff**: throttles TO, VR, pitch ~10°, positive rate gear UP, flaps UP at V2+10, CLB detent,
    YD/AP as required.
 8. **Climb**: CLB detent, FLC 220 KIAS / M0.60 (EST schedule, see §5.1), pressurization check.
@@ -528,18 +579,22 @@ EST (CJ-family single-pilot flow; AFM Vol. 2 525NPD not public).
 11. **Approach**: flaps 15 below 200, gear DN below 186, flaps 35 below 161, VREF + wind.
 12. **Landing**: AP off by DA/MDA (not an autoland system), throttles IDLE, ground flaps 60 (speed
     brakes deploy), brakes/anti-skid.
-13. **After landing / shutdown**: flaps up, speed brakes retract, P/S heat off, lights; AVIONICS OFF,
+13. **After landing / shutdown**: flaps up, speed brakes retract, P/S heat off, lights;
     throttles OFF, lights OFF, STBY FLT DISPLAY OFF, EMERGENCY LIGHTS OFF, BATTERY OFF, control lock ON.
 
 ### 10.1 Key abnormal procedures (EST, CJ family)
 - **Engine fire**: throttle OFF, ENG FIRE lift cover and push, BOTTLE (lit) push, FUEL BOOST (affected)
   OFF then NORM; second bottle after 30 s if the warning persists; single-engine procedures (tested).
 - **Environmental smoke**: masks 100 %, AIR SOURCE SELECT L, R, then FRESH AIR (cabin depressurizes).
-- **Fuel transfer**: FUEL BOOST OFF on the receiving side (525FM-15 p.2-11), TRANSFER from the heavy tank (GTC).
+- **Fuel transfer**: FUEL BOOST OFF on the receiving side (525FM-15 p.2-11), TRANSFER arrow toward the light tank
+  (GTC; R TANK moves fuel left → right, 525AFM-06 p.3-113).
 - **Generator failure**: GEN RESET then GEN; if off line: single-generator, loads shed (tested).
-- **Dual generator failure**: shed loads, BATTERY EMER → emergency bus (PFD1, GTC1, COM/NAV 1, ESI).
+- **Dual generator failure (GEN OFF L-R)**: GEN RESET; BATTERY EMER → emergency bus (PFD 1 reversionary on
+  ADC 2 / AHRS 2, GTC 1, COM/NAV 1, XPDR 1, audio, GMC, flood lights, ESI); autopilot inoperative (525AFM-06 p.3-26).
+- **Electric trim runaway**: AP/TRIM DISC press and hold, trim manually, PITCH TRIM CB pull.
 - **Hydraulic failure**: gear by emergency release + blow-down, flaps/speed brakes inoperative (tested).
-- **Emergency descent / CABIN ALTITUDE**: masks on 100 %, PASS OXY (auto drop at 13,500 ft), descend (tested).
+- **Emergency descent / CABIN ALTITUDE**: masks on 100 %, PASS OXY (auto drop at 14,500 ft; automatic EMER
+  pressurization at 14,500 ft), descend (tested).
 - **Anti-skid failure**: brake gently; emergency brake without anti-skid.
 
 ## 11. Simulation model summary and verification
@@ -781,3 +836,42 @@ speed brakes on the ground only, GROUND FLAPS caution in flight; night detection
 - **Open / EST**: exact M2 tilt-panel legends (no legible reference found); HORN SILENCE location; the
   shared bizjet yoke geometry (horn height) and the seat's inboard armrests over the aft pedestal are shared-library
   shapes, not changed; GCU 275 key logic follows G1000-family practice (pilot's guide not public).
+
+## 18. Fix round 1 — function lens (M2-L13/L14, M2-F01 … F59, M2-PROC-02 … 35)
+Tests: `tests/aircraft/citation-m2/fixround1-function.test.ts` (37 cases, each fails without its fix).
+- **Electrical**: no AVIONICS switch; BATTERY BATT closes the avionics relays; ELECTRICAL POWER panel L GEN |
+  BATTERY (red cap) | R GEN over DISPATCH (amber LED) | STBY FLT DISPLAY; DISPATCH = MFD + GTC 1 + GIA 1 (+ audio 1,
+  EST) from the aux battery; EMER bus per the M2 flows / CAE p.5-25 list (XPDR split into XPDR 1 EMER / XPDR 2 AVN 2,
+  audio 2, flood lights, R P/S heat, AFCS panel on EMER; ADC 1 / AHRS 1 / AP servos lost on EMER; PFD 1 reverts to
+  ADC 2 / AHRS 2 and to the reversionary format automatically); aux battery supports EMER and AVN 2 during starts;
+  inverter off in EMER; battery-only airstarts; SPD BRK breaker; GEN AMPS limits scheduled.
+- **CAS**: power from the GIAs; CJ-family texts; engine-off GEN / OIL / FUEL LOW PRESS / HYD FLOW LOW posted
+  without master before start and extinguishing during it, with masters when running or airborne; GEN OFF L-R
+  warning ("GENERATOR FAIL"); BATT O'TEMP voices and >160; takeoff / landing inhibits; FLAPS >35, T/O CONFIG,
+  FUEL FLTR BYPASS, W/S AIR O'HEAT, PRESS SOURCE FAIL, TAIL DE-ICE LOW TEMP (EST), anti-ice COLD L / R / L-R and
+  ON advisories, white HYD PRESS ON advisory; IGNITION moved to a green IGN legend on the ITT scale; no
+  RAIN DOOR / BATT DISCHARGE-on-ground nuisance messages.
+- **Fuel**: transfer direction per the selector arrow, no transfer with the receiving pump on, 600 lb/h; boost
+  NORM low-pressure latch.
+- **Pneumatic / pressurization / oxygen**: bleed source valves fail open (selector unpowered = BOTH); automatic
+  EMER pressurization 14,500 / 13,500 ft; dump needs DC, works in MANUAL, limit valves at 14,500 ft; CABIN ALTITUDE
+  9,500 ft (14,500 ft high-field mode); masks 14,500 ft; differential-limited schedule with the departure field
+  held; in-air presets take the nearest airport elevation; ramp differential < 0.01 psi.
+- **Ice**: per-side WING/ENG switches, wing valve off below 75 % N2, warm-up / cool-down COLD logic (ground check
+  shows COLD then clear), L-then-R boots with a 3 min dwell and MANUAL both, W/S overheat model, 10 min alcohol.
+- **Flight controls / gear / brakes**: speed brakes retract at high thrust even with ground flaps and redeploy at
+  idle; 38° flap switch; follow-up flap handle with gates; split trim switch + pilot priority; AP/TRIM DISC holds
+  off electric / AP trim; yoke trim disconnects the AP; AFCS sensor validity follows the coupled side;
+  blow-down only after the T-handle (free fall first); horn on ADC 2 and in the LDG GEAR test; anti-skid self
+  test; finite emergency brake bottle; SPD BRK EXTEND at full extension.
+- **Engines / lights / comm**: FADEC continuous ignition with engine anti-ice, on approach (gear down) and 8 s
+  after touchdown; beacon during START; PULSE alternates the landing lights; EMER COMM holds COM 1 on 121.5;
+  ADCs valid at once after in-air presets.
+- **Shared-library additions** (additive, defaults unchanged): Pressurization `dumpAllModes`, `dumpPower`,
+  `dumpLimitFt`, `cabinAltWarnFtBinding`, `departureFieldFt`; Flaps `continuous`; LandingGear
+  `alternate.freefallTrigger`, `horn.test`; Afcs `disconnect.trimInputs`; G3000 EIS ITT `ignVar`.
+- **Open / EST**: exact M2 G3000 CAS wording (M2 AFM not public); the third second-row switch on the ELECTRICAL
+  POWER panel; M2 windshield control set (L / R W/S BLEED knobs kept) and rain-removal handle count; throttle
+  high-thrust switch position (EST just above CRU); W/S temperature, boot inflation, anti-ice warm-up, emergency
+  brake bottle and anti-skid test timings; the yoke split switch halves are separate cockpit controls, so mouse
+  trim from the yoke needs both halves (keyboard trim unaffected).

@@ -38,7 +38,8 @@ describe('Citation M2 electrical power-up flow (battery -> GPU -> generators)', 
     expect(v.get('elec.batt_bus_powered')).toBe(0);
     expect(v.get('elec.emer_powered')).toBe(0);
 
-    // 1) BATTERY BATT: battery bus, emergency bus and crossfeeds on the NiCd (~24-25 V); avionics off until AVIONICS ON.
+    // 1) BATTERY BATT: battery bus, emergency bus, crossfeeds and (no avionics switch, AOPA Mar 2014) the avionics
+    //    buses on the NiCd (~24-25 V).
     v.set(M2.controlLock, 0);
     v.set(M2.battSw, 1);
     r.step(2);
@@ -46,14 +47,16 @@ describe('Citation M2 electrical power-up flow (battery -> GPU -> generators)', 
     expect(v.get('elec.emer_powered')).toBe(1);
     expect(v.get('elec.batt_bus_v')).toBeGreaterThan(23);
     expect(v.get('elec.batt_bus_v')).toBeLessThan(27);
-    expect(v.get('elec.avn1_powered')).toBe(0);
-    v.set(M2.avionicsSw, 1);
-    r.step(12);
     expect(v.get('elec.avn1_powered')).toBe(1);
     expect(v.get('elec.avn2_powered')).toBe(1);
-    // On the battery with the avionics up: discharging, BATT DISCHARGE caution after its delay.
+    r.step(12);
+    // On the battery with the avionics up: discharging, but battery-only ground operation is normal (525AFM-06
+    // p.3-86): no BATT DISCHARGE caution with the engines stopped on the ground (M2-F17).
     expect(v.get('elec.batt_amps')).toBeLessThan(-15);
-    expect(v.get('cas.batt_disch')).toBe(1);
+    expect(v.get('cas.batt_disch')).toBe(0);
+    // Engine-off annunciations posted without the master (start check, 525AFM-06 p.3-88).
+    expect(v.get('cas.gen_off_l_stop')).toBe(1);
+    expect(v.get('cas.oil_press_r_stop')).toBe(1);
     expect(v.get('cas.gpu')).toBe(0);
 
     // 2) GPU connected (ground-services menu): 28 V on the battery bus, GPU ON advisory, battery charging, BATT DISCHARGE clears.
@@ -73,8 +76,10 @@ describe('Citation M2 electrical power-up flow (battery -> GPU -> generators)', 
     r.step(3);
     expect(v.get(ENG.running(1))).toBe(1);
     expect(v.get(ENG.running(2))).toBe(1);
-    expect(v.get('cas.gen_off_l')).toBe(1);
-    expect(v.get('cas.gen_off_r')).toBe(1);
+    // Both generators off with the engines running: GEN OFF L-R warning (525AFM-06 p.3-106), singles suppressed.
+    expect(v.get('cas.gen_off_lr')).toBe(1);
+    expect(v.get('cas.gen_off_l')).toBe(0);
+    expect(v.get('alert.master_warning')).toBe(1);
 
     // 4) Generators ON, GPU disconnected: both generators on line at 28.5 V, cautions and GPU advisory clear.
     v.set(M2.genSw(1), 1);
@@ -105,13 +110,18 @@ describe('Citation M2 electrical power-up flow (battery -> GPU -> generators)', 
     const r = makeCockpitRig({ state: 'cold_dark' });
     const v = r.vars;
     v.set(M2.battSw, -1);
-    v.set(M2.avionicsSw, 1);
     r.step(2);
     expect(v.get('elec.emer_powered')).toBe(1);
     expect(v.get('elec.batt_bus_powered')).toBe(0);
     expect(v.get('elec.l_main_powered')).toBe(0);
-    expect(v.get('elec.avn1_powered')).toBe(1); // PFD 1 / GTC 1 side from the emergency bus
+    // M2 flows EMER BUS ITEMS: PFD 1 (reversion, ADC 2 / AHRS 2), GTC 1, COM/NAV 1, XPDR 1, audio 1 and 2, AFCS
+    // control panel, flood lights; AVN 1 (ADC 1 / AHRS 1 / AP servos) and AVN 2 are off.
+    expect(v.get('elec.avn1_powered')).toBe(0);
     expect(v.get('elec.avn2_powered')).toBe(0);
+    for (const l of ['pfd1', 'gtc1', 'gia1', 'adc2', 'ahrs2', 'xpdr1', 'audio1', 'audio2', 'gmc', 'flood_lts', 'gear_ctl', 'flap_ctl']) {
+      expect(v.get(`elec.${l}_powered`), l).toBe(1);
+    }
+    for (const l of ['adc1', 'ahrs1', 'ap_servos', 'mfd', 'pfd2', 'xpdr2']) expect(v.get(`elec.${l}_powered`), l).toBe(0);
     expect(v.get('cas.emer_bus')).toBe(1);
     // 110 V outlet: the inverter is on the R XFEED bus, dead in EMER (CAE: "will not function with the battery switch in EMER").
     click(r.control('m2.side.ac_outlet'));

@@ -56,6 +56,26 @@ export interface PressurizationConfig {
   manualCommand?: Binding;
   /** Cabin dump (outflow valve fully open in AUTO/ALTN). */
   dump?: Binding;
+  /** (Appended by the citation-m2 aircraft.) Dump effective in every mode, MANUAL included. Default false. */
+  dumpAllModes?: boolean;
+  /** (Appended by the citation-m2 aircraft.) Power needed by the dump solenoid. Default true. */
+  dumpPower?: Binding;
+  /**
+   * (Appended by the citation-m2 aircraft.) Maximum-limit valve: while dumping (or with the MANUAL valve fully open)
+   * the outflow valves close when the cabin reaches this altitude (ft), e.g. Citation 14,500 ft. Default none.
+   */
+  dumpLimitFt?: number;
+  /**
+   * (Appended by the citation-m2 aircraft.) CABIN ALTITUDE warning threshold as a binding (ft), e.g. a high-altitude
+   * airport mode; overrides `cabinAltWarnFt` when given (200 ft hysteresis).
+   */
+  cabinAltWarnFtBinding?: Binding;
+  /**
+   * (Appended by the citation-m2 aircraft.) Departure field elevation (ft) for differential-limited controllers: in
+   * the climb the auto schedule never commands the cabin below it, so the cabin is held at the departure field until
+   * the schedule or the differential limit requires more. Default none.
+   */
+  departureFieldFt?: Binding;
   /** AUTO fault -> automatic transfer to ALTN (737NG). Default true. */
   autoTransferToAltn?: boolean;
   /** CABIN ALTITUDE warning threshold (ft). Default 10,000 (737: warning horn above 10,000 ft). */

@@ -29,6 +29,11 @@ import { LandingGear, Brakes } from '../../../systems/gear';
 import { FLAP_DETENTS } from '../data';
 import { M2 } from '../vars';
 
+/** Derived flap lever command after the 38-degree switch logic (written by M2Logic). */
+export const M2_FLAP_LEVER_CMD = 'ac.m2.flap_lever_cmd';
+/** Neither AP/TRIM DISC button held. */
+export const TRIM_NOT_INTERRUPTED = `!${M2.apTrimDisc(1)} && !${M2.apTrimDisc(2)}`;
+
 const HYD_MAIN = 'clamp01(hyd.main_psi / 1200)';
 
 /** Pitch trim takeoff band (normalized units). EST: bracket of the computed takeoff trims for the certified CG range (tests). */
@@ -61,17 +66,22 @@ export function createFlightControls(ctx: SimContext): FlightControlBlocks {
     initial: 0.25,
     electric: {
       power: 'elec.trim_pitch_powered',
-      switchVars: ['input.pitch_trim_rate', M2.yokeTrim(1), M2.yokeTrim(2)],
+      // AP/TRIM DISC held interrupts the electric trim (525AFM-06 p.3-89.1 before-taxi check; runaway procedure).
+      enable: TRIM_NOT_INTERRUPTED,
+      // Yoke split switches after the arm/direction and pilot-priority logic (M2Logic), plus the keyboard trim input.
+      switchVars: ['input.pitch_trim_rate', M2.yokeTrimCmd],
       // EST: full travel ~20 s at low speed, ~40 s at high speed (speed-scheduled trim rate).
       rate: { x: [100, 200, 260], y: [0.1, 0.06, 0.045] },
     },
-    autopilot: { power: 'elec.ap_servos_powered', rate: { x: [100, 260], y: [0.06, 0.03] } },
+    autopilot: { power: 'elec.ap_servos_powered', enable: TRIM_NOT_INTERRUPTED, rate: { x: [100, 260], y: [0.06, 0.03] } },
     takeoffBand: PITCH_TRIM_TO_BAND,
   });
   const aileronTrim = new TrimAxis(ctx, { axis: 'roll', range: [-1, 1], positionVar: M2.aileronTrim });
   const rudderTrim = new TrimAxis(ctx, { axis: 'yaw', range: [-1, 1], positionVar: M2.rudderTrim });
   const flaps = new Flaps(ctx, {
-    leverVar: M2.flapHandle,
+    // Handle through the 38-degree switch logic (M2Logic: flap_lever_cmd); follow-up handle 0-35 (S&D15 §9.1).
+    leverVar: M2_FLAP_LEVER_CMD,
+    continuous: true,
     detents: FLAP_DETENTS.map((d) => ({ ...d })),
     // Electrically controlled (EMER bus flap control), hydraulically actuated; EST ~10 s 0 -> 35.
     normal: { power: `${HYD_MAIN} * elec.flap_ctl_powered`, rateDegPerS: 3.5 },
@@ -82,7 +92,7 @@ export function createFlightControls(ctx: SimContext): FlightControlBlocks {
     speedbrake: 'panels',
     groundSpoilers: false,
     travelS: 2, // EST
-    flightPower: `${HYD_MAIN} * elec.flap_ctl_powered`,
+    flightPower: `${HYD_MAIN} * elec.spd_brk_powered`, // SPEED BRAKE breaker (525AFM-06 p.3-102)
   });
   const yd = new YawDamper(ctx, {
     power: 'elec.ap_servos_powered',
@@ -104,11 +114,16 @@ export function createFlightControls(ctx: SimContext): FlightControlBlocks {
     actuation: { power: `${HYD_MAIN} * elec.gear_ctl_powered` },
     doors: { openS: 0.6, closeS: 0.6 },
     groundRetractInhibit: true,
-    alternate: { kind: 'blowdown', trigger: `${M2.gearEmerRelease} || ${M2.gearBlowdown}`, blowdownS: 4 },
+    // 525AFM-06 p.3-103: the T-handle releases the uplocks (free fall); "After the T handle has been pulled the round
+    // collar handle can be pulled to discharge the nitrogen blow down system" (blow-down only after the T-handle).
+    alternate: { kind: 'blowdown', trigger: `${M2.gearBlowdown} && ${M2.gearEmerRelease}`, freefallTrigger: M2.gearEmerRelease, blowdownS: 4 },
     horn: {
+      // SYSTEM TESTS LDG GEAR: lights and horn (EST, CJ-family rotary test), not silenceable.
+      test: `${M2.testSel} == 5`,
       rules: [
-        // S&D15 §7: gear up, < 130 KIAS and either throttle below ~85 % N2 (silenceable).
-        { when: 'gear.air_ground == 0 && adc1.ias_kt < 130 && (eng1.n2_pct < 85 || eng2.n2_pct < 85)', silenceable: true, label: 'THROTTLE' },
+        // 525AFM-06 p.3-103: gear up, "Airspeed below 130 KIAS (copilot's indicator)" and either throttle below ~85 % N2
+        // (silenceable); ADC 1 when ADC 2 is invalid.
+        { when: 'gear.air_ground == 0 && (adc2.valid ? adc2.ias_kt : adc1.ias_kt) < 130 && (eng1.n2_pct < 85 || eng2.n2_pct < 85)', silenceable: true, label: 'THROTTLE' },
         // Flaps beyond the approach setting with the gear up: cannot be silenced (CJ family, EST).
         { when: 'gear.air_ground == 0 && surf.flaps_deg > 17', silenceable: false, label: 'FLAPS' },
       ],
@@ -120,9 +135,11 @@ export function createFlightControls(ctx: SimContext): FlightControlBlocks {
     maxPsi: 1400, // EST metered brake pressure
     minSourcePsi: 900,
     accumulator: { chargeFrom: 'hyd.brk_psi', prechargePsi: 650, maxPsi: 1500 },
-    antiskid: { enabled: `${M2.antiskidSw} && elec.antiskid_powered`, minSpeedKt: 12 }, // S&D15 §7: anti-skid above 12 kt
+    // S&D15 §7: anti-skid above 12 kt; inoperative until its power-up self-test has passed (M2Logic, 525AFM-06 p.3-90).
+    antiskid: { enabled: `${M2.antiskidSw} && elec.antiskid_powered && !ac.m2.antiskid_test && !ac.m2.antiskid_fail`, minSpeedKt: 12 },
     parking: { var: M2.parkBrake, kind: 'hydraulic' },
-    emergency: { var: M2.emerBrake, pressurePsi: 1100 }, // pneumatic back-up, EST
+    // Pneumatic back-up (S&D21 §7.3) from a finite bottle (EST charge / consumption, M2Logic).
+    emergency: { var: M2.emerBrake, pressurePsi: `min(1100, ${M2.emerBrakeBottlePsi})` },
     temperature: { heatCapacityJPerK: 9000 },
   });
   return { fcs, pitchTrim, aileronTrim, rudderTrim, flaps, speedbrakes, yd, steering, gear, brakes };

@@ -71,9 +71,8 @@ describe('M2 function probe', () => {
     const r = makeM2({ state: 'cold_dark', fuelLb: 2000 });
     const v = r.vars;
     v.set(M2.battSw, -1);
-    v.set(M2.avionicsSw, 1);
     r.run(3);
-    const ids = ['emer', 'batt_bus', 'l_main', 'r_main', 'l_xfeed', 'r_xfeed', 'avn1', 'avn2', 'pfd1', 'mfd', 'pfd2', 'gtc1', 'gtc2', 'gia1', 'gia2', 'adc1', 'adc2', 'ahrs1', 'ahrs2', 'gmc', 'ap_servos', 'audio1', 'audio2', 'xpdr', 'dme', 'pitot_l', 'pitot_r', 'flood_lts', 'gear_ctl', 'flap_ctl', 'esi', 'inverter', 'hyd_brake_pump', 'press_ctl'];
+    const ids = ['emer', 'batt_bus', 'l_main', 'r_main', 'l_xfeed', 'r_xfeed', 'avn1', 'avn2', 'pfd1', 'mfd', 'pfd2', 'gtc1', 'gtc2', 'gia1', 'gia2', 'adc1', 'adc2', 'ahrs1', 'ahrs2', 'gmc', 'ap_servos', 'audio1', 'audio2', 'xpdr1', 'xpdr2', 'dme', 'pitot_l', 'pitot_r', 'flood_lts', 'gear_ctl', 'flap_ctl', 'esi', 'inverter', 'hyd_brake_pump', 'press_ctl'];
     log(`BATT EMER (engines off): ${ids.map((i) => `${i}=${v.get(`elec.${i}_powered`)}`).join(' ')}`);
     log(`BATT EMER CAS: ${cas(r)}`);
     // Ground running, BATTERY OFF with both generators on.
@@ -184,7 +183,6 @@ describe('M2 function probe', () => {
     const r = makeM2({ state: 'cold_dark', fuelLb: 2000 });
     const v = r.vars;
     v.set(M2.battSw, 1);
-    v.set(M2.avionicsSw, 1);
     v.set(M2.genSw(1), 1);
     v.set(M2.genSw(2), 1);
     v.set(M2.controlLock, 0);
@@ -228,7 +226,6 @@ describe('M2 function probe', () => {
     g.run(2);
     g.vars.set(M2.tla(1), TLA.cutoff);
     g.vars.set(M2.tla(2), TLA.cutoff);
-    g.vars.set(M2.avionicsSw, 0);
     g.run(40);
     g.vars.set(M2.battSw, 0);
     g.run(60);
@@ -238,10 +235,11 @@ describe('M2 function probe', () => {
     a.run(2);
     a.vars.set(M2.engAiSw(1), 1);
     a.vars.set(M2.engAiSw(2), 1);
-    a.vars.set(M2.wingAiSw, 1);
+    a.vars.set(M2.engAiSw(1), 2);
+    a.vars.set(M2.engAiSw(2), 2);
     a.vars.set(M2.wsBleedSw(1), 2);
     a.run(90);
-    log(`ground idle anti-ice ON 90 s: eai1 ${a.vars.get('pneu.eai1_ok').toFixed(2)} wai ${a.vars.get('pneu.wai_ok').toFixed(2)} bleed ${a.vars.get('pneu.bleed_psi').toFixed(1)} CAS: ${cas(a)}`);
+    log(`ground idle anti-ice ON 90 s: eai1 ${a.vars.get('pneu.eai1_ok').toFixed(2)} wai ${a.vars.get('pneu.wai1_ok').toFixed(2)} bleed ${a.vars.get('pneu.bleed_psi').toFixed(1)} CAS: ${cas(a)}`);
     expect(true).toBe(true);
   });
 

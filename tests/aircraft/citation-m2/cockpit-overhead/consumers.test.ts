@@ -19,7 +19,7 @@ import { GDU_THERMAL, M2_AVN_HEALTH_VARS } from '../../../../src/aircraft/citati
 import { allLoadsOn, click, makeCockpitRig, recordReads, type CockpitRig } from './harness';
 
 /** Feeders (bus links) are checked through their bus in breakers.test.ts. */
-const FEEDERS = new Set(['avn1', 'avn2', 'l_xfeed', 'aux_batt']);
+const FEEDERS = new Set(['avn1', 'avn2', 'l_xfeed', 'aux_batt', 'dispatch']);
 
 function ready(): CockpitRig {
   const r = makeCockpitRig({ state: 'ready_to_taxi' });

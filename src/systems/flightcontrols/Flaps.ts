@@ -94,6 +94,12 @@ export interface FlapsConfig {
   iasVar?: string;
   /** Initial flap angle if surf.flaps_deg is unset. Default the first detent's angle. */
   initialDeg?: number;
+  /**
+   * (Appended by the citation-m2 aircraft.) Follow-up handle: a lever value between two detents commands the
+   * proportional angle between their `flapDeg` (Citation "any intermediate position from zero to 35 degrees").
+   * Default false (nearest detent).
+   */
+  continuous?: boolean;
 }
 
 export class Flaps implements Subsystem {
@@ -150,6 +156,20 @@ export class Flaps implements Subsystem {
     return f;
   }
 
+  /** Flap angle interpolated between the detents bracketing `lever` (continuous handles). */
+  private continuousDeg(lever: number): number {
+    const d = this.cfg.detents;
+    if (lever <= d[0].lever) return d[0].flapDeg;
+    for (let i = 1; i < d.length; i++) {
+      if (lever <= d[i].lever) {
+        const span = d[i].lever - d[i - 1].lever;
+        const f = span > 1e-9 ? (lever - d[i - 1].lever) / span : 1;
+        return d[i - 1].flapDeg + (d[i].flapDeg - d[i - 1].flapDeg) * f;
+      }
+    }
+    return d[d.length - 1].flapDeg;
+  }
+
   /** Index of the detent nearest to the lever value. */
   detentIndex(lever: number): number {
     const d = this.cfg.detents;
@@ -187,8 +207,9 @@ export class Flaps implements Subsystem {
     const v = this.vars;
     const cfg = this.cfg;
     const ias = v.get(this.iasVar);
-    const idx = this.detentIndex(v.get(this.leverVar));
-    const leverDeg = cfg.detents[idx].flapDeg;
+    const lever = v.get(this.leverVar);
+    const idx = this.detentIndex(lever);
+    const leverDeg = cfg.continuous ? this.continuousDeg(lever) : cfg.detents[idx].flapDeg;
     let cmd = leverDeg;
 
     // ---- load relief

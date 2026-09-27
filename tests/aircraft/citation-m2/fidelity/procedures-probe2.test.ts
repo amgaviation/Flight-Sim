@@ -41,7 +41,6 @@ describe('M2 procedures probe 2', () => {
     const v = r.vars;
     v.set(M2.controlLock, 0);
     v.set(M2.battSw, 1);
-    v.set(M2.avionicsSw, 1);
     v.set(M2.genSw(1), 1);
     v.set(M2.genSw(2), 1);
     v.set(M2.antiColl, 1);

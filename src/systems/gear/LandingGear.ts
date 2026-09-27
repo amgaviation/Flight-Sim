@@ -83,9 +83,15 @@ export interface LandingGearConfig {
     trigger: Binding;
     blowdownS?: number;
     strokes?: number;
+    /**
+     * (Appended by the citation-m2 aircraft.) For 'blowdown': uplock release (T-handle) before the bottle is
+     * discharged: while true (and `trigger` false) the legs free fall (`freefallS`). Default none.
+     */
+    freefallTrigger?: Binding;
   };
   squat?: { legs?: number[]; mode?: 'any' | 'all'; airToGroundS?: number; groundToAirS?: number };
-  horn?: { rules: GearHornRule[]; tone?: string };
+  /** `test` (appended by the citation-m2 aircraft): horn sounds while true regardless of the gear (lamp/horn test). */
+  horn?: { rules: GearHornRule[]; tone?: string; test?: Binding };
   lights?: { power?: Binding; test?: Binding };
   disagreeS?: number;
   /** Start state if gear.pos vars are unset: true = down. Default true. */
@@ -135,6 +141,8 @@ export class LandingGear implements Subsystem {
   private readonly handleVar: string;
   private readonly power: Evaluator;
   private readonly altTrigger: () => boolean;
+  private readonly ffTrigger: () => boolean;
+  private readonly hornTest: () => boolean;
   private readonly lightPower: () => boolean;
   private readonly lampTest: () => boolean;
   private readonly hornRules: { when: () => boolean; silenceable: boolean; silenced: boolean }[];
@@ -158,6 +166,8 @@ export class LandingGear implements Subsystem {
     if (!v.has(this.handleVar)) v.set(this.handleVar, initDown ? 1 : 0);
     this.power = compileBinding(v, cfg.actuation?.power, 1);
     this.altTrigger = compileCondition(v, cfg.alternate?.trigger, false);
+    this.ffTrigger = compileCondition(v, cfg.alternate?.freefallTrigger, false);
+    this.hornTest = compileCondition(v, cfg.horn?.test, false);
     this.lightPower = compileCondition(v, cfg.lights?.power, true);
     this.lampTest = compileCondition(v, cfg.lights?.test ?? ALERT.annunTest, false);
     this.hornRules = (cfg.horn?.rules ?? []).map((r) => ({ when: compileCondition(v, r.when), silenceable: r.silenceable, silenced: false }));
@@ -259,6 +269,7 @@ export class LandingGear implements Subsystem {
     const alt = cfg.alternate;
     const altActive = !!alt && this.altTrigger();
     if (altActive && alt!.kind === 'blowdown') this.blowdownUsed = true;
+    const ffActive = !!alt && !altActive && this.ffTrigger();
 
     // ---- power
     let p = v.get(this.fAct) === 0 ? this.power() : 0;
@@ -277,7 +288,7 @@ export class LandingGear implements Subsystem {
       const tS = target > this.doors ? doorCfg.openS : doorCfg.closeS;
       this.doors += clampStep(target - this.doors, dt / Math.max(0.01, tS));
       travelPermit = this.doors >= 1 - EPS || !anyNeedsMove;
-    } else if (doorCfg && altActive) {
+    } else if (doorCfg && (altActive || ffActive)) {
       this.doors = 1; // doors are released with the uplocks
     }
 
@@ -298,6 +309,8 @@ export class LandingGear implements Subsystem {
           const target = Math.min(1, this.pumpStrokes / Math.max(1, alt!.strokes ?? 40));
           if (target > l.pos) l.pos = target;
         } else l.pos = Math.min(1, l.pos + rate * dt);
+      } else if (ffActive && !(upLocked && uplockStuck)) {
+        l.pos = Math.min(1, l.pos + dt / ff); // uplocks released: free fall
       } else if (powered && travelPermit && !this.blowdownUsed) {
         if (wantDown && !(upLocked && uplockStuck)) l.pos = Math.min(1, l.pos + (rateK / l.def.extendS) * dt);
         else if (wantUp) l.pos = Math.max(0, l.pos - (rateK / l.def.retractS) * dt);
@@ -350,6 +363,7 @@ export class LandingGear implements Subsystem {
     } else {
       for (const r of this.hornRules) r.silenced = false;
     }
+    if (this.hornTest()) horn = true;
     let hornCondition = false;
     if (this.retractable && !allDown) for (const r of this.hornRules) if (r.when()) hornCondition = true;
     let unsafe = false;

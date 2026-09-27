@@ -81,10 +81,12 @@ export function createSystems(ctx: SimContext, opts: CreateSystemsOptions = {}):
   av.suite.system.trafficSource = av.tcas;
   const cas = new CasManager(ctx, {
     messages: M2_CAS,
-    power: 'elec.gea_powered || elec.pfd1_powered',
+    // The CAS is a G3000 function (S&D21 §10.3 / §10.3.9): no GIA (IOP) powered, no CAS and no master annunciation.
+    power: 'elec.gia1_powered || elec.gia2_powered',
     lampTest: `${M2.testSel} == ${TEST_SEL.annu}`,
     sinks: [av.suite.casModel],
-    // CJ-family inhibits (EST): takeoff from 80 kt to 400 ft RA, landing below 200 ft RA.
+    // Flight-phase inhibits per message (systems/cas.ts `inhibit: 'takeoff+landing'`): FlightPhase defaults, takeoff
+    // 80 kt -> 400 ft RA, landing below 200 ft RA (dossier §8, CJ family EST).
   });
   const lights = createLighting(ctx);
   const logicLate = new M2LogicLate(ctx);

@@ -97,6 +97,11 @@ export interface EisIttSection {
   digitsOnlyWhenNotRunning?: boolean;
   /** Start pressure var shown between the dials before start (Longitude "START PSI"). */
   startPsiVar?: string;
+  /**
+   * (Appended by the citation-m2 aircraft.) Ignition discrete per engine: a green IGN legend above the upper centre of
+   * that engine's ITT scale while >= 0.5 (CJ-family G3000-class EIS, 525AFM-06 p.3-117). Default none.
+   */
+  ignVar?: EngineVar;
 }
 
 export interface EisDigitalRow {

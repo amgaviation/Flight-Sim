@@ -134,7 +134,7 @@ export function allLoadsOn(v: SimVars): void {
     [M2.paxSafety, 2],
     [M2.cabinFan, 2],
     ['ac.m2.ac_outlet_plug', 1],
-    [M2.avionicsSw, 1],
+    [M2.dispatchSw, 0],
   ];
   for (const [k, x] of on) v.set(k, x);
 }

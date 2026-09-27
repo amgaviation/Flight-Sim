@@ -20,7 +20,6 @@ describe('M2 function probe 3', () => {
     v.set(M2.battSw, 1);
     r.run(5);
     log(`BATT on, AVIONICS OFF: mw ${v.get('alert.master_warning')} mc ${v.get('alert.master_caution')} pfd1 ${v.get('elec.pfd1_powered')} CAS: ${cas(r)}`);
-    v.set(M2.avionicsSw, 1);
     r.run(60);
     log(`AVIONICS ON 60 s engines off: mw ${v.get('alert.master_warning')} mc ${v.get('alert.master_caution')} CAS: ${cas(r)}`);
     v.set(M2.controlLock, 0);

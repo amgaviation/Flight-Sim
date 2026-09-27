@@ -14,6 +14,9 @@ import { OxygenSystem } from '../../../systems/oxygen';
 import { LightingSystem, FLASH_PATTERNS } from '../../../systems/lighting';
 import { M2, TEST_SEL } from '../vars';
 
+/** Either engine in its start sequence (FADEC start states 1..3). */
+export const ENGINE_STARTING = '((fadec.eng1.start_state > 0 && fadec.eng1.start_state < 4) || (fadec.eng2.start_state > 0 && fadec.eng2.start_state < 4))';
+
 // ------------------------------------------------------------------ hydraulics
 
 /**
@@ -60,21 +63,28 @@ export function createHydraulics(ctx: Pick<SimContext, 'vars'>): HydraulicSystem
  * Flows EST: M2 cabin ~ 7.5 m^3, total conditioned air 0.14 kg/s (18 lb/min).
  */
 export function createPneumatics(ctx: Pick<SimContext, 'vars'>): PneumaticSystem {
-  const sel = M2.pressSource;
+  // Air source selection is electric: "Loss of Normal DC Power results in ... Air source fails to both" (CAE p.5-24,
+  // CJ family); 525AFM-06 p.3-26: source selection inoperative on emergency power, the air still flows. The source
+  // valves fail open (closed only by the ENG FIRE button); without selector power the effective selection is BOTH.
+  const selPowered = '(elec.bleed_ctl_l_powered || elec.bleed_ctl_r_powered)';
+  const sel = `(${selPowered} ? ${M2.pressSource} : 3)`;
   return new PneumaticSystem(ctx.vars, {
     ducts: ['bleed'],
     sources: [
-      { id: 'b1', duct: 'bleed', pressure: 'eng1.bleed_press_psi', valve: `!${M2.engFireBtn(1)} && elec.bleed_ctl_l_powered`, regulatedPsi: 40, maxFlowKgs: 0.3, engine: 1 },
-      { id: 'b2', duct: 'bleed', pressure: 'eng2.bleed_press_psi', valve: `!${M2.engFireBtn(2)} && elec.bleed_ctl_r_powered`, regulatedPsi: 40, maxFlowKgs: 0.3, engine: 2 },
+      { id: 'b1', duct: 'bleed', pressure: 'eng1.bleed_press_psi', valve: `!${M2.engFireBtn(1)}`, regulatedPsi: 40, maxFlowKgs: 0.3, engine: 1 },
+      { id: 'b2', duct: 'bleed', pressure: 'eng2.bleed_press_psi', valve: `!${M2.engFireBtn(2)}`, regulatedPsi: 40, maxFlowKgs: 0.3, engine: 2 },
     ],
     consumers: [
-      // Nacelle / pylon inlet anti-ice from each engine's own port.
-      { id: 'eai1', engine: 1, demandKgs: `${M2.engAiSw(1)} * 0.03`, minPsi: 15 },
-      { id: 'eai2', engine: 2, demandKgs: `${M2.engAiSw(2)} * 0.03`, minPsi: 15 },
-      { id: 'wai', duct: 'bleed', demandKgs: `${M2.wingAiSw} * 0.08`, minPsi: 18 },
-      { id: 'ws_l', duct: 'bleed', demandKgs: `${M2.wsBleedSw(1)} * 0.012`, minPsi: 12 },
-      { id: 'ws_r', duct: 'bleed', demandKgs: `${M2.wsBleedSw(2)} * 0.012`, minPsi: 12 },
-      { id: 'boots', duct: 'bleed', demandKgs: 'ice.tail_boots * 0.01', minPsi: 23 }, // 23 psi service air (S&D15 §9.7)
+      // Nacelle / pylon inlet anti-ice from each engine's own port (WING/ENG switch ENG ON or WING/ENG).
+      { id: 'eai1', engine: 1, demandKgs: `(${M2.engAiSw(1)} >= 1) * 0.03`, minPsi: 15 },
+      { id: 'eai2', engine: 2, demandKgs: `(${M2.engAiSw(2)} >= 1) * 0.03`, minPsi: 15 },
+      // Wing leading edges: each side from its engine through its wing A/I valve (N2 >= 75 %, M2Logic).
+      { id: 'wai1', engine: 1, demandKgs: `${M2.wingAiValve(1)} * 0.04`, minPsi: 18 },
+      { id: 'wai2', engine: 2, demandKgs: `${M2.wingAiValve(2)} * 0.04`, minPsi: 18 },
+      // Windshield bleed through the W/S shutoff valves (closed on overheat, M2Logic).
+      { id: 'ws_l', duct: 'bleed', demandKgs: `${M2.wsBleedSw(1)} * ac.m2.ws_valve1 * 0.012`, minPsi: 12 },
+      { id: 'ws_r', duct: 'bleed', demandKgs: `${M2.wsBleedSw(2)} * ac.m2.ws_valve2 * 0.012`, minPsi: 12 },
+      { id: 'boots', duct: 'bleed', demandKgs: '(ac.m2.boot1_cmd || ac.m2.boot2_cmd) * 0.01', minPsi: 23 }, // 23 psi service air (S&D15 §9.7)
     ],
     packs: [
       {
@@ -84,7 +94,8 @@ export function createPneumatics(ctx: Pick<SimContext, 'vars'>): PneumaticSystem
         flowKgs: `${sel} == 3 ? 0.14 : 0.1`,
         minPsi: 15,
       },
-      { id: 'emer', duct: 'bleed', on: `${sel} == 4`, flowKgs: 0.1, minPsi: 10, minOutletC: 40, maxOutletC: 90 },
+      // EMER: selector EMER, or the automatic emergency pressurization latch (525AFM-06 p.3-23, M2Logic).
+      { id: 'emer', duct: 'bleed', on: `${sel} == 4 || ac.m2.emer_press_auto`, flowKgs: 0.1, minPsi: 10, minOutletC: 40, maxOutletC: 90 },
     ],
     zones: [
       {
@@ -105,8 +116,12 @@ export function createPneumatics(ctx: Pick<SimContext, 'vars'>): PneumaticSystem
 export function createPressurization(ctx: Pick<SimContext, 'vars' | 'nav'>): Pressurization {
   return new Pressurization(ctx.vars, {
     ...PRESS_M2,
-    // S&D15 §9.5: 8.5 psid nominal; sea-level cabin to 22,027 ft; 8,000 ft cabin at FL410.
-    schedule: { x: [0, 41000], y: [0, 8000] },
+    // S&D15 §9.5: 8.5 psid nominal; "sea level cabin to 22,027 ft"; 8,000 ft cabin at FL410 (differential-limited
+    // controller). EST schedule: field / sea-level cabin to 22,000 ft, then toward 8,000 ft at FL410, with the
+    // 8.5 psid limit on top (Pressurization applies max(schedule, differential limit)); the cabin is held at the
+    // departure field until the limit takes over (525AFM-06 p.3-118 auto schedule from the departure field).
+    schedule: { x: [0, 22000, 41000], y: [0, 0, 8000] },
+    departureFieldFt: M2.takeoffFieldElevFt,
     cabinVolumeM3: 7.5, // FPG: passenger cabin 198 ft^3 (5.6 m^3) + cockpit (EST)
     inflowKgs: 'pneu.pack_flow_kgs',
     // GTC entry; cleared (< -1000) -> FMS destination elevation, or with no destination the takeoff field (EST, CJ family).
@@ -115,13 +130,25 @@ export function createPressurization(ctx: Pick<SimContext, 'vars' | 'nav'>): Pre
     destinationElevation: (id) => ctx.nav?.airport?.(id)?.elevationFt,
     mode: `${M2.pressMode} == 2 ? 2 : 0`,
     manualCommand: M2.pressManual,
+    // 525AFM-06 p.3-119: the dump "requires 29 VDC electrical power ... opens the outflow valves. Maximum limit valves
+    // will prevent complete depressurization to cabin altitude above 14,500 +/- 500 feet" (every mode).
     dump: M2.cabinDump,
-    masksDeployFt: 13500, // EST: CJ-family passenger mask auto deployment
+    dumpAllModes: true,
+    dumpPower: 'elec.r_main_powered || elec.emer_powered',
+    dumpLimitFt: 14500,
+    // 525AFM-06 p.3-23: CABIN ALT above 9,500 +/- 400 ft; 14,500 ft in the high-altitude mode (automatically for a
+    // field above 8,000 ft, p.3-118).
+    cabinAltWarnFtBinding: `max(${M2.takeoffFieldElevFt}, press.ldg_elev_ft) > 8000 ? 14500 : 9500`,
+    masksDeployFt: 14500, // 525AFM-06 p.3-122: masks drop above ~14,500 +/- 500 ft cabin (PASS OXY NORMAL)
     masksManual: `${M2.paxOxy} == 2`,
     onGround: 'gear.air_ground',
     // EST (CJ family): the ground solenoid opens the safety valve through the squat switch, so the cabin stays
     // unpressurised on the ground (the outflow valve alone left ~0.16 psi with both packs flowing at idle).
     safetyValveOpen: 'gear.air_ground',
+    // EST: ground safety valve / outflow effective area large enough that both packs flowing leave < 0.01 psid on the
+    // ramp ("INJURY MAY OCCUR IF CABIN PRESSURE DIFFERENTIAL IS GREATER THAN 0 PSID WHEN CABIN DOOR IS OPENED",
+    // 525AFM-06 p.3-26; 525FM-15 "cabin must be depressurized for takeoff and landing").
+    safetyAreaM2: 0.02,
     cabinTempC: 'pneu.cabin_temp_c',
   });
 }
@@ -132,15 +159,18 @@ export function createPressurization(ctx: Pick<SimContext, 'vars' | 'nav'>): Pre
 export function createIce(ctx: Pick<SimContext, 'vars'>): IceProtection {
   return new IceProtection(ctx.vars, {
     surfaces: [
-      { id: 'wing', output: M2.iceWing, ratePerMin: 0.1, protection: { kind: 'thermal', active: `${M2.wingAiSw} * pneu.wai_ok` } },
-      { id: 'tail', output: M2.iceTail, ratePerMin: 0.12, protection: { kind: 'boots', active: `(${M2.tailDeiceSw} != 0) * (pneu.bleed_psi > 20) * elec.tail_deice_powered`, bootCycleS: 60 } },
-      { id: 'inlet1', output: ICE.inlet(1), engine: 1, ratePerMin: 0.15, protection: { kind: 'thermal', active: `${M2.engAiSw(1)} * pneu.eai1_ok` } },
-      { id: 'inlet2', output: ICE.inlet(2), engine: 2, ratePerMin: 0.15, protection: { kind: 'thermal', active: `${M2.engAiSw(2)} * pneu.eai2_ok` } },
+      // Wing: mean of the two sides (each: valve open, flow adequate, leading edge warm).
+      { id: 'wing', output: M2.iceWing, ratePerMin: 0.1, protection: { kind: 'thermal', active: `0.5 * min(1, ac.m2.wai1_warm / 0.8) * ${M2.wingAiValve(1)} + 0.5 * min(1, ac.m2.wai2_warm / 0.8) * ${M2.wingAiValve(2)}` } },
+      // Tail boots: the M2Logic sequencer inflates L then R (AUTO, 3 min dwell) or both while MANUAL is held
+      // (525AFM-06 p.3-100); each inflation sheds the accreted ice (boot cycle ~ inflation time).
+      { id: 'tail', output: M2.iceTail, ratePerMin: 0.12, protection: { kind: 'boots', active: '(ac.m2.boot1_press || ac.m2.boot2_press)', bootCycleS: 5.9 } },
+      { id: 'inlet1', output: ICE.inlet(1), engine: 1, ratePerMin: 0.15, protection: { kind: 'thermal', active: `(${M2.engAiSw(1)} >= 1) * min(1, ac.m2.eai1_warm / 0.8)` } },
+      { id: 'inlet2', output: ICE.inlet(2), engine: 2, ratePerMin: 0.15, protection: { kind: 'thermal', active: `(${M2.engAiSw(2)} >= 1) * min(1, ac.m2.eai2_warm / 0.8)` } },
       { id: 'pitot1', output: ICE.pitot(1), ratePerMin: 0.5, speedExp: 0.5, protection: { kind: 'electric', active: 'elec.pitot_l_powered' } },
       { id: 'pitot2', output: ICE.pitot(2), ratePerMin: 0.5, speedExp: 0.5, protection: { kind: 'electric', active: 'elec.pitot_r_powered' } },
       { id: 'static1', output: ICE.static(1), ratePerMin: 0.2, speedExp: 0.5, protection: { kind: 'electric', active: 'elec.pitot_l_powered' } },
       { id: 'static2', output: ICE.static(2), ratePerMin: 0.2, speedExp: 0.5, protection: { kind: 'electric', active: 'elec.pitot_r_powered' } },
-      { id: 'ws1', output: ICE.windshield(1), ratePerMin: 0.2, protection: { kind: 'thermal', active: `max(clamp01(${M2.wsBleedSw(1)}) * pneu.ws_l_ok, ${M2.wsAlcoholSw} * elec.ws_alcohol_powered * 0.6, ${M2.airDistrib} * 0.2 * (pneu.pack_flow_kgs > 0.05))` } },
+      { id: 'ws1', output: ICE.windshield(1), ratePerMin: 0.2, protection: { kind: 'thermal', active: `max(clamp01(${M2.wsBleedSw(1)}) * pneu.ws_l_ok, ${M2.wsAlcoholSw} * elec.ws_alcohol_powered * (${M2.wsAlcoholRemaining} > 0) * 0.6, ${M2.airDistrib} * 0.2 * (pneu.pack_flow_kgs > 0.05))` } },
       { id: 'ws2', output: ICE.windshield(2), ratePerMin: 0.2, protection: { kind: 'thermal', active: `max(clamp01(${M2.wsBleedSw(2)}) * pneu.ws_r_ok, ${M2.airDistrib} * 0.2 * (pneu.pack_flow_kgs > 0.05))` } },
     ],
   });
@@ -204,15 +234,16 @@ export function createOxygen(ctx: Pick<SimContext, 'vars'>): OxygenSystem {
  * lighting (S&D15 §5). Cockpit: LED panels, floodlights, overhead map lights.
  */
 export function createLighting(ctx: Pick<SimContext, 'vars'>): LightingSystem {
-  const pulse = { kind: 'flash' as const, periodS: 1.0, windows: [0, 0.5] }; // EST Pulselite ~1 Hz alternating
   return new LightingSystem(ctx.vars, {
     exterior: [
       { name: 'nav', on: M2.navLt, power: 'elec.nav_lts_powered', tech: 'led' },
-      { name: 'beacon', on: `${M2.antiColl} >= 1`, power: 'elec.beacon_powered', pattern: FLASH_PATTERNS.beaconFlash, tech: 'led' },
+      // "When you press Start, even the rotating beacon is activated" (Twin & Turbine M2 flight report).
+      { name: 'beacon', on: `${M2.antiColl} >= 1 || ${ENGINE_STARTING}`, power: 'elec.beacon_powered', pattern: FLASH_PATTERNS.beaconFlash, tech: 'led' },
       { name: 'strobe', on: `${M2.antiColl} >= 2`, power: 'elec.strobes_powered', pattern: FLASH_PATTERNS.doubleStrobe, tech: 'led' },
-      { name: 'landing_l', on: `${M2.landingLt} >= 1`, power: 'elec.landing_l_powered', tech: 'led' },
-      { name: 'landing_r', on: `${M2.landingLt} >= 1`, power: 'elec.landing_r_powered', tech: 'led' },
-      { name: 'recognition', on: `${M2.landingLt} == 1`, power: 'elec.landing_l_powered', pattern: pulse, tech: 'led' },
+      // Pulse Light system "pulses the landing/recognition lights" (S&D21 §9.4.1): in PULSE the L and R lights
+      // alternate (M2Logic phase, EST ~1 Hz); steady only in ON.
+      { name: 'landing_l', on: `${M2.landingLt} >= 2 || (${M2.landingLt} == 1 && ac.m2.pulse_phase < 0.5)`, power: 'elec.landing_l_powered', tech: 'led' },
+      { name: 'landing_r', on: `${M2.landingLt} >= 2 || (${M2.landingLt} == 1 && ac.m2.pulse_phase >= 0.5)`, power: 'elec.landing_r_powered', tech: 'led' },
       { name: 'taxi', on: M2.taxiLt, power: 'elec.taxi_lts_powered', tech: 'led' },
       { name: 'logo', on: M2.logoLt, power: 'elec.logo_lts_powered', tech: 'led' },
       { name: 'wing', on: M2.wingInspLt, power: 'elec.wing_insp_powered', tech: 'led' },

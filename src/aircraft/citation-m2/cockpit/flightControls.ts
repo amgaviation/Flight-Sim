@@ -16,10 +16,13 @@
  *
  * Controls:
  *  - AP/TRIM DISC (red, outboard grip): event `ap.disc` (AFCS disconnect;
- *    a second press silences the disconnect tone). SCOPE: holding it does
- *    not additionally interrupt manual electric trim.
- *  - Pitch trim split rocker (outboard grip top): `ac.m2.yoke_trim<side>`
- *    +1 nose up / -1 nose down (TrimAxis switch input, systems/flight.ts).
+ *    a second press silences the disconnect tone) and, while held,
+ *    `ac.m2.ap_trim_disc<side>` interrupts the electric and AP trim
+ *    (525AFM-06 p.3-89.1 trim check, trim-runaway procedure).
+ *  - Pitch trim split switch (outboard grip top): two halves, ARM
+ *    `ac.m2.yoke_trim_arm<side>` and direction `ac.m2.yoke_trim<side>`,
+ *    +1 nose up / -1 nose down; the trim runs only with both halves moved the
+ *    same way, the pilot's overrides the copilot's (M2Logic -> TrimAxis).
  *  - CWS (white-ringed round button on top of the inboard horn, photos; S&D15
  *    §10.3.L CWS): event `ap.cws` { pressed } (GFC 700 CWS).
  *  - Wheels / columns animate from the surface positions (mechanical
@@ -52,11 +55,21 @@ export function buildFlightControls(b: CockpitBuilder): void {
         pitchVar: SURF.elevator,
         rollVar: SURF.aileron,
         switches: [
-          { anchor: `${out}Outboard`, kind: 'button', options: { id: `m2.yoke${side}.ap_disc`, label: 'AP/TRIM DISC', style: 'small', mode: 'momentary', event: 'ap.disc', capMaterial: 'knobRed' } },
+          // Held: disconnects the AP (event) and interrupts electric / AP trim (var, systems/flight.ts).
+          { anchor: `${out}Outboard`, kind: 'button', options: { id: `m2.yoke${side}.ap_disc`, var: M2.apTrimDisc(side), label: 'AP/TRIM DISC', style: 'small', mode: 'momentary', event: 'ap.disc', capMaterial: 'knobRed' } },
+          // Split pitch trim switch: ARM half (inboard) + direction half (outboard); the trim runs only with both
+          // moved the same way (525AFM-06 p.3-89.1).
           {
             anchor: `${out}Top`,
+            offset: [L ? 0.0026 : -0.0026, 0, 0],
             kind: 'rocker',
-            options: { id: `m2.yoke${side}.trim`, var: M2.yokeTrim(side), label: 'PITCH TRIM', positions: ['NOSE UP', 'OFF', 'NOSE DN'], values: [1, 0, -1], initial: 1, springs: { 0: 1, 2: 1 } },
+            options: { id: `m2.yoke${side}.trim_arm`, var: M2.yokeTrimArm(side), label: 'PITCH TRIM (ARM HALF)', positions: ['NOSE UP', 'OFF', 'NOSE DN'], values: [1, 0, -1], initial: 1, springs: { 0: 1, 2: 1 }, width: 0.0045 },
+          },
+          {
+            anchor: `${out}Top`,
+            offset: [L ? -0.0026 : 0.0026, 0, 0],
+            kind: 'rocker',
+            options: { id: `m2.yoke${side}.trim`, var: M2.yokeTrim(side), label: 'PITCH TRIM (DIRECTION HALF)', positions: ['NOSE UP', 'OFF', 'NOSE DN'], values: [1, 0, -1], initial: 1, springs: { 0: 1, 2: 1 }, width: 0.0045 },
           },
           { anchor: `${inn}Top`, kind: 'button', options: { id: `m2.yoke${side}.cws`, label: 'CWS', style: 'round', width: 0.009, mode: 'momentary', event: 'ap.cws', releaseEvent: 'ap.cws', capMaterial: 'knobWhite' } },
         ],

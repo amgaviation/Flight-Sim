@@ -22,7 +22,6 @@ describe('Citation M2 cold & dark start', () => {
     v.set(M2.battSw, 1);
     r.run(1);
     expect(v.get('elec.batt_v')).toBeGreaterThan(24);
-    v.set(M2.avionicsSw, 1);
     v.set(M2.genSw(1), 1);
     v.set(M2.genSw(2), 1);
     v.set(M2.antiColl, 1);

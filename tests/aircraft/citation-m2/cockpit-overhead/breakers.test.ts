@@ -16,7 +16,7 @@ function poweredVar(name: string): string {
   return feeders[name] ?? `elec.${name}_powered`;
 }
 /** Feeder breakers whose bus stays powered through a parallel path; checked through their link current instead. */
-const PARALLEL_FED = new Set(['l_xfeed', 'aux_batt']);
+const PARALLEL_FED = new Set(['l_xfeed', 'aux_batt', 'dispatch']); // DISPATCH relay feed: checked in fixround1-function.test.ts
 
 function ready(): CockpitRig {
   const r = makeCockpitRig({ state: 'ready_to_taxi' });

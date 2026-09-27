@@ -379,6 +379,7 @@ export class EisRenderer {
       } else {
         const st = v.get(sec.startingVar ? sec.startingVar(e + 1) : ev.start);
         if (st >= 1 && st <= 3) TF.draw(ctx, 'START', cx + (e === 0 ? -r - 2 : r + 2), cy + r * 0.2, 13 * scale, P.green, e === 0 ? 'right' : 'left', 'middle');
+        if (sec.ignVar && v.get(sec.ignVar(e + 1)) >= 0.5) TF.draw(ctx, 'IGN', cx, cy - r - 6 * scale, 12 * scale, P.green, 'center', 'middle');
         if (sec.fireVar && v.get(sec.fireVar(e + 1)) >= 0.5) {
           box(ctx, cx - 22, cy - 12, 44, 22, P.red, '');
           TF.draw(ctx, 'FIRE', cx, cy, 16, P.white, 'center', 'middle');

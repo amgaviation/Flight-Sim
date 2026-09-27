@@ -160,13 +160,13 @@ export function buildTiltPanels(b: CockpitBuilder, displays: Map<string, Cockpit
   bracket(L, 'ICE PROTECTION', 0.196, 0.338);
   const ice: [string, string, string, string[], number[] | undefined, Partial<ConstructorParameters<typeof ToggleSwitch>[1]>, string | null][] = [
     ['m2.pitot_static', M2.pitotStaticSw, 'P/S HEAT', ['OFF', 'ON'], undefined, {}, 'ac.m2.ps_heat_lt'],
-    ['m2.eng_ai1', M2.engAiSw(1), 'ENG L', ['OFF', 'ON'], undefined, {}, 'ac.m2.eai1_lt'],
-    ['m2.eng_ai2', M2.engAiSw(2), 'ENG R', ['OFF', 'ON'], undefined, {}, 'ac.m2.eai2_lt'],
-    ['m2.wing_ai', M2.wingAiSw, 'WING', ['OFF', 'ON'], undefined, {}, 'ac.m2.wai_lt'],
+    // Per-side WING/ENG ANTI-ICE: OFF / ENG / WING-ENG (525AFM-06 p.3-99; wing anti-ice only with the engine inlet).
+    ['m2.eng_ai1', M2.engAiSw(1), 'L WING/ENG', ['OFF', 'ENG', 'WING/ENG'], [0, 1, 2], {}, 'ac.m2.ai1_lt'],
+    ['m2.eng_ai2', M2.engAiSw(2), 'R WING/ENG', ['OFF', 'ENG', 'WING/ENG'], [0, 1, 2], {}, 'ac.m2.ai2_lt'],
     ['m2.tail_deice', M2.tailDeiceSw, 'TAIL', ['MAN', 'OFF', 'AUTO'], [-1, 0, 1], { initial: 1, springs: { 0: 1 } }, null],
   ];
   ice.forEach(([id, v, name, pos, vals, extra, lamp], k) => {
-    const x = 0.21 + k * 0.0285;
+    const x = 0.212 + k * 0.034;
     L.add(tog(env, id, v, name, pos, vals, extra), x, r1);
     if (lamp) L.add(green(env, `${id}_lt`, `${name} ON`, lamp), x, lt);
   });

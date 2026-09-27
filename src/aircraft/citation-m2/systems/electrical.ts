@@ -31,6 +31,7 @@ import type { SimContext } from '../../../core/SimContext';
 import { ENG } from '../../../core/vars';
 import { ElectricalNetwork, BATTERY_737NG_NICD, BATTERY_172S_MAIN, type LoadDef } from '../../../systems/electrical';
 import { M2 } from '../vars';
+import { ENGINE_STARTING } from './airframe';
 
 /** 'elec.<load>_powered' helper. */
 export const pw = (load: string): string => `elec.${load}_powered`;
@@ -99,9 +100,9 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): ElectricalNetwo
     load('trim_pitch', 'l_main', 'trim.pitch_in_motion * 2', {}, 5),
     load('landing_l', 'l_main', `${M2.landingLt} >= 1 ? 2.5 : 0`, {}, 5), // OSRAM LED (S&D15 §5)
     load('nav_lts', 'l_main', 2, { enabled: M2.navLt }, 5),
-    load('beacon', 'l_main', 1.5, { enabled: `${M2.antiColl} >= 1` }, 5),
+    load('beacon', 'l_main', 1.5, { enabled: `${M2.antiColl} >= 1 || ${ENGINE_STARTING}` }, 5), // beacon with START (airframe.ts)
     load('wing_insp', 'l_main', 1, { enabled: M2.wingInspLt }, 3),
-    load('ws_alcohol', 'l_main', 2.5, { enabled: M2.wsAlcoholSw }, 5),
+    load('ws_alcohol', 'l_main', 2.5, { enabled: `${M2.wsAlcoholSw} && ${M2.wsAlcoholRemaining} > 0` }, 5), // pump stops when the reservoir is empty
     load('bleed_ctl_l', 'l_main', 0.5, {}, 3), // bleed / anti-ice valves & controllers
     load('stall_warn', 'l_main', 0.5, {}, 3),
     // ---- R MAIN
@@ -113,7 +114,7 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): ElectricalNetwo
     load('logo_lts', 'r_main', 2, { enabled: M2.logoLt }, 5),
     load('bleed_ctl_r', 'r_main', 0.5, {}, 3),
     load('press_ctl', 'r_main', 0.5, {}, 3), // digital auto-schedule pressurization controller
-    load('tail_deice', 'r_main', `0.5 + 2 * ice.tail_boots`, {}, 5),
+    load('tail_deice', 'r_main', '0.5 + 1 * ac.m2.boot1_cmd + 1 * ac.m2.boot2_cmd', {}, 5),
     load('antiskid', 'r_main', 1, { enabled: M2.antiskidSw }, 5),
     // ---- L XFEED (cockpit)
     load('panel_lts', 'l_xfeed', `5.5 * ${M2.panelLt}`, { model: 'resistive' }, 7.5), // panels + pedestal on the PANELS dimmer

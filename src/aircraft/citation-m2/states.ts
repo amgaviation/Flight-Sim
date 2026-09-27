@@ -33,6 +33,17 @@ export function isNightForPreset(v: Pick<SimContext, 'vars'>['vars']): boolean {
 /** Normal takeoff pitch-trim setting (units): EST mid takeoff band, from computeTrim at 115 KIAS flaps 15 (tests). */
 export const TAKEOFF_TRIM = 0.3;
 
+/** Field elevation (ft) for an in-air preset: nearest airport within 30 nm, else the terrain under the aircraft. */
+export function presetFieldElevationFt(ctx: Pick<SimContext, 'vars' | 'nav' | 'world'>): number {
+  const v = ctx.vars;
+  const lat = v.get(FDM.lat);
+  const lon = v.get(FDM.lon);
+  const near = typeof ctx.nav?.airportsNear === 'function' ? ctx.nav.airportsNear(lat, lon, 30, 1) : [];
+  if (near.length > 0 && Number.isFinite(near[0].elevationFt)) return near[0].elevationFt;
+  const m = typeof ctx.world?.elevationAt === 'function' ? ctx.world.elevationAt(lat, lon) : 0;
+  return Number.isFinite(m) ? Math.max(0, m / 0.3048) : 0;
+}
+
 /** Writes the cockpit switch / lever vars for `s` (no system snapping). */
 export function setM2Switches(ctx: Pick<SimContext, 'vars'>, s: InitialState): void {
   const v = ctx.vars;
@@ -45,7 +56,7 @@ export function setM2Switches(ctx: Pick<SimContext, 'vars'>, s: InitialState): v
   // Electrical power panel
   v.set(M2.battSw, powered ? 1 : 0);
   for (const i of [1, 2]) v.set(M2.genSw(i), powered ? 1 : 0);
-  v.set(M2.avionicsSw, powered ? 1 : 0);
+  v.set(M2.dispatchSw, 0); // no avionics master: the BATTERY switch powers the avionics (AOPA Mar 2014)
   v.set(M2.stbyDispSw, powered ? 1 : 0); // STBY FLT DISPLAY ON (prep TEST / ON; shutdown OFF)
   v.set(M2.battDisc, 0); // NORMAL
   // Engine start / throttles
@@ -61,6 +72,8 @@ export function setM2Switches(ctx: Pick<SimContext, 'vars'>, s: InitialState): v
     v.set(M2.maskOn(i), 0);
     v.set(M2.maskMode(i), 0);
     v.set(M2.yokeTrim(i), 0);
+    v.set(M2.yokeTrimArm(i), 0);
+    v.set(M2.apTrimDisc(i), 0);
     v.set(M2.rainDoor(i), 0);
     v.set(M2.mapLt(i), 0);
   }
@@ -68,7 +81,6 @@ export function setM2Switches(ctx: Pick<SimContext, 'vars'>, s: InitialState): v
   v.set(M2.fuelXfer, 0);
   // Ice protection: P/S heat on for takeoff and in flight (before-takeoff flow).
   v.set(M2.pitotStaticSw, moving ? 1 : 0);
-  v.set(M2.wingAiSw, 0);
   v.set(M2.tailDeiceSw, 0);
   v.set(M2.wsAlcoholSw, 0);
   // Pressurization / ECS
@@ -146,7 +158,15 @@ export function applyM2State(ctx: SimContext, sys: M2Systems, s: InitialState): 
   sys.rudderTrim.setPosition(0);
 
   sys.logic.reset();
+  // Departure / landing field elevations for the pressurization controller. In the air there is no ground latch:
+  // take the nearest airport (the approach preset's destination), else the terrain under the start point.
+  if (inAir) {
+    const f = presetFieldElevationFt(ctx);
+    v.set(M2.takeoffFieldElevFt, f);
+    v.set(M2.landingElevFt, s === 'approach' ? f : -9999);
+  }
   sys.logic.update(1 / 60);
+  sys.logic.snapState(inAir);
   sys.fuel.snapValves();
   sys.lights.snap();
   sys.elec.settle();
@@ -222,7 +242,7 @@ export function applyM2State(ctx: SimContext, sys: M2Systems, s: InitialState): 
   sys.elec.settle();
   sys.fuel.update(1 / 60);
   for (const a of sys.ahrs) a.reset(true);
-  for (const a of sys.adc) a.reset();
+  for (const a of sys.adc) a.reset({ powered: true }); // air data running all along: no power-up self test
   sys.suite.applyState(s);
   sys.pneu.snap(22); // cabin temperature first (see the cold branch)
   v.set('pneu.cabin_temp_c', 22);

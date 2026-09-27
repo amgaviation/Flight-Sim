@@ -189,15 +189,15 @@ describe('Citation M2 main flight deck controls', () => {
     // A/C, cabin fan, temp select, defog, pax oxygen, pass safety, cabin lights, fuel transfer) are GTC controls:
     // checked by the next test against the synoptic page definitions.
     const inventory = [
-      M2.battSw, M2.genSw(1), M2.genSw(2), M2.avionicsSw, M2.stbyDispSw,
+      M2.battSw, M2.genSw(1), M2.genSw(2), M2.dispatchSw, M2.stbyDispSw,
       M2.startBtn(1), M2.startBtn(2), M2.startDiseng, M2.tla(1), M2.tla(2),
       M2.boostSw(1), M2.boostSw(2),
       M2.engFireBtn(1), M2.engFireBtn(2), M2.bottleBtn(1), M2.bottleBtn(2),
-      M2.pitotStaticSw, M2.engAiSw(1), M2.engAiSw(2), M2.wingAiSw, M2.tailDeiceSw, M2.wsBleedSw(1), M2.wsBleedSw(2), M2.wsAlcoholSw,
+      M2.pitotStaticSw, M2.engAiSw(1), M2.engAiSw(2), M2.tailDeiceSw, M2.wsBleedSw(1), M2.wsBleedSw(2), M2.wsAlcoholSw,
       M2.pressSource, M2.cabinDump, M2.tempMode, M2.tempManual,
       M2.gearHandle, M2.gearHornSilence, M2.gearEmerRelease, M2.gearBlowdown, M2.antiskidSw,
       M2.parkBrake, M2.emerBrake, M2.controlLock, M2.rainDoor(1), M2.rainDoor(2),
-      M2.flapHandle, M2.speedbrake, M2.pitchTrim, M2.aileronTrim, M2.rudderTrim, M2.yokeTrim(1), M2.yokeTrim(2),
+      M2.flapHandle, M2.speedbrake, M2.pitchTrim, M2.aileronTrim, M2.rudderTrim, M2.yokeTrim(1), M2.yokeTrim(2), M2.yokeTrimArm(1), M2.yokeTrimArm(2), M2.apTrimDisc(1), M2.apTrimDisc(2),
       M2.navLt, M2.antiColl, M2.landingLt, M2.taxiLt, M2.logoLt, M2.wingInspLt, M2.panelLt, M2.floodLt,
       M2.displayDim, M2.gtcDim, M2.emerComm, M2.eventMarker, M2.cvrTest, M2.eltSw, M2.emerLtsSw,
       'g3k.rev_sw.pfd1', 'g3k.rev_sw.pfd2', 'adc3.baro_inhg', 'adc3.baro_std',

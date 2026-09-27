@@ -136,6 +136,27 @@ export function buildMainPanel(c: PanelCtx): void {
   ep.label('ELECTRICAL POWER', 0.05, 0.012, { height: 0.0026 });
   ep.line(0.012, 0.018, 0.088, 0.018);
   const sw = (o: ConstructorParameters<typeof ToggleSwitch>[1]) => new ToggleSwitch(env, { scale: 0.8, ...o });
+  // Top row (photos pin1 / S&D figures): L GEN | BATTERY (red lever-lock cap) | R GEN. The M2 has no avionics switch:
+  // "a single battery switch controls both of the batteries and the avionics master" (AOPA Pilot, Mar 2014).
+  for (const [i, x] of [
+    [1, 0.018],
+    [2, 0.082],
+  ] as const) {
+    ep.add(
+      sw({
+        id: `m2.elec.gen${i}`,
+        var: M2.genSw(i),
+        label: `${i === 1 ? 'L' : 'R'} GEN`,
+        positions: ['RESET', 'OFF', 'GEN'],
+        values: [-1, 0, 1],
+        initial: 1,
+        springs: { 0: 1 },
+        labels: { name: i === 1 ? 'L GEN' : 'R GEN', positions: true, height: 0.0022 },
+      }),
+      x,
+      0.042,
+    );
+  }
   ep.add(
     sw({
       id: 'm2.elec.batt',
@@ -146,25 +167,29 @@ export function buildMainPanel(c: PanelCtx): void {
       initial: 1,
       leverLock: [2],
       handle: 'lever-lock',
+      handleMaterial: 'knobRed', // red lever cap (photos)
       labels: { name: 'BATTERY', positions: true, height: 0.0022 },
-    }),
-    0.022,
-    0.042,
-  );
-  ep.add(
-    sw({
-      id: 'm2.elec.avionics',
-      var: M2.avionicsSw,
-      label: 'AVIONICS',
-      positions: ['DISPATCH', 'OFF', 'ON'],
-      values: [-1, 0, 1],
-      initial: 1,
-      labels: { name: 'AVIONICS', positions: true, height: 0.0022 },
     }),
     0.05,
     0.042,
   );
-  // STBY FLT DISPLAY OFF / ON / TEST (M2 flows; CJ-family "Standby Gyro Switch - TEST; ON"), STBY BATT test light.
+  // Second row: DISPATCH with its amber LED (S&D15 §10.3.T; AOPA Mar 2014: powers GTC 1 and the MFD) and the STBY FLT
+  // DISPLAY switch with the STBY BATT test light (M2 flows). EST: the third switch of this row in the photos is not
+  // legible at the available resolution and is not modelled (no decorative controls).
+  ep.add(
+    sw({
+      id: 'm2.elec.dispatch',
+      var: M2.dispatchSw,
+      label: 'DISPATCH',
+      positions: ['OFF', 'DISPATCH'],
+      values: [0, 1],
+      initial: 0,
+      labels: { name: 'DISPATCH', positions: false, height: 0.0022 },
+    }),
+    0.03,
+    0.084,
+  );
+  ep.add(new AnnunciatorLight(env, { id: 'm2.elec.dispatch_lt', label: 'DISPATCH ON (AMBER LED)', width: 0.0045, height: 0.0045, bezel: false, segments: [{ text: '', color: 'amber', var: M2.dispatchLight }] }), 0.03, 0.1);
   ep.add(
     sw({
       id: 'm2.elec.stby_disp',
@@ -176,30 +201,10 @@ export function buildMainPanel(c: PanelCtx): void {
       springs: { 2: 1 },
       labels: { name: 'STBY DISP', positions: true, height: 0.0022 },
     }),
-    0.078,
-    0.042,
+    0.07,
+    0.084,
   );
-  ep.add(new AnnunciatorLight(env, { id: 'm2.elec.stby_batt', label: 'STBY BATT (ESI ON BATTERY)', width: 0.012, height: 0.007, segments: [{ text: ['STBY', 'BATT'], color: 'amber', var: M2.stbyBattLight, style: 'field' }] }), 0.078, 0.07);
-  ep.label('GENERATOR', 0.036, 0.068, { height: 0.0022 });
-  for (const [i, x] of [
-    [1, 0.022],
-    [2, 0.05],
-  ] as const) {
-    ep.add(
-      sw({
-        id: `m2.elec.gen${i}`,
-        var: M2.genSw(i),
-        label: `${i === 1 ? 'L' : 'R'} GEN`,
-        positions: ['RESET', 'OFF', 'GEN'],
-        values: [-1, 0, 1],
-        initial: 1,
-        springs: { 0: 1 },
-        labels: { name: i === 1 ? 'L' : 'R', positions: true, height: 0.0022 },
-      }),
-      x,
-      0.088,
-    );
-  }
+  ep.add(new AnnunciatorLight(env, { id: 'm2.elec.stby_batt', label: 'STBY BATT (ESI ON BATTERY)', width: 0.012, height: 0.007, segments: [{ text: ['STBY', 'BATT'], color: 'amber', var: M2.stbyBattLight, style: 'field' }] }), 0.088, 0.1);
 
   // --- RH edge outboard of PFD2: registration plate only (photos).
   main.placard({ text: 'N0000', height: 0.0048, style: 'engraved' }, 1.3, 0.02);

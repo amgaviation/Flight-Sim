@@ -119,7 +119,6 @@ describe('Citation M2 fix round 1: electrical / standby', () => {
     expect(v.get(M2.stbyBattLight)).toBe(0);
     // Shutdown: throttles OFF, avionics and battery off -> ESI on its own battery while ON ...
     for (const i of [1, 2]) v.set(M2.tla(i), TLA.cutoff);
-    v.set(M2.avionicsSw, 0);
     r.run(40);
     v.set(M2.battSw, 0);
     for (const i of [1, 2]) v.set(M2.genSw(i), 0);

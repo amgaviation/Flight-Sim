@@ -104,7 +104,10 @@ export function createEngineControls(ctx: SimContext): EngineControls {
         // Start relay on the battery bus: available above the relay drop-out voltage (see electrical.ts).
         starterAvailable: 'elec.batt_bus_v >= 7',
         ignitionPower: `elec.ign${i}_powered`,
-        continuousIgnition: `${M2.ignSw(i)} == 1`,
+        // FADEC ignition in NORM (CAE CJ3-to-CJ/CJ1/CJ2 differences p.5-44/45, FJ44-1AP): continuous with that engine's
+        // anti-ice ON; both igniters on approach (gear down and locked, TLA below max continuous) until 8 s after
+        // weight on wheels (M2Logic `ac.m2.ldg_ign_hold`); ON on the GTC ENGINE page; auto-relight on flameout.
+        continuousIgnition: `${M2.ignSw(i)} == 1 || ${M2.engAiSw(i)} >= 1 || (gear.air_ground == 0 && gear.down_locked && ${M2.fadecTla(i)} < ${TLA.clb}) || ac.m2.ldg_ign_hold`,
         autoRelight: true,
       }),
   );
