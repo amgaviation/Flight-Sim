@@ -293,8 +293,8 @@ export const ELEC_DATA = {
   mainBatteryAh: 12.75,
   /** POH Sec 7: 28 V, 60 A belt-driven alternator. */
   alternatorA: 60,
-  /** UND: "Normal voltage readings with the alternator operating should be about 28.0 volts"; ACU "approximately 28.5 volts". */
-  regulatedV: 28.25,
+  /** UND: the ACU regulates the main bus to "approximately 28.5 volts" (indicated ~28 V at the WARN breaker). */
+  regulatedV: 28.5,
   /** POH Sec 7 / UND: LOW VOLTS below 24.5 V. */
   lowVolts: 24.5,
   /** UND: HIGH VOLTS above 32.0 V. */

@@ -209,8 +209,9 @@ source block (FMS1, LOC1, VOR1 ...), preview course needle, sensor reversion fla
 ## 7. Other windows
 
 - **INAV map** (`mapWindow.ts`): menu bar (Map Data / Map View drop-downs, range - / +, WX,
-  TERR, TCAS), MovingMap (airports, navaids, fixes, flight plan, EGPWS terrain, TOD, selected
-  altitude arc), compass arc / rose, data blocks, vertical situation display with the terrain
+  TERR, TCAS), MovingMap (airports, navaids, fixes, flight plan, EGPWS terrain - black within
+  400 ft of the nearest runway elevation per the EGPWS pilot guide, so the airport area is not a
+  yellow dot field on the ground - TOD, selected altitude arc), compass arc / rose, data blocks, vertical situation display with the terrain
   profile along the track (+/- 1 nm corridor, EST), selected altitude and VNAV target. Weather
   radar layer (radar controls `epic.radar.mode / tilt_deg / gain` on the TSC WEATHER app): WX
   mode draws green / yellow / red returns in the +/-60 deg scan sector, GMAP a topographic

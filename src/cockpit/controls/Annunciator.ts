@@ -23,6 +23,7 @@ import type { LampColor } from '../materials';
 import { ControlBase, type ControlOptions } from './ControlBase';
 import { smoothTo } from '../anim';
 import { rectBezelGeometry } from '../geometry/panel';
+import { ControlInstances, markMovingPart } from '../instancing';
 
 export interface LegendSegment {
   /** Legend text; string with '\n' or array of lines. '' = plain lamp. */
@@ -172,6 +173,7 @@ export class AnnunciatorLight extends ControlBase {
   readonly face: LegendFace;
   private readonly o: AnnunciatorLightOptions;
   private testing = false;
+  private hoverOn = false;
 
   constructor(env: CockpitEnv, o: AnnunciatorLightOptions) {
     super(env, o);
@@ -182,6 +184,8 @@ export class AnnunciatorLight extends ControlBase {
     this.face = new LegendFace(env, o.segments, w, h, o.layout ?? 'stack', { intensity: o.intensity, own: (m) => this.own(m) });
     this.face.group.position.z = 0.0012;
     this.object.add(this.face.group);
+    // Lens segments and back are drawn as instances shared by every light of the cockpit (instancing.ts).
+    for (const c of this.face.group.children) if ((c as THREE.Mesh).isMesh) markMovingPart(c as THREE.Mesh, this.face.group);
     this.addHitBox(w + 0.003, h + 0.003, 0.006, 0, 0, 0.002);
   }
 
@@ -204,10 +208,20 @@ export class AnnunciatorLight extends ControlBase {
     this.testing = false;
   }
 
+  onHover(h: boolean): void {
+    this.hoverOn = h;
+  }
+
   override update(dt: number): void {
     this.face.update(dt, false, this.testing);
-    if (this.testing) this.face.group.position.z = 0.0006;
-    else this.face.group.position.z = 0.0012;
+    const z = this.testing ? 0.0006 : 0.0012;
+    const inst = ControlInstances.of(this.object);
+    inst?.sync(this.hoverOn);
+    if (this.face.group.position.z !== z) {
+      this.face.group.position.z = z;
+      inst?.moved(this.face.group);
+    }
+    inst?.syncLenses();
   }
 
   override dispose(): void {

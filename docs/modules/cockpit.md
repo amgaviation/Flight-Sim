@@ -284,6 +284,25 @@ bezels, slots, labels). **Anything the aircraft moves after build() must not con
 meshes, or must set `userData.cockpitDynamic = true` on the moving group** (Yoke and RudderPedals
 do this themselves). Consolidated originals are removed from the scene graph.
 
+**Moving parts (dynamic instancing, `instancing.ts`).** After static consolidation `build()`
+calls `instanceMovingParts(root, materials, lighting)` (option `instanceMoving`, default true,
+only with `mergeStatic`). Controls mark the meshes that travel with an animated group with
+`markMovingPart(mesh, mover)`: KeyPad key caps, legends, EXEC bars and face lights,
+CircuitBreaker caps and ratings, PushButton caps, engraved text, light bars and legend lenses.
+(`AnnunciatorLight` marks its lens segments and back.) Marked parts sharing geometry + material
+become one `InstancedMesh`; flat quads (legends, lenses,
+lens backs) share a unit quad per material or legend atlas page, with the atlas UV rectangle,
+diffuse and emissive colour as per-instance attributes (a whole MCDU keyboard or breaker panel
+draws in a handful of calls). The original meshes stay in the graph as invisible proxies (names,
+materials and transforms unchanged). The owning control drives its instances through
+`ControlInstances.of(control.object)`: `moved(mover)` after animating a group, `syncLenses()`
+after lamp updates and `sync(showProxies)` once per frame (instances follow the control's
+visibility; while hovered the originals are drawn so the hover rim attaches to them). Not
+instanced: parts under a `cockpitDynamic` ancestor (yoke/sidestick switches), controls nested in
+another control (the button of a `GuardedButton`), invisible parts and single parts.
+`build.movingStats = { parts, batches }`. As with static consolidation, the parent chain of each
+animated group is frozen at build time.
+
 ---
 
 ## 4. Controls: common behaviour
@@ -813,8 +832,11 @@ lamp colour; drive `emissiveIntensity`), `backlitLegend(map, fill, glow)`, `disp
 
 Interior occlusion: every cockpit MeshStandard/Physical material gets an `onBeforeCompile` patch
 scaling indirect diffuse/specular (hemisphere + environment light) by `interior.diffuse/specular`
-(the cockpit sees only part of the sky; there is no SSAO). Direct light (sun, floods) is
-unaffected. `build()` applies the patch to every MeshStandard/Physical material under the root
+(the cockpit sees only part of the sky; there is no SSAO), adding `interior.bounce` (irradiance
+reflected by the sunlit interior, linear RGB in render units) to the indirect diffuse, and
+multiplying the indirect light by `interior.adapt` / `adaptSpecular` (daylight adaptation to the
+shaded interior). `CockpitLighting` writes bounce and adaptation every frame (section 11).
+Direct light (sun, floods) is unaffected. `build()` applies the patch to every MeshStandard/Physical material under the root
 (including materials made by other modules, e.g. analog gauges; existing `onBeforeCompile` hooks
 are chained); call `env.materials.patchInterior(m)` yourself for materials added after build(). Procedural
 textures (`textures.ts`) are DataTextures (node-safe): crackle, paint, leather, fabric, carpet,
@@ -836,7 +858,9 @@ labels.legend(lines, pxW, pxH, 'legend'|'field', font?, weight?) -> { rect, text
 labels.quad(rect, w, h, ox?, oy?)  labels.flush()  labels.atlas (LabelAtlas: cell(), texture(page), pageCount)
 ```
 Text is rasterised once into shared 2048² atlas pages (34 px cap height, padded); identical
-strings share cells and geometry. Label materials are shared per (page, zone, colour) and their
+strings share cells and geometry. Text cells are coverage masks (white on opaque black, atlas
+pages without sRGB encoding) used as the label material's `alphaMap`; the fill colour and the
+backlight glow come from the material. Label materials are shared per (page, zone, colour) and their
 emissive follows the zone (engraved white text lit from behind). Fonts are system stacks
 (`PANEL_FONT` condensed grotesque, `KEY_FONT`). In node (no canvas) quads are untextured.
 
@@ -865,6 +889,23 @@ var `ac.light.<zone>` (the default label zone is `'panel'`), so aircraft must wr
 at night-adapted brightness and fade by day (annunciators and displays are not washed out).
 Reflections (env map intensity) also scale with ambient light. Keep real lights <= 4-5 per
 cockpit; they stay visible at zero intensity (no shader recompiles).
+
+Daylight interior fill (`lighting.interiorFill = { admitted: 0.06, reflectance, adaptation: 3.2,
+adaptationSpecular: 1.3 }`), written every frame into `materials.interior`:
+- `bounce`: light admitted through the windows and inter-reflected by the interior
+  (integrating-sphere estimate): `(1 - V) * rho * admitted * E_global / (1 - rho)`, with `V` the
+  sky visibility (`interior.diffuse`), `rho` the mean interior reflectance (EST from the palette's
+  sidewall / headliner / carpet / panel / glareshield colours, tint included) and `E_global` the
+  world's global illuminance (`env.ambient_light` log scale x `world.render_units_per_lux`). No
+  world (tests) = no bounce. Aircraft with more glass per interior area may raise `admitted`.
+- `adapt`: EST perceptual adaptation of the shade (indirect) light to the interior in daylight
+  (the renderer's exposure follows the sky), faded out with the backlight wash-out curve, so dusk
+  and night lighting are unchanged; direct sun and cockpit lamps are not scaled.
+`lighting.zoneOf(material)` returns the zone and gain a material was registered with.
+
+Legends: label text is a coverage mask read as the label material's `alphaMap` (white glyphs on
+an opaque black atlas cell, no sRGB decode), so minified legends keep their brightness instead of
+being darkened by the mip chain (section 10).
 
 ---
 
@@ -933,7 +974,11 @@ knob `push.event`, keypad `${eventPrefix}${id}` / `singleEvent` / `:up`, trim `m
 
 - Build dense panels with specs/rows; share geometry through `env.geometry`; keep `mergeStatic`
   on. The demo (48 controls, 2 displays) renders in ~140 draw calls; a full airliner flight deck
-  should stay under ~2,500 (moving parts are separate meshes by necessity).
+  should stay under ~2,500. Moving parts of keypads, breakers and push buttons are instanced
+  (section 3.4): cockpit draw calls at this change (node census of the built cockpits, before ->
+  after): M2 580 -> 319, Longitude 719 -> 288, G650 1,538 -> 418, G800 709 -> 281, Global 6000
+  1,109 -> 437, 737-800 1,793 -> 925 (tests/cockpit/jetDrawCalls.test.ts). Stand-alone
+  `AnnunciatorLight` lenses are instanced too.
 - Label text is cheap (atlas + merged quads); annunciator segments cost one material each.
 - `control.update` and `DisplayManager.update` do not allocate; `Lever.limit` callbacks should
   not allocate either (return a cached tuple if called per frame).

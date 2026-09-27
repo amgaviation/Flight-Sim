@@ -271,14 +271,29 @@ export class CockpitMaterials {
   private envMap: THREE.Texture | null = null;
   private envScale = 1;
   /**
-   * Interior occlusion (shared uniforms): a cockpit interior sees only part
-   * of the sky through its windows, and the renderer has no ambient
-   * occlusion, so the indirect (hemisphere/environment) light reaching
-   * cockpit surfaces is scaled down. Direct light (sun through the windows,
-   * flood lights) is unaffected. EST: ~40 % of the hemisphere is visible
-   * from a panel through a typical windshield + side windows.
+   * Interior indirect light (shared uniforms), applied by {@link patchInterior}:
+   *
+   *  - occlusion: a cockpit interior sees only part of the sky through its
+   *    windows, and the renderer has no ambient occlusion, so the indirect
+   *    (hemisphere/environment) light reaching cockpit surfaces is scaled
+   *    down (`diffuse`, `specular`). EST: ~40 % of the hemisphere is visible
+   *    from a panel through a typical windshield + side windows;
+   *  - `bounce`: irradiance (render units, linear RGB) reflected onto every
+   *    surface by the sunlit/skylit interior (seats, sidewalls, headliner,
+   *    floor, crew) - the light an occluded panel really receives instead of
+   *    the sky it cannot see. Written by CockpitLighting from the world's
+   *    global illuminance (integrating-sphere estimate, see Lighting.ts);
+   *  - `adapt` / `adaptSpecular`: daylight adaptation gain of the indirect
+   *    light (1 = none), see CockpitLighting.interiorFill.
+   * Direct light (sun through the windows, flood lights) is unaffected.
    */
-  readonly interior = { diffuse: { value: 0.4 }, specular: { value: 0.7 } };
+  readonly interior = {
+    diffuse: { value: 0.4 },
+    specular: { value: 0.7 },
+    bounce: { value: new THREE.Color(0, 0, 0) },
+    adapt: { value: 1 },
+    adaptSpecular: { value: 1 },
+  };
 
   constructor(palette: PaletteId | PaletteDef) {
     this.palette = typeof palette === 'string' ? PALETTES[palette] : palette;
@@ -334,6 +349,8 @@ export class CockpitMaterials {
       emissiveIntensity: 0,
     });
     m.name = 'cockpit.lens';
+    // Lets dynamic instancing (instancing.ts) draw lenses of one legend atlas page in one call.
+    m.userData.cockpitLens = true;
     this.track(m);
     return m;
   }
@@ -414,11 +431,14 @@ export class CockpitMaterials {
       prevCompile.call(s, shader, renderer);
       shader.uniforms.cockpitAoDiffuse = u.diffuse;
       shader.uniforms.cockpitAoSpecular = u.specular;
+      shader.uniforms.cockpitBounce = u.bounce;
+      shader.uniforms.cockpitAdapt = u.adapt;
+      shader.uniforms.cockpitAdaptSpec = u.adaptSpecular;
       shader.fragmentShader =
-        'uniform float cockpitAoDiffuse;\nuniform float cockpitAoSpecular;\n' +
+        'uniform float cockpitAoDiffuse;\nuniform float cockpitAoSpecular;\nuniform vec3 cockpitBounce;\nuniform float cockpitAdapt;\nuniform float cockpitAdaptSpec;\n' +
         shader.fragmentShader.replace(
           '#include <aomap_fragment>',
-          '#include <aomap_fragment>\n\treflectedLight.indirectDiffuse *= cockpitAoDiffuse;\n\treflectedLight.indirectSpecular *= cockpitAoSpecular;',
+          '#include <aomap_fragment>\n\treflectedLight.indirectDiffuse = ( reflectedLight.indirectDiffuse * cockpitAoDiffuse + cockpitBounce * BRDF_Lambert( material.diffuseColor ) ) * cockpitAdapt;\n\treflectedLight.indirectSpecular *= cockpitAoSpecular * cockpitAdaptSpec;',
         );
     };
     s.customProgramCacheKey = () => `${prevKey.call(s)}|cockpitInterior`;

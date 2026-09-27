@@ -13,6 +13,12 @@
  * Systems trip a breaker by writing `var` = 0 and `trippedVar` = 1; pushing
  * it back in writes var = 1 and trippedVar = 0 (the system re-trips it if
  * the fault persists).
+ *
+ * Draw calls: the collar is static (consolidated), the cap and its rating
+ * text are moving parts drawn as instances of all breakers of the cockpit
+ * (instancing.ts), and the white band - hidden inside the collar while the
+ * breaker is in - is only drawn while the breaker is out (one call per
+ * breaker that is out).
  */
 import * as THREE from 'three';
 import type { ControlPointer } from '../types';
@@ -22,6 +28,7 @@ import { ControlBase, type ControlOptions } from './ControlBase';
 import { CircuitBreakerLogic } from './logic/MiscLogic';
 import { cylinderZ, hexPrism, revolve } from '../geometry/primitives';
 import { smoothTo } from '../anim';
+import { ControlInstances, markMovingPart } from '../instancing';
 
 export interface CircuitBreakerOptions extends ControlOptions {
   var: string;
@@ -43,7 +50,10 @@ export class CircuitBreaker extends ControlBase {
   readonly logic: CircuitBreakerLogic;
   private readonly o: CircuitBreakerOptions;
   private readonly button = new THREE.Group();
+  private readonly band: THREE.Mesh;
   private out = 0;
+  private appliedOut = -1;
+  private hoverOn = false;
 
   constructor(env: CockpitEnv, o: CircuitBreakerOptions) {
     super(env, o);
@@ -77,8 +87,9 @@ export class CircuitBreaker extends ControlBase {
     // White band on the stem (hidden inside the collar when in).
     const band = this.mesh(this.geo(`cb.band.${d}`, () => cylinderZ(r * 0.8, r * 0.8, -POP, 0.0028, 20)), 'paintWhite', this.button);
     band.name = 'cbWhiteBand';
+    this.band = band;
     // Cap.
-    this.mesh(
+    const cap = this.mesh(
       this.geo(`cb.cap.${d}`, () =>
         revolve(
           [
@@ -96,9 +107,11 @@ export class CircuitBreaker extends ControlBase {
       'plasticBlack',
       this.button,
     );
+    markMovingPart(cap, this.button);
     if (o.rating !== undefined) {
       const l = this.engrave(String(o.rating), 0, 0, { height: r * 0.62, zone: null, color: '#e8e8e2', weight: 700 }, this.button, true);
       l.position.z = 0.0077;
+      markMovingPart(l, this.button);
     }
     if (o.name) this.engrave(typeof o.name === 'string' ? o.name : this.label, 0, -(r * 1.5 + 0.0035), { height: 0.0021 });
     this.addHitBox(d * 1.6, d * 1.6, 0.014, 0, 0, 0.006);
@@ -133,14 +146,26 @@ export class CircuitBreaker extends ControlBase {
     this.toggle();
   }
 
+  onHover(h: boolean): void {
+    this.hoverOn = h;
+  }
+
   override update(dt: number): void {
     const ev = this.logic.sync(this.env.vars.get(this.o.var), this.o.trippedVar ? this.env.vars.get(this.o.trippedVar) : 0);
     if (ev === 'tripped') this.playSound(COCKPIT_SOUNDS.cbTrip);
     this.out = smoothTo(this.out, this.logic.closed ? 0 : 1, dt, this.logic.tripped ? 0.008 : 0.02, 1e-4);
-    this.applyVisual();
+    const inst = ControlInstances.of(this.object);
+    inst?.sync(this.hoverOn);
+    if (this.applyVisual()) inst?.moved(this.button);
   }
 
-  private applyVisual(): void {
+  /** Places the button; returns true when it moved. */
+  private applyVisual(): boolean {
+    // The white band sits inside the collar while the breaker is in: not drawn then.
+    this.band.visible = this.out > 1e-3;
+    if (this.out === this.appliedOut) return false;
+    this.appliedOut = this.out;
     this.button.position.z = this.out * POP;
+    return true;
   }
 }

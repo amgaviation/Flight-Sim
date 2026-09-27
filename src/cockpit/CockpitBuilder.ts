@@ -22,6 +22,7 @@ import type { TextStyle } from './labels';
 import type { CockpitLightSpec, LightingZoneOptions } from './Lighting';
 import { bodyToLocalV, placeOnPanel, placePanel, type BodyVec, type PanelPlacement, type PlaceOnPanelOptions } from './frame';
 import { consolidateStatic, type MergeStats } from './merge';
+import { instanceMovingParts, type MovingInstanceStats } from './instancing';
 import type { DisplayOptions } from './DisplayManager';
 import {
   ATI2_HOLE,
@@ -76,6 +77,11 @@ export interface CockpitBuilderOptions extends CockpitEnvOptions {
   views?: CockpitBuild['views'];
   /** Consolidate static meshes in build() (default true). */
   mergeStatic?: boolean;
+  /**
+   * Draw the moving parts of keypads, breakers and push buttons as instanced
+   * batches in build() (instancing.ts; default true, only with mergeStatic).
+   */
+  instanceMoving?: boolean;
   /** Reuse an existing environment instead of creating one. */
   env?: CockpitEnv;
   name?: string;
@@ -391,6 +397,8 @@ export class Panel {
 export interface CockpitBuildEx extends CockpitBuild {
   env: CockpitEnv;
   mergeStats: MergeStats | null;
+  /** Moving control parts drawn as instances (instancing.ts); null when none. */
+  movingStats?: MovingInstanceStats | null;
 }
 
 export class CockpitBuilder {
@@ -559,6 +567,7 @@ export class CockpitBuilder {
       mergeStats = r.stats;
       merged.push(...r.meshes);
     }
+    const moving = this.o.mergeStatic !== false && this.o.instanceMoving !== false ? instanceMovingParts(this.root, this.env.materials, this.env.lighting) : null;
     const env = this.env;
     const hooks = this.hooks;
     const owned = this.ownedGeometry;
@@ -575,6 +584,7 @@ export class CockpitBuilder {
       occluders: this.occluders,
       env,
       mergeStats,
+      movingStats: moving?.stats ?? null,
       update(dt: number) {
         env.lighting.update(dt);
         env.labels.flush();
@@ -584,6 +594,7 @@ export class CockpitBuilder {
         for (const c of controls) c.dispose?.();
         for (const d of displays) d.display.dispose?.();
         for (const m of merged) if (m.userData.ownsGeometry) m.geometry.dispose();
+        moving?.dispose();
         for (const g of owned) g.dispose();
         root.removeFromParent();
         env.dispose();

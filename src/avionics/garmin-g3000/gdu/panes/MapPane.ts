@@ -25,6 +25,19 @@ import { G3K_PALETTE, TF, dataBox } from '../style';
 
 const P = G3K_PALETTE;
 
+/** EST: legend background grey, sampled from the CRG legend graphic. */
+const LEGEND_DARK = '#272b2b';
+/** Relative terrain legends (rows of 19 px): CRG 190-02047-01 Rev A p.100. */
+const TERRAIN_LEGEND_AIR: readonly { h: number; color: string; labels: readonly string[] }[] = [
+  { h: 2, color: '#ff0000', labels: ['FT', '-100'] },
+  { h: 1, color: '#ffff00', labels: ['-1000'] },
+  { h: 1, color: 'rgb(87,162,68)', labels: ['-2000'] },
+];
+const TERRAIN_LEGEND_GROUND: readonly { h: number; color: string; labels: readonly string[] }[] = [
+  { h: 2, color: '#ff0000', labels: ['FT', '400'] },
+  { h: 3, color: LEGEND_DARK, labels: ['-100', '-1000', '-2000'] },
+];
+
 /**
  * G3000 map style. Symbol range limits are in MovingMap range units (twice the
  * Garmin selected range): intersections up to 7.5 nm, small airports up to
@@ -121,6 +134,10 @@ export class MapPane {
     s.terrain = this.mode === 'taws' ? 'relative' : this.mode === 'traffic' ? 'off' : set.terrain;
     s.tawsLevel = tawsWarn as 0 | 1 | 2;
     s.gearDown = v.get(this.sys.cfg.gearDownVar) >= 0.5;
+    // Relative terrain legends (CRG 190-02047-01 Rev A p.99-100; G5000 CRG 190-02538-02 Rev A p.142): on the
+    // ground only terrain more than 400 ft above the aircraft is red; in the air red / yellow / green bands.
+    s.onGround = v.get('gear.air_ground', 1) >= 0.5;
+    s.terrainGreenBand = true;
     const nav = this.mode === 'nav' || this.mode === 'weather';
     s.showAirports = nav && set.airports;
     s.showNavaids = nav && set.navaids;
@@ -199,10 +216,35 @@ export class MapPane {
       const inop = v.get('taws.inop') >= 0.5;
       TF.draw(ctx, inop ? 'TAWS FAIL' : this.sys.cfg.taws === 'A' ? 'TAWS-A' : 'TAWS-B', r.x + r.w - 10, r.y + r.h - 16, 16, inop ? P.amber : P.white, 'right', 'middle', '#000000');
     }
+    if (!this.inset && m.terrain?.mode === 'relative' && m.state.valid) this.drawTerrainLegend(ctx, m.state.onGround);
     const traffic = this.sys.trafficThreats();
     if ((set.traffic || this.mode === 'traffic') && !traffic) TF.draw(ctx, 'TRFC UNAVAIL', r.x + 8, r.y + r.h - 16, 13, P.amber, 'left', 'middle', '#000000');
     const ptr = this.pane ? this.sys.pointers[this.pane] : null;
     if (ptr && ptr.active) this.drawPointer(ctx);
+  }
+
+  /**
+   * Relative terrain legend at the right edge of the pane: the "Terrain SVT / TAWS Relative Terrain
+   * Legends" of CRG 190-02047-01 Rev A p.99-100 (in-air: red with FT / -100, yellow -1000, green -2000;
+   * on-ground: red with FT / 400, dark -100 / -1000 / -2000). Size and position EST.
+   */
+  private drawTerrainLegend(ctx: Ctx2D, onGround: boolean): void {
+    const r = this.rect;
+    const w = 50;
+    const rowH = 19;
+    const x = r.x + r.w - w - 8;
+    let y = r.y + 60;
+    const bands = onGround ? TERRAIN_LEGEND_GROUND : TERRAIN_LEGEND_AIR;
+    dataBox(ctx, x - 2, y - 2, w + 4, rowH * (onGround ? 5 : 4) + 4, 'rgba(0,0,0,0.8)');
+    for (let k = 0; k < bands.length; k++) {
+      const b = bands[k];
+      box(ctx, x, y, w, rowH * b.h, b.color, '');
+      for (let i = 0; i < b.labels.length; i++) {
+        const t = b.labels[i];
+        TF.draw(ctx, t, x + w / 2, y + rowH * (i + 0.5), t === 'FT' ? 13 : 15, P.white, 'center', 'middle', '#000000');
+      }
+      y += rowH * b.h;
+    }
   }
 
   private drawRadarBackdrop(ctx: Ctx2D): void {

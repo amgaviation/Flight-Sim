@@ -7,6 +7,14 @@
  * colour); their emissive intensity follows the zone's dimmer var through
  * `CockpitLighting`, which is how engraved backlit legends light up at night.
  *
+ * Text cells are coverage masks (white glyphs on an opaque black cell, stored
+ * without sRGB encoding) read as the label material's `alphaMap`: the fill
+ * colour and backlight come from the material, and minified (mipmapped) text
+ * keeps its full brightness. With glyphs on a transparent background the
+ * mip chain averaged the transparent texels' black RGB into the glyphs, so a
+ * legend a few pixels tall was drawn at coverage squared - two to three times
+ * too dark on a daylight panel.
+ *
  * Label quads are flagged `userData.cockpitStatic = true` so `CockpitBuilder`
  * can merge all static labels of a panel into one draw call.
  *
@@ -147,7 +155,8 @@ export class LabelAtlas {
       if (canvas && ctx) {
         ctx.clearRect(0, 0, this.size, this.size);
         texture = new THREE.CanvasTexture(canvas);
-        texture.colorSpace = THREE.SRGBColorSpace;
+        // Coverage masks and black/white legend cells: no sRGB decode (alphaMap reads .g linearly).
+        texture.colorSpace = THREE.NoColorSpace;
         texture.anisotropy = 8;
         texture.minFilter = THREE.LinearMipmapLinearFilter;
         texture.magFilter = THREE.LinearFilter;
@@ -232,6 +241,9 @@ export class LabelFactory {
     const align = style.align ?? 'center';
     const key = `t|${text}|${cssFont}|${style.spacing ?? 0.04}|${style.lineHeight ?? 1.35}|${align}|${style.box ?? 0}`;
     const rect = this.atlas.cell(key, cellW, cellH, (ctx, x, y, w) => {
+      // Opaque black cell (padding included): the glyph coverage is the green channel (alphaMap).
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(x - PAD, y - PAD, w + PAD * 2, cellH + PAD * 2);
       ctx.fillStyle = '#ffffff';
       ctx.strokeStyle = '#ffffff';
       ctx.font = cssFont;
@@ -437,13 +449,13 @@ export class LabelFactory {
       const tex = this.atlas.texture(page);
       m = new THREE.MeshStandardMaterial({
         color: fill,
-        map: tex,
+        // Coverage mask (see header): alpha = glyph coverage, colour and backlight from the material.
+        alphaMap: tex,
         transparent: true,
         depthWrite: false,
         roughness: 0.55,
         metalness: 0,
         emissive: new THREE.Color(this.materials.palette.backlight),
-        emissiveMap: tex,
         emissiveIntensity: 0,
         polygonOffset: true,
         polygonOffsetFactor: -1,

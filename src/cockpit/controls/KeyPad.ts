@@ -2,10 +2,13 @@
  * Keypads built from a layout description: CDU/MCDU keyboards, Garmin
  * GCU/GMC keypads, line-select key columns, radio control panel keys.
  *
- * Each key is its own animated mesh (shared geometry per size) with an
+ * Each key is its own animated group (shared cap geometry per size) with an
  * engraved, backlit legend; keys may carry a small annunciator bar
  * (`lightVar`, e.g. EXEC). Extra annunciator lights on the keypad face
- * (MSG, FAIL, OFST, DSPY) are given in `lights`.
+ * (MSG, FAIL, OFST, DSPY) are given in `lights`. Caps, legends, bars and
+ * lights are marked as moving parts, so the cockpit build draws all key caps
+ * of one size/material, and all legends of one atlas page, as single
+ * instanced batches (instancing.ts); a pressed key moves its instances.
  *
  * Mouse: left or right press on a key presses it (emits its event);
  * release releases it. Clicking the keypad also gives it keyboard focus when
@@ -28,6 +31,7 @@ import { KeyPadLogic, type KeyDef } from './logic/MiscLogic';
 import { LegendFace } from './Annunciator';
 import { roundedBox } from '../geometry/primitives';
 import { smoothTo } from '../anim';
+import { ControlInstances, markMovingPart } from '../instancing';
 
 export interface KeyPadOptions extends ControlOptions {
   rows: KeyDef[][];
@@ -57,6 +61,8 @@ interface KeyState {
   group: THREE.Group;
   hit: THREE.Mesh;
   press: number;
+  /** Cap travel last applied to the group (m). */
+  appliedZ: number;
   down: boolean;
   bar: { mat: THREE.MeshStandardMaterial; level: number } | null;
 }
@@ -70,6 +76,7 @@ export class KeyPad extends ControlBase {
   private readonly faces: LegendFace[] = [];
   private active: KeyState | null = null;
   private hovered: KeyState | null = null;
+  private hoverOn = false;
   private focused = false;
   /** Size of the laid-out keypad (m). */
   readonly width: number;
@@ -104,6 +111,7 @@ export class KeyPad extends ControlBase {
       face.group.position.set(l.x, l.y, 0.0005);
       this.object.add(face.group);
       this.faces.push(face);
+      for (const c of face.group.children) if ((c as THREE.Mesh).isMesh) markMovingPart(c as THREE.Mesh, face.group);
     }
   }
 
@@ -135,6 +143,7 @@ export class KeyPad extends ControlBase {
   }
 
   onHover(h: boolean): void {
+    this.hoverOn = h;
     if (!h) this.hovered = null;
   }
 
@@ -167,10 +176,19 @@ export class KeyPad extends ControlBase {
   override update(dt: number): void {
     const test = this.env.lighting.lampTest();
     const lvl = this.env.lighting.annunciatorLevel();
+    // Instanced parts (after build): hidden with the keypad; the original meshes are drawn while hovered or
+    // keyboard-focused so the hover rim can attach to them.
+    const inst = ControlInstances.of(this.object);
+    inst?.sync(this.hoverOn || this.focused);
     for (let i = 0; i < this.keyList.length; i++) {
       const k = this.keyList[i];
       k.press = smoothTo(k.press, k.down ? 1 : 0, dt, 0.012, 1e-4);
-      k.group.position.z = -k.press * 0.0014;
+      const z = -k.press * 0.0014;
+      if (z !== k.appliedZ) {
+        k.appliedZ = z;
+        k.group.position.z = z;
+        inst?.moved(k.group);
+      }
       if (k.bar && k.def.lightVar) {
         const lit = test || this.env.vars.get(k.def.lightVar) !== 0;
         k.bar.level = smoothTo(k.bar.level, lit ? 1.5 * lvl : 0, dt, 0.025, 1e-3);
@@ -178,6 +196,7 @@ export class KeyPad extends ControlBase {
       }
     }
     for (let i = 0; i < this.faces.length; i++) this.faces[i].update(dt);
+    inst?.syncLenses();
   }
 
   override dispose(): void {
@@ -210,7 +229,7 @@ export class KeyPad extends ControlBase {
     });
     const sm = (k.style ? o.styleMaterials?.[k.style] : undefined) ?? o.keyMaterial ?? 'plasticGrey';
     const mat = typeof sm === 'string' ? this.env.materials.get(sm) : sm;
-    this.mesh(g, mat, group);
+    markMovingPart(this.mesh(g, mat, group), group);
     const label = k.label ?? k.id;
     const lines = label.split('\n').length;
     const th = o.legendHeight ?? Math.min(0.0024, (h * 0.5) / lines);
@@ -223,6 +242,7 @@ export class KeyPad extends ControlBase {
       // Shrink long legends to fit the key.
       const maxW = w * 0.86;
       if (l.userData.width_m > maxW) l.scale.setScalar(maxW / l.userData.width_m);
+      markMovingPart(l, group);
     }
     let bar: KeyState['bar'] = null;
     if (hasBar) {
@@ -230,10 +250,11 @@ export class KeyPad extends ControlBase {
       const bm = new THREE.Mesh(this.geo(`key.bar.${w.toFixed(5)}`, () => new THREE.PlaneGeometry(w * 0.6, h * 0.13)), m);
       bm.position.set(0, -h * 0.24, depth + 0.0001);
       group.add(bm);
+      markMovingPart(bm, group);
       bar = { mat: m, level: 0 };
     }
     const hit = this.addHitBox(w + 0.0005, h + 0.0005, depth + 0.003, 0, 0, depth / 2, group);
-    const st: KeyState = { def: k, group, hit, press: 0, down: false, bar };
+    const st: KeyState = { def: k, group, hit, press: 0, appliedZ: 0, down: false, bar };
     this.keys.set(k.id, st);
     this.keyList.push(st);
     this.byHit.set(hit, st);

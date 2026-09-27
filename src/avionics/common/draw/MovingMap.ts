@@ -155,6 +155,15 @@ export interface MapState {
   /** TAWS alert overlay 0/1/2 (see TerrainRaster). */
   tawsLevel: 0 | 1 | 2;
   gearDown: boolean;
+  /** Aircraft on the ground: Garmin G3000/G5000 on-ground relative terrain legend (TerrainRaster.onGround). */
+  onGround: boolean;
+  /** Garmin G3000/G5000 in-air relative terrain legend green band -1000..-2000 ft (TerrainRaster.relativeGreenBand). */
+  terrainGreenBand: boolean;
+  /**
+   * EGPWS terrain: elevation (ft MSL) of the runway nearest the aircraft, for the 400 ft runway blanking
+   * (TerrainRaster.runwayElevFt). NaN = the nearest airport of the map's nav database.
+   */
+  runwayElevFt: number;
   showAirports: boolean;
   showNavaids: boolean;
   showFixes: boolean;
@@ -191,6 +200,9 @@ export function createMapState(trafficCapacity = 30): MapState {
     terrain: 'off',
     tawsLevel: 0,
     gearDown: false,
+    onGround: false,
+    terrainGreenBand: false,
+    runwayElevFt: NaN,
     showAirports: true,
     showNavaids: true,
     showFixes: true,
@@ -369,13 +381,44 @@ export class MovingMap {
     const s = this.state;
     this.queryAge += dt;
     this.prepareProjection();
-    if (this.terrain) {
-      this.terrain.mode = s.declutter >= 3 && s.terrain === 'topo' ? 'off' : s.terrain;
-      this.terrain.alertLevel = s.tawsLevel;
-      this.terrain.gearDown = s.gearDown;
-      if (this.terrain.mode !== 'off') this.terrain.update(this.refLat, this.refLon, s.rangeNm, s.altFt, s.track);
-    }
     this.refreshQueries();
+    if (this.terrain) {
+      const t = this.terrain;
+      t.mode = s.declutter >= 3 && s.terrain === 'topo' ? 'off' : s.terrain;
+      t.alertLevel = s.tawsLevel;
+      t.gearDown = s.gearDown;
+      t.onGround = s.onGround;
+      t.relativeGreenBand = s.terrainGreenBand;
+      t.runwayElevFt = t.mode !== 'egpws' ? NaN : Number.isFinite(s.runwayElevFt) ? s.runwayElevFt : this.nearestRunwayElevFt(s.lat, s.lon);
+      if (t.mode !== 'off') t.update(this.refLat, this.refLon, s.rangeNm, s.altFt, s.track);
+    }
+  }
+
+  /**
+   * Field elevation (ft) of the airport with runways nearest to (lat, lon) among the airports queried
+   * around the map (NaN when none): the EGPWS "nearest runway elevation" (SCOPE: airport field
+   * elevation stands in for the individual runway elevation). Allocation-free.
+   */
+  nearestRunwayElevFt(lat: number, lon: number): number {
+    const list = this.airports;
+    const cos = Math.cos(lat * DEG2RAD);
+    let best = Infinity;
+    let elev = NaN;
+    for (let i = 0; i < list.length; i++) {
+      const a = list[i];
+      if (a.type === 'heliport' || a.type === 'seaplane_base' || a.type === 'closed' || a.runways.length === 0) continue;
+      const dy = a.lat - lat;
+      let dx = a.lon - lon;
+      if (dx > 180) dx -= 360;
+      else if (dx < -180) dx += 360;
+      dx *= cos;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < best) {
+        best = d2;
+        elev = a.elevationFt;
+      }
+    }
+    return elev;
   }
 
   draw(ctx: Ctx2D): void {

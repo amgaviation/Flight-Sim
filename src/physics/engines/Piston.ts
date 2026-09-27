@@ -123,6 +123,8 @@ export class Piston implements EngineModel {
   private readonly pFactor: number;
   private readonly slipYaw: number;
   private readonly fullRich: number;
+  /** 1 - torqueRollRecovery (appended option; 1 = the original full torque reaction). */
+  private readonly torqueRollFactor: number;
   private readonly injected: boolean;
   private readonly diskArea: number;
   private readonly jMax: number;
@@ -171,6 +173,7 @@ export class Piston implements EngineModel {
     this.pFactor = cfg.pFactorCoeff ?? 0.35;
     this.slipYaw = cfg.slipstreamYawCoeff ?? 0.004;
     this.fullRich = cfg.fullRichFactor ?? 1.12;
+    this.torqueRollFactor = 1 - clamp01(cfg.torqueRollRecovery ?? 0);
     this.injected = (cfg.induction ?? 'injected') === 'injected';
     this.diskArea = Math.PI * 0.25 * cfg.propDiameter_m * cfg.propDiameter_m;
     this.jMax = cfg.propCP.x[cfg.propCP.x.length - 1];
@@ -419,7 +422,7 @@ export class Piston implements EngineModel {
     const rot = this.rot;
     const em = this.extraMoment;
     // Airframe reaction to the engine torque on the crankshaft (roll opposite to prop rotation).
-    em.x = -rot * this.shaftTorque_Nm * this.axis.x;
+    em.x = -rot * this.shaftTorque_Nm * this.axis.x * this.torqueRollFactor;
     em.y = 0;
     // P-factor: descending blade (right side for clockwise rotation) has more AoA at +alpha -> yaw left.
     const dy = rot * this.pFactor * R * clamp(env.alpha_rad, -0.35, 0.35);

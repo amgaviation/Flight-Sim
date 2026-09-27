@@ -546,14 +546,26 @@ per-update budget, and shifts by whole cells as the aircraft moves. A change of 
 recolours the grid from a LUT without resampling.
 
 - Fields: `mode: 'off' | 'relative' | 'egpws' | 'topo'`, `alertLevel: 0 | 1 | 2`,
-  `alertLookAheadNm = 4`, `gearDown`, `size`, `ppc`, `canvas`.
+  `alertLookAheadNm = 4`, `gearDown`, `size`, `ppc`, `canvas`, and the near-airport rules:
+  - `onGround` ('relative'): Garmin on-ground legend, only terrain 400 ft or more above the
+    aircraft is red (CRG 190-02047-01 Rev A p.99-100; G5000 CRG 190-02538-02 Rev A p.142; G1000
+    NXi PG 190-02177-00 Rev A p.291), so the departure airport area is not painted red/yellow
+    while taxiing;
+  - `relativeGreenBand` ('relative'): G3000/G5000/G1000 NXi in-air legend adds green
+    -1000..-2000 ft (G1000 NXi PG p.292; the original G1000 TAWS-B is red/yellow/black: leave
+    false);
+  - `runwayElevFt` ('egpws'): terrain within 400 ft (vertical) of the nearest runway elevation is
+    not displayed (MK VI/VIII EGPWS Pilot Guide 060-4314-000 Rev C p.32). NaN = unknown (no
+    blanking). `MovingMap` fills it from the nearest airport of its nav database.
 - Methods: `update(lat, lon, rangeNm, altFt, trackDeg)`,
   `draw(ctx, centerX, centerY, pxPerNm, upDeg)`, `reset(lat, lon, cellNm)`,
   `cachedElevationFt(lat, lon)` (NaN when not yet sampled), `completeness` (0..1), `gridLat`,
   `gridLon`, `gridCellNm`.
-- `terrainBand(mode, dFt, gearDown)` exposes the pure classification:
-  - relative: red above -100 ft, yellow down to -1000 ft;
-  - egpws: Honeywell EGPWS pilot guide density bands.
+- `terrainBand(mode, dFt, gearDown, { onGround?, greenBand?, elevFt?, runwayElevFt? })` exposes
+  the pure classification:
+  - relative: red above -100 ft, yellow down to -1000 ft (green to -2000 ft with `greenBand`);
+    on the ground red only above +400 ft;
+  - egpws: Honeywell EGPWS pilot guide density bands; black within 400 ft of the runway.
 
 `MovingMap` uses the raster; build your own only for a stand-alone TAWS page.
 
@@ -584,7 +596,9 @@ new MovingMap({ rect, style, ownX?, ownY?, rangePx?,
   - own-ship: `valid`, `lat`, `lon`, `altFt`, `vsFpm`, `heading`, `track`, `gsKt`, `dtk`;
   - view: `orientation: 'north-up' | 'track-up' | 'heading-up' | 'dtk-up'`, `rangeNm` (own-ship
     to the range edge), `declutter: 0..3`;
-  - terrain: `terrain: TerrainMode`, `tawsLevel: 0..2`, `gearDown`;
+  - terrain: `terrain: TerrainMode`, `tawsLevel: 0..2`, `gearDown`, `onGround` and
+    `terrainGreenBand` (Garmin legends, see 10.7), `runwayElevFt` (EGPWS runway blanking; NaN =
+    nearest airport of the map's nav database, `nearestRunwayElevFt(lat, lon)`);
   - layers: `showAirports`, `showNavaids`, `showFixes`, `showTraffic`, `showRoute`,
     `showRangeRings`;
   - pan: `panActive`, `panLat`, `panLon`;

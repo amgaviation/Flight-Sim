@@ -78,6 +78,9 @@ interface Zone {
   lights: { light: THREE.PointLight | THREE.SpotLight; candela: number }[];
 }
 
+/** world/worldVars.ts WORLD_VARS.renderUnitsPerLux: scene light units per lux (incl. eye adaptation). */
+const RENDER_UNITS_PER_LUX = 'world.render_units_per_lux';
+
 export class CockpitLighting {
   private readonly vars: SimVars;
   private readonly materials: CockpitMaterials;
@@ -105,10 +108,53 @@ export class CockpitLighting {
   private wash = 1;
   /** Lamp-test var (ALERT.annunTest). */
   lampTestVar: string = ALERT.annunTest;
+  /**
+   * Daylight interior fill (materials.interior `bounce` / `adapt`), updated
+   * every frame from the world's illumination:
+   *
+   *  - bounce: sunlight and skylight admitted through the windows is
+   *    inter-reflected by the interior (integrating-sphere estimate): mean
+   *    interior irradiance E_int = admitted x E_global / (1 - rho), and a
+   *    surface whose hemisphere sees the interior over the fraction
+   *    (1 - skyVisibility) receives (1 - V) x rho x E_int from it. E_global
+   *    (global horizontal illuminance, lux) is recovered from env.ambient_light
+   *    (log photocell scale, world/sky/illumination.ts: 0.1 lux -> 0,
+   *    100,000 lux -> 1) and converted with world.render_units_per_lux.
+   *    `admitted` EST 0.06: tau (~0.8 laminated windshield) x window area
+   *    (~2.5 m2 windshield + side windows) x 0.5 (mean projection of the
+   *    windows) / interior surface (~17 m2) of a bizjet / airliner flight
+   *    deck; `reflectance` EST from the palette's sidewall, headliner,
+   *    carpet and panel colours. Aircraft with more glass (a 172's cabin)
+   *    may raise `admitted`.
+   *  - adapt: the pilot's eye (and any photograph of a flight deck) adapts
+   *    to the shaded interior, whereas the renderer's exposure follows the
+   *    sky (world/sky/Environment.ts adaptation). EST perceptual gain (x3.2,
+   *    ~1.7 EV, tuned on daylight screenshots against flight-deck photos:
+   *    dark-grey panels read mid-grey, engraved legends near white) on the
+   *    indirect (shade) light of the interior in full daylight, faded out
+   *    with the same curve as the backlight wash-out, so dusk and night
+   *    lighting are unchanged. Direct sun and cockpit lamps are not scaled.
+   */
+  readonly interiorFill = { admitted: 0.06, reflectance: 0.3, adaptation: 3.2, adaptationSpecular: 1.3 };
+  /** Linear RGB of the mean interior reflectance, normalised to luminance 1 (bounce tint). */
+  private readonly bounceTint = new THREE.Color(1, 1, 1);
 
   constructor(vars: SimVars, materials: CockpitMaterials) {
     this.vars = vars;
     this.materials = materials;
+    // Mean interior reflectance (EST area weights: sidewalls 35 %, headliner 20 %, floor 15 %, panels and
+    // glareshield 30 %), from the palette colours (sRGB -> linear).
+    const p = materials.palette;
+    const acc = new THREE.Color(0, 0, 0);
+    const add = (c: THREE.ColorRepresentation, w: number) => acc.add(new THREE.Color(c).multiplyScalar(w));
+    add(p.interior, 0.35);
+    add(p.headliner, 0.2);
+    add(p.carpet, 0.15);
+    add(p.panel, 0.2);
+    add(p.glareshield, 0.1);
+    const lum = 0.2126 * acc.r + 0.7152 * acc.g + 0.0722 * acc.b;
+    this.interiorFill.reflectance = Math.min(0.7, Math.max(0.05, lum));
+    if (lum > 1e-6) this.bounceTint.copy(acc).multiplyScalar(1 / lum);
   }
 
   /** Adds (or reconfigures) a backlight / flood zone. */
@@ -146,6 +192,14 @@ export class CockpitLighting {
     m.emissive.copy(z.color);
     z.materials.push({ m, gain });
     m.emissiveIntensity = z.level * this.wash * z.gain * gain;
+  }
+
+  /** Zone and gain a material was registered with by {@link registerBacklight} (null when it follows no zone). */
+  zoneOf(m: THREE.Material): { zone: string; gain: number } | null {
+    for (const z of this.zoneList) {
+      for (const e of z.materials) if (e.m === m) return { zone: z.id, gain: e.gain };
+    }
+    return null;
   }
 
   /** Removes a material from every zone. */
@@ -255,6 +309,27 @@ export class CockpitLighting {
       this.envScale = s;
       this.materials.setEnvironmentScale(s);
     }
+    this.updateInteriorFill(amb, t * t * (3 - 2 * t));
+  }
+
+  /** Bounce irradiance and daylight adaptation of the interior indirect light (see `interiorFill`). */
+  private updateInteriorFill(amb: number, day: number): void {
+    const u = this.materials.interior;
+    const f = this.interiorFill;
+    const v = this.vars;
+    const unitsPerLux = v.get(RENDER_UNITS_PER_LUX, 0);
+    let eBounce = 0;
+    if (unitsPerLux > 0 && v.has(this.ambientVar)) {
+      const lux = Math.pow(10, 6 * amb - 1);
+      const rho = f.reflectance;
+      const sky = Math.min(1, Math.max(0, u.diffuse.value));
+      eBounce = (1 - sky) * rho * ((f.admitted * lux * unitsPerLux) / (1 - rho));
+    }
+    const b = u.bounce.value;
+    const t = this.bounceTint;
+    if (Math.abs(b.g - eBounce * t.g) > 1e-5 * (1 + eBounce)) b.setRGB(eBounce * t.r, eBounce * t.g, eBounce * t.b);
+    u.adapt.value = 1 + (f.adaptation - 1) * day;
+    u.adaptSpecular.value = 1 + (f.adaptationSpecular - 1) * day;
   }
 
   /** Zone descriptors for `CockpitBuild.lighting`. */

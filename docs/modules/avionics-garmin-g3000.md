@@ -176,7 +176,12 @@ Both are `CanvasDisplay`s (≤ 30 Hz / 20 Hz, brightness `display.<id>.brt` or
 checklist, W&F and TOLD are half-size only. Maps: heading / track / north up,
 detail levels, relative terrain (when a WorldQuery is available), traffic,
 range rings (Garmin range = inner ring), map pointer with bearing / distance /
-lat-lon (`sys.pointers[pane]`).
+lat-lon (`sys.pointers[pane]`). Relative terrain follows the CRG "Relative
+Terrain Legends" (190-02047-01 Rev A p.99-100, G5000 190-02538-02 Rev A
+p.142): in the air red above -100 ft, yellow -100..-1000 ft, green
+-1000..-2000 ft; on the ground (`gear.air_ground`) only terrain more than
+400 ft above the aircraft is red. The matching legend is drawn at the right
+edge of full / half panes.
 
 ---
 

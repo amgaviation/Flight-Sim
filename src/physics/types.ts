@@ -292,6 +292,12 @@ export interface PistonConfigExtras {
   slipstreamYawCoeff?: number;
   /** Full-rich fuel/air ratio at sea level as a multiple of best-power FAR (default 1.12). */
   fullRichFactor?: number;
+  /**
+   * (Appended by the c172s-common aircraft.) Fraction 0..1 of the engine torque reaction
+   * (rolling moment) cancelled by the wing straightening the propeller slipstream swirl.
+   * Default 0 (full torque reaction, the original behaviour).
+   */
+  torqueRollRecovery?: number;
 }
 
 /** Turbofan refinements (all optional), merged into `TurbofanConfig` below. Read by `physics/engines/Turbofan.ts`. */

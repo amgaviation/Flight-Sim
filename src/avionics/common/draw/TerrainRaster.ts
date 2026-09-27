@@ -20,9 +20,12 @@
  *    TAWS Relative Terrain Legends"):
  *      in-air legend with `relativeGreenBand`: red above -100 ft, yellow
  *      -100..-1000 ft, green -1000..-2000 ft, black below;
- *      on-ground legend (`onGround`): only terrain more than 400 ft above
+ *      on-ground legend (`onGround`): only terrain 400 ft or more above
  *      the aircraft is red, everything else black, so the departure airport
- *      area is not painted red/yellow while taxiing.
+ *      area is not painted red/yellow while taxiing. The G1000 NXi uses the
+ *      same legends (PG 190-02177-00 Rev A p.291-292: green -1000..-2000 ft
+ *      for Terrain Proximity, Terrain-SVT and TAWS-B, and the on-ground rule);
+ *      plain 'relative' (no options) is the original G1000 red/yellow/black.
  *  - 'egpws' (Honeywell MK VI/VIII EGPWS Pilot Guide 060-4314-000 Rev C
  *    p.31, non-peaks): > +2000 ft high-density red, +1000..+2000 high-density
  *    yellow, -500 (-250 gear down)..+1000 low-density yellow, -1000..-500
@@ -65,7 +68,11 @@ export interface TerrainRasterOptions {
 }
 
 const M_TO_FT = 1 / 0.3048;
-/** Garmin G3000/G5000 on-ground relative terrain legend: red above +400 ft (CRG 190-02047-01 Rev A p.100). */
+/**
+ * Garmin on-ground relative terrain legend: red at 400 ft or more above the aircraft, black below (CRG
+ * 190-02047-01 Rev A p.100; G1000 NXi PG 190-02177-00 Rev A p.291: "While the aircraft is on the ground,
+ * the system displays relative terrain 400 feet or more above the aircraft altitude using red").
+ */
 const GARMIN_GROUND_RED_FT = 400;
 /** EGPWS: terrain within 400 ft (vertical) of the nearest runway elevation is not displayed (Pilot Guide 060-4314-000 Rev C p.32). */
 const EGPWS_RUNWAY_BLANK_FT = 400;
@@ -365,7 +372,7 @@ export class TerrainRaster {
             let dens = 1;
             if (mode === 'relative') {
               if (onGround) {
-                if (d > GARMIN_GROUND_RED_FT) band = 2;
+                if (d >= GARMIN_GROUND_RED_FT) band = 2;
               } else if (d > -100) band = 2;
               else if (d > -1000) band = 1;
               else if (greenBand && d > -2000) band = 4;
@@ -476,7 +483,7 @@ export interface TerrainBandOptions {
  */
 export function terrainBand(mode: 'relative' | 'egpws', d: number, gearDown = false, o: TerrainBandOptions = {}): { band: 0 | 1 | 2 | 3; density: number } {
   if (mode === 'relative') {
-    if (o.onGround) return d > GARMIN_GROUND_RED_FT ? { band: 2, density: 1 } : { band: 0, density: 0 };
+    if (o.onGround) return d >= GARMIN_GROUND_RED_FT ? { band: 2, density: 1 } : { band: 0, density: 0 };
     if (d > -100) return { band: 2, density: 1 };
     if (d > -1000) return { band: 1, density: 1 };
     if (o.greenBand && d > -2000) return { band: 3, density: 1 };

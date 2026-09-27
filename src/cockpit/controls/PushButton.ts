@@ -14,6 +14,10 @@
  *
  * Korry 389 switch-light face: 5/8 in square (korry.com, 389 series
  * technical guide) - the default 'korry' size. Other sizes EST.
+ *
+ * Draw calls: the cap, its engraved text, light bar and legend lenses are
+ * moving parts (they travel with the cap), drawn as instances shared with
+ * every other button of the cockpit (instancing.ts); the frame is static.
  */
 import * as THREE from 'three';
 import type { ControlPointer } from '../types';
@@ -26,6 +30,7 @@ import { LegendFace, type LegendSegment } from './Annunciator';
 import { cylinderZ, revolve, roundedBox } from '../geometry/primitives';
 import { rockerFrameGeometry } from '../geometry/switches';
 import { smoothTo } from '../anim';
+import { ControlInstances, markMovingPart } from '../instancing';
 
 export type PushButtonStyle = 'korry' | 'round' | 'mcp' | 'key' | 'softkey' | 'mushroom' | 'small';
 
@@ -88,6 +93,8 @@ export class PushButton extends ControlBase {
   private readonly cap = new THREE.Group();
   private readonly dims: StyleDims;
   private press = 0;
+  private appliedZ = 0;
+  private hoverOn = false;
   private barMat: THREE.MeshStandardMaterial | null = null;
   private barLevel = 0;
   private lastSynced: number;
@@ -136,6 +143,10 @@ export class PushButton extends ControlBase {
     this.doRelease();
   }
 
+  onHover(h: boolean): void {
+    this.hoverOn = h;
+  }
+
   /** Programmatic press/release (yoke hat mapping, keyboard shortcuts). */
   doPress(): void {
     if (!this.logic.press()) return;
@@ -174,7 +185,15 @@ export class PushButton extends ControlBase {
     // Latched alternate-action buttons rest slightly in.
     const target = L.pressed ? 1 : L.mode !== 'momentary' && on && this.dims.travel > 0 ? 0.4 : 0;
     this.press = smoothTo(this.press, target, dt, 0.012, 1e-4);
-    this.cap.position.z = -this.press * this.dims.travel;
+    const inst = ControlInstances.of(this.object);
+    inst?.sync(this.hoverOn);
+    const z = -this.press * this.dims.travel;
+    if (z !== this.appliedZ) {
+      this.appliedZ = z;
+      this.cap.position.z = z;
+      inst?.moved(this.cap);
+    }
+    inst?.syncLenses();
   }
 
   override dispose(): void {
@@ -209,7 +228,7 @@ export class PushButton extends ControlBase {
         this.object,
         true,
       );
-      this.mesh(this.geo(`pb.capR.${r}.${depth}`, () => cylinderZ(r * 0.98, r * 0.95, 0, depth, 36)), mat, this.cap);
+      markMovingPart(this.mesh(this.geo(`pb.capR.${r}.${depth}`, () => cylinderZ(r * 0.98, r * 0.95, 0, depth, 36)), mat, this.cap), this.cap);
     } else if (style !== 'key' && style !== 'softkey') {
       this.mesh(this.geo(`pb.frame.${w}.${h}`, () => rockerFrameGeometry(w + 0.0006, h + 0.0006, 0.0014, 0.0028)), 'bezel', this.object, true);
       const cg = this.geo(`pb.cap.${w}.${h}.${depth}`, () => {
@@ -217,7 +236,7 @@ export class PushButton extends ControlBase {
         g.translate(0, 0, depth / 2);
         return g;
       });
-      this.mesh(cg, mat, this.cap);
+      markMovingPart(this.mesh(cg, mat, this.cap), this.cap);
     } else {
       const cg = this.geo(`pb.key.${w}.${h}.${depth}`, () => {
         const g = roundedBox(w, h, depth, Math.min(w, h) * 0.14, 3);
@@ -234,7 +253,7 @@ export class PushButton extends ControlBase {
         g.computeVertexNormals();
         return g;
       });
-      this.mesh(cg, mat, this.cap);
+      markMovingPart(this.mesh(cg, mat, this.cap), this.cap);
     }
     const faceZ = depth + 0.00012;
     // Legend segments.
@@ -245,6 +264,7 @@ export class PushButton extends ControlBase {
       face.group.position.z = faceZ;
       this.cap.add(face.group);
       this.faceRef = face;
+      for (const c of face.group.children) if ((c as THREE.Mesh).isMesh) markMovingPart(c as THREE.Mesh, this.cap);
     }
     // Engraved cap text.
     if (o.engraved) {
@@ -252,6 +272,7 @@ export class PushButton extends ControlBase {
       const y = o.lightBar ? h * 0.18 : 0;
       const l = this.engrave(o.engraved, 0, y, { height: th, zone: o.zone === undefined ? 'panel' : o.zone, color: o.engravedColor ?? '#f2f2ee', weight: 700 }, this.cap, true);
       l.position.z = faceZ;
+      markMovingPart(l, this.cap);
     }
     // Light bar.
     if (o.lightBar) {
@@ -260,6 +281,7 @@ export class PushButton extends ControlBase {
       const bar = new THREE.Mesh(this.geo(`pb.bar.${w}`, () => new THREE.PlaneGeometry(w * 0.62, h * 0.16)), m);
       bar.position.set(0, o.engraved ? -h * 0.2 : 0, faceZ);
       this.cap.add(bar);
+      markMovingPart(bar, this.cap);
     }
     if (o.name) this.engrave(typeof o.name === 'string' ? o.name : this.label, 0, h / 2 + 0.0055, { weight: 700 });
     this.addHitBox(w + 0.002, h + 0.002, depth + 0.004, 0, 0, depth / 2);
