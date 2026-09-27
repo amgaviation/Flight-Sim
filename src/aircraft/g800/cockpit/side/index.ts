@@ -11,8 +11,10 @@
  *
  * Sidewalls aft of the seats: pilot and copilot circuit-breaker panels (breakers.ts).
  *
- * Not fitted / not built (see docs/aircraft/g800.md §10.2): windshield wipers (the Gulfstream
- * GVI/GVIII family uses heated, coated windshields without wipers, EST), hardware audio control
+ * Not fitted / not built (see docs/aircraft/g800.md §10.2): windshield wipers (Airframer / PPG
+ * G650 release: the PPG "Surface Seal" water-repellent coating is the primary rain-removal system,
+ * "enabling Gulfstream to certify the aircraft without windshield wipers"; PPG also supplies the
+ * G500/G600 flight-deck windows. EST: the G800, a GVI-fuselage derivative, is the same), hardware audio control
  * panels (Symmetry audio is on the touch-screen controllers' RADIOS app), a flight-deck door
  * control (no G800 door-lock system data).
  *
@@ -56,7 +58,7 @@ export function buildSideConsoles(c: G800CockpitContext): void {
         ],
         initial: 0,
         diameter: 0.016,
-        labelHeight: 0.0022,
+        labelHeight: 0.0028,
         title: 'O2 MASK',
       }),
       outb * 0.1,
@@ -74,12 +76,12 @@ export function buildSideConsoles(c: G800CockpitContext): void {
       outb * 0.1,
       maskV - 0.045,
     );
-    con.label('PULL MASK - SQUEEZE RED TABS', 0.02 * -outb, maskV - 0.085, { height: 0.0021 });
+    con.label('PULL MASK - SQUEEZE RED TABS', 0.02 * -outb, maskV - 0.085, { height: 0.0027, weight: 700 });
 
     if (side === 1) {
       // Tiller (forward end of the mount, just aft of the sidestick pod).
       con.add(new Tiller(env, { id: 'g800.side.tiller', label: 'NOSEWHEEL TILLER', var: V.tiller, maxDeg: G800_LIMITS.tillerSteerDeg }), 0, 0.14);
-      con.label('STEER', 0, 0.075, { height: 0.0026 });
+      con.label('STEER', 0, 0.075, { height: 0.0034, weight: 700 });
     }
   }
 

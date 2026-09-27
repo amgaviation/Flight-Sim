@@ -82,8 +82,8 @@ export function buildM2Cockpit(ctx: SimContext, opts: M2CockpitOptions = {}): M2
       { name: 'Overhead', position_m: [3.0, -0.12, -0.42], yawDeg: 0, pitchDeg: 38, fovDeg: 70 },
       // Overhead / sidewall parts (cockpit/overhead, cockpit/side).
       { name: 'Headliner / crew oxygen', position_m: [3.15, 0, -0.36], yawDeg: 180, pitchDeg: 66, fovDeg: 80 },
-      { name: 'LH circuit breakers', position_m: [3.27, -0.4, -0.22], yawDeg: -90, pitchDeg: -48, fovDeg: 44 },
-      { name: 'RH circuit breakers', position_m: [3.27, 0.4, -0.22], yawDeg: 90, pitchDeg: -48, fovDeg: 44 },
+      { name: 'LH circuit breakers', position_m: [3.27, -0.4, -0.22], yawDeg: -90, pitchDeg: -43, fovDeg: 46 },
+      { name: 'RH circuit breakers', position_m: [3.27, 0.4, -0.22], yawDeg: 90, pitchDeg: -43, fovDeg: 46 },
     ],
   });
   const env = b.env;

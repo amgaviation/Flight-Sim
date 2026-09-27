@@ -97,7 +97,7 @@ export function fillCbPanel(env: CockpitEnv, panel: Panel, groups: CbGroup[], ra
   const G = CB_GRID;
   let y = G.margin;
   for (const g of groups) {
-    panel.bracket(g.title, panel.width / 2, y + 0.004, panel.width - 2 * G.margin, { height: 0.0026 });
+    panel.bracket(g.title, panel.width / 2, y + 0.004, panel.width - 2 * G.margin, { height: 0.0032 });
     y += G.title;
     g.items.forEach(([name, legend], i) => {
       const col = i % G.cols;
@@ -118,7 +118,7 @@ export function fillCbPanel(env: CockpitEnv, panel: Panel, groups: CbGroup[], ra
         x,
         yy,
       );
-      panel.label(legend, x, yy + 0.0115, { height: 0.0021, weight: 700 });
+      panel.label(legend, x, yy + 0.0118, { height: 0.0025, weight: 700 });
       out.push(cb);
     });
     y += Math.ceil(g.items.length / G.cols) * G.dy;

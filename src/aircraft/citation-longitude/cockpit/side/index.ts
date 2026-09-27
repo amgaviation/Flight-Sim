@@ -121,19 +121,29 @@ function buildConsole(c: LonCockpitContext, side: 'left' | 'right'): void {
   );
 
   // ---- circuit breakers: sidewall panel beside the seat, in a trim housing reaching back to the wall.
+  // Height fits the breaker rows (the fixed 0.25 m left ~40 % of the panel empty); the top edge stays under the sill.
   const C = CB_PANEL;
-  const cbp = b.panel({ name: `cb_${side}`, center_m: [C.x, sgn * C.y, C.z], facing: side === 'left' ? 'right' : 'left', tiltDeg: C.tiltDeg, width: C.length, height: C.height, material: 'panel', radius: 0.008, screws: { kind: 'dzus', diameter: 0.007, inset: 0.008, pitch: 0.28 } });
-  const housing = new THREE.Mesh(new THREE.BoxGeometry(C.length + 0.02, C.height + 0.02, 0.07), env.materials.get('interior'));
+  const groups = cbGroupsFor(side, c.sys.elec.breakerNames());
+  const h = Math.min(C.height, cbPanelHeight(groups.map((g) => g.items.length)));
+  const zc = C.z - C.height / 2 + h / 2;
+  const cbp = b.panel({ name: `cb_${side}`, center_m: [C.x, sgn * C.y, zc], facing: side === 'left' ? 'right' : 'left', tiltDeg: C.tiltDeg, width: C.length, height: h, material: 'panel', radius: 0.008, screws: { kind: 'dzus', diameter: 0.007, inset: 0.008, pitch: 0.28 } });
+  const housing = new THREE.Mesh(new THREE.BoxGeometry(C.length + 0.02, h + 0.02, 0.07), env.materials.get('interior'));
   b.trackGeometry(housing.geometry);
   housing.userData.cockpitStatic = true;
   housing.name = `cb_housing_${side}`;
   cbp.addObject(housing, 0, 0, { z: -0.036 });
-  cbp.label(`${side === 'left' ? 'LEFT' : 'RIGHT'} CIRCUIT BREAKERS`, 0, C.height / 2 - 0.012, { height: 0.0034 });
-  buildBreakers(c, cbp, side, C.height / 2 - 0.032);
+  cbp.label(`${side === 'left' ? 'LEFT' : 'RIGHT'} CIRCUIT BREAKERS`, 0, h / 2 - 0.012, { height: 0.0034 });
+  buildBreakers(c, cbp, groups, h / 2 - 0.032);
 }
 
-function buildBreakers(c: LonCockpitContext, p: Panel, side: 'left' | 'right', yTop: number): void {
-  const groups = cbGroupsFor(side, c.sys.elec.breakerNames());
+/** Panel height (m) that fits the header and the breaker groups (item counts per group). */
+export function cbPanelHeight(groupSizes: number[]): number {
+  let h = 0.032;
+  for (const n of groupSizes) h += CB.titleH + Math.ceil(n / CB.cols) * CB.rowPitch + 0.008;
+  return h + 0.006;
+}
+
+function buildBreakers(c: LonCockpitContext, p: Panel, groups: ReturnType<typeof cbGroupsFor>, yTop: number): void {
   let yy = yTop;
   const x0 = (-(CB.cols - 1) * CB.pitch) / 2;
   for (const g of groups) {

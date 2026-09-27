@@ -638,6 +638,24 @@ acceleration error, internal lamp on the panel-lights circuit; reads
 **Views added.** Headliner / crew oxygen, LH circuit breakers, RH circuit
 breakers; the Overhead view now looks at the compass / windshield header.
 
+**Second pass: every breaker has a consumer.** A new test (`consumers.test.ts`) records the reads
+of every panel breaker's `elec.<load>_powered` flag. Six were read by nothing: xpdr, radar, audio2,
+cockpit_fans, cabin_fan and pax_signs. They are now consumed as follows:
+- `systems/avionicsHealth.ts` (`M2AvionicsHealth`, after the G3000 systems) posts Garmin system
+  messages. The wording follows the G1000 PG 190-00498-07 App. A; its use on the M2's G3000 is EST.
+  - "GMA1/2 FAIL". The marker receiver is now powered by either GMA (`audio1 || audio2`).
+  - "XPDR1 FAIL", with IDENT dropped; `ac.m2.xpdr_reply` is published.
+  - "GWX FAIL", with the G3000 radar forced to STBY.
+  - "PFD1/MFD1/PFD2 COOLING" from an EST GDU thermal model driven by the avionics fans (rise +12 C
+    with fans, +40 C without, tau 10 min, hot above 50 C). A hot GDU dims to 60 % (`M2LogicLate`).
+- The CABIN FAN (evaporator blower) scales vapor-cycle A/C cooling: OFF 40 %, LOW 70 %, HIGH 100 %
+  (EST, `airframe.ts`).
+- The passenger signs publish `ac.m2.pass_belt_lt` / `pass_nosmk_lt` and play the cabin chime.
+- The avionics and cabin fans drive the `fan.avionics` audio loop (`side/services.ts`).
+
+CB names are now engraved at 2.7 mm and group titles at 3.1 mm (earlier they were 2.1 mm and hard to
+read), and the CB views sit closer to the panels.
+
 ## 15. Check ride (verification agent)
 
 Tests: `tests/aircraft/citation-m2/verify/` (`flightRig.ts` rig, `fullFlight.test.ts`,

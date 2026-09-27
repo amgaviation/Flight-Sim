@@ -146,7 +146,7 @@ export function buildAftPedestal(c: B738CockpitContext): void {
           cap: 'fluted',
           diameter: 0.0092,
           height: 0.008,
-          pointer: 'line',
+          pointer: 'none',
           outer: { var: B738.acpRxVol(s, rx), min: 0, max: 1, step: 0.05, angleRange: [-140, 140], label: `${name} VOL`, format: (x) => `${Math.round(x * 100)} %` },
           push: on ? { var: on, mode: 'toggle', label: `${name} ON/OFF` } : undefined,
         }),

@@ -25,8 +25,8 @@
  * switches (OG 12-3: automatic controller), storm lights (the FLOOD knob at
  * full is the thunderstorm setting; SCOPE).
  *
- * Geometry (EST from flight-deck photographs): 0.40 m wide x 0.36 m long
- * console from x 7.99 aft to 7.63, following the 12 deg headliner slope, set
+ * Geometry (EST from flight-deck photographs): 0.40 m wide x 0.30 m long
+ * console from x 7.96 aft to 7.66, following the 12 deg headliner slope, set
  * ~55 mm below the headliner in a light-grey trimmed housing. Panel
  * convention (facing down): +x = right, +y = aft (label tops toward the tail,
  * as read when looking up; docs/modules/cockpit.md §1).
@@ -42,7 +42,7 @@ export const OVERHEAD = {
   center_m: [7.81, 0, -1.03] as [number, number, number],
   tiltDeg: 12, // + = forward end lower here (verified with placePanel: -12 raised the front into the windshield header)
   width: 0.4,
-  height: 0.36,
+  height: 0.3, // 0.36 left a 60 mm empty band aft of the PASS SAFETY row (screenshot review)
 };
 
 /** Dome light: centre of the headliner aft of the overhead console (EST 6 cd LED fixture: ~4 lux at the floor, ~6 lux at the seat pans). */
@@ -101,7 +101,7 @@ export function buildOverhead(c: LonCockpitContext): void {
   p.addObject(housing, 0, 0, { z: -0.052 });
 
   // ---------------------------------------------------------------- EXTERIOR LIGHTS (forward row, OG 16-3 Fig 16-3-2)
-  const yExt = -0.12;
+  const yExt = -0.1;
   p.bracket('EXTERIOR LIGHTS', 0, yExt + 0.033, 0.34);
   const ext: [string, string, string][] = [
     ['lon.oh.ldg_l', 'L LDG', V.ltLdgL],
@@ -116,7 +116,7 @@ export function buildOverhead(c: LonCockpitContext): void {
   ext.forEach(([id, name, v], i) => lightButton(c, p, id, name, v, -0.1505 + i * 0.043, yExt));
 
   // ---------------------------------------------------------------- COCKPIT LIGHTS (OG 16-2 Fig 16-2-1)
-  const yCk = -0.025;
+  const yCk = -0.015;
   p.bracket('COCKPIT LIGHTS', -0.075, yCk + 0.037, 0.2);
   dimKnob(c, p, 'lon.oh.panel', 'PANEL', V.ltPanel, -0.14, yCk, (v) => (v >= 0.999 ? 'DAY' : fmtPct(v)));
   p.label('DAY', -0.14 + 0.0135, yCk - 0.0125, { height: 0.0019 });
@@ -151,7 +151,7 @@ export function buildOverhead(c: LonCockpitContext): void {
   );
 
   // ---------------------------------------------------------------- PASS SAFETY / OXYGEN / TEST (aft row)
-  const yAft = 0.085;
+  const yAft = 0.08;
   p.add(
     new ToggleSwitch(env, {
       id: 'lon.oh.pass_safety',
@@ -159,7 +159,7 @@ export function buildOverhead(c: LonCockpitContext): void {
       label: 'PASS SAFETY',
       positions: ['OFF', 'SEAT BELT', 'PASS SAFETY'],
       values: [0, 1, 2],
-      labels: { name: 'PASS SIGNS', positions: true, height: 0.0024 },
+      labels: { name: false, positions: true, height: 0.0026 },
     }),
     -0.145,
     yAft,

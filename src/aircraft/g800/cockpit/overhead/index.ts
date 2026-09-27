@@ -44,6 +44,10 @@ import { OVHD } from './layout';
 /** Korry switchlight size on the overhead (EST: Esterline Korry 0.75 x 0.68 in rectangular caps, GV-family overhead). */
 const KW = 0.019;
 const KH = 0.017;
+/** Legend heights (m): engraved control names, position legends and group titles (EST ~1/8 in, 7/64 in, 9/64 in). */
+const NAME_H = 0.0032;
+const POS_H = 0.0028;
+const TITLE_H = 0.0036;
 
 type Seg = LegendSegment;
 /** Display-side derived lamp var (cockpit only, systems never read it): GPU connected but not on line. */
@@ -77,13 +81,18 @@ export function buildOverhead(c: G800CockpitContext): void {
   b.trackGeometry(bodyMesh.geometry);
   ov.addObject(bodyMesh, 0, 0, { z: -P.bodyDepth / 2 - 0.004 });
 
-  const korry = (panel: Panel, x: number, y: number, o: ConstructorParameters<typeof PushButton>[1], name: string) =>
-    panel.add(new PushButton(env, { style: 'korry', width: KW, height: KH, layout: 'split', name, ...o }), x, y);
+  // Engraved names above the switchlights: 3.2 mm white Gothic (EST: GV-family overhead legends ~1/8 in; the
+  // control's default 2.6 mm engraving is unreadable at the ~0.9 m eye-to-overhead distance).
+  const nameAbove = (panel: Panel, text: string, x: number, y: number) => panel.label(text, x, y + KH / 2 + 0.0062, { height: NAME_H, weight: 700 });
+  const korry = (panel: Panel, x: number, y: number, o: ConstructorParameters<typeof PushButton>[1], name: string) => {
+    nameAbove(panel, name, x, y);
+    return panel.add(new PushButton(env, { style: 'korry', width: KW, height: KH, layout: 'split', ...o }), x, y);
+  };
 
   // =============================================================== row A (forward): ELECTRIC POWER CONTROL + ENGINE START
   {
     const yA = P.rows.a;
-    ov.bracket('ELECTRIC POWER CONTROL', -0.105, yA + 0.058, 0.4);
+    ov.bracket('ELECTRIC POWER CONTROL', -0.105, yA + 0.058, 0.4, { height: TITLE_H });
     const cols = [-0.28, -0.19, -0.1, -0.01, 0.08];
     const r1 = yA + 0.018;
     const r2 = yA - 0.03;
@@ -108,17 +117,18 @@ export function buildOverhead(c: G800CockpitContext): void {
         layout: 'split',
         stateNames: ['OFF', 'ARM'],
         segments: [lit('ON', 'amber', V.ebattOn), lit('ARMED', 'white', V.emerPwr)],
-        name: 'EMER PWR',
+        name: false,
         guard: { color: 'clear', close: 'free' },
       }),
       cols[2],
       r2,
     );
+    nameAbove(ov, 'EMER PWR', cols[2], r2);
     korry(ov, cols[3], r2, { id: 'g800.oh.apu_master', label: 'APU MASTER', var: V.apuMaster, mode: 'toggle', segments: [lit('ON', 'white', V.apuMaster), lit('AVAIL', 'green', 'apu.avail')] }, 'APU MASTER');
     korry(ov, cols[4], r2, { id: 'g800.oh.apu_start', label: 'APU START', var: V.apuStart, mode: 'momentary', segments: [lit('START', 'white', 'apu.starting'), lit('FAULT', 'amber', 'apu.fault')] }, 'APU START');
     ov.line(-0.33, yA - 0.058, 0.12, yA - 0.058);
 
-    ov.bracket('ENGINE START', 0.225, yA + 0.058, 0.2);
+    ov.bracket('ENGINE START', 0.225, yA + 0.058, 0.2, { height: TITLE_H });
     const ec = [0.155, 0.225, 0.295];
     korry(ov, ec[0], r1, { id: 'g800.oh.start_master', label: 'START MASTER', var: V.startMaster, mode: 'toggle', segments: [lit('ON', 'white', V.startMaster)] }, 'START MSTR');
     korry(ov, ec[1], r1, { id: 'g800.oh.crank_master', label: 'CRANK MASTER', var: V.crankMaster, mode: 'toggle', segments: [lit('ON', 'white', V.crankMaster)] }, 'CRANK MSTR');
@@ -142,7 +152,7 @@ export function buildOverhead(c: G800CockpitContext): void {
   // =============================================================== row B: BLEED AIR + CABIN PRESSURE CONTROL
   {
     const yB = P.rows.b;
-    ov.bracket('BLEED AIR', -0.165, yB + 0.058, 0.3);
+    ov.bracket('BLEED AIR', -0.165, yB + 0.058, 0.3, { height: TITLE_H });
     const r1 = yB + 0.018;
     const r2 = yB - 0.03;
     korry(ov, -0.29, r1, { id: 'g800.oh.bleed_l', label: 'L ENG BLEED', var: V.bleedL, mode: 'toggle', segments: [lit('OFF', 'white', V.bleedL, isZero), lit('FAIL', 'amber', 'pneu.bleed_l_trip')] }, 'L ENG');
@@ -161,7 +171,7 @@ export function buildOverhead(c: G800CockpitContext): void {
         ],
         initial: 1,
         diameter: 0.016,
-        labelHeight: 0.0021,
+        labelHeight: POS_H,
         title: 'ISOLATION',
       }),
       -0.225,
@@ -181,15 +191,16 @@ export function buildOverhead(c: G800CockpitContext): void {
         layout: 'split',
         stateNames: ['CLOSED', 'OPEN'],
         segments: [lit('OPEN', 'white', V.ramAir)],
-        name: 'RAM AIR',
+        name: false,
         guard: { color: 'red', close: 'free' },
       }),
       -0.29,
       r2,
     );
+    nameAbove(ov, 'RAM AIR', -0.29, r2);
     ov.line(-0.33, yB - 0.058, 0.0, yB - 0.058);
 
-    ov.bracket('CABIN PRESSURE CONTROL', 0.17, yB + 0.058, 0.3);
+    ov.bracket('CABIN PRESSURE CONTROL', 0.17, yB + 0.058, 0.3, { height: TITLE_H });
     ov.add(
       new SelectorKnob(env, {
         id: 'g800.oh.press_mode',
@@ -202,7 +213,7 @@ export function buildOverhead(c: G800CockpitContext): void {
         ],
         initial: 0,
         diameter: 0.016,
-        labelHeight: 0.0021,
+        labelHeight: POS_H,
         title: 'MODE',
       }),
       0.06,
@@ -220,7 +231,7 @@ export function buildOverhead(c: G800CockpitContext): void {
       0.14,
       r1 - 0.012,
     );
-    ov.label('LDG ELEV', 0.14, r1 - 0.036, { height: 0.0022 });
+    ov.label('LDG ELEV', 0.14, r1 - 0.036, { height: NAME_H, weight: 700 });
     ov.add(
       new ToggleSwitch(env, {
         id: 'g800.oh.press_man',
@@ -230,7 +241,7 @@ export function buildOverhead(c: G800CockpitContext): void {
         values: [-1, 0, 1],
         initial: 1,
         springs: { 0: 1, 2: 1 },
-        labels: { name: 'MAN', positions: true, height: 0.002 },
+        labels: { name: 'MAN', positions: true, height: POS_H },
       }),
       0.215,
       r1 - 0.012,
@@ -242,7 +253,7 @@ export function buildOverhead(c: G800CockpitContext): void {
         var: V.pressDump,
         positions: ['OFF', 'DUMP'],
         guard: { color: 'red', guardedPosition: 0 },
-        labels: { name: 'DUMP', positions: false, height: 0.002 },
+        labels: { name: 'DUMP', positions: false, height: POS_H },
       }),
       0.29,
       r1 - 0.012,
@@ -252,7 +263,7 @@ export function buildOverhead(c: G800CockpitContext): void {
   // =============================================================== row C: SYSTEM TEST, EMER LTS, COCKPIT LIGHTS, RAT
   {
     const yC = P.rows.c;
-    ov.bracket('SYSTEM TEST', -0.255, yC + 0.05, 0.13);
+    ov.bracket('SYSTEM TEST', -0.255, yC + 0.05, 0.13, { height: TITLE_H });
     korry(ov, -0.29, yC + 0.01, { id: 'g800.oh.fire_test', label: 'FIRE TEST', var: V.fireTest, mode: 'momentary', segments: [lit('FIRE\nTEST', 'white', V.fireTest)] }, 'FIRE');
     korry(ov, -0.22, yC + 0.01, { id: 'g800.oh.lamp_test', label: 'LAMP TEST', var: ALERT.annunTest, mode: 'momentary', segments: [lit('LAMP\nTEST', 'white', ALERT.annunTest)] }, 'LAMP');
 
@@ -266,13 +277,13 @@ export function buildOverhead(c: G800CockpitContext): void {
         values: [0, 1, 2],
         initial: 1,
         guard: { color: 'red', guardedPosition: 1 },
-        labels: { name: 'EMER LTS', positions: true, height: 0.002 },
+        labels: { name: 'EMER LTS', positions: true, height: POS_H },
       }),
       -0.13,
       yC + 0.006,
     );
 
-    ov.bracket('COCKPIT LIGHTS', 0.07, yC + 0.05, 0.28);
+    ov.bracket('COCKPIT LIGHTS', 0.07, yC + 0.05, 0.28, { height: TITLE_H });
     const dimmer = (id: string, label: string, varName: string, x: number) => {
       ov.add(
         new RotaryKnob(env, {
@@ -286,12 +297,12 @@ export function buildOverhead(c: G800CockpitContext): void {
         x,
         yC + 0.006,
       );
-      ov.label(label, x, yC - 0.02, { height: 0.0022 });
+      ov.label(label, x, yC - 0.02, { height: NAME_H, weight: 700 });
     };
     dimmer('g800.oh.panel_dim', 'PANEL', V.ltPanel, -0.04);
     dimmer('g800.oh.flood_dim', 'FLOOD', V.ltFlood, 0.03);
-    ov.add(new ToggleSwitch(env, { id: 'g800.oh.dome', label: 'DOME', var: V.ltDome, positions: ['OFF', 'ON'], labels: { name: 'DOME', positions: true, height: 0.002 } }), 0.1, yC + 0.006);
-    ov.add(new ToggleSwitch(env, { id: 'g800.oh.storm', label: 'STORM', var: V.stormLt, positions: ['OFF', 'ON'], labels: { name: 'STORM', positions: true, height: 0.002 } }), 0.165, yC + 0.006);
+    ov.add(new ToggleSwitch(env, { id: 'g800.oh.dome', label: 'DOME', var: V.ltDome, positions: ['OFF', 'ON'], labels: { name: 'DOME', positions: true, height: POS_H } }), 0.1, yC + 0.006);
+    ov.add(new ToggleSwitch(env, { id: 'g800.oh.storm', label: 'STORM', var: V.stormLt, positions: ['OFF', 'ON'], labels: { name: 'STORM', positions: true, height: POS_H } }), 0.165, yC + 0.006);
 
     // RAT manual deploy T-handle (dossier §9.7; SCQ: "manual deployment only (handle/cable)"). Same var as the touch key.
     ov.add(
@@ -310,7 +321,7 @@ export function buildOverhead(c: G800CockpitContext): void {
       0.265,
       yC + 0.004,
     );
-    ov.label('RAT - PULL TO DEPLOY', 0.265, yC - 0.036, { height: 0.0021 });
+    ov.label('RAT - PULL TO DEPLOY', 0.265, yC - 0.036, { height: POS_H });
   }
 
   // =============================================================== aft: placards

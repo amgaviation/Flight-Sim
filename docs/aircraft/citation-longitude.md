@@ -687,7 +687,7 @@ Code: `src/aircraft/citation-longitude/cockpit/overhead/index.ts`, `cockpit/side
 `tests/aircraft/citation-longitude/cockpit-overhead/`. Both builders are loaded by
 `cockpit/index.ts` through `import.meta.glob`.
 
-### 11.1 Overhead panel (EST geometry: 0.40 × 0.36 m, x 7.99 → 7.63, forward end 12° lower)
+### 11.1 Overhead panel (EST geometry: 0.40 × 0.30 m, x 7.96 → 7.66, forward end 12° lower)
 
 | Row (fwd → aft) | Control | Var / effect |
 |---|---|---|
@@ -705,8 +705,8 @@ Code: `src/aircraft/citation-longitude/cockpit/overhead/index.ts`, `cockpit/side
 - Forward end: crew quick-donning mask in its stowage box (click = don / stow, `ac.lon.oxy.mask_l/_r`), regulator
   NORM / 100 % / EMER (`ac.lon.oxy.mode` pilot, `ac.lon.oxy.mode_r` copilot), PRESS TO TEST (`ac.lon.oxy.test_l/_r`),
   FLOW indicator (`oxy.pilot_flowing` / `oxy.copilot_flowing`).
-- Circuit breakers: one sidewall panel per side below the side-window sill (0.56 × 0.25 m, EST position, clear of
-  the armrests). Every network breaker ≤ 50 A is on a panel, grouped by bus (L: EMER, MISSION, MAIN / INTERIOR /
+- Circuit breakers: one sidewall panel per side below the side-window sill (0.56 m long, height sized to the breaker
+  rows, at most 0.25 m, EST position, clear of the armrests). Every network breaker ≤ 50 A is on a panel, grouped by bus (L: EMER, MISSION, MAIN / INTERIOR /
   STBY / HOT BATT; R: EMER, MISSION, MAIN / INTERIOR / SERVICE), bound to `cb.<load>` / `cb.<load>_tripped`.
   Feeders above 50 A (APU starter, PTCU motor, MAIN feeds, BUS TIE) are J-box current limiters, not panel breakers.
   A network breaker missing from the table is placed automatically in an L/R MISC group.
