@@ -88,9 +88,9 @@ export function lonMaterials(env: CockpitEnv): LonMaterials {
     return x;
   };
   m = {
-    deck: mk('deck', 0x141517, 0.62),
+    deck: mk('deck', 0x131416, 0.7),
     trim: mk('trim', 0x18191b, 0.8),
-    unit: mk('unit', 0x111213, 0.5),
+    unit: mk('unit', 0x111213, 0.78),
     silver: mk('silver', 0x8d9197, 0.38, 0.55),
     pillar: mk('pillar', 0xa4a6a8, 0.7),
     fixture: mk('fixture', 0x3a3c3f, 0.45, 0.3),

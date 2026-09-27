@@ -107,6 +107,9 @@ describe('Citation Longitude check ride KICT -> KMCI (full normal procedure)', (
       log(r, 'cold & dark');
 
       // ================================================================ 2. cockpit inspection (OG 17-2)
+      // CONTROL LOCK (pedestal aft left): engaged while parked; released first (checklists.ts Cockpit Inspection, EST).
+      expect(v.get(V.controlLock)).toBe(1);
+      v.set(V.controlLock, 0);
       v.set(V.stbyPwr, 2); // TEST
       r.run(11);
       expect(v.get(V.stbyBattLed)).toBe(2); // green: standby battery test OK
@@ -242,7 +245,7 @@ describe('Citation Longitude check ride KICT -> KMCI (full normal procedure)', (
       v.set(V.flapLever, 2);
       v.set(V.ltTaxi, 1);
       v.set(V.ltAntiColl, 1);
-      v.set(V.ltSeatBelt, 1);
+      v.set(V.ltSeatBelts, 1); // overhead SEAT BELTS switchlight
       r.run(15);
       expect(v.get('surf.flaps_deg')).toBeCloseTo(15, 0);
       v.set(V.parkBrake, 0);
@@ -626,7 +629,7 @@ describe('Citation Longitude check ride KICT -> KMCI (full normal procedure)', (
       v.set(V.ltEmer, 0);
       v.set(V.stbyPwr, 0);
       v.set(V.ltAntiColl, 0);
-      v.set(V.ltSeatBelt, 0);
+      v.set(V.ltSeatBelts, 0);
       v.set(V.battL, 0);
       v.set(V.battR, 0);
       r.run(5);

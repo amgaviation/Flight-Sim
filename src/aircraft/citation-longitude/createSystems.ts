@@ -444,6 +444,8 @@ export function createLongitudeSystems(ctx: SimContext, opts: LongitudeSystemsOp
     // Primary stabilizer trim channels (STAB PRI TRIM CHANNEL SELECT swaps to the other one; EST).
     { id: 'trim.stab_ch1', name: 'Stab trim primary channel 1', category: 'flight controls' },
     { id: 'trim.stab_ch2', name: 'Stab trim primary channel 2', category: 'flight controls' },
+    // Normal yaw-damper channel of the rudder control unit (STANDBY YAW DAMP restores damping; EST).
+    { id: 'yd.normal', name: 'Yaw damper normal channel', category: 'flight controls' },
   ]);
 
   return {

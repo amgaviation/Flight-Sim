@@ -92,7 +92,7 @@ export const LON_VARS = {
   fireEngR: `${P}fire.eng_r`,
   bottle1: `${P}fire.bottle1`, // BOTTLE 1 ARMED/DISCH pushbutton, momentary
   bottle2: `${P}fire.bottle2`,
-  fireTest: `${P}fire.test`, // FIRE WARN TEST pushbutton, momentary (overhead)
+  fireTest: `${P}fire.test`, // fire warning test: GTC Aircraft Systems > Tests FIRE WARN toggle (no overhead test button, c_oh)
 
   // ---------------- Flight controls (pedestal / yoke / pedestal aft)
   flapLever: `${P}flap_lever`, // 0 UP, 1 (7), 2 (15), 3 FULL (35)
@@ -125,7 +125,7 @@ export const LON_VARS = {
   ltFlood: `${P}lt.flood`, // FLOOD knob 0..1
   ltAux: `${P}lt.aux`, // AUX knob 0..1 (glareshield under-lighting, EST)
   ltEmer: `${P}lt.emer`, // EMER LTS: 0 OFF, 1 ARM, 2 ON
-  ltSeatBelt: `${P}lt.pass_safety`, // PASS SAFETY: 0 OFF, 1 BELT, 2 BELT+NO SMOKING (EST)
+  ltSeatBelt: `${P}lt.pass_safety`, // legacy 3-position PASS SAFETY state (0 / 1 belt / 2 belt + safety), still honoured; the cockpit now has the SEAT BELTS / PAX SAFETY switchlights (ltSeatBelts / ltPaxSafety)
   ltPfdL: `${P}lt.pfd_l`, // pilot PFD/GTC dimmer outer (PFD) 0..1
   ltGtcL: `${P}lt.gtc_l`, // inner (outboard GTC)
   ltMfd: `${P}lt.mfd`, // pedestal MFD/GTC dimmer outer
@@ -136,7 +136,7 @@ export const LON_VARS = {
   ltMapR: `${P}lt.map_r`,
 
   // ---------------- Oxygen (EST: side consoles / overhead)
-  oxyPax: `${P}oxy.pax`, // PASS OXY: 0 NORM (auto deploy), 1 MAN DEPLOY
+  oxyPax: `${P}oxy.pax`, // passenger oxygen: 0 AUTO (auto deploy), 1 DEPLOY (GTC ECS page PAX OXY, SCOPE)
   oxyMaskL: `${P}oxy.mask_l`, // crew mask in use (stowage door open)
   oxyMaskR: `${P}oxy.mask_r`,
   oxyMode: `${P}oxy.mode`, // mask regulator: 0 NORM, 1 100 %, 2 EMER
@@ -185,11 +185,11 @@ export const LON_VARS = {
   discHeld: `${P}yoke.disc_held`, // either AP/TRIM DISC held
 
   // ---------------- Overhead / side consoles (added by the overhead + side-console agent)
-  ltDome: `${P}lt.dome`, // overhead DOME light toggle: 0 OFF, 1 ON (hot battery bus, EST)
+  ltDome: `${P}lt.dome`, // cockpit dome light: GTC Lights page CKPT DOME toggle (SCOPE; hot battery bus, EST)
   oxyModeR: `${P}oxy.mode_r`, // copilot mask regulator: 0 NORM, 1 100 %, 2 EMER (pilot = oxyMode)
   oxyTestL: `${P}oxy.test_l`, // mask stowage PRESS TO TEST, momentary: 1 while held
   oxyTestR: `${P}oxy.test_r`,
-  lampTest: 'alert.annun_test', // overhead ANNUN TEST button (momentary), read by the CAS and every lens
+  lampTest: 'alert.annun_test', // annunciator lamp test: GTC Tests page ANNUN toggle, read by the CAS and every lens
 
   // ---------------- Check-ride pass: controls from the DGAC-published Longitude abnormal checklist card
   pitchRollDisc: `${P}fc.pitch_roll_disc`, // PITCH/ROLL DISCONNECT handle: 0 NORM, 1 PULLED (both axes split), 2 PITCH RECONNECT, 3 ROLL RECONNECT
@@ -261,11 +261,11 @@ export const LON_CONTROL_VARS: string[] = [
 
 /** Events emitted by cockpit buttons (momentary commands). */
 export const LON_EVENTS = {
-  masterWarning: 'cas.ack_warning', // MASTER WARNING switchlights (glareshield, both sides)
-  masterCaution: 'cas.ack_caution', // MASTER CAUTION switchlights
-  toga: 'ap.toga', // TO/GA buttons (outboard side of each thrust lever handle)
-  atEngage: 'at.engage', // A/T arm/engage button (aft face of each lever arm)
-  atDisc: 'at.disc', // A/T disconnect button (front of each handle)
+  masterWarning: 'cas.ack_warning', // MASTER WARNING RESET switchlights (lower glareshield tier, both sides)
+  masterCaution: 'cas.ack_caution', // MASTER CAUTION RESET switchlights
+  toga: 'ap.toga', // TO/GA buttons (outboard end of each thrust-lever grip)
+  atEngage: 'at.engage', // AT paddle on the outboard side of each thrust-lever arm
+  atDisc: 'at.disc', // AT DISC button (inboard top of each thrust-lever grip)
   apDisc: 'input.ap_disc', // AP/TRIM DISC on each yoke (hold var)
   tawsGsCancel: 'taws.gs_cancel',
   tawsTest: 'taws.test',

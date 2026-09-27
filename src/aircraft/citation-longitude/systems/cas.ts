@@ -150,7 +150,7 @@ export const LONGITUDE_CAS: CasMessageDef[] = [
   { id: 'sb_auto_stow', text: 'SPEEDBRAKE AUTO STOW', level: 'caution', when: V.sbAutoStow, inhibit: TL },
   { id: 'speedbrakes', text: 'SPEEDBRAKES', level: 'caution', when: `${air} && ra1.valid && ra1.alt_ft < 500 && spoilers.sb_ext > 0.05`, inhibit: TO },
   // STANDBY YAW DAMP engaged restores yaw damping after a normal-channel failure (logic.ts, EST).
-  { id: 'yd_fail', text: 'YAW DAMPER FAIL A/B', level: 'caution', when: `${air} && (hyd.a_psi < 1500 && hyd.rss_psi < 1500 || (fail.yd && !(${V.stbyYd} && elec.emer_r_powered))) && ${bothRun}`, delayS: 2, inhibit: TL },
+  { id: 'yd_fail', text: 'YAW DAMPER FAIL A/B', level: 'caution', when: `${air} && (hyd.a_psi < 1500 && hyd.rss_psi < 1500 || fail.yd || (fail.yd.normal && !(${V.stbyYd} && elec.emer_r_powered))) && ${bothRun}`, delayS: 2, inhibit: TL },
   // EST text (the OG CAS list has no flap message): latched flap fault, cleared by FLAP RESET (logic.ts).
   { id: 'flap_fail', text: 'FLAP FAIL', level: 'caution', when: V.flapFault, delayS: 1, inhibit: TL },
   { id: 'ps_button_c', text: 'P/S BUTTON ON', level: 'caution', when: `${V.pitotStatic} && ${gnd}`, inhibit: TL },

@@ -386,7 +386,7 @@ Inhibits:
 
 ## 6. Normal procedures (OG 17; `checklists.ts`)
 
-1. **Cockpit inspection.** STBY PWR to TEST (green ≥ 10 s), then ON. EMER LTS to ARM. Gear DOWN. BATT L/R ON and check volts. EIS/CAS. GPU and/or APU ON/START (BATT amps 0 or charging). Lights.
+1. **Cockpit inspection.** CONTROL LOCK UNLOCK (EST item). STBY PWR to TEST (green ≥ 10 s), then ON. EMER LTS to ARM. Gear DOWN. BATT L/R ON and check volts. EIS/CAS. GPU and/or APU ON/START (BATT amps 0 or charging). Lights.
 2. **Cockpit preparation.**
    - APU running; GPU disconnected.
    - Dry motor if the engines were shut down 15-180 min ago.
@@ -400,7 +400,7 @@ Inhibits:
    - STARTER push;
    - monitor (ITT < 650 °C).
    Then check the EIS/CAS.
-5. **Before taxi.** Flight controls. Speedbrakes retracted. Flaps 1 or 2. Instruments aligned; altimeters within 75 ft of the field and 50 ft of each other. ENG A/I as required.
+5. **Before taxi.** Flight controls. Speedbrakes retracted. Flaps 1 or 2. Instruments aligned; altimeters within 75 ft of the field and 50 ft of each other. ENG A/I as required. AUTO GROUND SPOILERS armed, POWER RESERVE AUTO (EST items).
 6. **Taxi.** Lights. Park brake stowed. Brakes. NWS. Reversers deploy/stow check.
 7. **Before takeoff.** Flaps, speedbrakes, trims, ice protection, V-speeds displayed, SPD knob FMS, briefing. In icing, P/S ON for 15 s. Lights. EIS/CAS (no NO TAKEOFF).
 8. **Takeoff.** Throttles TO; A/T shows green HOLD; N1 matches, green TO. Release the brakes. Rotate at VR to 10°.
@@ -426,148 +426,181 @@ Key abnormal procedures and the modelled reactions:
 | Dual generator loss | APU generator (FL310 start) or PTCU HYD GEN | ELEC EMER to preserve the batteries |
 | Hydraulic A loss | RSS powers the rudder | — |
 | Hydraulic A+B loss | Accumulators give ground spoilers, NWS and park/emergency brakes | — |
-| Engine fire | — | ENG FIRE switchlight, BOTTLE 1, BOTTLE 2 if still burning |
+| Engine fire | — | ENG FIRE switchlight, bottle switchlight above it, the other bottle if still burning |
+| APU fire | Automatic APU shutdown and bottle discharge (5 s) | APU FIRE switchlight (APU off, fuel shutoff, bottle) |
+| Engine failure at takeoff thrust | POWER RESERVE AUTO: APR on the operating engine (EST) | — |
+| Flap drive fault | FLAP FAIL, flaps held (EST) | FLAP RESET |
+| Yaw-damper normal channel | YAW DAMPER FAIL A/B | STANDBY YAW DAMP |
+| Primary stab-trim channel | Trim inoperative on that channel | STAB PRI TRIM CHANNEL SELECT, then SECONDARY TRIM |
 | Cabin altitude | Passenger masks at 14,000 ft | Emergency descent, crew masks |
 
 Checklist text for these abnormal procedures is not written yet.
 
 ## 7. Cockpit control inventory
 
-Coordinates are EST, from published flight-deck photos and the OG figures.
-Panel coordinates are x right and y up from the panel centre, in mm.
-The body frame is x forward, y right, z down, from the datum (fdm.ts).
+Rebuilt in the layout-audit fix round 1 (§14) from the AOPA 2021 flight-deck photographs (pilot-seat view a21_004,
+close-ups c_gs21, c_top21, c_lowL21, c_lowR21, c_oh, c_lcon, c_yokeL21, a21_006) and the Textron panel / pedestal
+photographs (_pedfwd, _pedaft). Where a photograph and the OG disagree, the photograph is followed and the conflict
+is noted. Panel coordinates are x right / y up from the panel centre (or x right / y down / aft from the top-left
+corner where noted), in mm. Body frame: x forward, y right, z down, from the datum (fdm.ts). Legends: normal state
+cyan in the upper half, off-normal state in the lower half; unlit lenses near black.
 
-### 7.0 Geometry
-- **Cockpit.** Floor at z ≈ +0.65 m. Width at the panel ≈ 1.80 m.
-- **Crew seats.** At x ≈ 7.4 m, y ±0.50 m.
-- **Design eye.** Body (7.55, ∓0.50, −0.50) m.
-- **Main instrument panel.** Face at x ≈ 8.35 m, 1.80 m wide. Display band 0.30 m tall, bottom edge about 0.62 m above the floor. Tilted 10° back (face up toward the eye).
-- **Glareshield.** Top at z ≈ −0.62 m (about 1.27 m above the floor). Depth 0.22 m.
-- **Pedestal.** 0.34 m wide. Runs from the panel (x ≈ 8.3) aft to the seat line (x ≈ 7.45). Top surface 0.70 m above the floor at the front, sloping down 12° aft (forward end raised).
-- **Overhead panel.** A short console from the windshield header (x ≈ 8.2) aft to x ≈ 7.6, 0.45 m wide, 12° down at the front.
-- **Windshield.** Two large curved main panels, frame-free at the centre post (EST 0.08 m post). Lower edge just above the glareshield. Height about 0.55 m. Side windows aft of them (DV opening not required).
-- **Yokes.** Centred at y ±0.50 m, x ≈ 7.95 m, hub 0.30 m below the display band.
+### 7.0 Geometry (`cockpit/layout.ts`)
+- **Floor** z +0.62. **Design eyes** (7.55, ∓0.50, −0.55): 1.17 m above the floor (EST).
+- **Display band** (three GDU 1400W): centre z −0.085, face tilted 10°, PFD centres ±0.41 m (Textron photograph).
+- **Second (lower glareshield) tier**: 88 mm tall, coplanar with the display band, so it cannot shade the screens.
+- **GMC tier (glareshield face)**: 80 mm, 20° tilt, rising from the tier top; hood brow 30 mm above.
+  Over-the-nose line over the brow ≈ 9.6° (EST). The whole PFD, FMA row included, is visible from both eyes
+  (`fixRound1.test.ts` L01).
+- **Outboard GTC wedges**: at y ±0.80, turned 25° toward the pilot, below / outboard of the PFDs.
+- **Lower band**: black knee-pod face (z +0.045..+0.225) with a 260 mm system sub-panel under the inboard half of each
+  PFD and a 130 mm dimmer strip outboard of the yoke column; column wells to the floor.
+- **Yokes**: ram's-horn wheels, hub (8.05, ±0.45, +0.04), about the PFD bottom edge.
+- **Pedestal**: 0.36 m wide; silver nose surround with the MFD GTCs, black top x 8.11 → 7.28, rounded black side rails.
+- **Overhead**: single LIGHTS strip 0.56 × 0.11 m just aft of the windshield header.
+- **Consoles**: from the seat to the GTC wedges; tiller knob in the left console top; CB grid panels on the forward
+  sidewall, turned 30° toward the pilot.
+- **Finish**: deck, tiers, pedestal, consoles and lower sidewall black / charcoal; headliner and upper sidewall light
+  grey; windshield frames light grey with a dark inner edge; centre post ≈ 65 mm.
 
-### 7.1 Glareshield (left to right)
+### 7.1 Glareshield, GMC tier (left to right; c_gs21)
 
-| Control | Type / positions | Var / event | Position, size |
+| Control | Type / positions | Var / event | Position |
 |---|---|---|---|
-| MASTER WARNING (L) | Red switchlight, momentary | event `cas.ack_warning`; light `alert.master_warning` | Above the L PFD, outboard; 40×25 mm |
-| MASTER CAUTION (L) | Amber switchlight, momentary | event `cas.ack_caution`; light `alert.master_caution` | Next to it; 40×25 mm |
-| L ENG FIRE | Red switchlight, push-latch, guarded (EST) | `ac.lon.fire.eng_l`; light `fire.eng1_warn` | Glareshield inboard of the L PFD controller; 40×30 mm |
-| BOTTLE 1 / BOTTLE 2 ARMED-DISCH | Push, momentary (EST) | `ac.lon.fire.bottle1` / `bottle2`; lights `fire.eng*_armed`, `fire.bottle*_discharged` | Beside the fire switchlights; 25×20 mm |
-| L display controller | BARO knob (push STD), RANGE knob, MINS knob, MFD/PFD reversion switch | G5000 events `g3k.baro1.*`, `g3k.range1.turn`, `g3k.mins1.*`, var `g3k.rev_sw.pfd1` (`g3000Controls`) | Above the L PFD; 200×55 mm |
-| GMC 710 AFCS controller | Keys HDG, NAV, APR, BC, BANK, AP, XFR, A/T, FD (L/R), VS, FLC, ALT, VNAV. Knobs: CRS1 (push sync), HDG (push sync), ALT dual (push), SPD (FMS/MAN push), CRS2. NOSE UP/DN wheel. No YD key. | `g3k.gmc.key_*`, `g3k.gmc.*` (`g3000Controls(suite.cfg)`) | Glareshield centre; 380×70 mm |
-| R display controller, R ENG FIRE, R MASTER CAUTION / WARNING | Mirror image | `ac.lon.fire.eng_r`, `g3k.*2` | — |
+| L bottle switchlight | Square, momentary, dark until armed; ARMED (green) / DISCH (amber) (legend EST) | `ac.lon.fire.bottle1`; lights `ac.lon.ck.bottle1_armed`, `fire.bottle1_discharged` | Directly above L ENG FIRE, 30 mm |
+| L ENG FIRE | Red switchlight, push-latch, clear guard | `ac.lon.fire.eng_l`; light `fire.eng1_warn` | −238 from the GMC centre; 36×27 mm |
+| GMC 710 (425×75 mm) | FD / L CRS knob (PUSH DIR) · VS key over NOSE wheel (DN top, UP bottom) · VNAV, FLC over SPD knob (green SPD light, FMS / MAN ring, PUSH IAS MACH) · AP over CPL (green arrows) · NAV, HDG, APPR over BANK, HDG knob (PUSH SYNC), B/C · ALT key over ALT knob (PUSH FINE) · FD / R CRS knob (PUSH DIR). No A/T, SPD or YD key. | `g3k.gmc.key_*`, `g3k.gmc.*`; ALT knob `lon.gmc.alt*` → 1,000 / 100 ft (FINE, `ac.lon.gmc.alt_fine`, EST); SPD push = `g3k.gmc.key_spd` (IAS/MACH); ring = `g3k.gmc.spd_push` (FMS/MAN, `g3k.spd_fms`); SPD light = A/T engaged (EST) | Centre |
+| ENG FIRE R, R bottle switchlight | Mirror image | `ac.lon.fire.eng_r`, `ac.lon.fire.bottle2` | +238 |
+| APU FIRE | Red switchlight, push-latch, clear guard | `ac.lon.fire.apu`: APU shutdown, APU fuel shutoff, APU bottle discharge (EST function); light `fire.apu_warn` | +282 |
 
-### 7.2 Main instrument panel
+### 7.2 Lower glareshield tier (left to right; c_top21)
+
+| Control | Type | Var / event | Position (from centre) |
+|---|---|---|---|
+| MASTER CAUTION RESET (L) | Amber switchlight 30×24 mm | event `cas.ack_caution`; `alert.master_caution` | −423 (outboard) |
+| MASTER WARNING RESET (L) | Red switchlight 30×24 mm | event `cas.ack_warning`; `alert.master_warning` | −384 |
+| L display controller (140×50 mm, black) | RANGE knob (PUSH PAN, joystick) · CLR over ENT · PFD dual knob (PUSH ENT) · -D-> over FPL · COM/NAV over PROC · BARO knob (PUSH STD) | GCU logic (`state/Gcu.ts`, created in createSystems): `g3k.range1.*`, `g3k.gcu1.*`, `g3k.baro1.*` | −290 |
+| MAX AIRSPEED LIMITS placard | FLAP 1: 250, 2: 230, FULL: 180 KIAS; GEAR EXT/OPERATING 230 KIAS; TURBULENT AIR 235 KIAS / .75M | data.ts `vfe*`, `vleKt`, `vTurbKt`, `mTurb` | −165 |
+| POWER RESERVE MANUAL | Switchlight, ON (white) | `ac.lon.eng.apr_manual` | −107 |
+| POWER RESERVE AUTO | Switchlight in a yellow frame, ARM (cyan) / APR (green) (legends EST) | `ac.lon.eng.apr_auto`; `ac.lon.eng.apr_active` | −66 |
+| Standby flight display | 86 mm bezel, BARO knob lower right (push STD) | `adc3.baro_inhg`, `adc3.baro_std`; power `elec.stby_inst_powered` | 0 |
+| Knob right of the standby | STBY display brightness (EST function) | `ac.lon.lt.stby` → `display.stby.brt` | +69 |
+| Registration placard | Framed tail number (EST registration) | — | +159 |
+| R display controller, MASTER WARNING / CAUTION RESET (R) | Mirror image | `g3k.*2`, `g3k.gcu2.*` | +290, +384, +423 |
+
+SCOPE: minimums are set on the GTC PFD page (no MINS knob on the Longitude controller); display reversion is
+automatic / GTC (no reversion switch visible on the controller, EST).
+
+### 7.3 Main instrument panel and GTC wedges
 
 | Control / display | Type | Var | Position |
 |---|---|---|---|
-| L PFD | GDU 14 in (active area 302×188 mm) | display `pfd1` | Panel x −560, y 0 |
-| MFD | GDU 14 in | `mfd` | Centre |
-| R PFD | GDU 14 in | `pfd2` | x +560 |
-| L PFD GTC (GTC 570, portrait) | Touchscreen + knobs | `gtc1` | Outboard of the L PFD, x −830; 127×178 mm |
-| R PFD GTC | Same | `gtc4` | x +830 |
-| Standby flight display | Round/square 3ATI, standby ADC/AHRS 3 | Power `elec.stby_inst_powered` | Below the MFD / left of centre, x −120, y −200 (EST) |
+| L PFD / MFD / R PFD | GDU 1400W 14.1 in | `pfd1`, `mfd`, `pfd2` | x −410 / 0 / +410 |
+| Gasper L / R | Eyeball outlet: click open / closed, wheel 25 % steps, drag aims (SCOPE: airflow state) | `ac.lon.ecs.gasper_l/_r` → `ac.lon.ecs.gasper_flow` | Upper outboard PFD corners |
+| L PFD GTC / R PFD GTC | GTC 570 on the outboard wedges | `gtc1`, `gtc4` | Body y ±0.80 |
 
-### 7.3 Pilot lower sub-panel (under the L PFD)
+### 7.4 Pilot lower sub-panel: ELECTRICAL (c_lowL21; OG Fig 5-3-1, 5-4..5-6)
 
-| Control | Type / positions | Var | Position (from panel centre) |
+Plate 260 × 180 mm under the inboard half of the L PFD, white bus mimic joining the controls.
+
+| Row | Control | Type / legends | Var |
 |---|---|---|---|
-| PFD/GTC dimmer | Dual concentric knob: outer PFD, inner GTC | `ac.lon.lt.pfd_l`, `ac.lon.lt.gtc_l` (0..1) | Outboard, x −800, y −60 |
-| MAP LIGHT | Knob 0..1 | `ac.lon.lt.map_l` | Below it, y −110 |
-| EMER/PARK BRAKE | T-handle, pull 0..1 | `ac.lon.park_brake` | Lower outboard, x −760, y −160 |
-| BATT L / BATT R | Korry pushbuttons (ON cyan, OFF amber) | `ac.lon.elec.batt_l/_r` | Electrical group, x −380..−460, y −60 |
-| GEN L / APU / R | 3-position toggles ON / OFF / RESET (momentary) | `ac.lon.elec.gen_l`, `gen_apu`, `gen_r` (1 / 0 / 2) | Row y −110 |
-| BUS TIE | Pushbutton OPEN (cyan) / CLOSED (amber) | `ac.lon.elec.bus_tie`; light `ac.lon.elec.bus_tie_closed` | y −60, centre of the group |
-| MAIN L / MAIN R | Pushbutton ON / OFF | `ac.lon.elec.main_l/_r` | y −160 |
-| ELEC L / ELEC R | Pushbutton ON / EMER | `ac.lon.elec.elec_l/_r` | y −160 |
-| INTERIOR | Pushbutton NORM / OFF | `ac.lon.elec.interior` | y −160 |
-| STBY PWR | 3-position toggle OFF / ON / TEST (momentary), LED amber (not charging) / green (test OK) | `ac.lon.elec.stby_pwr`; LED `ac.lon.elec.stby_led` | x −250, y −110 |
-| EXT PWR | Pushbutton with AVAIL | `ac.lon.elec.ext_pwr`; AVAIL `elec.gpu_avail` | x −250, y −60 |
-| Circuit breakers | Behind the seats / side consoles (EST) | `cb.<load>` (see `systems/electrical.ts`) | — |
+| 1 | L MAIN, R MAIN | ON (cyan) / OFF (white) | `ac.lon.elec.main_l/_r` |
+| 1 | L ELEC, R ELEC | NORM (cyan) / EMER (amber) | `ac.lon.elec.elec_l/_r` |
+| 1 | INTERIOR | NORM (cyan) / OFF (white) | `ac.lon.elec.interior` |
+| 2 | STBY PWR | Toggle ON (up) / OFF (centre, engraved left) / TEST (down, momentary); amber / green LED left of the switch (OG 5-5) | `ac.lon.elec.stby_pwr` (1 / 0 / 2); LED `ac.lon.elec.stby_led` |
+| 2 | L GEN, R GEN | Toggle ON / OFF / RESET (momentary); OFF engraved outboard (left of L GEN, right of R GEN) | `ac.lon.elec.gen_l/_r` |
+| 2 | BUS TIE | OPEN (cyan) / CLOSED (amber) | `ac.lon.elec.bus_tie`; `ac.lon.elec.bus_tie_closed` |
+| 3 | APU GEN | Toggle ON / OFF / RESET, OFF engraved left | `ac.lon.elec.gen_apu` |
+| 3 | L BATT, R BATT | ON (cyan) / OFF (amber) | `ac.lon.elec.batt_l/_r` |
+| 3 | EXT PWR | AVAIL (white) / ON (cyan) | `ac.lon.elec.ext_pwr`; `elec.gpu_avail` |
+| Strip | L PFD GTC DIM | Dual knob (outer PFD, inner GTC), OFF arc | `ac.lon.lt.pfd_l`, `ac.lon.lt.gtc_l` |
+| Strip | MAP LIGHT | Knob, MIN arc | `ac.lon.lt.map_l` |
 
-### 7.4 Copilot lower sub-panel (under the R PFD)
-
-| Control | Type | Var | Position |
-|---|---|---|---|
-| ENGINE L / ENGINE R (anti-ice) | Pushbutton OFF (cyan) / ON (white) | `ac.lon.ice.eng_l/_r` | Left side of the panel, x +300..+360, y −60 |
-| WING | Pushbutton OFF / ON | `ac.lon.ice.wing` | x +420 |
-| STAB | Pushbutton OFF / ON | `ac.lon.ice.stab` | x +480 |
-| PITOT/STATIC | Pushbutton NORM (cyan) / ON (amber) | `ac.lon.ice.pitot_static` | y −110 |
-| LANDING GEAR handle | Wheel-shaped lever, DN / UP; three green / red lights; locked on the ground (`gear.handle_lock`) | `ac.lon.gear_handle` (1 DN); lights `gear.green*`/`gear.red*` | Inboard edge, x +210, y −40..−140 |
-| EMER GEAR EXTENSION | T-handle (EST) | `ac.lon.gear_emer` | Lower inboard, x +230, y −170 |
-| PFD/GTC dimmer, MAP LIGHT | As on the L side | `ac.lon.lt.pfd_r`, `ac.lon.lt.gtc_r`, `ac.lon.lt.map_r` | Outboard, x +800 |
-
-### 7.5 Pedestal, forward section (from the panel aft)
-
-| Control | Type / positions | Var | Position |
-|---|---|---|---|
-| MFD GTC L / MFD GTC R | GTC 570 ×2 side by side | `gtc2`, `gtc3` | Forward pedestal face, 2 × 127×178 mm |
-| MFD/GTC dimmer | Dual knob | `ac.lon.lt.mfd`, `ac.lon.lt.gtc_c` | Forward left of the pedestal |
-| FUEL BOOST PUMP L / R | Pushbutton NORM (cyan) / ON (amber) | `ac.lon.fuel.boost_l/_r` | Right side fore, row 1 |
-| GRAVITY XFLOW | Pushbutton CLOSED (cyan) / OPEN (white) | `ac.lon.fuel.grav_xflow` | Row 1 centre |
-| FUEL TRANSFER | 3-position rotary L TANK / OFF / R TANK | `ac.lon.fuel.transfer` (−1 / 0 / 1) | Row 2 |
-| HYDRAULICS PUMP A / B | 3-position toggles NORM / MIN / SHUTOFF (guard over SHUTOFF, EST) | `ac.lon.hyd.pump_a/_b` (0 / 1 / 2) | Right of the throttles, row 3 |
-| PTCU | 5-position rotary OFF / AUX A / NORM / AUX B / HYD GEN | `ac.lon.hyd.ptcu` (0..4) | Row 3 centre |
-| RUDDER STANDBY | Pushbutton NORM (cyan) / OFF (amber) | `ac.lon.hyd.rudder_stby` | Row 3 |
-| SPEEDBRAKE handle | Lever, retracted (up) .. full, continuous | `ac.lon.speedbrake` 0..1 | Left of the throttles |
-| FUEL RECIRC | Pushbutton NORM / OFF | `ac.lon.fuel.recirc` | Under the speedbrake handle |
-| Thrust levers L / R | Levers IDLE 0 .. TO 1 (CRU ≈ 0.62, CLB ≈ 0.80 ranges); lift the reverser levers for −1..0 | `ac.tla1`, `ac.tla2` | Pedestal centre |
-| TO/GA buttons | Push, momentary, outboard side of each handle | event `ap.toga` (plus the `input.toga` key) | On the levers |
-| A/T disconnect | Push, front of each handle | event `at.disc` | On the levers |
-| A/T arm/engage | Push, aft face of the lever arm | event `at.engage` | On the levers |
-| FLAPS lever | Lever UP / 1 / 2 / FULL detents | `ac.lon.flap_lever` 0..3 | Right side of the pedestal |
-| AILERON TRIM / RUDDER TRIM | Spring-loaded rocker / knob (EST) | `ac.lon.trim.ail_sw`, `ac.lon.trim.rud_sw` (−1 / 0 / +1) | Aft of the flap lever |
-| SECONDARY STAB TRIM | Guarded 3-position toggle, momentary | `ac.lon.trim.stab_sec_sw`, guard `ac.lon.trim.stab_sec_guard` | Aft pedestal right (EST) |
-
-### 7.6 Pedestal, aft section
-
-| Control | Type | Var | Position |
-|---|---|---|---|
-| ENGINE RUN/STOP L / R | Guarded pushbutton (RUN / STOP) | `ac.lon.eng.run_l/_r`; guards `…run_l_guard` | Aft of the throttle quadrant, outboard |
-| ENGINE STARTER L / R | Momentary pushbutton, lit white while the starter runs | `ac.lon.eng.start_l/_r`; light `fadec.engN.starter_cmd` | Inboard of each RUN/STOP |
-| CABIN TEMP / CKPT TEMP | Rotary: NORM detent (0), manual COLD..HOT (0.05..1) | `ac.lon.ecs.cabin_temp`, `ac.lon.ecs.ckpt_temp` | Behind the start buttons |
-| ECS | Rotary NORM / ACM ONLY / HEAT EXCHG ONLY | `ac.lon.ecs.mode` | Same row |
-| FLOW | Pushbutton NORM / HIGH | `ac.lon.bleed.flow` | Same row |
-| CABIN DUMP | Guarded pushbutton NORM / DUMP | `ac.lon.press.dump`, guard `…dump_guard` | Pressurization group |
-| PRESS MODE | Pushbutton NORM / MANUAL | `ac.lon.press.mode` | — |
-| CABIN ALT | Spring-loaded toggle UP / – / DN | `ac.lon.press.cabin_alt_sw` (+1 / 0 / −1) | Left of PRESS MODE |
-| ENG BLD AIR L / R | Pushbutton NORM / OFF | `ac.lon.bleed.eng_l/_r` | Bleed group |
-| APU BLEED | Pushbutton NORM / OFF | `ac.lon.bleed.apu` | — |
-| BLEED ISOLATE | Pushbutton NORM / XFLOW | `ac.lon.bleed.isolate` | — |
-| PRESS SOURCE L / R | Pushbutton NORM / OFF | `ac.lon.bleed.press_src_l/_r` | — |
-| APU | 3-position rotary OFF / ON / START (spring to ON) | `ac.lon.apu.knob` (0 / 1 / 2) | Aft right corner |
-| PITCH/ROLL DISCONNECT | Red T-handle, pull to latch, push to reset (SCOPE) | `ac.lon.fc.pitch_roll_disc` (0 / 1) | Left side of the pedestal, opposite the trims (EST, DGAC / PAT) |
-
-### 7.7 Overhead panel
+### 7.5 Copilot lower sub-panel: LANDING GEAR / ICE PROTECTION (c_lowR21; OG Fig 12-3-1, 14-4-1)
 
 | Control | Type | Var |
 |---|---|---|
-| L LDG, R LDG, RECOG, PULSE, TAXI, WING INSP, TAIL FLOOD, ANTI COLL | Pushbuttons | `ac.lon.lt.ldg_l`, `ldg_r`, `recog`, `pulse`, `taxi`, `wing_insp`, `tail_flood`, `anti_coll` |
-| PANEL / FLOOD / AUX | Knobs 0..1 (PANEL full = DAY) | `ac.lon.lt.panel`, `flood`, `aux` |
-| EMER LTS | 3-position toggle OFF / ARM / ON | `ac.lon.lt.emer` |
-| PASS SAFETY | 3-position OFF / BELT / BELT+NO SMOKING (EST) | `ac.lon.lt.pass_safety` |
-| FIRE WARN TEST | Momentary pushbutton (EST) | `ac.lon.fire.test` |
-| PASS OXY | Guarded toggle NORM / MAN DEPLOY (EST) | `ac.lon.oxy.pax` |
+| LANDING GEAR handle | Wheel handle DN / UP in its slot, GEAR UP ↕ GEAR DOWN arrow, bracketed title; no position lights (gear on the EIS); down-lock on the ground | `ac.lon.gear_handle` (1 DN) |
+| ICE PROTECTION ENGINE L / R | OFF (cyan, lower) / ON (white, upper), under an ENGINE bracket | `ac.lon.ice.eng_l/_r` |
+| WING / STAB | Same | `ac.lon.ice.wing`, `ac.lon.ice.stab` |
+| PITOT/STATIC | NORM (cyan, upper) / ON (amber) | `ac.lon.ice.pitot_static` |
+| R PFD GTC DIM, MAP LIGHT | As on the L side | `ac.lon.lt.pfd_r`, `gtc_r`, `map_r` |
+| EMER GEAR EXTENSION | Red T-handle on the copilot knee-pod face (EST: not visible in c_lowR21) | `ac.lon.gear_emer` |
 
-### 7.8 Yokes, pedals, side consoles
-- **Yokes.** Pitch/roll through `input.pitch`/`input.roll` (cockpit yoke contract).
-  - Pitch trim split switch: `input.pitch_trim_rate`.
-  - AP/TRIM DISC (MASTER DISCONNECT): `input.ap_disc` (hold). Held, it also disengages nosewheel steering (DGAC).
-  - PTT: audio. Pusher interrupt: no var (EST, not modelled).
-- **Rudder pedals.** `input.yaw` and toe brakes `input.brake_left/right`.
-- **Tiller.** Left side console: `input.tiller` (±81°).
-- **Oxygen masks.** Side-console stowage boxes: mask in use `ac.lon.oxy.mask_l/_r`; regulator NORM / 100 % / EMER `ac.lon.oxy.mode`.
+### 7.6 Pedestal, forward section (_pedfwd, c_pedFL2, c_ped21)
 
-### 7.9 GTC system pages (touchscreen)
+| Area | Control | Type / legends | Var |
+|---|---|---|---|
+| Nose | MFD GTC L / R | GTC 570 × 2 in the silver surround | `gtc2`, `gtc3` |
+| Left column | MFD / GTCs dimmer | Dual knob, OFF arc | `ac.lon.lt.mfd`, `ac.lon.lt.gtc_c` |
+| Left column | STABILIZER PRIMARY TRIM CHANNEL SELECT | Switchlight, alternates CH 1 / CH 2 (cyan) (EST: ch 1 on the L emer bus, ch 2 on the R) | `ac.lon.trim.stab_chan` (1 / 2) |
+| Left column | SECONDARY TRIM | Switchlight in a yellow frame, NORM (cyan) / ENGAGED (amber); engaged = primary (wheel) trim off, rocker active (EST) | `ac.lon.trim.stab_sec_arm` |
+| Left column | NOSE DOWN / NOSE UP | Spring-loaded rocker | `ac.lon.trim.stab_sec_sw` (−1 / 0 / +1) → `ac.lon.trim.stab_sec_cmd` |
+| Left column | AUTO GROUND SPOILERS | Switchlight, dark when armed, OFF (amber) disarmed (EST legend) | `ac.lon.fc.auto_gnd_splr` |
+| Left column | STANDBY YAW DAMP | Switchlight NORM (cyan) / ON (white) (EST legends) | `ac.lon.fc.stby_yd` |
+| Quadrant | SPEEDBRAKE | Lever RET (fwd) .. EXT (aft), continuous, wedge scale, vertical engraving, cylindrical grip | `ac.lon.speedbrake` 0..1 |
+| Quadrant | Thrust levers L / R | Silver arms, horizontal cylindrical grips; IDLE 0 .. TO 1 (CRU ≈ 0.62, CLB ≈ 0.80), lift the reverse range −1..0; held at idle by CONTROL LOCK | `ac.tla1`, `ac.tla2` |
+| Quadrant | TO/GA (outboard end of each grip), AT DISC (inboard top, black), AT paddle (outboard side of the arm) | Momentary | events `ap.toga`, `at.disc`, `at.engage` |
+| Quadrant | FUEL RECIRC PUMP | NORM (cyan) / OFF | `ac.lon.fuel.recirc` |
+| Right column | HYDRAULIC PUMP A / B | Toggles NORM / MIN / SHUTOFF (lever-locked), MIN engraved between | `ac.lon.hyd.pump_a/_b` |
+| Right column | POWER TRANSFER (PTCU) | Rotary OFF / AUX A / NORM / AUX B / HYD GEN (photo shows two switchlights under this bracket, legends illegible; the OG knob is kept) | `ac.lon.hyd.ptcu` |
+| Right column | RUDDER STANDBY | NORM (cyan) / OFF (amber) | `ac.lon.hyd.rudder_stby` |
+| Right column | FUEL: BOOST PUMP L / R | NORM (cyan, upper) / ON (amber) | `ac.lon.fuel.boost_l/_r` |
+| Right column | GRAVITY XFLOW | OPEN (upper) / CLOSED (cyan, lower) | `ac.lon.fuel.grav_xflow` |
+| Right column | TRANSFER | Rotary L TANK / OFF / R TANK | `ac.lon.fuel.transfer` |
 
-These vars are written by the G5000 synoptic controls (`systems/synoptics.ts`: MFD pages ELECTRICAL, FUEL,
-HYDRAULICS, ECS / PRESSURIZATION, ANTI-ICE, EXTERIOR LIGHTS; the GTC shows each page's controls):
-- Exterior lights: `ac.lon.lt.nav`, `ac.lon.lt.beacon_mode`, `ac.lon.lt.auto_pulse`.
+### 7.7 Pedestal, aft section (_pedaft, c_pedA2, a21_006)
+
+| Area | Control | Type / legends | Var |
+|---|---|---|---|
+| Aft left | EMER / PARK BRAKE | Lever with red / white striped grip in a slotted recess, OFF .. PARK | `ac.lon.park_brake` |
+| Aft left | CONTROL LOCK | Lever UNLOCK (up / fwd) / LOCK (down / aft); only with both levers at idle; LOCK holds the surfaces, keeps the thrust at idle, AP inhibit, NO TAKEOFF (EST) | `ac.lon.fc.control_lock` |
+| Centre | ENGINE: L RUN/STOP · STARTER L / R · R RUN/STOP | RUN (cyan) / STOP, clear guards; START (white) momentary | `ac.lon.eng.run_l/_r`, `start_l/_r` |
+| Centre | PRESSURIZATION: CKPT TEMP · ECS · CABIN TEMP | Temp knobs NORM / COLD / HOT / MANUAL; ECS NORM (top) / HEAT EXCHG ONLY (left) / ACM ONLY (right). Photo order followed (OG MSFS art: CABIN left / CKPT right, ACM left) | `ac.lon.ecs.ckpt_temp`, `ecs.mode`, `ecs.cabin_temp` |
+| Centre | CABIN DUMP (red guard) · FLOW · CABIN ALT (UP / HLD / DN) · PRESS MODE (NORM / MANUAL, cyan) | | `ac.lon.press.dump`, `bleed.flow`, `press.cabin_alt_sw`, `press.mode` |
+| Centre | L PRESS SOURCE · APU BLEED · R PRESS SOURCE | NORM (cyan) / OFF (amber) | `ac.lon.bleed.press_src_l`, `bleed.apu`, `press_src_r` |
+| Centre | L ENG BLEED · BLEED ISOLATE · R ENG BLEED | NORM / OFF; isolate NORM / XFLOW; duct mimic with WING A/I taps | `ac.lon.bleed.eng_l`, `isolate`, `eng_r` |
+| Centre | COCKPIT VOICE RECORDER: TEST (green) + HOLD 5 SEC light · HEADSET jack · ERASE (red) | Momentary; status after 5 s held with the CVR powered; ERASE on the ground with the park brake set (SCOPE: no audio) | `ac.lon.cvr.test`, `cvr.erase`; `cvr.test_ok`, `cvr.erased` |
+| Aft right | FLAP lever | 0 / 1 (7°) / 2 (15°) / FULL (35°) | `ac.lon.flap_lever` 0..3 |
+| Aft right | FLAP RESET | Momentary, FAIL (amber) while a flap fault is latched (EST function) | `ac.lon.fc.flap_reset`; `ac.lon.fc.flap_fault` |
+| Aft right | APU box: OFF / ON / START (spring to ON); EVENT MARKER | Rotary; momentary (SCOPE: FDR event count) | `ac.lon.apu.knob`; `ac.lon.fdr.event_marker` → `fdr.event_count` |
+| Aft end | AIL TRIM, RUD TRIM | Spring-loaded; EST position (not in the photographs) | `ac.lon.trim.ail_sw`, `trim.rud_sw` |
+| Aft face | PITCH/ROLL DISCONNECT | Red flag "PULL": pull = split both, rotate up = PITCH RECONNECT, down = ROLL RECONNECT, push = reset (mount EST) | `ac.lon.fc.pitch_roll_disc` (0..3) |
+
+### 7.8 Overhead LIGHTS strip (c_oh; OG Fig 16-2-1, 16-3-2)
+
+| Controls (left to right) | Type | Var |
+|---|---|---|
+| L LDG, R LDG, TAXI, RECOG, PULSE | Switchlights, ON (cyan) | `ac.lon.lt.ldg_l`, `ldg_r`, `taxi`, `recog`, `pulse` |
+| PANEL (MIN .. DAY), FLOOD (MIN), AUX (MIN) | Knobs with engraved arcs | `ac.lon.lt.panel`, `flood`, `aux` |
+| EMER LTS | Lever-lock toggle in a ring guard: ARM (up) / ON (centre, engraved at the side) / OFF (down) | `ac.lon.lt.emer` (1 / 2 / 0) |
+| ANTI COLL, WING INSP, TAIL FLOOD, PAX SAFETY, SEAT BELTS | Switchlights, ON (cyan) | `ac.lon.lt.anti_coll`, `wing_insp`, `tail_flood`, `pax_safety_btn`, `seat_belts` |
+
+Headliner: two round fixtures either side of the strip with the flood lights; sun visors on rails above the side
+windows (`ac.lon.visor_l/_r`, SCOPE shading state). Not on the real overhead, moved to GTC pages (§7.10): DOME,
+PASS OXY, FIRE WARN TEST, ANNUN TEST.
+
+### 7.9 Yokes, pedals, side consoles
+- **Yokes** (ram's horn): pitch / roll through `input.pitch` / `input.roll`; outboard grip (c_yokeL21): AP/TRIM DISC
+  (red, `ac.lon.yoke.disc_l/_r`, event `ap.disc`), ICS push (`ac.lon.yoke.ics_l/_r`, SCOPE), split pitch-trim switch
+  (`ac.lon.yoke.trim_l/_r`); PTT trigger on the back of the grip (`ac.lon.yoke.ptt_l/_r` → `ac.lon.com.transmitting`,
+  SCOPE).
+- **Rudder pedals**: `input.yaw`, toe brakes.
+- **Tiller**: black finger-grip knob in the forward left console (`ac.lon.tiller`, ±81°).
+- **Oxygen**: mask in a console cup with the white hose loop and red squeeze tabs (`ac.lon.oxy.mask_l/_r`); regulator
+  NORM / 100 % / EMER, PRESS TO TEST and FLOW beside the cup (EST positions).
+- **Circuit breakers**: forward sidewall grid panels (columns N.. left / AA.. right, rows 1-5), name under each
+  breaker; every breaker is a `cb.<load>` of the network.
+
+### 7.10 GTC system pages (touchscreen)
+
+Written by the G5000 synoptic controls (`systems/synoptics.ts`):
+- Exterior lights: `ac.lon.lt.nav`, `ac.lon.lt.beacon_mode`, `ac.lon.lt.auto_pulse`; CKPT DOME `ac.lon.lt.dome` (SCOPE).
 - Temperature: `ac.lon.ecs.cabin_set_c`, `ac.lon.ecs.ckpt_set_c`, `ac.lon.ecs.recirc_fan`.
-- Cabin Pressure: `ac.lon.press.sel_mode`, `ac.lon.press.ldg_elev_ft` (−9999 = FMS destination), `ac.lon.press.sel_cabin_ft`.
+- Cabin Pressure: `ac.lon.press.sel_mode`, `ac.lon.press.ldg_elev_ft` (−9999 = FMS destination), `ac.lon.press.sel_cabin_ft`;
+  PAX OXY AUTO / DEPLOY `ac.lon.oxy.pax` (SCOPE).
+- Tests: FIRE WARN (`ac.lon.fire.test`), ANNUN lamp test (`alert.annun_test`).
 
 ## 8. Integration notes for the cockpit, index.ts and exterior agents
 
@@ -862,3 +895,45 @@ This pass re-walked the control inventory against the code (every `LON_VARS` con
 - **Toggle middle-position legends** (GEN OFF, STBY PWR ON) are partly under the switch nut: this is the shared ToggleSwitch layout. They are still readable.
 - **MFD terrain on the ground**: fixed in the integration QA (maps default to Absolute terrain, see above).
 - The PITCH/ROLL DISCONNECT handle position, and whether the Longitude posts a CAS message for it, are not published. No CAS message was invented.
+
+## 14. Layout-audit fix round 1 (AOPA 2021 / Textron photographs)
+
+All 54 layout gaps (L01-L54) and LON-F-22 / LON-F-35 / LON-F-36 / LON-PROC-06 / LON-PROC-27 were addressed; §7 is
+the resulting inventory. Main points:
+
+- **Geometry (L01).** The first build's glareshield face sat 0.1 m aft of the displays and hid the top ~45 mm of
+  every PFD. The display band is now 80 mm lower, the lower glareshield tier is coplanar with it and the GMC tier
+  rises from the tier top. `fixRound1.test.ts` casts rays from both design eyes to the top corners / centre of all
+  three screens.
+- **New systems functions** (all EST where the AFM text is not public, and marked in the code):
+  - APU FIRE switchlight (environment.ts);
+  - POWER RESERVE MANUAL / AUTO and the APR trigger (logic.ts);
+  - stab-trim channel select and secondary trim (cockpitInputs.ts, createSystems.ts);
+  - AUTO GROUND SPOILERS and STANDBY YAW DAMP (logic.ts; new failure `yd.normal`);
+  - FLAP RESET / flap-fault latch with CAS FLAP FAIL (EST text);
+  - CONTROL LOCK (crewControls.ts: surfaces held, thrust interlock, AP inhibit, NO TAKEOFF);
+  - CVR test / erase, EVENT MARKER, PTT / ICS, gaspers, visors (crewControls.ts, SCOPE);
+  - PITCH/ROLL DISCONNECT four-state handle (pitchRollDisconnect.ts);
+  - ALT knob PUSH FINE (crewControls.ts);
+  - display controllers on the GCU logic.
+- **States / checklists.** cold & dark has the CONTROL LOCK engaged; the Cockpit Inspection checklist starts with
+  CONTROL LOCK UNLOCK; Before Taxi checks AUTO GROUND SPOILERS and POWER RESERVE AUTO.
+- **EIS.** Flap scale 0 / 7 / 15 / 35 with the selected-position cyan bug; the thrust-mode label is the governing
+  rating (CRU below CLB), APR while the reserve is in force, magenta under the A/T (OG 7-7).
+- **Superseded text.** §10.2 and §11.1-§11.2 geometry descriptions refer to the first build; §7 is current.
+
+### 14.1 Shared-library changes (additive, default behaviour unchanged)
+- `src/cockpit/controls/PushButton.ts`: optional `unlitTint` (passed to LegendFace) and `lightBar.unlitTint`.
+- `src/cockpit/geometry/levers.ts`: LeverKnobStyle `'cylinder-grip'`.
+- `src/cockpit/geometry/yokes.ts`: YokeStyle `'ramshorn'`.
+- `src/avionics/garmin-g3000/config.ts` + `gdu/Eis.ts`: EisN1Section `modeColorByAt`, EisFlapsSection
+  `selectedVar` / `selectedDeg` (cyan selected-flap bug).
+- `src/avionics/garmin-g3000/presets.ts`: LONGITUDE_EIS only (flap detents, selected bug, thrust-mode var).
+
+### 14.2 Remaining gaps (honest list)
+- Legends of the bottle, POWER RESERVE, STAB CHANNEL, SECONDARY TRIM, AUTO GROUND SPOILERS, STANDBY YAW DAMP and FLAP
+  RESET switchlights are not legible in the photographs: EST.
+- The POWER TRANSFER area shows two switchlights in the Textron photograph; the OG PTCU knob is kept.
+- The EMER GEAR handle, aileron / rudder trim controls and the PITCH/ROLL DISCONNECT mount position are EST.
+- "TRIM" under the MFD / GTCs dimmer (c_pedFL2) is not engraved (meaning unclear).
+- The pilot's default view still shows the lower side windshield left of the panel wrap (cheek loft, EST shape).

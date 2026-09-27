@@ -215,9 +215,11 @@ export class LongitudeLogic implements Subsystem {
     const rudderAvail = aPsi > 1500 || v.get('hyd.rss_psi') > 1500;
     // STANDBY YAW DAMP switchlight (pedestal forward left, Textron photograph): EST, a standby yaw-damper channel in the
     // rudder control unit on the R emergency bus that engages with the button when the normal channel has failed
-    // (fail.yd) or lost its power; it needs rudder hydraulics like the normal channel.
-    const stbyYd = v.get(V.stbyYd) !== 0 && v.get('elec.emer_r_powered') !== 0;
-    const normYd = v.get('elec.rudder_ctl_powered') !== 0 && v.get('fail.yd') === 0;
+    // (fail.yd.normal) or lost its power; it needs rudder hydraulics like the normal channel. fail.yd (the YawDamper
+    // block's own failure) takes out yaw damping altogether.
+    const ydDead = v.get('fail.yd') !== 0;
+    const stbyYd = v.get(V.stbyYd) !== 0 && v.get('elec.emer_r_powered') !== 0 && !ydDead;
+    const normYd = v.get('elec.rudder_ctl_powered') !== 0 && v.get('fail.yd.normal') === 0 && !ydDead;
     const yd = !ground && rudderAvail && (normYd || stbyYd);
     v.set(V.ydAuto, yd ? 1 : 0);
     v.set('ap.yd_engaged', yd ? 1 : 0);

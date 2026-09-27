@@ -22,7 +22,6 @@ import { GuardedButton, Lever, PushButton, RockerSwitch, RotaryKnob, SelectorKno
 import type { Panel } from '../../../cockpit/CockpitBuilder';
 import { bl } from '../../../cockpit/frame';
 import { INPUT } from '../../../core/vars';
-import { G3K } from '../../../avionics/garmin-g3000/vars';
 import { LON_VARS as V } from '../vars';
 import { TLA } from '../systems/logic';
 import { lonMaterials, seg, type LonCockpitContext } from './context';
@@ -750,5 +749,4 @@ function aftEnd(c: LonCockpitContext, ped: Panel, len: number): void {
   face.label('ROLL', 0.0, -0.04, { height: 0.0042 });
   face.label('RECONNECT', 0.0, -0.047, { height: 0.0042 });
   face.add(new PitchRollHandle(env, { id: 'lon.ped.pitch_roll_disc', label: 'PITCH / ROLL DISCONNECT', var: V.pitchRollDisc }), -0.01, 0.0);
-  void G3K;
 }

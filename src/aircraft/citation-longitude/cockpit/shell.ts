@@ -151,6 +151,12 @@ export function buildShell(b: CockpitBuilder): void {
   add(loftFuselage(F, X_AFT, ws.headerX, sw.roof - 0.04, sw.roof, 18, 1, fi), frame, 'roof_r');
   add(loftFuselage(F, X_AFT, ws.headerX, -sw.roof, -sw.roof + 0.04, 18, 1, fi), frame, 'roof_l');
 
+  // Panel cheeks: the glareshield / panel wrap either side of the main panel down to the consoles (Textron panel
+  // photograph: the deck curves back to the side windows), inside the lower corners of the windshield glazing.
+  const cheek = { inset: INSET + 0.02, inward: true };
+  add(loftFuselage(F, 8.26, ws.baseX + 0.02, 0.95, 1.75, 6, 10, cheek), L.trim, 'panel_cheek_r');
+  add(loftFuselage(F, 8.26, ws.baseX + 0.02, -1.75, -0.95, 6, 10, cheek), L.trim, 'panel_cheek_l');
+
   // Aft bulkhead (faces forward) with the cockpit doorway frame.
   const s = F.at(X_AFT);
   const bulk = new THREE.CircleGeometry(1, 48);

@@ -11,7 +11,7 @@
  *
  * Unlit lenses are near black (layout audit L03/L05/L08: cold & dark shows no pastel legends).
  */
-import { AnnunciatorLight, GuardedButton, PushButton, RotaryKnob } from '../../../cockpit/controls';
+import { GuardedButton, PushButton, RotaryKnob } from '../../../cockpit/controls';
 import type { Panel } from '../../../cockpit/CockpitBuilder';
 import { LON_LIMITS } from '../data';
 import { LON_VARS as V } from '../vars';
@@ -46,7 +46,7 @@ function buildGmcTier(c: LonCockpitContext): void {
         mode: 'toggle',
         width: 0.036,
         height: 0.027,
-        unlitTint: 0.12, // red-tinted cover lens (c_gs21 shows a dark red lens when unlit)
+        unlitTint: 0.08, // red-tinted cover lens (c_gs21 shows a dark red lens when unlit)
         segments: [{ text: side < 0 ? ['L ENG', 'FIRE'] : ['ENG R', 'FIRE'], color: 'red', var: `fire.eng${i}_warn`, style: 'field' }],
         guard: { color: 'clear', hinge: 'top', close: 'free' },
       }),
@@ -65,7 +65,7 @@ function buildGmcTier(c: LonCockpitContext): void {
         width: 0.03,
         height: 0.026,
         layout: 'stack',
-        unlitTint: DARK,
+        unlitTint: 0, // dark square until armed (c_gs21)
         segments: [seg.on('ARMED', 'green', CK.bottleArmed(bn)), seg.on('DISCH', 'amber', `fire.bottle${bn}_discharged`)],
       }),
       fx,
@@ -82,7 +82,7 @@ function buildGmcTier(c: LonCockpitContext): void {
       mode: 'toggle',
       width: 0.034,
       height: 0.027,
-      unlitTint: 0.12,
+      unlitTint: 0.08,
       segments: [{ text: ['APU', 'FIRE'], color: 'red', var: 'fire.apu_warn', style: 'field' }],
       guard: { color: 'clear', hinge: 'top', close: 'free' },
     }),
@@ -211,8 +211,7 @@ function powerReserve(c: LonCockpitContext, p: Panel): void {
   );
   p.label('MANUAL', xm, 0.021, { height: 0.0022 });
   // Yellow frame round AUTO (c_top21).
-  const frame = p.subPanel({ name: 'apr_auto_frame', x: xa, y: 0.004, width: 0.03, height: 0.03, material: 'guardYellow', screws: false, radius: 0.002, thickness: 0.002 });
-  void frame;
+  p.subPanel({ name: 'apr_auto_frame', x: xa, y: 0.004, width: 0.03, height: 0.03, material: 'guardYellow', screws: false, radius: 0.002, thickness: 0.002 });
   p.add(
     new PushButton(env, {
       id: 'lon.gs.apr_auto',
@@ -231,5 +230,4 @@ function powerReserve(c: LonCockpitContext, p: Panel): void {
     { z: 0.002 },
   );
   p.label('AUTO', xa, 0.021, { height: 0.0022 });
-  void AnnunciatorLight;
 }

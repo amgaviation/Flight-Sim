@@ -34,7 +34,7 @@ export const EYE_R: [number, number, number] = [7.55, 0.5, -0.55];
 export const MAIN_PANEL = {
   center_m: [8.34, 0, -0.085] as BodyVec,
   tiltDeg: 10,
-  width: 1.8,
+  width: 1.6,
   height: 0.25,
 };
 
@@ -66,7 +66,7 @@ function alongUp(c: readonly [number, number, number], tiltDeg: number, v: numbe
 export const UPPER_TIER = {
   center_m: alongUp(MAIN_PANEL.center_m, MAIN_PANEL.tiltDeg, MAIN_PANEL.height / 2 + 0.044),
   tiltDeg: MAIN_PANEL.tiltDeg,
-  width: 1.8,
+  width: 1.6,
   height: 0.088,
 };
 const TIER_TOP = alongUp(MAIN_PANEL.center_m, MAIN_PANEL.tiltDeg, MAIN_PANEL.height / 2 + UPPER_TIER.height);
@@ -75,7 +75,7 @@ const TIER_TOP = alongUp(MAIN_PANEL.center_m, MAIN_PANEL.tiltDeg, MAIN_PANEL.hei
 export const GLARE_FACE = {
   center_m: alongUp(TIER_TOP, 20, 0.04),
   tiltDeg: 20,
-  width: 1.8,
+  width: 1.6,
   height: 0.08,
 };
 const FACE_TOP = alongUp(TIER_TOP, 20, 0.08);
