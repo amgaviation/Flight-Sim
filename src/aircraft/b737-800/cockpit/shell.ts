@@ -230,7 +230,7 @@ export function buildShell(b: CockpitBuilder): void {
   for (const s of [-1, 1]) {
     const yIn = MIP.width / 2;
     const yOut = F.halfWidth(MIP.center_m[0], 0.05, INSET) - 0.02;
-    if (yOut > yIn + 0.01) add(new THREE.BoxGeometry(yOut - yIn, 0.45, 0.03), 'panel', 'mip_side', [MIP.center_m[0] + 0.02, s * (yIn + yOut) / 2, -0.035]);
+    if (yOut > yIn + 0.01) add(new THREE.BoxGeometry(yOut - yIn, MIP.height + 0.02, 0.03), 'panel', 'mip_side', [MIP.center_m[0] + 0.02, s * (yIn + yOut) / 2, MIP.center_m[2]]);
   }
 
   // ---- knee panels and foot wells under P1 / P3 (dark grey), forward wall.

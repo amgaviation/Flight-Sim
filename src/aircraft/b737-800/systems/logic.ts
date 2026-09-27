@@ -33,7 +33,15 @@ export class B738Logic implements Subsystem {
     clockChr: [new EdgeDetector(), new EdgeDetector()],
     isfdStd: new EdgeDetector(),
     isfdRst: new EdgeDetector(),
+    grdCall: new EdgeDetector(),
+    attendCall: new EdgeDetector(),
   };
+  /** Cabin attendant answering an ATTEND call (s until the call-back, -1 = none). */
+  private attendT = -1;
+  /** Ground crew external-power request: seconds until the GPU is (dis)connected, -1 = none. */
+  private gpuReqT = -1;
+  /** Incoming call from the ground crew (s remaining). */
+  private crewCallT = 0;
   private cvrEraseT = 0;
   /** ISFD ATT RST action (createSystems wires it to the ISFD attitude re-alignment). */
   isfdReset: (() => void) | null = null;
@@ -118,6 +126,33 @@ export class B738Logic implements Subsystem {
       this.pendingApEngage = false;
       v.set('ac.at_arm', 1);
       for (const b of ['cmd_a', 'hdgsel', 'althld', 'speed']) ev.emit(`ac.mcp.${b}`);
+    }
+
+    // ---- Ground crew (SCOPE: there is no ground-services UI; the crew calls the ground engineer with GRD CALL,
+    // who plugs in / removes the external power cable). On the ground and stopped, a GRD CALL push asks for the
+    // GPU to be connected (EST 20 s) or, if connected, removed (EST 10 s). The cable is pulled if the aircraft
+    // moves (> 2 kt ground speed).
+    if (this.e.grdCall.rising(v.get(B738.grdCall) !== 0) && !air && v.get('fdm.gs_kt') < 1 && this.gpuReqT < 0) {
+      this.gpuReqT = v.get(B738.gpuConnected) !== 0 ? 10 : 20;
+    }
+    if (this.gpuReqT >= 0) {
+      this.gpuReqT -= dt;
+      if (this.gpuReqT < 0) {
+        v.set(B738.gpuConnected, v.get(B738.gpuConnected) !== 0 ? 0 : 1);
+        this.crewCallT = 5; // the ground engineer calls the flight deck back (blue CALL light)
+      }
+    }
+    // ATTEND: the cabin chime sounds and the attendant calls the flight deck back on the interphone (EST 8 s).
+    if (this.e.attendCall.rising(v.get(B738.attendCall) !== 0) && this.attendT < 0) this.attendT = 8;
+    if (this.attendT >= 0) {
+      this.attendT -= dt;
+      if (this.attendT < 0) this.crewCallT = 5;
+    }
+    if (this.crewCallT > 0) this.crewCallT -= dt;
+    v.set('ac.b738.crew_call_in', this.crewCallT > 0 ? 1 : 0);
+    if (v.get(B738.gpuConnected) !== 0 && (air || v.get('fdm.gs_kt') > 2)) {
+      v.set(B738.gpuConnected, 0);
+      this.gpuReqT = -1;
     }
 
     // ---- Momentary switches -> events.
@@ -254,6 +289,11 @@ export class B738Logic implements Subsystem {
     this.maxAltFt = v.get('fdm.press_alt_ft');
     this.offSched = false;
     this.apuEcuOffS = v.get('elec.apu_ecu_powered') !== 0 ? 0 : 1e9;
+    this.e.grdCall.reset(v.get(B738.grdCall) !== 0);
+    this.gpuReqT = -1;
+    this.e.attendCall.reset(v.get(B738.attendCall) !== 0);
+    this.attendT = -1;
+    this.crewCallT = 0;
   }
 
   /** Failures of the aircraft-specific logic (ids under fail.b738.*). */
@@ -570,7 +610,9 @@ export class B738LogicLate implements Subsystem {
     v.set(L.passOxyOn, lit(v.get('oxy.pax_deployed') !== 0));
     v.set(L.crewOxyPsi, v.get('oxy.crew_psi'));
     v.set(L.lockFail, lit(false)); // SCOPE: flight deck door lock always healthy
-    v.set(L.callLt, lit(v.get(B738.attendCall) !== 0 || v.get(B738.grdCall) !== 0));
+    // CALL (blue): the flight deck is being called by the cabin or the ground crew (FCOM 5.10). ATTEND / GRD CALL
+    // themselves sound the cabin chime / nose-wheel-well horn and do not light it (SCOPE: no aural of those).
+    v.set(L.callLt, lit(v.get('ac.b738.crew_call_in') !== 0));
     v.set('ac.b738.cvr_test_lt', lit(v.get(B738.cvrTest) !== 0));
     v.set('ac.b738.fd_door_locked', v.get(B738.fdDoorLock) >= 0 && v.get(B738.door('flt_deck')) === 0 ? 1 : 0);
   }

@@ -120,6 +120,12 @@ export const STALL_CFG_ALPHA = {
   y: [ALPHA_STALL.y[0], ALPHA_STALL.y[0] + SLAT_ALPHA, ALPHA_STALL.y[1] + SLAT_ALPHA, ALPHA_STALL.y[2] + SLAT_ALPHA, ALPHA_STALL.y[3] + SLAT_ALPHA],
 };
 
+/**
+ * FMS speed schedule (EST): climb 300 KIAS / M0.80, cruise M0.85 (SPEC typical cruise), descent M0.85 / 300 KIAS;
+ * 250 KIAS below 10,000 ft is applied by the FMS (14 CFR 91.117).
+ */
+const FMS_SPEEDS = { climbKt: 300, climbMach: 0.8, cruiseKt: 300, cruiseMach: 0.85, descentKt: 300, descentMach: 0.85, approachKt: 140, machTransitionFt: 31000 };
+
 /** Writes the radio receiver power vars from the electrical loads. */
 class RadioPower implements Subsystem {
   readonly name = 'g6k.radio_power';
@@ -251,7 +257,7 @@ export function createSystems(ctx: SimContext, opts: G6kSystemsOptions = {}): G6
     style: 'boeing',
     engineCount: 2,
     bankLimitDeg: 25,
-    speeds: { climbKt: 300, climbMach: 0.8, cruiseKt: 300, cruiseMach: 0.85, descentKt: 300, descentMach: 0.85, approachKt: 140, machTransitionFt: 31000 },
+    speeds: FMS_SPEEDS,
   });
   let suite: FusionSuite | null = null;
   if (!opts.noAvionics) {
@@ -294,6 +300,21 @@ export function createSystems(ctx: SimContext, opts: G6kSystemsOptions = {}): G6
     );
   }
 
+  // The Fusion FMS PERF INIT / VNAV SETUP defaults (generic in the suite: BOW 51,200 lb, climb 250 / M0.80, descent
+  // 280 / M0.80) become the Global's: SPEC BOW 52,230 lb and the EST speed schedule of the FMS above. CONFIRM INIT
+  // (applySpeeds) otherwise replaced the aircraft's schedule with the generic one, and VNAV climbed at 250 KIAS to
+  // FL300 (found by the full-flight verification).
+  if (suite) {
+    const p = suite.fmsHost.perf;
+    p.bowLb = G6K_LIMITS.bowLb;
+    p.climbKt = FMS_SPEEDS.climbKt;
+    p.climbMach = FMS_SPEEDS.climbMach;
+    p.cruiseKt = FMS_SPEEDS.cruiseKt;
+    p.cruiseMach = FMS_SPEEDS.cruiseMach;
+    p.descentKt = FMS_SPEEDS.descentKt;
+    p.descentMach = FMS_SPEEDS.descentMach;
+  }
+
   // ---- engines / FADEC / autothrottle
   const eng = createEngines(ctx);
 
@@ -326,7 +347,11 @@ export function createSystems(ctx: SimContext, opts: G6kSystemsOptions = {}): G6
       auto: 'stall.pusher_active',
       engageInhibit: `(gear.air_ground == 0 && ra1.valid && ra1.alt_ft < 200)`,
     },
-    gains: { gainRefKt: 250 },
+    // EST alphaTauS 4 s (default 2 s): with the AoA feed-forward filtered at 2 s the pitch / path loops fought the slow
+    // flight-path response of the slats-out wing and the coupled ILS oscillated +/-3.5 deg pitch (8 s period, VS -150 ..
+    // -1,150 fpm; found by the full-flight verification). With 4 s it holds the glideslope at ~3.5 deg nose up and -670 fpm
+    // (AAIB N618WF: ~4 deg mean approach attitude).
+    gains: { gainRefKt: 250, alphaTauS: 4 },
   });
   const bankLimit = new AfcsBankLimit(ctx, afcs);
   // Dual yaw dampers (GXFC) on the rudder summing unit: EST gains.
@@ -493,7 +518,10 @@ export function createSystems(ctx: SimContext, opts: G6kSystemsOptions = {}): G6
   };
   const cas = new CasManager({ ...ctx, audio: casAudio }, {
     messages: G6K_CAS,
-    power: 'elec.dc_ess_powered || elec.batt_bus_powered || elec.dc_emer_powered',
+    // The IACs (CAS, aural warning generators) run on DC ESS / BATT bus; the DC EMER bus is hot from the battery direct
+    // buses even with BATT MASTER off, and powering the CAS from it lit MASTER CAUTION in a cold & dark cockpit (found by
+    // the full-flight verification).
+    power: 'elec.dc_ess_powered || elec.batt_bus_powered',
     // EST inhibits: from 80 kt until 400 ft / 30 s after lift-off; below 200 ft RA until 60 kt.
     phase: { takeoffInhibit: { fromKt: 80, toFt: 400, maxAfterLiftoffS: 30 }, landingInhibit: { belowFt: 200, untilKt: 60 } },
     sinks: suite ? [suite.cas.model] : [],

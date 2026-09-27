@@ -212,7 +212,22 @@ function buildCbPanel(c: B738CockpitContext, s: Side, groups: CbGroup[], ratings
   });
   const title = s === 1 ? 'P18  CIRCUIT BREAKER PANEL - CAPT' : 'P6  CIRCUIT BREAKER PANEL - F/O';
   panel.label(title, P.w / 2, 0.012, { height: 0.0032, zone: 'cb', weight: 800 });
-  fillCbPanel(env, panel, P.w, groups, ratings, 0.024);
+  const cbs = fillCbPanel(env, panel, P.w, groups, ratings, 0.024);
+  const cbVarNames = groups.flatMap((g) => g.items.map(([name]) => `cb.${name}`));
+  // Draw-call saving (123 breakers): the white band on the stem shows only with the breaker out (pulled or
+  // tripped), so it is not drawn while the breaker is in (same technique as the Citation M2 CB panels).
+  const bands: { band: THREE.Object3D; name: string }[] = [];
+  cbs.forEach((cb, i) => {
+    const band = cb.object.getObjectByName('cbWhiteBand');
+    const name = cbVarNames[i];
+    if (band && name) bands.push({ band, name });
+  });
+  const v = env.vars;
+  const sync = (): void => {
+    for (const x of bands) x.band.visible = v.get(x.name, 1) === 0;
+  };
+  sync();
+  b.onUpdate(sync);
 }
 
 export function fillCbPanel(env: CockpitEnv, panel: Panel, width: number, groups: CbGroup[], ratings: ReadonlyMap<string, number>, y0: number): CircuitBreaker[] {

@@ -124,8 +124,11 @@ describe('(d) stall speeds (1 g, KCAS, 60 t)', () => {
     let integ = 0;
     r.run(80, () => {
       const err = alt0 - v.get(FDM.altMsl);
-      integ = Math.max(-0.5, Math.min(0.5, integ + err * 0.00002));
-      const cmd = Math.max(-0.6, Math.min(0.6, 0.0006 * err - 0.0002 * v.get(FDM.vs) - 0.03 * v.get('fdm.q_dps') + integ));
+      // Pitch-rate command toward level flight, integrated into the column position (a smooth pilot).
+      const q = v.get('fdm.q_dps');
+      const qDes = Math.max(-1, Math.min(1, 0.004 * err - 0.003 * v.get(FDM.vs)));
+      integ = Math.max(-1, Math.min(1, integ + (qDes - q) * 0.0015));
+      const cmd = Math.max(-1, Math.min(1, integ + 0.03 * (qDes - q)));
       v.set('input.pitch', cmd);
       if (Number.isNaN(shakerKt) && v.get('alert.stick_shaker') === 1) {
         shakerKt = v.get(FDM.cas);

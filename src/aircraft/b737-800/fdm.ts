@@ -188,19 +188,22 @@ const TAIL_SKID: [number, number, number] = [MAIN_GEAR_X - TAIL_SKID_DX, 0, MAIN
  * Lift: AR 34.32^2 / 124.58 = 9.45, quarter-chord sweep 25 deg: Helmbold/DATCOM lift slope
  * 2 pi AR / (2 + sqrt(AR^2 (1 + tan^2 L) + 4)) = 4.7 /rad = 0.082 /deg (EST); CL_mach adds the
  * compressibility rise (~ +20 % at M0.78). The trimmed 1-g CLmax per flap setting is chosen from the
- * VREF table (VREF = 1.23 VS1G): clean 1.30 (slats retracted), f1 1.55, f2 1.60, f5 1.65, f10 1.70,
- * f15 1.78, f25 1.93, f30 2.03, f40 2.24 (wing values, tuned so the trimmed 1-g stall speeds of the
- * complete aircraft match the targets, see the stall test). Leading-edge slats/Krueger flaps are extended for flaps 1 and
+ * VREF table (VREF = 1.23 VS1G): clean 1.30 (slats retracted), f1 1.66, f2 1.71, f5 1.78, f10 1.80,
+ * f15 1.83, f25 1.93, f30 2.03, f40 2.24 (wing values, tuned so the trimmed 1-g stall speeds of the
+ * complete aircraft match the targets, see the stall test). The take-off flaps 1-5 values are EST from
+ * 14 CFR 25.107(b): V2 >= 1.13 VSR, so with the line V2 of ~150-152 kt at 65 t flaps 5 VSR5 must be
+ * <= ~133 KCAS (CL >= 1.78); the earlier 1.65 put the stick shaker (1.07 VS) at V2. Flaps 10 / 15 are
+ * kept at or above flaps 5 (VREF15 ~153-155 kt at 60 t -> VS15 ~124-126). Leading-edge slats/Krueger flaps are extended for flaps 1 and
  * more (FCOM 9.20), so their effect is part of the flap columns (CL_slats covers only the auto-slat).
  */
 const FLAPS = [0, 1, 2, 5, 10, 15, 25, 30, 40];
 const COLS: { cl0: number; stall: number; peak: number }[] = [
   { cl0: 0.25, stall: 14.3, peak: 1.3 },
-  { cl0: 0.45, stall: 14.9, peak: 1.55 },
-  { cl0: 0.5, stall: 14.9, peak: 1.6 },
-  { cl0: 0.6, stall: 14.3, peak: 1.65 },
-  { cl0: 0.75, stall: 13.1, peak: 1.7 },
-  { cl0: 0.85, stall: 12.9, peak: 1.78 },
+  { cl0: 0.5, stall: 14.9, peak: 1.66 },
+  { cl0: 0.55, stall: 14.9, peak: 1.71 },
+  { cl0: 0.65, stall: 14.3, peak: 1.78 },
+  { cl0: 0.78, stall: 13.1, peak: 1.8 },
+  { cl0: 0.87, stall: 12.9, peak: 1.83 },
   { cl0: 1.0, stall: 12.9, peak: 1.93 },
   { cl0: 1.15, stall: 12.3, peak: 2.03 },
   { cl0: 1.35, stall: 12.4, peak: 2.24 },

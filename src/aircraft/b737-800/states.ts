@@ -272,6 +272,9 @@ export function applyB738State(ctx: SimContext, sys: B738Systems, s: InitialStat
     sys.hyd.setPressure('a', 0);
     sys.hyd.setPressure('b', 0);
     sys.hyd.setPressure('stby', 0);
+    // Air/ground state before the suite reset: otherwise the A/T touchdown bookkeeping sees a landing at the
+    // first update and disarms an A/T ARM set during the preflight 2 s later (the post-touchdown disengage).
+    sys.gear.update(1 / 60);
     sys.suite.applyState(s);
     sys.press.settle();
     sys.pneu.snap(15);

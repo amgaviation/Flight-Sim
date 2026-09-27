@@ -61,7 +61,9 @@ export function createFuel(ctx: Pick<SimContext, 'vars'>): FuelSystem {
     consumers: [
       { id: 'eng1', node: 'eng1_in', flowPph: ENG.fuelFlowPph(1), engine: 1, run: 'fadec.eng1.fuel_cmd', suction: { tank: 'main1', ceilingFt: 25000 }, minPressPsi: 3 },
       { id: 'eng2', node: 'eng2_in', flowPph: ENG.fuelFlowPph(2), engine: 2, run: 'fadec.eng2.fuel_cmd', suction: { tank: 'main2', ceilingFt: 25000 }, minPressPsi: 3 },
-      { id: 'apu', node: 'man1', flowPph: 'apu.ff_pph', run: `${B738.apuSw} >= 1`, suction: { tank: 'main1', running: `${B738.apuSw} >= 1`, ceilingFt: 41000 }, minPressPsi: 2 },
+      // The APU fuel shutoff valve follows the ECU fuel command, so the 60 s cool-down after APU OFF keeps burning
+      // (FCOM 7.10: "APU switch OFF ... APU continues to run for a cooling period"); the switch opens it for the start.
+      { id: 'apu', node: 'man1', flowPph: 'apu.ff_pph', run: `${B738.apuSw} >= 1 || apu.fuel_cmd != 0`, suction: { tank: 'main1', running: `${B738.apuSw} >= 1 || apu.fuel_cmd != 0`, ceilingFt: 41000 }, minPressPsi: 2 },
     ],
     balance: { left: 'main1', right: 'main2', alertKg: B738_TANKS.imbalanceKg },
     temperature: { skin: 'fdm.tat_c', initialC: 15 },

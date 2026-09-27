@@ -66,6 +66,14 @@ export const B738_AFCS_GAINS: Partial<AfcsGains> = {
   gainRefKt: 250,
 };
 
+/**
+ * Autothrottle speed loop (lever rate = kp * speed error - kd * speed trend; systems-control §5): EST, tuned
+ * with the headless full-flight test: the library default kp 0.02 cycled N1 between ~33 % and ~80 % every
+ * ~30 s on the glideslope against the CFM56 spool lag; kp 0.01 holds VREF + 5 within 0.5 kt at a steady
+ * ~57 % N1 (typical 737-800 flaps 30 approach N1, line experience).
+ */
+export const B738_AT_GAINS: { speedKp: number; speedKd: number } = { speedKp: 0.01, speedKd: 0.08 };
+
 export function createAvionics(ctx: SimContext, opts: AvionicsOptions = {}): AvionicsBlocks {
   const nav = opts.nav === undefined ? ctx.nav : opts.nav;
   const irs = [
@@ -74,8 +82,10 @@ export function createAvionics(ctx: SimContext, opts: AvionicsOptions = {}): Avi
   ];
   const adc = [
     // ADIRU air data modules (Boeing 10 s speed trend vector, FCOM 10.10).
-    new AirDataComputer(ctx, { index: 1, power: `${POWER.irs1} || irs1.on_dc`, trendS: 10 }),
-    new AirDataComputer(ctx, { index: 2, power: `${POWER.irs2} || irs2.on_dc`, trendS: 10 }),
+    // Vertical speed: the ADIRU blends baro rate with IRS vertical acceleration (inertial vertical speed,
+    // FCOM 10.10 "Vertical speed ... inertial"), so it has much less lag than a pure baro rate: EST 0.15 s.
+    new AirDataComputer(ctx, { index: 1, power: `${POWER.irs1} || irs1.on_dc`, trendS: 10, vsTauS: 0.15 }),
+    new AirDataComputer(ctx, { index: 2, power: `${POWER.irs2} || irs2.on_dc`, trendS: 10, vsTauS: 0.15 }),
     // ISFD: auxiliary pitot (pitot 3) and the alternate static ports (static 3).
     new AirDataComputer(ctx, { index: 3, power: POWER.isfd, pitotProbe: 3, staticPort: 3, selfTestS: 10, trendS: 10 }),
   ];
@@ -126,6 +136,7 @@ export function createAvionics(ctx: SimContext, opts: AvionicsOptions = {}): Avi
         atPower: POWER.at,
         leverVar: (e) => B738.tla(e as 1 | 2),
         gains: B738_AFCS_GAINS,
+        autothrottle: { ...B738_AT_GAINS },
         // Fail-operational autoland: allow the ROLLOUT lateral mode (the AFDS preset lists the modes of the
         // fail-passive system) and annunciate it (FCOM 4.20 FMA "ROLLOUT").
         afcs: {

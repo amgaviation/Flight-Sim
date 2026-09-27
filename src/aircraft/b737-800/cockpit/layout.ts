@@ -30,14 +30,22 @@ export const X_AFT = 12.6;
  * back (dossier §10.0). Origin 'center': u right, v up in the panel plane.
  */
 export const MIP: PanelPlacement & { width: number; height: number } = {
-  center_m: [14.555, 0, -0.035] as BodyVec,
+  // Top edge stays under the glareshield soffit (x 14.611, z -0.243); the panel extends 0.11 m lower than
+  // the first estimate so the upper DU row could move down (see DU_ROW_V).
+  center_m: [14.5407, 0, 0.0181] as BodyVec,
   facing: 'aft',
   tiltDeg: 15,
   width: 1.64,
-  height: 0.43,
+  height: 0.54,
 };
-/** Panel v of the upper DU row centre (z = -0.14 m, 0.28 m below the eye). */
-export const DU_ROW_V = 0.108;
+/**
+ * Panel v of the upper DU row centre (z = -0.062 m, 0.36 m below the eye). From the design eye the whole
+ * active area of the PFD / ND / upper DU must be visible under the glareshield (737 eye reference
+ * position); the first estimate (0.28 m below the eye) hid the FMA and the top of the speed and altitude
+ * tapes behind the glareshield, so the row is 0.08 m lower (EST: sight line from EYE_CAPT past the
+ * glareshield soffit edge at z -0.24).
+ */
+export const DU_ROW_V = 0.083;
 /** DU centres (panel u, m). Captain PFD / ND ~0.11 m either side of the eye line; mirrored for the F/O. */
 export const DU_U = { capt_out: -0.64, capt_in: -0.425, upper: 0, lower: 0, fo_in: 0.425, fo_out: 0.64 } as const;
 /** Lower DU centre (panel v): directly below the upper DU (avionics B737_DU_LAYOUT: 0.22 m lower). */

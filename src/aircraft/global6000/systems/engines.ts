@@ -143,10 +143,10 @@ export function createEngines(ctx: SimContext): G6kEngines {
     leverVar: (e) => V.tla(e as 1 | 2),
     power: 'elec.afcs1_powered || elec.afcs2_powered',
     servoRate: 0.12,
-    // EST gains: the default 0.02 / 0.08 speed loop hunted +/-15 % N1 with a ~20 s period on the flaps-30 approach
-    // (BR710 spool-up lag against the heavy landing-configuration drag); more IAS-trend damping, less gain.
+    // EST gain: the default Kp 0.02 speed loop hunted +/-15 % N1 with a ~20 s period on the flaps-30 approach (BR710
+    // spool-up lag against the landing-configuration drag); half the proportional gain, default IAS-trend damping.
     speedKp: 0.01,
-    speedKd: 0.16,
+    speedKd: 0.08,
     retardRate: 0.1,
     thrHoldKt: 60,
     thrHoldEndFt: 400,

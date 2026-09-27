@@ -124,16 +124,18 @@ when light.
 
 | Test | Result | Target |
 |---|---|---|
-| MTOW take-off SL ISA, slats/flaps 6 | rotation 136 KIAS, lift-off 150 KIAS; 4,876 ft to 35 ft (× 1.15 = 5,607 ft) | SPEC 6,476 ft (±15 %) |
-| Accelerate-stop from V1 at MTOW (GLD + max braking, no reverse) | 5,961 ft | within 15 % of 6,476 ft |
-| Stall 78,600 lb clean (slats in) | 133.8 KCAS (shaker 146.8) | 134.8 (±5 %) |
-| Stall 78,600 lb slats / flaps 30 | 98.7 KCAS (shaker 103.8) | 100.5 (±5 %) |
-| Stall 65,000 lb slats / flaps 30 | 90.7 KCAS | 91.4 (±5 %) |
+| MTOW take-off SL ISA, slats/flaps 6 | rotation 136 KIAS, lift-off 148 KIAS; 4,693 ft to 35 ft (× 1.15 = 5,397 ft) | SPEC 6,476 ft (±15 %) |
+| Accelerate-stop from V1 at MTOW (GLD + max braking, no reverse) | 6,131 ft | within 15 % of 6,476 ft |
+| Stall 78,600 lb clean (slats in) | 133.0 KCAS (shaker 148.3) | 134.8 (±5 %) |
+| Stall 78,600 lb slats / flaps 30 | 98.2 KCAS (shaker 105.9) | 100.5 (±5 %) |
+| Stall 65,000 lb slats / flaps 30 | 90.3 KCAS | 91.4 (±5 %) |
 | Climb MTOW → FL410 (FLC 250 / 300 KIAS / M0.80, A/T CLB) | 18.0 min; 1,260 fpm at FL400 | SPEC initial cruise altitude FL410 (≥ 300 fpm residual) |
 | FL410 M0.85 at 96,500 lb | 487.5 KTAS, 3,697 lb/h | SPEC 487 KTAS ± 8 %; fuel flow EST 3,200–4,000 heavy |
 | FL410 M0.85 at 78,000 lb | 487.5 KTAS, 3,220 lb/h | AOPA 490 / 3,200 lb/h ± 8 % |
 | Vmo / Mmo | overspeed clacker and `alert.overspeed` above 300 / 340 KIAS and the MMO schedule (FL330 0.89, FL470 0.858) | GXAG placard |
-| Coupled ILS | CYUL 06L: 0.008 LOC / 0.121 GS (full scale 1). KTEB 6: 0.010 / 0.098. AP disconnected at 200 ft RA | within 1 dot (0.5 full scale) |
+| Coupled ILS | CYUL 06L: 0.008 LOC / 0.008 GS (full scale 1), -671 fpm at 200 ft; KTEB 6: 0.010 / 0.010. AP disconnected at 200 ft RA | within 1 dot (0.5 full scale) |
+| Approach / touchdown attitude (full-flight check ride, 70,500 lb, VAPP 122) | 3.9° on the glideslope, 7.9° at touchdown | AAIB EW/C2008/08/09 (Global Express N618WF): mean ~4° on the approach, 8° at touchdown |
+| Check ride KTEB → KPIT (`verify/fullFlight.test.ts`, 73,300 lb) | lift-off 132 KIAS at 2,266 ft; FL350 in 8.2 min; FL350 M0.85 490 KTAS 3,676 lb/h at 71,600 lb; cabin 3,500 ft / 9.47 psi | EST bands (see §16) |
 
 ## 4. Aerodynamics (`fdm.ts`, EST calibration)
 
@@ -143,9 +145,9 @@ when light.
   | Flaps | CL0 | Stall α | Post-stall CLmax |
   |---|---|---|---|
   | 0 | 0.15 | 14° | 1.25 |
-  | 6 | 0.62 | 11° | 1.42 (+ slats) |
+  | 6 | 0.80 | 9° | 1.42 (+ slats) |
   | 16 | 0.80 | 11° | 1.60 (+ slats) |
-  | 30 | 1.05 | 10° | 1.80 (+ slats) |
+  | 30 | 0.80 | 11° | 1.80 (+ slats) |
 
 - **Drag:** CD0 0.0165 clean, 0.026 with slats and flaps 6, 0.038 with flaps 16, 0.072 with flaps 30. Gear, spoiler
   and compressibility drag rise above M0.84.
@@ -392,6 +394,12 @@ when light.
   source is FMS and an ILS approach is loaded.
 - Pressing the FCP AT button engages the autothrottle.
 - EDM (emergency descent mode).
+- AFCS options (set by the check-ride verification, §16): armed LNAV / LOC captures only once airborne
+  (`nav.groundCapture: false`, the TO lateral mode holds the runway track); VNAV climbs in VFLC (`vnavClimb`); VNAV never
+  descends through the FCP altitude (`altvBoundBySel`); the VNAV modes and the A/T fly the FCP speed, which the Fusion FCP
+  fills with the FMS speed in SPD FMS (`vnavSpeedFromSelected`); AoA feed-forward filter 4 s (`alphaTauS`).
+- The Fusion PERF INIT / VNAV SETUP defaults are the Global's: BOW 52,230 lb (SPEC), climb 300 KIAS / M0.80, cruise
+  M0.85, descent M0.85 / 300 KIAS (EST, `FMS_SPEEDS` in createSystems.ts); 250 KIAS below 10,000 ft by the FMS.
 
 **Sensors, TAWS and CAS**
 
@@ -807,3 +815,61 @@ MASTER, gasper, standby compass, CVR area microphone, clock, CVR panel, pitot-st
 WARNING TEST 1 / 2 and RAT TEST are listed but inactive; the two EMS CDUs are not linked. No windshield wipers (none on
 the FCOM overhead). No cockpit-door control (the FCOM lists none). Map lights are emissive lamp heads only (the
 cockpit's real-light budget is used by the floods and dome light).
+
+
+## 16. Check-ride verification (adversarial review pass)
+
+`tests/aircraft/global6000/verify/fullFlight.test.ts` (rig `verify/flightRig.ts`) flies one continuous flight
+KTEB 24 → RAV → NASTY → ILS 28R KPIT at FL350 from cold & dark to cold & dark. The crew acts only through the cockpit
+control vars, the FCP / CTP / MKP events the 3D panels emit and FMS-window line selects (the CCP cursor ENTER), plus
+yoke, pedals, toe brakes and the NOSE STEER handwheel. The checklists' live auto-checks (checklists.ts) are asserted at
+COCKPIT PREPARATION, BEFORE START, ENGINE START, AFTER START, BEFORE TAKEOFF, AFTER TAKEOFF, DESCENT, APPROACH and
+LANDING. Steps: BATT MASTER → APU battery start (APU battery dips to ~20 V while cranking) → APU GEN → hydraulics, IRS
+NAV, fuel, pushers, windshield heat → APU BLEED / XBLEED → R then L auto start (peak ITT 559 °C) → APU off (60 s
+cooldown) → IRS alignment → FMS: FPLN origin / destination, DEPARTURE runway 24, RAV on the first free VIA / TO row,
+ARRIVAL I28R via NASTY, EXEC, PERF INIT (BOW, payload, FL350, CONFIRM INIT), TAKEOFF REF V1 / VR / V2 and flaps 6 → FCP
+ALT / HDG / SPD knobs → taxi on the handwheel → A/T, TOGA (TO / TO, A/T TO → HOLD), LNAV armed → rotate at VR → gear up →
+AP, LNAV, FLC, slats / flaps up, VNAV (VFLC, 250 → 300 KIAS / M0.80) → baro STD (CTP) → FL350 CRZ rating, RVSM hold,
+M0.85, fuel tanks decrement at the engine flow → VNAV path descent with FLIGHT SPOILER use → baro QNH → APPROACH REF
+VREF / VAPP → slats / flaps 6 → APPR (nav-to-nav: NAV1 tuned, PFD NAV SRC LOC1, `ap.nav_source` 1) → LOC / GS capture →
+flaps 16, gear, flaps 30, VAPP → AP/SP DISC at 200 ft → hand flare (A/T RETARD) → GLD, reversers (N1 ≤ 70 %), autobrake
+MED → taxi clear → APU start, ENG RUN OFF → IRS / APU / BATT MASTER OFF (cold & dark, no CAS, no master caution).
+
+`verify/inventory.test.ts` is the reverse audit of the §12 inventory: every `G6K_CONTROL_VARS` entry is written by a 3D
+control of the complete flight deck (exempt: ground carts, doors, EMS CDU page entries, LDG ELEV ft which the slew switch
+drives).
+
+`verify/drawcalls.test.ts` guards the render budget: 1,153 draw calls for the complete flight deck (static parts
+consolidated into 56 meshes); 254 of them are the two Fusion MKP keyboards (one mesh per key, collins-fusion
+cockpit.ts). Headless SwiftShader measured 1,041 calls / 769 k triangles in the pilot view. Visual check
+(scripts/lon-shots.mjs on a scratch build, KTEB, day 15:00 and night 03:30): pilot / copilot, glareshield, centre
+panel, pedestal, overhead, side panels, CCBP, chase view. The Pedestal preset view was moved inboard (it looked through
+the pilot's inboard armrest).
+
+**Defects found and fixed in this pass**
+
+| Defect | Fix |
+|---|---|
+| A/T could not be engaged for take-off: the ground placement looked like a touchdown to the A/T, which auto-disengaged every ground engagement | states.ts snaps the squat state and resets the A/T bookkeeping |
+| YD OFF on the take-off after a cold start: the power-up YD engagement happened before the IRS alignment and dropped out | logic.ts waits for a valid attitude before the automatic engagement |
+| LNAV armed on the ground captured immediately (lateral TO replaced on the runway) | `nav.groundCapture: false` |
+| VNAV press in a climb only armed the path (no VFLC climb) | `vnavClimb: true` |
+| VNAV (VALTS) followed the next approach constraint through the 5,000 ft FCP altitude | `altvBoundBySel: true` |
+| SPD MAN on the FCP was ignored in VPATH (A/T kept the FMS speed) | `vnavSpeedFromSelected` (AFCS and A/T) |
+| CONFIRM INIT replaced the Global speed schedule with the suite's generic one (VNAV climbed at 250 KIAS to FL300) | Fusion perf defaults set from `FMS_SPEEDS` |
+| A/T speed loop hunted ±15 % N1 (20 s period) on the flaps-30 approach | A/T gains Kp 0.01 (EST) |
+| Coupled ILS pitch oscillation ±3.5° (8 s period, VS −150 … −1,150 fpm) | `alphaTauS` 4 s |
+| Glide-path attitude ~0.5–1° (AAIB: ~4°) | flaps-30 lift curve cl0 1.05 → 0.80, stall 10 → 11° (CLmax unchanged) |
+| Late lift-off with flaps 6 (CL ~1.4 at the lift-off AoA) | flaps-6 cl0 0.62 → 0.80, stall 11 → 9° (CLmax unchanged) |
+| MASTER CAUTION lit in a cold & dark cockpit (CAS powered from the hot DC EMER bus) | CAS on DC ESS / BATT bus only |
+
+**Remaining gaps found by the check ride**
+
+- Waypoint idents shared with an airport's FAA LID resolve to the airport first (JST → KJST, HAR → KCXY) because the
+  Fusion FMS has no duplicate-ident selection page (`src/avionics/collins-fusion/fms/pages.ts resolve`, other agent's
+  module). The check ride uses RAV.
+- The AP/SP DISC var alone does not disconnect the AP; the 3D button emits `ap.disc` itself (hardware bindings must
+  emit the event too).
+- Engaging the AP in the TO vertical mode reverts to PITCH (shared AFCS behaviour); the crew then selects FLC / VNAV.
+- The light-weight (73,000 lb) lift-off comes ~VR + 16 kt after a 2.5 °/s rotation (high thrust-to-weight
+  acceleration during the rotation); take-off V-speeds remain the CLmax-derived EST values.

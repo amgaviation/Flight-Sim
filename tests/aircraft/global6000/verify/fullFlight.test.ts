@@ -146,6 +146,9 @@ describe('Global 6000 check ride KTEB -> KPIT (full normal procedure)', () => {
       expect(v.get('eng1.running') + v.get('eng2.running')).toBe(0);
       expect(v.get('display.fusion.afd1.power')).toBe(0);
       expect(v.get(V.battMaster)).toBe(0);
+      LOG.push(`cold & dark: master warning ${v.get('alert.master_warning')} caution ${v.get('alert.master_caution')}`);
+      expect(v.get('alert.master_warning')).toBe(0);
+      expect(v.get('alert.master_caution')).toBe(0);
       log(r, 'cold & dark');
 
       // ================================================================ 2. COCKPIT PREPARATION: power-up
@@ -461,7 +464,6 @@ describe('Global 6000 check ride KTEB -> KPIT (full normal procedure)', () => {
         if (v.getString('ap.at_mode') === 'HOLD') holdSeen = true;
         if (v.get('alert.takeoff_config')) tocw = true;
         n1To = Math.max(n1To, v.get('eng1.n1_pct'));
-        if (v.get(FDM.ias) > 100 && Math.abs(r.t * 4 - Math.round(r.t * 4)) < 0.01) LOG.push(`DBG to ias ${v.get(FDM.ias).toFixed(0)} pitch ${v.get(FDM.pitch).toFixed(1)} aoa ${v.get('fdm.aoa_deg').toFixed(1)} elev ${v.get('surf.elevator').toFixed(2)} in ${v.get(INPUT.pitch).toFixed(2)} gnd ${v.get('gear.air_ground')} trim ${v.get('trim.pitch_units').toFixed(2)} agl ${v.get(FDM.altAgl).toFixed(0)}`);
         const agl = v.get(FDM.altAgl);
         if (isNaN(gearUpAgl) && agl > 50 && v.get(FDM.vs) > 300) {
           gearUpAgl = agl;
@@ -525,7 +527,7 @@ describe('Global 6000 check ride KTEB -> KPIT (full normal procedure)', () => {
         const alt = v.get(FDM.altMsl);
         maxMachOver = Math.max(maxMachOver, v.get(FDM.mach) - mmoAt(alt));
         cabinMax = Math.max(cabinMax, v.get('press.cabin_alt_ft'));
-        if (Math.round(r.t) % 60 === 0 && Math.abs(r.t - Math.round(r.t)) < 0.01) LOG.push(`DBG climb ${alt.toFixed(0)} ias ${v.get(FDM.ias).toFixed(0)} M${v.get(FDM.mach).toFixed(3)} vs ${v.get(FDM.vs).toFixed(0)} ${fma(r)} rating ${v.getString('fadec.rating')} sel ${v.get('ap.sel_spd_kt')}/${v.get('ap.sel_mach')} cabin ${v.get('press.cabin_alt_ft').toFixed(0)}`);
+        if (Math.round(r.t) % 60 === 0 && Math.abs(r.t - Math.round(r.t)) < 0.01) LOG.push(`climb ${alt.toFixed(0)} ias ${v.get(FDM.ias).toFixed(0)} M${v.get(FDM.mach).toFixed(3)} vs ${v.get(FDM.vs).toFixed(0)} ${fma(r)} rating ${v.getString('fadec.rating')} sel ${v.get('ap.sel_spd_kt')}/${v.get('ap.sel_mach')} cabin ${v.get('press.cabin_alt_ft').toFixed(0)}`);
         if (!ldgOff && alt > 10000) {
           ldgOff = true;
           v.set(V.ltLdgL, 0);
@@ -583,7 +585,7 @@ describe('Global 6000 check ride KTEB -> KPIT (full normal procedure)', () => {
         if (v.getString('ap.vert_active') === 'VPATH') pathSeen = true;
         maxDesIas = Math.max(maxDesIas, v.get(FDM.ias));
         maxDesMachOver = Math.max(maxDesMachOver, v.get(FDM.mach) - mmoAt(v.get(FDM.altMsl)));
-        if (Math.round(r.t) % 60 === 0 && Math.abs(r.t - Math.round(r.t)) < 0.01) LOG.push(`DBG des ${v.get(FDM.altMsl).toFixed(0)} ias ${v.get(FDM.ias).toFixed(0)} vs ${v.get(FDM.vs).toFixed(0)} ${fma(r)} dist ${v.get('fms.dist_to_dest_nm').toFixed(0)} sb ${v.get(V.flightSpoiler)}`);
+        if (Math.round(r.t) % 60 === 0 && Math.abs(r.t - Math.round(r.t)) < 0.01) LOG.push(`descent ${v.get(FDM.altMsl).toFixed(0)} ias ${v.get(FDM.ias).toFixed(0)} vs ${v.get(FDM.vs).toFixed(0)} ${fma(r)} dist ${v.get('fms.dist_to_dest_nm').toFixed(0)} sb ${v.get(V.flightSpoiler)}`);
         if (v.get(FDM.altMsl) < 17500 && v.get('adc1.baro_std') === 1) {
           ctp(r, 1, 'baro_push');
           ctp(r, 2, 'baro_push');
@@ -614,7 +616,6 @@ describe('Global 6000 check ride KTEB -> KPIT (full normal procedure)', () => {
       setSpd(r, 210);
       r.run(600, () => {
         speedbrakeStep(r);
-        if (Math.abs(r.t * 0.1 - Math.round(r.t * 0.1)) < 0.001) LOG.push(`DBG slow ${v.get(FDM.altMsl).toFixed(0)} sel ${v.get('ap.sel_alt_ft')} ias ${v.get(FDM.ias).toFixed(0)} vs ${v.get(FDM.vs).toFixed(0)} ${fma(r)} dist ${v.get('fms.dist_to_dest_nm').toFixed(1)} next ${v.getString('fms.next_wpt')} tgt ${v.get('fms.vnav_tgt_alt_ft')} dev ${v.get('fms.vnav_dev_ft').toFixed(0)} thr ${distanceNm(v.get(FDM.lat), v.get(FDM.lon), rw28r.lat, rw28r.lon).toFixed(1)} sb ${v.get(V.flightSpoiler)}`);
         return v.get(FDM.ias) < 222;
       });
       v.set(V.flapLever, 1); // 0 OUT (VFE 225)
@@ -627,7 +628,6 @@ describe('Global 6000 check ride KTEB -> KPIT (full normal procedure)', () => {
       log(r, 'slats out, flaps 6, 190 kt');
       r.run(900, () => {
         speedbrakeStep(r);
-        if (Math.abs(r.t * 0.1 - Math.round(r.t * 0.1)) < 0.001) LOG.push(`DBG pre ${v.get(FDM.altMsl).toFixed(0)} sel ${v.get('ap.sel_alt_ft')} ias ${v.get(FDM.ias).toFixed(0)} vs ${v.get(FDM.vs).toFixed(0)} ${fma(r)} dist ${v.get('fms.dist_to_dest_nm').toFixed(1)} next ${v.getString('fms.next_wpt')} tgt ${v.get('fms.vnav_tgt_alt_ft')} dev ${v.get('fms.vnav_dev_ft')?.toFixed?.(0)} thr ${distanceNm(v.get(FDM.lat), v.get(FDM.lon), rw28r.lat, rw28r.lon).toFixed(1)}`);
         return v.get('fms.dist_to_dest_nm') < 20;
       });
       setSpd(r, 180);
@@ -671,7 +671,6 @@ describe('Global 6000 check ride KTEB -> KPIT (full normal procedure)', () => {
           setSpd(r, vapp);
         }
         const ra = v.get('ra1.alt_ft');
-        if (Math.abs(r.t * 0.1 - Math.round(r.t * 0.1)) < 0.001) LOG.push(`DBG app ra ${ra.toFixed(0)} ias ${v.get(FDM.ias).toFixed(0)} sel ${v.get('ap.sel_spd_kt')} vs ${v.get(FDM.vs).toFixed(0)} flap ${v.get(V.flapLever)}/${v.get('surf.flaps_deg').toFixed(0)} gear ${v.get('gear.down_locked')} n1 ${v.get('eng1.n1_pct').toFixed(1)} tla ${v.get(V.tla(1)).toFixed(2)} ${fma(r)} gs ${v.get('nav1.gs_dev').toFixed(2)} sb ${v.get(V.flightSpoiler)}`);
         if (!isNaN(gsT) && ra > 250 && r.t > gsT + 20) {
           maxLoc = Math.max(maxLoc, Math.abs(v.get('nav1.cdi')));
           maxGs = Math.max(maxGs, Math.abs(v.get('nav1.gs_dev')));
@@ -701,8 +700,9 @@ describe('Global 6000 check ride KTEB -> KPIT (full normal procedure)', () => {
       r.run(0.2);
       expect(v.get('ap.engaged')).toBe(0);
       log(r, 'AP disconnected');
-      const thetaRef = v.get(FDM.pitch);
       let pInt = 0;
+      let pitchApp = 0;
+      let tdPitch = NaN;
       let retardSeen = false;
       let tdVs = NaN;
       let tdIas = NaN;
@@ -711,28 +711,46 @@ describe('Global 6000 check ride KTEB -> KPIT (full normal procedure)', () => {
       const far2 = destinationPoint(rw28r.lat, rw28r.lon, rw28r.headingTrue, 2);
       const clAlong = () => alongTrackNm(thr.lat, thr.lon, far2.lat, far2.lon, v.get(FDM.lat), v.get(FDM.lon)) * 1852;
       const clCross = () => crossTrackNm(thr.lat, thr.lon, far2.lat, far2.lon, v.get(FDM.lat), v.get(FDM.lon)) * 1852;
+      const D2R = Math.PI / 180;
       r.run(60, () => {
         const ra = v.get('ra1.alt_ft');
         if (v.getString('ap.at_mode') === 'RETARD') retardSeen = true;
-        // Glide path to 50 ft, then a flare to ~150 fpm (pilot: pitch attitude + sink rate on the yoke).
-        const vsTgt = ra > 50 ? -700 : -Math.max(120, 700 * (ra / 50) * 0.9);
-        const thetaCmd = thetaRef + Math.max(-3, Math.min(6, 0.004 * (vsTgt - v.get(FDM.vs)) + (ra < 50 ? 2.5 * (1 - ra / 50) : 0)));
+        // Pilot: glide path (3 deg, raw glideslope correction, flown as a flight-path-angle target) to 30 ft, then the
+        // attitude flare: +3 deg over the approach attitude by 10 ft, thrust levers to idle (A/T RETARD).
+        const gsFpm = v.get(FDM.gs) * 101.27;
+        const vsPath = -gsFpm * Math.tan(3 * D2R) - (ra > 100 ? 150 * Math.max(-1, Math.min(1, v.get('nav1.gs_dev'))) : 0);
+        const vsTgt = vsPath;
+        let thetaCmd: number;
+        if (ra > 40) {
+          const tasFpm = Math.max(1, v.get(FDM.tas) * 101.27);
+          const gam = Math.asin(Math.max(-1, Math.min(1, v.get(FDM.vs) / tasFpm))) / D2R;
+          const gamTgt = Math.asin(Math.max(-1, Math.min(1, vsTgt / tasFpm))) / D2R;
+          thetaCmd = Math.max(-2, Math.min(8, v.get(FDM.pitch) + (gamTgt - gam)));
+          pitchApp = v.get(FDM.pitch);
+        } else thetaCmd = pitchApp + 4 * Math.min(1, (40 - ra) / 25);
+        if (ra < 6) tdVs = Math.min(isNaN(tdVs) ? 0 : tdVs, v.get(FDM.vs));
         const e = thetaCmd - v.get(FDM.pitch);
-        pInt = Math.max(-0.5, Math.min(0.5, pInt + (e * 0.02) / 60));
-        v.set(INPUT.pitch, Math.max(-1, Math.min(1, 0.12 * e + pInt - 0.05 * v.get(FDM.q))));
+        pInt = Math.max(-0.3, Math.min(0.3, pInt + (0.05 * e) / 60));
+        v.set(INPUT.pitch, Math.max(-1, Math.min(1, (ra > 40 ? 0.2 : 0.35) * e + pInt - 0.15 * v.get(FDM.q))));
         const bankCmd = Math.max(-5, Math.min(5, -0.05 * clCross() - 0.5 * wrap180(v.get(FDM.trackTrue) - rw28r.headingTrue)));
         v.set(INPUT.roll, Math.max(-1, Math.min(1, 0.05 * (bankCmd - v.get(FDM.bank)))));
         if (v.get('gear.air_ground') === 1) {
-          tdVs = v.get(FDM.vs);
+          tdPitch = v.get(FDM.pitch);
           tdIas = v.get(FDM.ias);
           tdDistFt = clAlong() / 0.3048;
           return true;
         }
       });
       log(r, 'touchdown');
-      LOG.push(`touchdown ${tdVs.toFixed(0)} fpm, ${tdIas.toFixed(0)} KIAS (VAPP ${vapp}), ${tdDistFt.toFixed(0)} ft past the threshold, ${clCross().toFixed(1)} m off centre`);
+      LOG.push(`approach attitude ${pitchApp.toFixed(1)} deg, touchdown ${tdVs.toFixed(0)} fpm pitch ${tdPitch.toFixed(1)} deg, ${tdIas.toFixed(0)} KIAS (VAPP ${vapp}), ${tdDistFt.toFixed(0)} ft past the threshold, ${clCross().toFixed(1)} m off centre`);
       expect(retardSeen).toBe(true);
       expect(tdVs).toBeGreaterThan(-600);
+      // AAIB EW/C2008/08/09 (Global Express N618WF): approach attitude ~4 deg nose up, ~8 deg at touchdown; the tail
+      // strikes at ~13.5 deg (fdm.ts).
+      expect(pitchApp).toBeGreaterThan(2);
+      expect(pitchApp).toBeLessThan(6);
+      expect(tdPitch).toBeGreaterThan(3);
+      expect(tdPitch).toBeLessThan(11);
       expect(tdIas).toBeGreaterThan(vapp - 20);
       expect(tdIas).toBeLessThan(vapp + 5);
       expect(tdDistFt).toBeGreaterThan(300);

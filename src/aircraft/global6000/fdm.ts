@@ -214,9 +214,16 @@ function clColumn(cl0: number, slope: number, stall: number, peak: number): numb
 /** Flap columns (slats IN). The slats-out increment is CL_SLATS. Tuned in the stall-speed test. */
 export const CL_TUNE = {
   f0: { cl0: 0.15, stall: 14, peak: 1.25 },
-  f6: { cl0: 0.62, stall: 11, peak: 1.42 },
+  // Flaps 6: cl0 0.8 / stall 9 (first calibration 0.62 / 11): the old curve gave CL ~1.4 at the ~9 deg lift-off AoA,
+  // so the aircraft lifted off ~VR + 19 kt (V2 + 15) at 73,000 lb instead of reaching V2 by 35 ft (14 CFR 25.107(e),
+  // found by the full-flight verification). CLmax (peak + slats = 1.87) is unchanged.
+  f6: { cl0: 0.8, stall: 9, peak: 1.42 },
   f16: { cl0: 0.8, stall: 11, peak: 1.6 },
-  f30: { cl0: 1.05, stall: 10, peak: 1.8 },
+  // Flaps 30: cl0 lowered 0.25 (the curve reaches the same peak): AAIB report
+  // on Global Express N618WF (EW/C2008/08/09): on the approach at ~121 KIAS "the pitch attitude varied by 2 deg either
+  // side of a mean value of approximately 4 deg nose up", 8 deg at touchdown. The old curve (cl0 1.05, stall 10) flew the 3 deg glide path
+  // at ~0.5-1 deg pitch (found by the full-flight verification). CLmax (peak + slats) and so the stall speeds are unchanged.
+  f30: { cl0: 0.8, stall: 11, peak: 1.8 },
 };
 /** Slat CL increment at the stall: 1.70 - 1.25 slats out flaps 0 (data.ts CLMAX, EST). */
 export const CL_SLATS = 0.45;

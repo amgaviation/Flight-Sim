@@ -54,7 +54,7 @@ export const G6K_VIEWS = [
   { name: 'Glareshield (FCP / CTP)', position_m: [11.12, 0, -1.02] as [number, number, number], yawDeg: 0, pitchDeg: -14, fovDeg: 58 },
   { name: 'Centre panel (AFD 2 / 3, IESI, gear)', position_m: [11.02, 0, -0.86] as [number, number, number], yawDeg: 0, pitchDeg: -18, fovDeg: 58 },
   { name: 'MKP / CCP (FMS)', position_m: [11.0, -0.14, -0.78] as [number, number, number], yawDeg: 14, pitchDeg: -58, fovDeg: 50 },
-  { name: 'Pedestal', position_m: [10.6, -0.3, -0.98] as [number, number, number], yawDeg: 36, pitchDeg: -58, fovDeg: 60 },
+  { name: 'Pedestal', position_m: [10.62, -0.16, -1.02] as [number, number, number], yawDeg: 20, pitchDeg: -60, fovDeg: 60 },
   { name: 'Pedestal aft (EMS CDU, lights, IRS)', position_m: [10.55, -0.14, -0.8] as [number, number, number], yawDeg: 30, pitchDeg: -72, fovDeg: 50 },
   { name: 'Overhead', position_m: [10.74, 0, -0.84] as [number, number, number], yawDeg: 0, pitchDeg: 84, fovDeg: 78 },
   { name: 'NOSE STEER / left console', position_m: [10.92, -0.5, -0.95] as [number, number, number], yawDeg: -48, pitchDeg: -45, fovDeg: 55 },
