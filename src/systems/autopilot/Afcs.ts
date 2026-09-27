@@ -277,6 +277,13 @@ export class Afcs implements Subsystem {
   private prevNavValidT = 0;
   private annKey = -1;
   private kapAltArm = true;
+  /**
+   * KAP 140 altitude arming selected with the ARM button (read-only view for the cockpit
+   * annunciation; toggle it with `press('ARM')`). Appended accessor (c172-steam).
+   */
+  get kapAltitudeArm(): boolean {
+    return this.kapAltArm;
+  }
   private xtkIntegral = 0;
   private readonly fAfcs = failVar('afcs');
   private readonly fServoP = failVar('afcs.servo_pitch');
