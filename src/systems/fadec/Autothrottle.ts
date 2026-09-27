@@ -108,6 +108,11 @@ export interface AutothrottleConfig {
   /** Vmo/Mmo protection: never target above these. */
   vmoKt?: number;
   mmo?: number;
+  /**
+   * Always hold the selected speed, also in VNAV (`ap.at_spd_fms`): for installations whose speed selector
+   * follows the FMS speed in FMS mode and overrides it in MAN (G5000 Longitude SPD knob, OG 7-4). Default false.
+   */
+  vnavSpeedFromSelected?: boolean;
 }
 
 export class Autothrottle implements Subsystem {
@@ -410,7 +415,7 @@ export class Autothrottle implements Subsystem {
 
   private speedTarget(): number {
     const v = this.vars;
-    const fms = v.get(AFCS_VARS.atSpeedFms) !== 0;
+    const fms = v.get(AFCS_VARS.atSpeedFms) !== 0 && !this.cfg.vnavSpeedFromSelected;
     const ias = v.get(ADC.ias(1));
     const mach = v.get(ADC.mach(1));
     let tgt: number;

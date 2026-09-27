@@ -653,6 +653,10 @@ HDG_SYNC, CRS_SYNC, SPD_MACH, ROL, PIT, FPA.
 | `bankSelector`, `altsAutoArm` (true), `altCaptureToHoldFt` (20), `selAltChangeInCapture` | |
 | `autoland` | `{ flareFt 50, armBelowFt 1500, secondChannelBeforeFt 800, flareArmDeadlineFt 350, rollout, flareTauS 5, touchdownVsFpm 120 }` |
 | `fdAutoOn` (true), `steps`, `rollHoldMinDeg` (6), `cwsWingsLevelDeg` (6) | |
+| `nav.groundCapture` (true) | false: armed LNAV/VOR/LOC/BC wait until airborne (FD keeps TO on the roll) |
+| `vnavClimb` (false) | Garmin: VNAV key in the FMS climb phase engages VFLC (G5000) |
+| `altvBoundBySel` (false) | ALTV target bounded by the selected altitude (never descends through it after a constraint sequences) |
+| `vnavSpeedFromSelected` (false) | VNAV modes fly `ap.sel_spd_kt`/`sel_mach` (speed selector follows the FMS in FMS mode, Longitude); same option on `Autothrottle` |
 
 ### 4.3 AFCS → autothrottle protocol (`vars.ts`)
 

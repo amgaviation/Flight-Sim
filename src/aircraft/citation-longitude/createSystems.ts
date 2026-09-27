@@ -48,6 +48,7 @@ import { LONGITUDE_CAS } from './systems/cas';
 import { createLighting } from './systems/lighting';
 import { LONGITUDE_TOLD } from './performance';
 import { LONGITUDE_CHECKLISTS } from './checklists';
+import { LONGITUDE_SYNOPTICS } from './systems/synoptics';
 
 export interface LongitudeSystemsOptions {
   /** Headless: build the G5000 suite without canvases (tests). */
@@ -171,6 +172,7 @@ export function createLongitudeSystems(ctx: SimContext, opts: LongitudeSystemsOp
         performance: LONGITUDE_TOLD,
         trafficSource: tcas,
         checklists: LONGITUDE_CHECKLISTS,
+        synoptics: LONGITUDE_SYNOPTICS, // MFD synoptics + GTC system controls (lights, temperature, cabin pressure)
         speedTape: { vmoKt: LON_LIMITS.vmoKt, shakerNorm: 1.0, cautionNorm: 0.8, approachRefNorm: 0.66 }, // OG 4-6: amber 0.8-1.0, VAPP at 0.66
         // FPG p.15-19: 270 KIAS / M0.80 climb, M0.80-0.82 cruise, 3,000 fpm high-speed descent (EST 300 KIAS / M0.80).
         fmsOptions: { engineCount: 2, speeds: { climbKt: 270, climbMach: 0.8, cruiseKt: 300, cruiseMach: 0.82, descentKt: 300, descentMach: 0.8, approachKt: 140, machTransitionFt: 29000 } },
@@ -185,6 +187,19 @@ export function createLongitudeSystems(ctx: SimContext, opts: LongitudeSystemsOp
   // ---- AFCS (G5000): no YD button (automatic yaw damping in the FBW rudder, OG 4-7/15-3).
   const afcs = new Afcs(ctx, {
     ...AFCS_GFC_G5000,
+    // G5000 CRG 190-02538-02 p.154-156: the VNAV key arms PATH, FLC and ALTV as the FMS profile requires (VNAV
+    // climbs in VFLC at the FMS climb speed); the VNAV path mode is annunciated PATH on the G5000.
+    vnavClimb: true,
+    vnavSpeedFromSelected: true, // SPD knob FMS/MAN (OG 7-4): the G5000 copies the FMS speed into the selected speed
+    altvBoundBySel: true, // VNAV never descends through the selected altitude (G5000 CRG: ALTS vs ALTV arming)
+    labels: {
+      ...AFCS_GFC_G5000.labels,
+      vertical: { ...AFCS_GFC_G5000.labels.vertical, VPATH: 'PATH' },
+      armedVertical: { ...AFCS_GFC_G5000.labels.armedVertical, VPATH: 'PATH' },
+    },
+    // The FD stays in TO on the takeoff roll; an armed FMS/LOC captures once airborne (EST: G5000 practice, the
+    // CRG lists TO as "constant pitch angle on the ground"; capturing LNAV at brake release would drop the TO FMA).
+    nav: { ...AFCS_GFC_G5000.nav, groundCapture: false },
     power: 'elec.afcs_powered && elec.gmc_powered',
     servoPower: 'elec.afcs_powered',
     sensors: { valid: '(ahrs1.valid && adc1.valid)' },

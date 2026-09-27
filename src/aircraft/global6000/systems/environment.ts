@@ -81,11 +81,12 @@ export function createPneumatics(ctx: Pick<SimContext, 'vars'>): PneumaticSystem
  * Zone target temperature: the TEMPERATURE knob (16..30 degC); with TRIM AIR
  * OFF the zones follow the pack outlet (EST: target pulled toward 18 degC),
  * with the PACK CONTROL MAN TEMP knob out of AUTO the pack outlet demand is
- * the knob (COLD 2 degC .. HOT 70 degC).
+ * the knob (COLD 2 degC .. HOT 70 degC) while PACK CONTROL is at MAN.
  */
 function zoneTarget(z: 1 | 2 | 3, pack: 'l' | 'r'): string {
   const man = V.packManTemp(pack);
-  return `${man} > 0.02 ? 2 + ${man} * 68 : (${V.trimAir} == 1 ? ${V.zoneTemp(z)} : 18)`;
+  // FCOM 01-10-41: PACK CONTROL NORM / MAN switch; in MAN the L / R MAN TEMP knobs (COLD .. HOT) set the pack outlet.
+  return `${V.packCtlMan} == 1 ? 2 + ${man} * 68 : (${V.trimAir} == 1 ? ${V.zoneTemp(z)} : 18)`;
 }
 
 /** Cabin schedule (AOPA 4,500 ft at FL450; 5,680 ft at FL510 EST, PRESS_GLOBAL6000). */
@@ -153,7 +154,7 @@ export function createApu(ctx: Pick<SimContext, 'vars'>): Apu {
     starterVolts: 'elec.apu_batt_dir_v', // GXAPU CB: APU START on the APU battery (ASCA)
     starterNominalV: 25.2,
     starterPeakA: 500, // EST: RE220 starter inrush on the 42 Ah NiCd
-    fuelAvailable: 'fuel.apu_on',
+    fuelAvailable: V.apuFuelOk, // fuel.apu_on with a 2 s changeover ride-through (logic.ts G6kPostLogic)
     fire: 'fire.apu_warn || fire.apu_armed',
     bleedLoad: 'clamp01(pneu.apu_flow_kgs / 0.8)',
     genLoad: 'clamp01(elec.apu_gen_load_pct / 100)',
@@ -209,8 +210,9 @@ export function createOxygen(ctx: Pick<SimContext, 'vars'>): OxygenSystem {
       { id: 'pax', capacityL: 230 * ft3, fullPsi: 1850, lowPsi: 400, valve: `${V.paxOxy} >= 1` },
     ],
     crew: [
-      { id: 'pilot', bottle: 'crew', inUse: V.oxyMask(1), mode: V.oxyMaskMode },
-      { id: 'copilot', bottle: 'crew', inUse: V.oxyMask(2), mode: V.oxyMaskMode },
+      // Each stowage box has its own N / 100 % regulator selector and RESET / TEST (FCOM 01-10-37 / -46).
+      { id: 'pilot', bottle: 'crew', inUse: V.oxyMask(1), mode: V.oxyMaskMode, test: `${V.oxyTest(1)} == 1` },
+      { id: 'copilot', bottle: 'crew', inUse: V.oxyMask(2), mode: V.oxyMaskModeR, test: `${V.oxyTest(2)} == 1` },
     ],
     pax: { kind: 'gaseous', deploy: `${V.paxOxy} == 2 || (${V.paxOxy} == 1 && press.pax_masks)`, bottle: 'pax', flowLpm: 60 },
   });

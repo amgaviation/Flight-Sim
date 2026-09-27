@@ -27,6 +27,7 @@ import type { SimContext } from '../../../core/SimContext';
 import type { FusionSuite } from '../../../avionics/collins-fusion';
 import type { LegendSegment } from '../../../cockpit/controls';
 import type { G6kSystems } from '../createSystems';
+import type { DisplayCanvas } from '../../../avionics/common/CanvasDisplay';
 
 export interface G6kCockpitContext {
   b: CockpitBuilder;
@@ -37,6 +38,10 @@ export interface G6kCockpitContext {
   suite: FusionSuite | null;
   /** Empty groups at the overhead / side-console mount frames (cockpit-local, parented to the root). */
   mounts: { overhead: THREE.Group; sideLeft: THREE.Group; sideRight: THREE.Group };
+  /** Canvas option for cockpit-owned displays (G6kCockpitOptions.canvas; null = no display). Added for the side-panel EMS CDUs. */
+  canvas?: 'dom' | 'offscreen' | DisplayCanvas | null;
+  /** Extra clean-ups run by the build's dispose() (event subscriptions of cockpit-owned logic). */
+  disposers?: (() => void)[];
 }
 
 /** Switchlight legends (Bombardier convention: dark = normal; white status, amber caution, green / cyan advisory). */

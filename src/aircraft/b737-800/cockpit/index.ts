@@ -69,7 +69,11 @@ export function buildB738Cockpit(ctx: SimContext, sys: B738Systems, o: B738Cockp
       { name: 'FMS / CDU', position_m: [13.9, -0.22, -0.2], yawDeg: 12, pitchDeg: -50, fovDeg: 45 },
       { name: 'Throttle quadrant', position_m: [13.55, -0.3, -0.32], yawDeg: 22, pitchDeg: -58, fovDeg: 55 },
       { name: 'Aft pedestal (radios / fire)', position_m: [13.2, -0.26, -0.3], yawDeg: 25, pitchDeg: -72, fovDeg: 58 },
-      { name: 'Overhead', position_m: [13.55, -0.3, -0.45], yawDeg: 10, pitchDeg: 62, fovDeg: 65 },
+      { name: 'Overhead', position_m: [13.42, -0.08, -0.42], yawDeg: 4, pitchDeg: 66, fovDeg: 72 },
+      // Overhead / side-console agent views (cockpit/overhead, cockpit/side).
+      { name: 'Aft overhead (IRS / doors)', position_m: [13.22, -0.05, -0.45], yawDeg: 0, pitchDeg: 89, fovDeg: 80 },
+      { name: 'Captain side console / P18 breakers', position_m: [13.45, -0.5, -0.4], yawDeg: -118, pitchDeg: -14, fovDeg: 72 },
+      { name: 'F/O side console / P6 breakers', position_m: [13.45, 0.5, -0.4], yawDeg: 118, pitchDeg: -14, fovDeg: 72 },
     ],
   });
   const env = b.env;

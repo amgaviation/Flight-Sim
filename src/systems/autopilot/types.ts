@@ -176,8 +176,32 @@ export interface AfcsConfig {
     maxInterceptLocDeg?: number;
     /** Glideslope capture threshold (normalized full scale). Default 0.2 (737: 2/5 dot). */
     gsCaptureDev?: number;
+    /**
+     * Armed LNAV/VOR/LOC/BC may capture while on the ground. Default true (unchanged behaviour). False: the FD
+     * keeps TO on the takeoff roll and the armed mode captures once airborne (Longitude, added by its verify pass).
+     */
+    groundCapture?: boolean;
   };
   vnav?: boolean;
+  /**
+   * Garmin style: the VNAV key in the FMS climb phase (selected altitude above) engages VNAV flight level change
+   * (VFLC, FMS climb speed) instead of only arming the descent path (G5000: the VNAV key "can automatically arm
+   * PATH, FLC and ALTV", CRG 190-02538-02 p.154; system message ARM VNAV CLIMB). Default false.
+   */
+  vnavClimb?: boolean;
+  /**
+   * ALTV never goes beyond the selected altitude: its target is the VNAV target bounded by `ap.sel_alt_ft`.
+   * Default false (unchanged). Without it, sequencing the constrained waypoint during the capture hands ALTV the
+   * next, lower target, and ALTV keeps descending through every constraint and the selected altitude to the
+   * runway threshold (found by the Longitude full-flight verification).
+   */
+  altvBoundBySel?: boolean;
+  /**
+   * VNAV modes (VFLC) fly the selected speed (`ap.sel_spd_kt` / `ap.sel_mach`) instead of the FMS target, for
+   * installations where the speed selector itself follows the FMS speed in FMS mode and overrides it in MAN
+   * (G5000 Longitude SPD knob FMS / MAN, OG 7-4). Default false.
+   */
+  vnavSpeedFromSelected?: boolean;
   to?: {
     lateral: 'LVL' | 'HDG' | 'TRK';
     /** Pitch on the ground before `rotateKt` (737: -10°). Default = pitchDeg. */

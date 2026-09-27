@@ -154,6 +154,13 @@ export function setB738Switches(ctx: Pick<SimContext, 'vars'>, s: InitialState):
   v.set(B738.isduSel, 1);
   v.set(B738.isduSys, 0);
   v.set(B738.passOxy, 0);
+  // Crew oxygen masks stowed, regulators at 100 % (side consoles).
+  for (const i of [1, 2] as const) {
+    v.set(B738.oxyMask(i), 0);
+    v.set(B738.oxyTest(i), 0);
+    v.set(B738.oxyDiluter(i), 0);
+    v.set(B738.oxyEmer(i), 0);
+  }
   v.set(B738.fdrSw, 0);
   v.set(B738.leDevTest, 0);
   v.set(B738.svcInterphone, 0);

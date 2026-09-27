@@ -115,8 +115,9 @@ export function setG6kSwitches(ctx: Pick<SimContext, 'vars'>, sys: G6kSystems, s
   v.set(V.trimAir, 1);
   v.set(V.recircFan, 1);
   v.set(V.ramAir, 0);
-  v.set(V.packManTemp('l'), 0);
-  v.set(V.packManTemp('r'), 0);
+  v.set(V.packCtlMan, 0); // PACK CONTROL NORM
+  v.set(V.packManTemp('l'), 0.5);
+  v.set(V.packManTemp('r'), 0.5);
   v.set(V.zoneTemp(1), 21);
   v.set(V.zoneTemp(2), 22);
   v.set(V.zoneTemp(3), 22);
@@ -137,6 +138,7 @@ export function setG6kSwitches(ctx: Pick<SimContext, 'vars'>, sys: G6kSystems, s
   v.set(V.pressManAlt, 0);
   v.set(V.pressManRate, 0.5);
   v.set(V.ldgElevFms, 1);
+  v.set(V.ldgElevSlew, 0);
   v.set(V.ldgElevFt, v.get('fdm.ground_elev_ft', 0));
   v.set(V.outflowClosed(1), 0);
   v.set(V.outflowClosed(2), 0);
@@ -151,6 +153,9 @@ export function setG6kSwitches(ctx: Pick<SimContext, 'vars'>, sys: G6kSystems, s
   v.set(V.oxyMask(1), 0);
   v.set(V.oxyMask(2), 0);
   v.set(V.oxyMaskMode, 0);
+  v.set(V.oxyMaskModeR, 0);
+  v.set(V.oxyTest(1), 0);
+  v.set(V.oxyTest(2), 0);
   v.set(V.crewOxy, b(powered));
   v.set(V.paxOxy, 1);
   v.set(V.hudPower, b(powered));

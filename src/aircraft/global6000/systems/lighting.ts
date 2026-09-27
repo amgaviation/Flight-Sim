@@ -32,8 +32,9 @@ export function createLighting(ctx: Pick<SimContext, 'vars'>): LightingSystem {
     exterior: [
       { name: 'nav', on: on(V.ltNav), power: 'elec.nav_lts_powered', tech: 'led' },
       // GXLT: fuselage red/white anti-collision strobes (upper and lower), EST 50 flashes/min.
-      { name: 'beacon', on: on(V.ltBeacon), power: 'elec.beacon_powered', pattern: FLASH_PATTERNS.beaconFlash, tech: 'xenon' },
-      { name: 'beacon_lower', on: on(V.ltBeacon), power: 'elec.beacon_powered', pattern: FLASH_PATTERNS.beaconFlash, phaseS: 0.5, tech: 'xenon' },
+      // BEACON RED / OFF / WHT (FCOM 01-10-41). SCOPE: WHT flashes the same beacon lamps (the exterior renders one colour).
+      { name: 'beacon', on: `${V.ltBeacon} >= 1 ? 1 : 0`, power: 'elec.beacon_powered', pattern: FLASH_PATTERNS.beaconFlash, tech: 'xenon' },
+      { name: 'beacon_lower', on: `${V.ltBeacon} >= 1 ? 1 : 0`, power: 'elec.beacon_powered', pattern: FLASH_PATTERNS.beaconFlash, phaseS: 0.5, tech: 'xenon' },
       { name: 'strobe', on: on(V.ltStrobe), power: 'elec.strobe_powered', pattern: FLASH_PATTERNS.singleStrobe, tech: 'xenon' },
       { name: 'strobe_tail', on: on(V.ltStrobe), power: 'elec.strobe_powered', pattern: FLASH_PATTERNS.singleStrobe, tech: 'xenon' }, // synchronized with the wing strobes (GXLT)
       { name: 'landing_l', on: on(V.ltLdgL), power: 'elec.ldg_lt_l_powered', tech: 'halogen' },

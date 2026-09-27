@@ -53,12 +53,15 @@ export function buildLongitudeCockpit(ctx: SimContext, sys: LongitudeSystems, su
       { name: 'Glareshield (GMC 710)', position_m: [7.86, -0.12, -0.44], yawDeg: 6, pitchDeg: -12, fovDeg: 42 },
       { name: 'Pilot lower panel', position_m: [7.86, -0.42, -0.24], yawDeg: -2, pitchDeg: -32, fovDeg: 50 },
       { name: 'Pedestal', position_m: [7.42, -0.22, -0.36], yawDeg: 24, pitchDeg: -66, fovDeg: 60 },
-      { name: 'MFD GTCs (FMS)', position_m: [7.92, -0.08, -0.2], yawDeg: 8, pitchDeg: -52, fovDeg: 45 },
-      { name: 'Overhead', position_m: [7.52, -0.22, -0.56], yawDeg: 22, pitchDeg: 64, fovDeg: 55 },
+      { name: 'MFD GTCs (FMS)', position_m: [7.9, -0.06, -0.22], yawDeg: 6, pitchDeg: -40, fovDeg: 45 },
+      { name: 'Overhead', position_m: [7.55, 0, -0.6], yawDeg: 0, pitchDeg: 62, fovDeg: 50 },
       { name: 'Tiller / left console', position_m: [7.62, -0.45, -0.4], yawDeg: -40, pitchDeg: -45, fovDeg: 55 },
       // Added with the side consoles (cockpit/side): oxygen masks and circuit-breaker panels.
       { name: 'Left console (O2, breakers)', position_m: [7.5, -0.5, -0.3], yawDeg: -80, pitchDeg: -30, fovDeg: 62 },
       { name: 'Right console (O2, breakers)', position_m: [7.5, 0.5, -0.3], yawDeg: 80, pitchDeg: -30, fovDeg: 62 },
+      // Close-ups added by the verification pass so the pedestal legends are legible at 1280 x 720.
+      { name: 'Pedestal forward (fuel, hydraulics, levers)', position_m: [7.74, 0, -0.24], yawDeg: 0, pitchDeg: -62, fovDeg: 46 },
+      { name: 'Pedestal aft (engines, ECS, pressurization, APU)', position_m: [7.4, 0, -0.2], yawDeg: 0, pitchDeg: -80, fovDeg: 46 },
     ],
   });
   const env = b.env;

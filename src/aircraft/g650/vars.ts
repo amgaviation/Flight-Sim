@@ -220,7 +220,19 @@ export const G650_VARS = {
   yokeTrimCmd: `${P}fc.yoke_trim_cmd`, // merged yoke trim switch (pilot priority), read by the FBW as a trim switch
   discHeld: `${P}fc.disc_held`, // an AP/TRIM DISC button held: yoke trim interrupted
   tillerCmd: `${P}tiller_cmd`, // hardware tiller axis or the 3D handle, whichever is deflected more
+
+  // ======================================================== AUDIO CONTROL PANELS (side consoles; added with the overhead / side build)
+  // SCOPE: systems/audio.ts tracks the selections (no radio audio is synthesised by the app).
+  acpMic: (n: 1 | 2) => `${P}acp${n}.mic`, // transmitter select: 1 VHF 1, 2 VHF 2, 3 VHF 3, 4 HF 1, 5 HF 2, 6 PA
+  acpVol: (n: 1 | 2, ch: AcpChannel) => `${P}acp${n}.vol_${ch}`, // receiver volume 0..1
+  // Derived by systems/audio.ts
+  acpTx: (n: 1 | 2) => `${P}acp${n}.tx`, // selected transmitter while the ACP is powered (0 = none)
+  acpRx: (n: 1 | 2, ch: AcpChannel) => `${P}acp${n}.rx_${ch}`, // receiver audio level (volume x ACP and receiver power)
 } as const;
+
+/** ACP receiver channels (EST Primus Epic ACP layout: VHF 1-3, NAV 1-2, ADF, MKR). */
+export const ACP_CHANNELS = ['vhf1', 'vhf2', 'vhf3', 'nav1', 'nav2', 'adf', 'mkr'] as const;
+export type AcpChannel = (typeof ACP_CHANNELS)[number];
 
 /** Every cockpit control var (inputs), for the "every control is consumed" audit test. */
 export const G650_CONTROL_VARS: string[] = [

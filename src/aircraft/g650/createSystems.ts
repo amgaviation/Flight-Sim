@@ -51,6 +51,7 @@ import { G650Logic, G650PostLogic, STAB_PER_DEG } from './systems/logic';
 import { G650_CAS } from './systems/cas';
 import { createLighting } from './systems/lighting';
 import { G650CockpitInputs } from './systems/cockpitInputs';
+import { G650AudioPanels } from './systems/audio';
 import { G650_CHECKLISTS } from './checklists';
 
 export interface G650SystemsOptions {
@@ -396,6 +397,8 @@ export function createSystems(ctx: SimContext, opts: G650SystemsOptions = {}): G
   const disc = new DisconnectAlerts(ctx, { apToneMaxS: 1.5 });
   const post = new G650PostLogic(v, fbw, rudTrim);
   const lights = createLighting(ctx);
+  // Audio control panels on the side consoles (added with the overhead / side-console build, systems/audio.ts).
+  const audio = new G650AudioPanels(v);
 
   const list: Subsystem[] = [
     failures,
@@ -440,6 +443,7 @@ export function createSystems(ctx: SimContext, opts: G650SystemsOptions = {}): G
     disc,
     post,
     lights,
+    audio,
   ];
   for (const s of list) {
     const f = (s as { failures?: () => FailureDef[] }).failures;

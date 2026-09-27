@@ -9,7 +9,7 @@ the cockpit control inventory. Every control in the inventory has a SimVar in
 
 Code: `src/aircraft/citation-longitude/` contains `data.ts`, `vars.ts`, `fdm.ts`, `systems/*`,
 `createSystems.ts`, `states.ts`, `checklists.ts`, `inputMap.ts`, `meta.ts` and `performance.ts`.
-Tests are in `tests/aircraft/citation-longitude/` (29 tests, about 70 s).
+Tests are in `tests/aircraft/citation-longitude/` (about 40 tests; the full-flight check ride in `verify/` alone takes ~75 s).
 
 ## 0. Sources (abbreviations used everywhere)
 
@@ -299,7 +299,7 @@ The STANDBY bus is fed from the standby battery (24 V 10.4 Ah lead-acid, charged
 
 ### 4.12 AFCS and autothrottle (OG 4-7, 7-4/7-5; BCA)
 - **Lateral modes:** ROL, HDG, FMS (LNAV), VOR, LOC, BC, TO, GA.
-- **Vertical modes:** PIT, ALT, ALTS, ALTV, VS, FLC, VPTH/PATH, VFLC, GS, GP, TO, GA.
+- **Vertical modes:** PIT, ALT, ALTS, ALTV, VS, FLC, PATH (VNAV path; G5000 CRG 190-02538-02 p.156 annunciates PATH), VFLC (VNAV climb), GS, GP, TO, GA.
 - **AP behaviour.** Engage limits: 400 ft after takeoff, 160 ft on approach. TO/GA disconnects the AP (BCA). Go-around pitch 7.5°. Not autoland capable.
 - **A/T modes:** TO, HOLD (on the ground above 60 kt, until 400 ft), CLIMB, DESC, SPD, RETARD (below 40 ft), MAX SPD, MIN SPD.
 - **Speed selection.** SPD knob FMS / MAN.
@@ -553,7 +553,8 @@ The body frame is x forward, y right, z down, from the datum (fdm.ts).
 
 ### 7.9 GTC system pages (touchscreen)
 
-These vars are written by the G5000 synoptic controls:
+These vars are written by the G5000 synoptic controls (`systems/synoptics.ts`: MFD pages ELECTRICAL, FUEL,
+HYDRAULICS, ECS / PRESSURIZATION, ANTI-ICE, EXTERIOR LIGHTS; the GTC shows each page's controls):
 - Exterior lights: `ac.lon.lt.nav`, `ac.lon.lt.beacon_mode`, `ac.lon.lt.auto_pulse`.
 - Temperature: `ac.lon.ecs.cabin_set_c`, `ac.lon.ecs.ckpt_set_c`, `ac.lon.ecs.recirc_fan`.
 - Cabin Pressure: `ac.lon.press.sel_mode`, `ac.lon.press.ldg_elev_ft` (−9999 = FMS destination), `ac.lon.press.sel_cabin_ft`.
@@ -735,3 +736,78 @@ Code: `src/aircraft/citation-longitude/cockpit/overhead/index.ts`, `cockpit/side
   SAFETY signs; FIRE WARN TEST; PASS OXY guard; crew-mask test, don and regulator.
 - Screenshots: `node scripts/lon-shots.mjs` with `SHOT_VIEWS=9` (views 6 overhead, 8 / 9 consoles); night with
   `SHOT_TIME=02:00`.
+
+
+## 12. Check-ride verification pass (full normal procedure, performance, visuals)
+
+Code: `tests/aircraft/citation-longitude/verify/` (`flightRig.ts`, `fullFlight.test.ts`, `synoptics.test.ts`).
+
+### 12.1 The check ride (`fullFlight.test.ts`, ~75 s)
+
+One continuous flight KICT 01R → KMCI ILS 01L (route `ICT EMP`, CYPRE transition, FL280), real navigation database,
+headless G5000, real SimLoop, and a two-field world (flat at each field elevation, linear blend between). The crew acts
+only through cockpit vars, GMC keys / knob events, the G5000 flight-plan editor and TOLD model (the GTC pages'
+back end), yoke, pedals, tiller and toe brakes. Every phase asserts CAS / FMA / numbers:
+
+| Phase | What is checked |
+|---|---|
+| Cold & dark | no power, cabin unpressurized (ΔP < 0.05 psi), no warnings |
+| Cockpit inspection | STBY PWR TEST green LED; BATT L/R > 24.5 V; mission buses powered |
+| APU | AVAIL < 60 s; bus dip > 16 V; APU GEN on line; APU bleed after 90 s, start pressure ≥ 32 psi |
+| Engine starts (R, L) | idle < 35 s; peak ITT < 650 °C; generators on line; hydraulics > 2,800 psi |
+| Avionics / FMS | AHRS aligned, GPS valid; route, cruise FL280, ILS 01L via CYPRE loaded; W&F gross within 400 lb of the FDM mass; TOLD V1/VR/V2, field length, takeoff N1 |
+| Taxi | pure-pursuit taxi onto the runway, ≤ 20 kt, lined up < 15 m off the centre line |
+| Takeoff | no NO TAKEOFF; SPD FMS; A/T engaged + TO/GA → FMA TO / TO / A/T TO, FMS armed; A/T HOLD above 60 kt; takeoff N1 = TOLD N1 ± 1 % and ≤ 96.79 %; liftoff < 0.85 × TOLD field length and < V2 + 8; < 5 m centre-line deviation |
+| After takeoff | AP engages into PIT with FMS captured; flaps up at V2 + 20; FLC → A/T CLIMB; VNAV → VFLC; level FL280 in ALTS/ALT; STD baro above FL180; bank < 30°, IAS < Vmo; no cautions |
+| Cruise | ALT ± 60 ft, M0.70-0.84; fuel flow 1,500-3,200 pph (2,446 pph at M0.76); cabin < 3,000 ft at 9.66 psid; tank quantity decrements at the engine flow (± 10 %) |
+| Descent | VNAV PATH captured at TOD; IAS < Vmo; baro set below FL180 |
+| Approach | MAN speed; flaps 1 / 2 / FULL on schedule; speedbrakes as needed; NAV1 auto-tuned to I-MCI; APR arms LOC + GS; LOC / GS captured; gear down; at 1,000 ft RA: IAS within 8 kt of VAPP, 450-1,000 fpm, LOC/GS within ½ scale, no warnings |
+| Landing | AP disconnect at 160 ft (OG 1-7); A/T RETARD; touchdown > −600 fpm, VAPP −20..+5 kt, 500-3,000 ft past the threshold |
+| Rollout | ground spoilers deploy (≥ 0.9) and stow below 30 kt; reverse N1 > 50 %, reverse at idle by 45 kt; A/T disengaged; 25 kt with > 1,000 ft of runway left; < 10 m off the centre line |
+| Taxi in / shutdown | clear of the runway; ENGINE SHUTDOWN R (white) while L runs, no ENGINE FAIL; both engines stopped, hydraulics bleed down; batteries off → dark |
+
+Numbers from the last run: liftoff 127 KIAS (VR 110, V2 123) 1,879 ft from brake release (TOLD field length
+3,390 ft); FL280 reached 6.6 min after brake release; M0.76 / 452 KTAS / 2,446 pph at FL280 and 31,000 lb; touchdown
+116 KIAS 1,214 ft past the threshold; 25 kt at 3,870 ft with 0.45 brake pressure and reversers.
+
+### 12.2 Defects found and fixed
+
+| # | Defect (found by) | Fix |
+|---|---|---|
+| 1 | A/T could never be engaged on the ground: the systems were built before the FDM published weight-on-wheels, the first frames saw AIR, the A/T latched a "touchdown" and auto-disengaged 2 s after every ground engagement (TOGA takeoff impossible) | `states.ts` `resetAirGround`: seeds `gear.wow*` from the placement, re-reads the squat switches and resets the A/T before anything reads `gear.air_ground` |
+| 2 | Every start (cold & dark included) began with the cabin ~1.1-1.8 psid above ambient on the ramp and bled down at up to 20,000 fpm: the pressurization settle used the not-yet-published 0 °C cabin temperature | `states.ts` publishes the snapped zone temperature before `press.settle()` |
+| 3 | Armed FMS captured on the takeoff roll, so the FMA lost TO at brake release | Afcs option `nav.groundCapture: false` (Longitude only): armed modes capture once airborne |
+| 4 | VFLC (G5000 VNAV climb) was in the mode list but unreachable; VNAV only armed the descent path | Afcs option `vnavClimb` (G5000 CRG 190-02538-02 p.154: the VNAV key arms PATH, FLC and ALTV as the profile needs) |
+| 5 | **Safety:** ALTV followed the live VNAV target; when the constrained waypoint sequenced during the capture it tracked each lower constraint and descended through the selected altitude to the runway threshold (flew to 60 ft AGL at 215 kt 5 nm short) | Afcs option `altvBoundBySel` (Longitude on): the ALTV target is bounded by the selected altitude |
+| 6 | SPD knob MAN was ignored in VNAV: the AFCS and A/T flew the FMS speed in PATH/VFLC (A/T added thrust at 300 KIAS with 210 kt selected) | Afcs and Autothrottle option `vnavSpeedFromSelected` (Longitude on): the G5000 copies the FMS speed into the selected speed in FMS mode (OG 7-4), so both always use the selected speed |
+| 7 | The GTC-only controls (NAV / BEACON / AUTO PULSE, cabin / cockpit temperature, recirc fan, cabin pressure mode, landing elevation, cabin altitude select) had no page: `createSystems` passed no synoptics | `systems/synoptics.ts`: six MFD synoptic pages with those GTC controls; `verify/synoptics.test.ts` |
+| 8 | TOLD returned no takeoff N1, so the PFD N1 reference bug stayed empty | `performance.ts` `takeoffN1`: the FADEC TO rating table at the runway pressure altitude / OAT |
+| 9 | FMA said VPTH (G3000 wording) | G5000 label PATH (CRG p.156) |
+| 10 | Pedestal, MFD-GTC and overhead preset views too far / clipped for the legends to be read | Overhead view re-aimed square to the panel; MFD GTC view raised; two new pedestal close-ups (forward, aft) |
+
+### 12.3 Shared-library changes (all additive, opt-in, default behaviour unchanged)
+
+- `src/systems/autopilot/types.ts` + `Afcs.ts`: `nav.groundCapture`, `vnavClimb`, `altvBoundBySel`, `vnavSpeedFromSelected`.
+- `src/systems/fadec/Autothrottle.ts`: `vnavSpeedFromSelected`.
+- `scripts/lon-shots.mjs`: `SHOT_OUT` output directory.
+
+### 12.4 Remaining gaps (honest list)
+
+- **Liftoff speed** is VR + 17 kt (127 vs V2 123) with the scripted 3°/s rotation: the pilot script applies only ~40 %
+  elevator and the nose wheel needs ~1.5 s to unstick. All-engine distances meet the FPG; a real crew rotates faster.
+  The FDM lift curve was left as calibrated (stall speeds within 1 kt of the FPG).
+- **FMS (shared nav library):** (a) `dist_to_dest` and the VNAV profile use nominal leg lengths, so a large fly-by turn
+  (EMP→BUM→final, 18 nm anticipation at FL200) makes the distance step 17 nm and the path deviation +5,000 ft at the
+  sequence; the check-ride route avoids it with the CYPRE transition. (b) The FMS speed stays 300 KIAS until 10,000 ft
+  instead of decelerating to 250 kt before it (14 CFR 91.117). (c) `FplEditor` keeps the destination leg active after
+  enroute waypoints are inserted before it: the crew must "Activate Leg" on the first waypoint on the ground.
+- **ALTV after a sequenced constraint** now levels at the next constraint or the selected altitude, but the PATH
+  re-capture after a level segment needs the path to come back within 150 ft; the aircraft may level early above the
+  path (seen at DASHI 5,000 ft) instead of following a continuous path.
+- **A/T MIN / MAX SPD** protection and the 2-nm approach-speed reduction are still not modelled; no autobrake exists on the
+  Longitude, so none is modelled.
+- **A/T `reset()`** does not clear its touchdown timer (shared library); the Longitude avoids the latch through `resetAirGround`.
+- **Terrain map on the ground** paints the MFD map red (terrain within 100 ft of the aircraft) — shared G5000 map behaviour.
+- **Draw calls / triangles:** pilot view ~875 draw calls, cockpit 974 meshes / 354 k triangles (instanced bezel
+  hardware 74 k, breaker panels 28 k), exterior 42 k triangles; SwiftShader runs ~4 fps (GPU-bound software rasteriser).
+  No merge was done in this pass.

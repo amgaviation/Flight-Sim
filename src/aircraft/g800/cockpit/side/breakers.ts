@@ -78,7 +78,7 @@ export const CB_PANEL_RIGHT: CbGroup[] = [
 ];
 
 /** Layout constants of a CB panel (m). */
-export const CB_GRID = { cols: 14, dx: 0.029, dy: 0.03, title: 0.014, margin: 0.018 } as const;
+export const CB_GRID = { cols: 14, dx: 0.031, dy: 0.03, title: 0.014, margin: 0.018 } as const;
 
 /** Panel size (width, height) needed for the given groups. */
 export function cbPanelSize(groups: CbGroup[]): [number, number] {
@@ -118,7 +118,7 @@ export function fillCbPanel(env: CockpitEnv, panel: Panel, groups: CbGroup[], ra
         x,
         yy,
       );
-      panel.label(legend, x, yy + 0.0115, { height: 0.0017, weight: 700 });
+      panel.label(legend, x, yy + 0.0115, { height: 0.0021, weight: 700 });
       out.push(cb);
     });
     y += Math.ceil(g.items.length / G.cols) * G.dy;

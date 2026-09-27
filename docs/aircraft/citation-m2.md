@@ -580,3 +580,54 @@ mains inboard, nose doors), flaps, ailerons + LH trim tab, upper / lower speed
 brakes, elevators + tabs, rudder + tab, fans, airstair door
 (`ac.m2.door_cabin`), exterior lights (LED, EST candela through
 `world.render_units_per_lux`).
+
+## 14. Overhead and sidewalls (cockpit-overhead agent)
+
+Code: `src/aircraft/citation-m2/cockpit/overhead/` (`index.ts` headliner fittings,
+`compass.ts`, `mask.ts`) and `cockpit/side/` (`index.ts` sidewalls, `breakers.ts`
+CB table, `outlet.ts`, `services.ts` subsystem, `interior.ts` lining profile);
+both mount through the `import.meta.glob` hook of `cockpit/index.ts`. Tests:
+`tests/aircraft/citation-m2/cockpit-overhead/` (coverage report
+`tests/output/citation-m2-overhead-coverage.txt`: 74 controls, 0 unbound).
+
+**What the M2 has up there.** No overhead switch panel: every system switch is
+on the instrument / tilt panels, glareshield and pedestal (S&D15 §10.2). The
+S&D15 §10.4 "miscellaneous cockpit equipment" list gives the rest: magnetic
+compass, eye position reference indicator, two ventilation air outlets, oxygen
+system control, two oxygen masks, two reading lights, a floodlight; §11.1:
+reading lights, air outlets, sidewall map pockets, dual cupholders per crew
+seat, a 110 V outlet in the copilot sidewall; §14: cockpit fire extinguisher,
+emergency lighting battery pack. Not fitted, so not built: wipers (rain doors),
+electric windshield heat (bleed air), dome / storm lights, emergency-lighting
+switch (CAE CJ-family differences p. 5-17: none on the CJ/CJ1/CJ2), cockpit
+door, audio control panel (GMA 36 run from the GTCs, S&D15 §10.3.H).
+
+**Circuit breakers.** LH / RH sidewall panels (S&D15 §9.4) carry one
+`CircuitBreaker` per network breaker <= 50 A (every load plus the AVN 1 / AVN 2 /
+L XFEED / AUX BATT feeders), grouped EMERGENCY BUS / AVIONICS 1 / LEFT MAIN /
+LEFT CROSSFEED and AVIONICS 2 / RIGHT MAIN / RIGHT CROSSFEED; L / R IGN and
+PITCH TRIM on the left panel per the CAE CJ-family text. The > 50 A breakers
+(generator-bus limiters, R XFEED feed, vapor-cycle A/C) are junction-box
+limiters, not on the panels. Names, grouping and layout are EST.
+
+**Controls and what reads them.** Crew masks (`ac.m2.mask<n>_on`), regulator
+N / 100% / EMER (`ac.m2.mask<n>_mode`), PRESS TO TEST (`ac.m2.mask<n>_test`) and
+the flow lamps (`oxy.crew<n>_flowing`) -> OxygenSystem; 110 V outlet plug
+(`ac.m2.ac_outlet_plug`) -> inverter load enable, outlet LED from
+`ac.m2.ac_outlet_v`; breakers -> ElectricalNetwork.
+
+**Systems changes (bug fixes for loads whose power nothing read).** W/S
+ALCOHOL anti-ice now needs `elec.ws_alcohol_powered`; AUTO cabin temperature
+needs `elec.temp_ctl_powered` (unpowered: the mixing valve holds the manual
+target); inverter load enabled by the outlet plug (2.5 A EST); crew mask test
+bindings. `M2CabinServices` (cockpit/side/services.ts) forces the DME outputs
+invalid with `elec.dme_powered` = 0, publishes the outlet voltage and runs the
+5 g inertia emergency-lighting battery pack (`ac.m2.emer_lts`, 10 min EST).
+
+**Compass.** Drum card with reverse sensing, EST damping (tau 1.2 s),
+northerly turning error (latitude / 15 x bank x cos heading) and
+acceleration error, internal lamp on the panel-lights circuit; reads
+`fdm.hdg_mag_deg` (the compass is its own sensor).
+
+**Views added.** Headliner / crew oxygen, LH circuit breakers, RH circuit
+breakers; the Overhead view now looks at the compass / windshield header.

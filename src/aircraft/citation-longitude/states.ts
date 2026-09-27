@@ -176,12 +176,28 @@ export function setLongitudeSwitches(ctx: Pick<SimContext, 'vars'>, sys: Longitu
   v.set(V.lampTest, 0);
 }
 
+/**
+ * Re-reads the squat switches after the reposition (the systems were built before the FDM published
+ * weight-on-wheels) and re-arms the A/T touchdown logic from that air/ground state. Without it the first
+ * frames saw AIR, the A/T latched a "touchdown" and auto-disengaged 2 s later on every ground engagement,
+ * so A/T + TO/GA takeoffs were impossible (found by verify/fullFlight.test.ts).
+ */
+function resetAirGround(ctx: SimContext, sys: LongitudeSystems, onGround: boolean): void {
+  // The FDM writes gear.wow* only when it steps; seed them with the placement the app just made.
+  for (const i of [0, 1, 2]) ctx.vars.set(`gear.wow${i}`, onGround ? 1 : 0);
+  sys.gear.reset();
+  sys.gear.update(0);
+  sys.at.reset();
+}
+
 /** `AircraftInstance.applyState` of the Longitude. */
 export function applyLongitudeState(ctx: SimContext, sys: LongitudeSystems, s: InitialState): void {
   const v = ctx.vars;
   setLongitudeSwitches(ctx, sys, s);
   const coldDark = s === 'cold_dark';
   const inAir = s === 'cruise' || s === 'approach';
+  // Before anything reads gear.air_ground (pressurization settle, A/T, CAS inhibits).
+  resetAirGround(ctx, sys, !inAir);
   const fm = ctx.fdm as Partial<FlightModel> & SimContext['fdm'];
 
   sys.fuel.snapValves();
@@ -203,6 +219,9 @@ export function applyLongitudeState(ctx: SimContext, sys: LongitudeSystems, s: I
     sys.logic.reset();
     sys.post.reset();
     sys.pneu.snap(v.get('fdm.sat_c', 15));
+    // The pressurization mass balance uses the published cabin temperature: publish the snapped zone
+    // temperature first (it was still 0 degC here, so the cabin started ~1.1 psid above ambient on the ramp).
+    v.set('pneu.cabin_temp_c', v.get('fdm.sat_c', 15));
     sys.press.settle();
     sys.suite?.applyState(s);
     return;
@@ -253,6 +272,7 @@ export function applyLongitudeState(ctx: SimContext, sys: LongitudeSystems, s: I
     for (let i = 0; i < 200; i++) a.update(1 / 60);
   }
   sys.pneu.snap(22);
+  v.set('pneu.cabin_temp_c', 22); // see the cold & dark branch
   sys.press.settle();
   sys.suite?.applyState(s);
 

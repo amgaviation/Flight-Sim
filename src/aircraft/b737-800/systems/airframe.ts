@@ -251,11 +251,16 @@ export function createFire(ctx: Pick<SimContext, 'vars'>): FireProtection {
 export function createOxygen(ctx: Pick<SimContext, 'vars'>): OxygenSystem {
   return new OxygenSystem(ctx.vars, {
     bottles: [{ id: 'crew', capacityL: 3250, fullPsi: 1850, lowPsi: 400 }],
-    crew: [
-      // SCOPE: masks are used only while the cabin altitude warning is active above 10,000 ft (the crew dons them).
-      { id: 'capt', bottle: 'crew', inUse: 'press.cabin_alt_warn', mode: 1 },
-      { id: 'fo', bottle: 'crew', inUse: 'press.cabin_alt_warn', mode: 1 },
-    ],
+    // Masks: in use when pulled out of the stowage box (side consoles), or (SCOPE: the crew dons them) while the
+    // cabin altitude warning is active. Regulator: 100% (stowed setting) / N (diluter) / EMERGENCY (positive pressure);
+    // RESET/TEST gives the flow check (FCOM 1.20 "Flight crew oxygen masks").
+    crew: ([1, 2] as const).map((s) => ({
+      id: s === 1 ? 'capt' : 'fo',
+      bottle: 'crew',
+      inUse: `press.cabin_alt_warn || ${B738.oxyMask(s)}`,
+      mode: `${B738.oxyEmer(s)} ? 2 : ${B738.oxyDiluter(s)} ? 0 : 1`,
+      test: B738.oxyTest(s),
+    })),
     pax: { kind: 'chemical', deploy: 'press.pax_masks', durationS: 720 },
   });
 }

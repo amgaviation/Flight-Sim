@@ -283,17 +283,29 @@ export class G6kLogic implements Subsystem {
       v.set(N.packCmd[s], bmc && v.get(N.packSw[s]) === 1 && !ram && !starting ? 1 : 0);
     }
 
+    // ---------------- PRESSURIZATION LDG ELEV UP / DN toggle (FCOM 01-10-41): slewing selects MAN landing elevation.
+    // EST rate 500 ft/s (the FCOM gives no rate), range -1,000 .. 14,000 ft (dossier section 12.1).
+    const slew = v.get(V.ldgElevSlew);
+    if (slew !== 0) {
+      if (v.get(V.ldgElevFms) !== 0) v.set(V.ldgElevFms, 0);
+      const e = v.get(V.ldgElevFt) + Math.sign(slew) * 500 * dt;
+      v.set(V.ldgElevFt, Math.max(-1000, Math.min(14000, e)));
+    }
+
     // ---------------- ice protection (IAMS, EST architecture)
     const iceDet = v.get('ice.detected') !== 0;
     const autoInhibit = ground && v.get('fdm.gs_kt') < 40; // EST: wing anti-ice AUTO inhibited while taxiing
     v.set(V.iceAutoInhibit, autoInhibit ? 1 : 0);
     const wingSwA = v.get(V.wingAi);
     const wai = wingSwA === 2 || (wingSwA === 1 && iceDet && !autoInhibit);
-    const xb = v.get(V.wingXbleed) === 1;
+    // WING XBLEED rotary (FCOM 01-10-41): FROM L (1) / FROM R (2) feeds both wings from that engine; AUTO (0) opens the
+    // wing crossbleed automatically when only one engine bleed is available (EST logic).
+    const xbSel = v.get(V.wingXbleed);
+    const oneEng = (v.get(N.running[1]) !== 0) !== (v.get(N.running[2]) !== 0);
     for (const s of S2) {
       const i = s === 'l' ? 1 : 2;
       const other = s === 'l' ? 2 : 1;
-      // WING XBLEED: one engine supplies both wings (the dead side's piccolo is fed through the wing crossbleed).
+      const xb = xbSel === other || (xbSel === 0 && oneEng);
       const supplied = v.get(N.running[i]) !== 0 || (xb && v.get(N.running[other]) !== 0) || !ground;
       v.set(N.waiCmd[s], wai && supplied ? 1 : 0);
       const cs = v.get(N.cowlSw[s]);
@@ -399,6 +411,7 @@ export class G6kPostLogic implements Subsystem {
   private afcsPowered = false;
   private ydT = 0;
   private prevGsMute = 0;
+  private apuFuelT = 0;
 
   constructor(
     vars: SimVars,
@@ -431,6 +444,12 @@ export class G6kPostLogic implements Subsystem {
     const gs = v.get(V.gsMute);
     if (gs !== 0 && this.prevGsMute === 0) this.events?.emit('taws.gs_cancel');
     this.prevGsMute = gs;
+    // APU fuel supply ride-through (EST 2 s): the RE220's own fuel control pump and the line fuel carry the APU while
+    // the boost source changes over (AC PRI pumps lost -> DC AUX pump commanded), e.g. APU GEN selected OFF with the
+    // APU generator as the only AC source. Without it a one-step pressure gap flamed the APU out.
+    if (v.get('fuel.apu_on') !== 0) this.apuFuelT = 2;
+    else this.apuFuelT = Math.max(0, this.apuFuelT - dt);
+    v.set(V.apuFuelOk, this.apuFuelT > 0 ? 1 : 0);
   }
 
   reset(): void {
@@ -442,5 +461,6 @@ export class G6kPostLogic implements Subsystem {
     this.afcsPowered = v.get('elec.afcs1_powered') !== 0 || v.get('elec.afcs2_powered') !== 0;
     this.ydT = 0;
     this.prevGsMute = v.get(V.gsMute);
+    this.apuFuelT = v.get('fuel.apu_on') !== 0 ? 2 : 0;
   }
 }

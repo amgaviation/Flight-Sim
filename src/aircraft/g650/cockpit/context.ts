@@ -34,6 +34,7 @@ import type { SimContext } from '../../../core/SimContext';
 import type { EpicSuite } from '../../../avionics/honeywell-epic/suite';
 import type { LegendSegment } from '../../../cockpit/controls';
 import type { G650Systems } from '../createSystems';
+import type { DisplayCanvas } from '../../../avionics/common/CanvasDisplay';
 
 export interface G650CockpitContext {
   b: CockpitBuilder;
@@ -44,6 +45,8 @@ export interface G650CockpitContext {
   suite: EpicSuite | null;
   /** Empty groups at the overhead / side-console mount frames (cockpit-local, parented to the root). */
   mounts: { overhead: THREE.Group; sideLeft: THREE.Group; sideRight: THREE.Group };
+  /** Canvas factory for the cockpit's own small displays (overhead readouts); tests pass a fake canvas. */
+  canvas?: (w: number, h: number) => DisplayCanvas;
 }
 
 /**

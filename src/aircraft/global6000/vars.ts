@@ -55,7 +55,7 @@ export const G6K_VARS = {
   ltLdgR: 'ac.light.landing_r_sw', // LANDING R WING
   ltTaxi: 'ac.light.taxi_sw', // TAXI/RECOG: 1 ON
   ltNav: 'ac.light.nav_sw', // NAV: 1 ON
-  ltBeacon: 'ac.light.beacon_sw', // BEACON: 1 ON (red anti-collision)
+  ltBeacon: 'ac.light.beacon_sw', // BEACON: 0 OFF, 1 RED, 2 WHT (FCOM 01-10-41 three-position switch)
   ltStrobe: 'ac.light.strobe_sw', // STROBE: 1 ON (white anti-collision)
   ltWing: 'ac.light.wing_sw', // WING INSP: 1 ON
   ltLogo: 'ac.light.logo_sw', // LOGO: 1 ON
@@ -80,12 +80,12 @@ export const G6K_VARS = {
   trimAir: 'ac.ecs.trim_air_sw', // TRIM AIR PBA: 1 normal, 0 OFF
   recircFan: 'ac.ecs.recirc_sw', // RECIRC PBA: 1 normal, 0 OFF
   ramAir: 'ac.ecs.ram_air_sw', // RAM AIR PBA (guarded): 1 ON
-  packManTemp: (s: 'l' | 'r') => `${P}ecs.pack_${s}_man_temp`, // PACK CONTROL L / R MAN TEMP knob: 0 AUTO (full CCW), 0.05..1 COLD -> HOT manual outlet
+  packManTemp: (s: 'l' | 'r') => `${P}ecs.pack_${s}_man_temp`, // L / R MAN TEMP knob: 0 COLD .. 1 HOT pack outlet, effective with PACK CONTROL MAN (packCtlMan)
   zoneTemp: (z: 1 | 2 | 3) => `ac.ecs.zone${z}_temp_c`, // TEMPERATURE COCKPIT / FWD CABIN / AFT CABIN knob: 16..30 degC
   // ---- ANTI-ICE (GX_01_018)
   wingAi: 'ac.ice.wing_sw', // WING rotary: 0 OFF, 1 AUTO, 2 ON
   cowlAi: (s: 'l' | 'r') => `ac.ice.cowl_${s}_sw`, // L / R COWL rotary: 0 OFF, 1 AUTO, 2 ON
-  wingXbleed: `${P}ice.wing_xbleed_sw`, // WING XBLEED PBA: 1 ON (one engine supplies both wings)
+  wingXbleed: `${P}ice.wing_xbleed_sw`, // WING XBLEED rotary (FCOM 01-10-41): 0 AUTO, 1 FROM L, 2 FROM R (that engine supplies both wings)
   // ---- FIRE (GX_01_018, GXFP): handles pull, DISCH 1 / 2 PBAs under each handle
   fireHandle: (z: 'l' | 'apu' | 'r') => `${P}fire.${z}_handle`, // 0 stowed, 1 pulled (arms squibs, closes fuel / hyd / bleed SOVs)
   fireDisch: (z: 'l' | 'apu' | 'r', b: 1 | 2) => `${P}fire.${z}_disch${b}`, // DISCH n PBA: momentary 1 (bottle n)
@@ -209,6 +209,14 @@ export const G6K_VARS = {
   yokeTrimCmd: `${P}yoke.trim_cmd`, // merged wheel trim command (pilot priority), read by the stabilizer trim
   discHeld: `${P}yoke.disc_held`, // either AP/SP DISC held: trim and pusher interrupted
   tillerCmd: `${P}tiller_cmd`, // merged tiller command (hardware axis or 3D handle) for the NWS
+
+  // ======================================================== OVERHEAD / SIDE CONSOLES (added with the overhead build)
+  // FCOM CSP 700-6 01-10-41 (overhead panel drawing GF0110_024) and 01-10-37 / -46 (side consoles).
+  packCtlMan: `${P}ecs.pack_ctl_man`, // PACK CONTROL NORM / MAN toggle: 0 NORM (automatic), 1 MAN (L / R MAN TEMP knobs drive the packs)
+  ldgElevSlew: `${P}press.ldg_elev_slew`, // LDG ELEV UP / DN toggle (spring to centre): +1 UP, -1 DN; slews ac.press.ldg_elev_ft and selects MAN
+  oxyMaskModeR: `${P}oxy.mask2_mode`, // copilot mask regulator N / 100 % / EMERGENCY (0 / 1 / 2); oxyMaskMode is the pilot's
+  oxyTest: (s: 1 | 2) => `${P}oxy.mask${s}_test`, // mask stowage box RESET / TEST: momentary 1 (flow check, blinker)
+  apuFuelOk: `${P}apu.fuel_ok`, // derived (logic.ts G6kPostLogic): APU fuel supply with a 2 s ride-through of boost-pump changeovers
 } as const;
 
 type S = 'l' | 'r';
@@ -333,6 +341,11 @@ export const G6K_CONTROL_VARS: string[] = [
   G6K_VARS.yokeDisc(1),
   G6K_VARS.yokeDisc(2),
   G6K_VARS.tiller3d,
+  G6K_VARS.packCtlMan,
+  G6K_VARS.ldgElevSlew,
+  G6K_VARS.oxyMaskModeR,
+  G6K_VARS.oxyTest(1),
+  G6K_VARS.oxyTest(2),
 ];
 
 /** Events emitted by cockpit buttons (momentary commands). */

@@ -130,6 +130,9 @@ export function createEngines(ctx: SimContext): LongitudeEngines {
     labels: { THR: 'CLIMB', IDLE: 'DESC', SPD: 'SPD', SPD_FMS: 'SPD', MACH: 'SPD', HOLD: 'HOLD', TO: 'TO', GA: 'TO', RETARD: 'RETARD' },
     vmoKt: LON_LIMITS.vmoKt,
     mmo: LON_LIMITS.mmo,
+    // SPD knob FMS / MAN (OG 7-4): the G5000 copies the FMS speed into the selected speed in FMS mode, so the A/T
+    // always holds the selected speed; MAN overrides the FMS speed also in VNAV.
+    vnavSpeedFromSelected: true,
   });
   return { ratings, fadec, starts, at };
 }

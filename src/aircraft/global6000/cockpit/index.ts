@@ -56,8 +56,13 @@ export const G6K_VIEWS = [
   { name: 'MKP / CCP (FMS)', position_m: [11.0, -0.14, -0.78] as [number, number, number], yawDeg: 14, pitchDeg: -58, fovDeg: 50 },
   { name: 'Pedestal', position_m: [10.6, -0.3, -0.98] as [number, number, number], yawDeg: 36, pitchDeg: -58, fovDeg: 60 },
   { name: 'Pedestal aft (EMS CDU, lights, IRS)', position_m: [10.55, -0.14, -0.8] as [number, number, number], yawDeg: 30, pitchDeg: -72, fovDeg: 50 },
-  { name: 'Overhead', position_m: [10.45, -0.2, -0.92] as [number, number, number], yawDeg: 8, pitchDeg: 58, fovDeg: 70 },
+  { name: 'Overhead', position_m: [10.74, 0, -0.84] as [number, number, number], yawDeg: 0, pitchDeg: 84, fovDeg: 78 },
   { name: 'NOSE STEER / left console', position_m: [10.92, -0.5, -0.95] as [number, number, number], yawDeg: -48, pitchDeg: -45, fovDeg: 55 },
+  // Overhead / side-console builders (cockpit/overhead, cockpit/side):
+  { name: 'Overhead from the pilot seat', position_m: [10.88, -0.45, -1.0] as [number, number, number], yawDeg: 40, pitchDeg: 72, fovDeg: 80 },
+  { name: 'Pilot side panel (EMS CDU 1)', position_m: [10.95, -0.72, -0.8] as [number, number, number], yawDeg: -62, pitchDeg: -32, fovDeg: 55 },
+  { name: 'Copilot side console (EMS CDU 2, PASS OXY)', position_m: [10.9, 0.62, -0.85] as [number, number, number], yawDeg: 70, pitchDeg: -42, fovDeg: 62 },
+  { name: 'Cockpit circuit breaker panel (aft bulkhead)', position_m: [9.92, -0.62, -0.9] as [number, number, number], yawDeg: 176, pitchDeg: -3, fovDeg: 45 },
 ];
 
 export function buildG6kCockpit(ctx: SimContext, sys: G6kSystems, o: G6kCockpitOptions = {}): G6kCockpit {
@@ -77,6 +82,8 @@ export function buildG6kCockpit(ctx: SimContext, sys: G6kSystems, o: G6kCockpitO
     sys,
     suite: sys.suite,
     mounts: { overhead: mount('overhead', MOUNTS.overhead), sideLeft: mount('sideLeft', MOUNTS.sideLeft), sideRight: mount('sideRight', MOUNTS.sideRight) },
+    canvas: o.canvas,
+    disposers: [],
   };
 
   // ---- lighting zones (systems/lighting.ts dimmer outputs) and real lights (<= 5, docs/modules/cockpit.md §11)
@@ -116,6 +123,7 @@ export function buildG6kCockpit(ctx: SimContext, sys: G6kSystems, o: G6kCockpitO
   const dispose = build.dispose?.bind(build);
   build.dispose = () => {
     ems.dispose();
+    for (const d of c.disposers ?? []) d();
     dispose?.();
   };
   return { build, context: c, ems };

@@ -65,16 +65,17 @@ export function buildOverhead(c: G800CockpitContext): void {
   b.zone({ id: 'storm', intensityVar: 'ac.light.storm', lagS: 0, color: 0xffffff });
   env.lighting.addStormLight('storm', 'storm', [P.center_m[0] + 0.3, 0, P.center_m[2] + 0.02], [13.36, 0, -0.35], b.root, 12);
 
-  // ---- structure: the overhead console body closing the panel up to the curved headliner.
-  const body = trimBoxGeometry(P.width + 0.03, P.bodyDepth, P.length + 0.02, 0.01);
-  const bm = b.structureMesh(body, 'panelDark', [P.center_m[0], 0, P.center_m[2] - P.bodyDepth / 2 - 0.002]);
-  bm.name = 'overhead_body';
-  bm.rotation.x = THREE.MathUtils.degToRad(P.tiltDeg);
-
   // Panel paint: Symmetry medium-dark grey (EST from G500/G600 overhead photographs), a shade lighter than the
   // main-panel grey so the downward-facing overhead does not read black under the cabin's bounce light.
   const paint = env.materials.custom('paint', '#4a4d52', 0.62);
   const ov = b.panel({ name: 'g800.ovhd', center_m: P.center_m, facing: 'down', tiltDeg: P.tiltDeg, width: P.width, height: P.length, material: paint, screws: { kind: 'dzus', diameter: 0.007, inset: 0.009, pitch: 0.24 }, radius: 0.012 });
+
+  // ---- structure: the overhead console body behind the panel face, closing it up to the curved headliner
+  // (in the panel frame: u across, v along, n toward the crew; the body extends behind the face, -n).
+  const bodyMesh = new THREE.Mesh(trimBoxGeometry(P.width + 0.03, P.length + 0.02, P.bodyDepth, 0.01), env.materials.get('panelDark'));
+  bodyMesh.name = 'overhead_body';
+  b.trackGeometry(bodyMesh.geometry);
+  ov.addObject(bodyMesh, 0, 0, { z: -P.bodyDepth / 2 - 0.004 });
 
   const korry = (panel: Panel, x: number, y: number, o: ConstructorParameters<typeof PushButton>[1], name: string) =>
     panel.add(new PushButton(env, { style: 'korry', width: KW, height: KH, layout: 'split', name, ...o }), x, y);

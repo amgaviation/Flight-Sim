@@ -58,6 +58,11 @@ export const G650_VIEWS = [
   { name: 'Gear / lower panel', position_m: [14.1, 0.2, -0.8] as [number, number, number], yawDeg: -4, pitchDeg: -35, fovDeg: 50 },
   { name: 'Overhead', position_m: [13.65, -0.3, -1.05] as [number, number, number], yawDeg: 14, pitchDeg: 64, fovDeg: 64 },
   { name: 'Left console / tiller', position_m: [13.95, -0.62, -0.92] as [number, number, number], yawDeg: -35, pitchDeg: -58, fovDeg: 58 },
+  // Overhead / side-console builders (cockpit/overhead, cockpit/side).
+  { name: 'Overhead (lights / anti-ice)', position_m: [13.72, -0.1, -1.08] as [number, number, number], yawDeg: 4, pitchDeg: 50, fovDeg: 52 },
+  { name: 'Overhead (systems)', position_m: [13.6, -0.05, -1.0] as [number, number, number], yawDeg: 0, pitchDeg: 76, fovDeg: 66 },
+  { name: 'Circuit breakers', position_m: [13.24, 0, -1.08] as [number, number, number], yawDeg: 0, pitchDeg: 86, fovDeg: 62 },
+  { name: 'Right console', position_m: [13.95, 0.62, -0.92] as [number, number, number], yawDeg: 35, pitchDeg: -58, fovDeg: 58 },
 ];
 
 /** HUD combiner and overhead projector (pilot side). Returns the combiner screen mesh and its pivot group. */
@@ -117,6 +122,7 @@ export function buildG650Cockpit(ctx: SimContext, sys: G650Systems, o: G650Cockp
     sys,
     suite,
     mounts: { overhead: mount('overhead', MOUNTS.overhead), sideLeft: mount('sideLeft', MOUNTS.sideLeft), sideRight: mount('sideRight', MOUNTS.sideRight) },
+    canvas: o.canvas,
   };
 
   // ---- lighting zones and real lights (<= 5, docs/modules/cockpit.md §11). LED backlighting (no lag).

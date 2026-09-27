@@ -346,6 +346,8 @@ export class B738LogicLate implements Subsystem {
     // ---- Panel test switches (FCOM): WINDOW HEAT TEST OVHT lights OVERHEAT (ON lights out), PWR TEST forces ON;
     //      air conditioning OVHT TEST lights ZONE TEMP; cargo fire TEST lights both cargo FIRE lights;
     //      electrical MAINT lights ELEC / TR UNIT (SCOPE: BITE lamp test only).
+    // FWD / AFT CAB ZONE TEMP lights (the duct overheat failure lights CONT CAB via its annunciator): lamp test only.
+    for (const z of [2, 3] as const) v.set(B738.lt.zoneTemp(z), powered && test ? 1 : 0);
     const wht = v.get(B738.windowHeatTest);
     if (powered && wht <= -0.5) for (const w of WINDOW_HEATS) if (v.get(B738.windowHeat(w)) !== 0) v.set(B738.lt.windowOverheat(w), 1);
     if (powered && v.get(B738.ovhtTest) !== 0) for (const z of [1, 2, 3] as const) v.set(B738.lt.zoneTemp(z), 1);

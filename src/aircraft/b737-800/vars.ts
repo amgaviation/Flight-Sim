@@ -220,6 +220,16 @@ export const B738 = {
   /** Flight deck door lock selector (pedestal): UNLKD (-1) / AUTO (0) / DENY (1). */
   fdDoorLock: `${P}fd_door_lock`,
 
+  // ================================================================ SIDE CONSOLES (crew oxygen mask stowage boxes, FCOM 1.20)
+  /** Crew oxygen mask (Capt 1 / F/O 2): STOWED (0) / DONNED (1; pulled out of the box, flow starts, OXY ON flag). */
+  oxyMask: (s: Side) => `${P}oxy_mask${s}`,
+  /** Mask box RESET/TEST slide (momentary): flow check through the regulator (yellow flow indicator). */
+  oxyTest: (s: Side) => `${P}oxy_test${s}`,
+  /** Regulator N / 100% selector: 100% (0, the stowed setting) / N normal diluter (1). */
+  oxyDiluter: (s: Side) => `${P}oxy_diluter${s}`,
+  /** Regulator EMERGENCY (positive pressure) knob: NORMAL (0) / EMERGENCY (1). */
+  oxyEmer: (s: Side) => `${P}oxy_emer${s}`,
+
   // ================================================================ FORWARD PANELS / GLARESHIELD
   /** MASTER CAUTION (Capt / F/O lighted push buttons, momentary). */
   masterCaution: (s: Side) => `${P}master_caution${s}`,

@@ -84,6 +84,8 @@ export function buildSideConsoles(c: G800CockpitContext): void {
   }
 
   // =============================================================== sidewall CB panels
+  // CB panel paint: mid grey with white legends (EST, GVI-family CB panels) so the legends read in daylight.
+  const cbPaint = env.materials.custom('paint', '#676b71', 0.6);
   const ratings = new Map(sys.elec.breakerNames().map((x) => [x.name, x.ratingA] as [string, number]));
   for (const side of [1, 2] as const) {
     const groups = side === 1 ? CB_PANEL_LEFT : CB_PANEL_RIGHT;
@@ -103,7 +105,7 @@ export function buildSideConsoles(c: G800CockpitContext): void {
       width: w,
       height: h,
       origin: 'top-left',
-      material: 'panel',
+      material: cbPaint,
       screws: { kind: 'dzus', diameter: 0.006, inset: 0.007, pitch: 0.15 },
       radius: 0.006,
     });

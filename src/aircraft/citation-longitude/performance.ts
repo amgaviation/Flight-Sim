@@ -9,7 +9,18 @@
  * 50 % / tailwind 150 % per 14 CFR 25.105; wet: +15 % landing (EST)).
  */
 import type { PerformanceProvider, TakeoffInput, TakeoffResult, LandingInput, LandingResult } from '../../avionics/garmin-g3000/config';
-import { interpTable, LDG_DIST_SL_ISA_FT, TAKEOFF_SPEEDS, TOFL_SL_ISA_F2_FT, VREF } from './data';
+import { interpTable, LDG_DIST_SL_ISA_FT, LON_LIMITS, TAKEOFF_SPEEDS, TOFL_SL_ISA_F2_FT, VREF } from './data';
+import { interp2 } from '../../core/math';
+import { N1C_TO, ratingTable } from './systems/engines';
+
+/** FADEC takeoff N1 rating (the same table the thrust-rating computer uses, systems/engines.ts). */
+const TO_N1_TABLE = ratingTable(N1C_TO, LON_LIMITS.n1TakeoffPct);
+
+/** Takeoff N1 (%) for the runway pressure altitude and OAT: the G5000 TOLD "N1" sent to the PFD N1 bug. */
+export function takeoffN1(runwayElevFt: number, qnhInHg: number, oatC: number): number {
+  const pa = runwayElevFt + (29.92 - qnhInHg) * 1000;
+  return Math.round(interp2(TO_N1_TABLE, pa, oatC) * 10) / 10;
+}
 
 const clampW = (w: number, xs: readonly number[]) => Math.max(xs[0], Math.min(xs[xs.length - 1], w));
 
@@ -51,6 +62,7 @@ export const LONGITUDE_TOLD: PerformanceProvider = {
     return {
       vspeeds: { V1: s.v1, VR: s.vr, V2: s.v2, VENR: s.v2 + 50 },
       fieldLengthFt: Math.round(fl / 10) * 10,
+      n1Pct: takeoffN1(i.runwayElevFt, i.qnhInHg, i.oatC),
       notes: [`FLAPS ${flaps}`, `TOFL ${Math.round(fl).toLocaleString('en-US')} FT`, fl > i.runwayLengthFt ? 'RWY TOO SHORT' : 'RWY OK'],
     };
   },

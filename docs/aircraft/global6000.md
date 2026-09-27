@@ -749,3 +749,61 @@ gear retracting with `gear.pos*`, doors, compression, steering and wheel spin, 2
 entry / baggage / emergency-exit seams. Lights from `light.*` (systems/lighting.ts): nav, wing-tip and tail strobes,
 upper / lower beacons, wing-root landing lights and nose-gear landing lights (real spot lights, candela ×
 `world.render_units_per_lux`), taxi / recognition, wing inspection, logo, emergency.
+
+## 15. Overhead panel, side consoles and circuit breakers (overhead agent)
+
+**Sources**
+
+| Tag | Source |
+|---|---|
+| FCOM-AG | Bombardier Global Express FCOM CSP 700-6 Vol. 2 "Airplane General", Rev 51 (Aug 2006): 01-10-35 flight compartment arrangement (GF0110_018), 01-10-36 aft view of the 280 bulkhead (CCBP), 01-10-37 / -38 pilot's side console and side panel, 01-10-41 overhead panel drawing GF0110_024, 01-10-45 / -46 copilot's side panel and console |
+| FCOM-EL | Global 5000 / Express FCOM CSP 700-5000-6 Vol. 2 chapter 7 "Electrical": 07-10-9 .. 12 EMS CDU (SSPC control, STATUS page, "THERM CB CANT BE CHANGED FROM CDU"), 07-10-36 RAT TEST, 07-20-1 CCBP drawing FGF0720_005, 07-20-2 .. 38 breaker lists by system and bus (names, bus, location SSPC / CCBP / ACPC / DCPC / ASCA), 07-20-39 SWITCH CONTROL, 07-20-40 .. 42 TEST CONTROL (FIRE TEST 10 s, STALL TEST 20 s ground only) |
+
+**Files**
+
+| File | Contents |
+|---|---|
+| `cockpit/overhead/layout.ts` | drawing-to-panel transform (GF0110_024 text positions in PDF points, 0.78 m / 385 pt), plate modules |
+| `cockpit/overhead/index.ts` | `buildOverhead`: FIRE DISCH handles L / APU / R with bottle 1 / 2 PBAs, DOME, TEMPERATURE, RECIRC / TRIM AIR / RAM AIR (guarded), AURAL WARNING IAC 1 / 2, ELT (guarded), HYDRAULIC (SOVs, pumps 1B / 3A / 3B / 2B), ELECTRICAL (BATT MASTER, EXT AC / DC, GEN 1-4, APU GEN, RAT GEN), FUEL (WING XFER, AUX / PRI PUMP, XFEED SOV, AFT XFER, RECIRC), ENGINE (IGNITION, CRANK, START), APU rotary, BLEED / AIR COND (MAN TEMP, PACK CONTROL, PACKs, ENG BLEED, XBLEED, APU BLEED), ANTI-ICE (COWLs, WING, WING XBLEED), PRESSURIZATION (AUTO/MAN, MAN ALT, LDG ELEV slew, RATE, LDG ELEV FMS/MAN, EMER DEPRESS and DITCHING guarded, OUTFLOW VALVE 1 / 2), WINDSHIELD HEAT, EXTERNAL LIGHTS, PASS SIGNS, EMER LIGHTS (guarded at ARM); derived legend vars `ac.g6k.ck.oh.*` |
+| `cockpit/side/index.ts` | side consoles (mask stowage, N / 100 % regulator, RESET / TEST, flow blinker, headset panel, crew oxygen supply, PASSENGER OXYGEN with PASS ON / LOW), side panels (EMS CDU 1 / 2, STALL PUSHER, MAP LT, HUD power, map-light heads), CCBP on the 280 bulkhead |
+| `cockpit/side/emsCdu.ts` | EMS CDU logic (SYS / BUS / STAT / CNTL / TEST / EMER CNTL pages, SSPC pull / reset, auto STATUS on a trip, 2 min blanking) and screen |
+| `cockpit/side/cbTable.ts` | every network breaker (`cb.<load>`) with its EMS name, system group, bus and location |
+| `cockpit/side/oxygenMask.ts` | quick-donning mask stowage box control |
+| `tests/aircraft/global6000/cockpit-overhead/*` | coverage (0 unbound of 120), breakers (directory = network, CCBP pull, EMS SSPC pull / reset, thermal lock-out, trip + STATUS + reset), flows (power-up BATT -> EXT AC -> APU GEN -> VFGs with legends, fire test / handle / bottle, IAC mute, LDG ELEV slew, lamp test and INTEGRAL OVHD) |
+
+**Differences from the §12.1 / §12.5 inventory (FCOM drawing wins)**
+
+- Hydraulic pumps 1B / 3B / 2B and 3A, PASS SIGNS and EXTERNAL LIGHTS are toggle switches (legends stacked ON / OFF / AUTO), not rotaries.
+- WING XBLEED is a rotary FROM L / AUTO / FROM R (`V.wingXbleed` 1 / 0 / 2); logic.ts feeds the other wing from the selected
+  engine and opens it automatically in AUTO with one engine bleed.
+- BEACON is RED / OFF / WHT (`V.ltBeacon` 1 / 0 / 2); lighting.ts treats both as on. SCOPE: one beacon colour is rendered.
+- PACK CONTROL NORM / MAN (`V.packCtlMan`, new): the L / R MAN TEMP knobs act only in MAN (environment.ts).
+- LDG ELEV is a spring-loaded UP / DN toggle (`V.ldgElevSlew`, new; logic.ts slews 500 ft/s EST and selects MAN) plus
+  the LDG ELEV FMS / MAN switchlight; RATE is NORM / HIGH (`V.pressManRate` 0.5 / 1).
+- Each crew mask has its own N / 100 % regulator (`V.oxyMaskModeR` for the copilot, new) and RESET / TEST
+  (`V.oxyTest(n)`, new; OxygenSystem mask test flow).
+- CABIN PWR is on the EMS CDU SWITCH CONTROL page (07-20-39), not an overhead toggle.
+- The EMS CDUs are on the pilot's and copilot's side panels (07-10-9). The pedestal EMS unit built by the main cockpit
+  duplicates EMER CNTL / FIRE / STALL TEST on the same vars (left in place).
+
+**Circuit protection**
+
+- The network's ~120 breakers are listed in `cbTable.ts`. SSPC breakers (DC loads) are pulled / reset from either EMS
+  CDU. CCBP breakers (13 modelled thermal breakers: windshield / window / probe heat, SLAT/FLAP PWR 1 / 2, STAB TRIM
+  CH 1 / 2, ICE DETECTOR, STBY ADI, battery chargers) are physical `CircuitBreaker`s on the bulkhead panel. ACPC / DCPC /
+  ASCA breakers are thermal breakers outside the flight deck: the EMS shows them but cannot change them (FCOM).
+- A trip (over-current, `fail.elec.<load>.short`) brings up the STATUS page on both CDUs with the trip highlighted.
+
+**Systems fixes made with the overhead build**
+
+- `logic.ts` G6kPostLogic: APU fuel supply ride-through (`V.apuFuelOk`, 2 s EST). Selecting APU GEN OFF with the APU
+  generator as the only AC source used to flame the APU out in one step (the AC PRI pumps stopped one step before
+  the DC AUX pump was commanded).
+
+**SCOPE / not built**
+
+AUX PRESS PBA and the pack LO / HIGH legend (function not in the public FCOM chapters), the "EMS" legend beside BATT
+MASTER, gasper, standby compass, CVR area microphone, clock, CVR panel, pitot-static SELECT VALVE, printer. EMS AURAL
+WARNING TEST 1 / 2 and RAT TEST are listed but inactive; the two EMS CDUs are not linked. No windshield wipers (none on
+the FCOM overhead). No cockpit-door control (the FCOM lists none). Map lights are emissive lamp heads only (the
+cockpit's real-light budget is used by the floods and dome light).

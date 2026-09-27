@@ -250,6 +250,8 @@ export class Afcs implements Subsystem {
   private bankOut = 0;
   private lastSelAlt = NaN;
   private capVs = 0;
+  /** Direction of the ALTV capture (-1 descending, +1 climbing), for cfg.altvBoundBySel. */
+  private altvDir = 0;
   private captureSel = NaN;
   private flcDir = 0;
   private navRx = 1;
@@ -910,6 +912,11 @@ export class Afcs implements Subsystem {
         this.setVert('VFLC');
       }
     } else {
+      // Optional G5000 VNAV climb (cfg.vnavClimb): VFLC toward the FMS climb target / selected altitude.
+      if (this.cfg.vnavClimb && phase === 'CLB' && v.get(AP.selAltitude) > this.alt + 75 && this.vert !== 'ALTS' && this.vert !== 'ALTV') {
+        this.flcDir = 1;
+        this.setVert('VFLC');
+      }
       this.vertArmed |= ARM.VPATH;
     }
   }
@@ -1112,7 +1119,8 @@ export class Afcs implements Subsystem {
 
   private lateralTransitions(dt: number): void {
     const v = this.vars;
-    const armed = this.latArmed;
+    // Optional (cfg.nav.groundCapture === false): armed modes wait until airborne.
+    const armed = this.onGround && this.cfg.nav?.groundCapture === false ? 'NONE' : this.latArmed;
     if (armed === 'LNAV') {
       if (v.get(FMS.lnavValid) !== 0) {
         const xtk = Math.abs(v.get(FMS.xtkNm));
@@ -1227,6 +1235,12 @@ export class Afcs implements Subsystem {
     }
   }
 
+  /** ALTV target: the live VNAV target, bounded by the selected altitude when cfg.altvBoundBySel. */
+  private altvTarget(tgt: number, sel: number): number {
+    if (!this.cfg.altvBoundBySel || this.altvDir === 0) return tgt;
+    return this.altvDir < 0 ? Math.max(tgt, sel) : Math.min(tgt, sel);
+  }
+
   private vnavTransitions(sel: number): void {
     const v = this.vars;
     const valid = v.get(FMS.vnavValid) !== 0;
@@ -1250,13 +1264,15 @@ export class Afcs implements Subsystem {
         const capDist = Math.max(50, (Math.abs(this.vs) * this.gains.altCaptureTauS) / 60);
         if (Math.abs(tErr) <= capDist) {
           this.capVs = this.vs;
+          this.altvDir = dir;
           this.vertArmed &= ~ARM.ALTV;
           this.setVert('ALTV');
         }
       } else this.vertArmed &= ~ARM.ALTV;
     }
-    if (this.vert === 'ALTV' && Math.abs(tgt - this.alt) < (this.cfg.altCaptureToHoldFt ?? 20)) {
-      this.altRef = tgt;
+    const altvTgt = this.altvTarget(tgt, sel);
+    if (this.vert === 'ALTV' && Math.abs(altvTgt - this.alt) < (this.cfg.altCaptureToHoldFt ?? 20)) {
+      this.altRef = altvTgt;
       if (this.style === 'boeing') this.setVert('VALT');
       else {
         this.setVert('ALT');
@@ -1496,7 +1512,7 @@ export class Afcs implements Subsystem {
     const v = this.vars;
     let tgt: number;
     let mt = 0;
-    if (fms) {
+    if (fms && !this.cfg.vnavSpeedFromSelected) {
       tgt = v.get(FMS.vnavTargetSpeedKt, this.ias);
       mt = v.get(FMS.vnavTargetMach);
     } else {
@@ -1527,7 +1543,7 @@ export class Afcs implements Subsystem {
         return this.pathLaw(clampAbs(g.altGain * (this.altRef - this.alt), g.altHoldMaxVs), dt);
       case 'ALTS':
       case 'ALTV': {
-        const tgt = this.vert === 'ALTS' ? v.get(AP.selAltitude) : v.get(FMS.vnavTargetAltFt);
+        const tgt = this.vert === 'ALTS' ? v.get(AP.selAltitude) : this.altvTarget(v.get(FMS.vnavTargetAltFt), v.get(AP.selAltitude));
         const err = tgt - this.alt;
         let cmd = (err * 60) / g.altCaptureTauS;
         const cap = Math.max(200, Math.abs(this.capVs));
