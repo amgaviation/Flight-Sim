@@ -14,12 +14,25 @@
  * Colour schemes:
  *  - 'relative' (Garmin TAWS-B / G1000 relative terrain): red = terrain at
  *    or within 100 ft below the aircraft or above it, yellow = 100..1000 ft
- *    below, black (transparent) otherwise.
+ *    below, black (transparent) otherwise. Garmin G3000/G5000 variants
+ *    (Cockpit Reference Guides 190-02047-01 Rev A p.99-100, TBM 930, and
+ *    190-02538-02 Rev A p.142, Citation XLS G5000 TAWS-A: "Terrain SVT /
+ *    TAWS Relative Terrain Legends"):
+ *      in-air legend with `relativeGreenBand`: red above -100 ft, yellow
+ *      -100..-1000 ft, green -1000..-2000 ft, black below;
+ *      on-ground legend (`onGround`): only terrain more than 400 ft above
+ *      the aircraft is red, everything else black, so the departure airport
+ *      area is not painted red/yellow while taxiing.
  *  - 'egpws' (Honeywell MK VI/VIII EGPWS Pilot Guide 060-4314-000 Rev C
  *    p.31, non-peaks): > +2000 ft high-density red, +1000..+2000 high-density
  *    yellow, -500 (-250 gear down)..+1000 low-density yellow, -1000..-500
  *    high-density green, -2000..-1000 low-density green, below -2000 black.
  *    EST densities: high 50 %, low 25 % (ordered 4x4 dither).
+ *    Same guide p.32: "Terrain more than 2000 feet below the aircraft, or
+ *    within 400 (vertical) feet of the nearest runway elevation, is not
+ *    displayed (black)" - applied when `runwayElevFt` is known (MovingMap
+ *    fills it from the nearest airport), so the airport area stays black on
+ *    the ground and on approach instead of a yellow dot field.
  *  - 'topo': absolute elevation ramp (EST Garmin-like topo colours), water
  *    below 0 m (terrarium tiles carry bathymetry, so oceans are negative).
  *  - 'off'.
@@ -28,8 +41,10 @@
  * yellow or red are painted solid yellow / red (EGPWS: "the terrain that
  * created the alert is changed to solid yellow/red").
  * SCOPE: the real EGPWS paints only the cells found by its look-ahead
- * envelope; here the forward sector approximates that envelope. The
- * "within 400 ft of the nearest runway" blanking is not modelled.
+ * envelope; here the forward sector approximates that envelope. The EGPWS
+ * "reference altitude" (projected 30 s ahead when descending > 1000 fpm,
+ * guide p.35) is not modelled; the nearest runway is approximated by the
+ * nearest airport's field elevation.
  */
 import type { WorldQuery } from '../../../world/types';
 import { createDisplayCanvas, type DisplayCanvas } from '../CanvasDisplay';
@@ -50,6 +65,16 @@ export interface TerrainRasterOptions {
 }
 
 const M_TO_FT = 1 / 0.3048;
+/** Garmin G3000/G5000 on-ground relative terrain legend: red above +400 ft (CRG 190-02047-01 Rev A p.100). */
+const GARMIN_GROUND_RED_FT = 400;
+/** EGPWS: terrain within 400 ft (vertical) of the nearest runway elevation is not displayed (Pilot Guide 060-4314-000 Rev C p.32). */
+const EGPWS_RUNWAY_BLANK_FT = 400;
+/** EST: green of the G3000/G5000 in-air relative terrain legend, sampled from the legend graphic (CRG 190-02047-01 Rev A p.100). */
+const GARMIN_GREEN = [87, 162, 68];
+
+function sameElev(a: number, b: number): boolean {
+  return Number.isNaN(a) ? Number.isNaN(b) : Math.abs(a - b) < 1;
+}
 /** 4x4 Bayer matrix, thresholds in (0,1). */
 const BAYER4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map((v) => (v + 0.5) / 16);
 
@@ -81,6 +106,15 @@ export class TerrainRaster {
   alertLookAheadNm = 4;
   /** Gear down: EGPWS low-density yellow band starts at -250 ft instead of -500. */
   gearDown = false;
+  /**
+   * 'relative' mode, Garmin G3000/G5000 on-ground legend: while on the ground
+   * only terrain more than 400 ft above the aircraft is shown (red).
+   */
+  onGround = false;
+  /** 'relative' mode, Garmin G3000/G5000 in-air legend: green band -1000..-2000 ft (G1000 TAWS-B: none). */
+  relativeGreenBand = false;
+  /** 'egpws' mode: elevation (ft MSL) of the runway nearest the aircraft; terrain within 400 ft of it is black. NaN = unknown. */
+  runwayElevFt = NaN;
 
   private readonly world: Pick<WorldQuery, 'elevationAt'>;
   private readonly ctx: Ctx2D;
@@ -99,6 +133,9 @@ export class TerrainRaster {
   private colorMode: TerrainMode = 'off';
   private colorAlert = 0;
   private colorTrack = NaN;
+  private colorOnGround = false;
+  private colorGreen = false;
+  private colorRwy = NaN;
   private needsColor = true;
   private sampledCount = 0;
 
@@ -205,7 +242,10 @@ export class TerrainRaster {
       this.colorMode !== this.mode ||
       (this.mode !== 'topo' && Math.abs(altFt - this.colorAltFt) > 25) ||
       this.colorAlert !== this.alertLevel ||
-      (this.alertLevel > 0 && Math.abs(trackDeg - this.colorTrack) > 3)
+      (this.alertLevel > 0 && Math.abs(trackDeg - this.colorTrack) > 3) ||
+      this.colorOnGround !== this.onGround ||
+      this.colorGreen !== this.relativeGreenBand ||
+      !sameElev(this.colorRwy, this.runwayElevFt)
     ) {
       this.colorize(lat, lon, altFt, trackDeg);
     }
@@ -294,6 +334,10 @@ export class TerrainRaster {
     const tx = Math.sin(trk);
     const ty = -Math.cos(trk);
     const cosSector = Math.cos((30 * Math.PI) / 180);
+    const onGround = this.onGround;
+    const greenBand = this.relativeGreenBand;
+    const rwy = mode === 'egpws' && Number.isFinite(this.runwayElevFt) ? this.runwayElevFt : NaN;
+    const rwyBlank = Number.isFinite(rwy);
     for (let i = 0; i < n; i++) {
       for (let j = 0; j < n; j++) {
         const k = i * n + j;
@@ -317,11 +361,16 @@ export class TerrainRaster {
             density = 1;
           } else {
             const d = el - altFt;
-            let band = 0; // 0 none, 1 yellow, 2 red, 3 green
+            let band = 0; // 0 none, 1 yellow, 2 red, 3 green, 4 Garmin green
             let dens = 1;
             if (mode === 'relative') {
-              if (d > -100) band = 2;
+              if (onGround) {
+                if (d > GARMIN_GROUND_RED_FT) band = 2;
+              } else if (d > -100) band = 2;
               else if (d > -1000) band = 1;
+              else if (greenBand && d > -2000) band = 4;
+            } else if (rwyBlank && Math.abs(el - rwy) <= EGPWS_RUNWAY_BLANK_FT) {
+              band = 0;
             } else if (d > 2000) {
               band = 2;
               dens = 0.5;
@@ -354,6 +403,10 @@ export class TerrainRaster {
               else if (band === 1) {
                 r = 255;
                 g = 255;
+              } else if (band === 4) {
+                r = GARMIN_GREEN[0];
+                g = GARMIN_GREEN[1];
+                b = GARMIN_GREEN[2];
               } else g = 200;
             }
           }
@@ -377,6 +430,9 @@ export class TerrainRaster {
     this.colorMode = mode;
     this.colorAlert = alert;
     this.colorTrack = trackDeg;
+    this.colorOnGround = onGround;
+    this.colorGreen = greenBand;
+    this.colorRwy = this.runwayElevFt;
     this.needsColor = false;
   }
 
@@ -402,13 +458,33 @@ export class TerrainRaster {
 
 const TMP = [0, 0, 0];
 
+/** Options of {@link terrainBand} (see the TerrainRaster properties of the same names). */
+export interface TerrainBandOptions {
+  /** 'relative': Garmin G3000/G5000 on-ground legend (red above +400 ft only). */
+  onGround?: boolean;
+  /** 'relative': Garmin G3000/G5000 in-air green band -1000..-2000 ft. */
+  greenBand?: boolean;
+  /** 'egpws': terrain elevation and nearest runway elevation (ft MSL) for the 400 ft runway blanking. */
+  elevFt?: number;
+  runwayElevFt?: number;
+}
+
 /**
  * Pure classification used by the raster (exported for tests): relative
  * band for terrain `d` ft above (+) / below (-) the aircraft.
  * Returns 0 none, 1 yellow, 2 red, 3 green, and the density (0..1).
  */
-export function terrainBand(mode: 'relative' | 'egpws', d: number, gearDown = false): { band: 0 | 1 | 2 | 3; density: number } {
-  if (mode === 'relative') return { band: d > -100 ? 2 : d > -1000 ? 1 : 0, density: 1 };
+export function terrainBand(mode: 'relative' | 'egpws', d: number, gearDown = false, o: TerrainBandOptions = {}): { band: 0 | 1 | 2 | 3; density: number } {
+  if (mode === 'relative') {
+    if (o.onGround) return d > GARMIN_GROUND_RED_FT ? { band: 2, density: 1 } : { band: 0, density: 0 };
+    if (d > -100) return { band: 2, density: 1 };
+    if (d > -1000) return { band: 1, density: 1 };
+    if (o.greenBand && d > -2000) return { band: 3, density: 1 };
+    return { band: 0, density: 0 };
+  }
+  const el = o.elevFt ?? NaN;
+  const rwy = o.runwayElevFt ?? NaN;
+  if (Number.isFinite(el) && Number.isFinite(rwy) && Math.abs(el - rwy) <= EGPWS_RUNWAY_BLANK_FT) return { band: 0, density: 0 };
   if (d > 2000) return { band: 2, density: 0.5 };
   if (d > 1000) return { band: 1, density: 0.5 };
   if (d > (gearDown ? -250 : -500)) return { band: 1, density: 0.25 };
