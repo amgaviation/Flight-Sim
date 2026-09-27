@@ -14,6 +14,7 @@
  */
 import * as THREE from 'three';
 import { CockpitBuilder, type CockpitBuildEx } from '../../../cockpit/CockpitBuilder';
+import { PALETTES, type PaletteDef } from '../../../cockpit/materials';
 import { placePanel, bl } from '../../../cockpit/frame';
 import { DISPLAY_VARS } from '../../../cockpit/types';
 import type { SimContext } from '../../../core/SimContext';
@@ -48,6 +49,21 @@ export interface G650Cockpit {
   context: G650CockpitContext;
 }
 
+/**
+ * G650 flight-deck paint. The shared 'gulfstream' palette is charcoal; G650 / G650ER photographs (Flickr
+ * jeffatchison 52948656184 / 52948654839 / 52948516166, cockpit photograph in daylight) show medium blue-grey
+ * instrument panel, pedestal, glareshield-face and overhead panels with black bezels and knobs, a dark charcoal
+ * glareshield top, and grey knee panels. EST sRGB values sampled from those photographs (shaded areas).
+ */
+export const G650_PALETTE: PaletteDef = {
+  ...PALETTES.gulfstream,
+  name: 'Gulfstream G650 PlaneView II (blue-grey)',
+  panel: '#5c6570',
+  panelDark: '#3a4047',
+  glareshield: '#1d1f22',
+  bezel: '#1b1d20',
+};
+
 /** Pitch of the default pilot view (deg, + up). */
 export const G650_EYE_PITCH_DEG = -15;
 
@@ -58,7 +74,7 @@ export const G650_VIEWS = [
   { name: 'Pilot displays', position_m: [14.0, -0.38, -0.95] as [number, number, number], yawDeg: 4, pitchDeg: -22, fovDeg: 58 },
   { name: 'Pedestal', position_m: [13.72, -0.22, -0.95] as [number, number, number], yawDeg: 18, pitchDeg: -58, fovDeg: 64 },
   { name: 'MCDUs (FMS)', position_m: [14.12, -0.1, -0.82] as [number, number, number], yawDeg: 6, pitchDeg: -62, fovDeg: 46 },
-  { name: 'Gear / lower panel', position_m: [14.1, 0.2, -0.8] as [number, number, number], yawDeg: -4, pitchDeg: -35, fovDeg: 50 },
+  { name: 'Lower centre panel (fire handles, autobrake, IRS, gear)', position_m: [14.13, 0, -0.78] as [number, number, number], yawDeg: 0, pitchDeg: -42, fovDeg: 50 },
   { name: 'Overhead', position_m: [13.65, -0.3, -1.05] as [number, number, number], yawDeg: 14, pitchDeg: 64, fovDeg: 64 },
   { name: 'Left console / tiller', position_m: [13.95, -0.62, -0.92] as [number, number, number], yawDeg: -35, pitchDeg: -58, fovDeg: 58 },
   // Overhead / side-console builders (cockpit/overhead, cockpit/side).
@@ -109,7 +125,7 @@ function buildHud(c: G650CockpitContext, canvas?: (w: number, h: number) => Disp
 
 export function buildG650Cockpit(ctx: SimContext, sys: G650Systems, o: G650CockpitOptions = {}): G650Cockpit {
   const suite: EpicSuite | null = sys.suite;
-  const b = new CockpitBuilder(ctx, { palette: 'gulfstream', name: 'g650', eyePosition_m: EYE_L, views: G650_VIEWS });
+  const b = new CockpitBuilder(ctx, { palette: G650_PALETTE, name: 'g650', eyePosition_m: EYE_L, views: G650_VIEWS });
   const env = b.env;
   const mount = (name: string, p: (typeof MOUNTS)[keyof typeof MOUNTS]) => {
     const g = new THREE.Group();

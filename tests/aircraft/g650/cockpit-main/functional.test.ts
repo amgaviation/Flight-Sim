@@ -165,7 +165,7 @@ describe('G650 cockpit: controls drive the systems', () => {
     step(2);
     expect(r.vars.get(V.parkBrake)).toBeLessThan(0.05);
     expect(r.vars.get('brakes.parking_set')).toBe(0);
-    const ab = ctl('g650.ped.autobrake');
+    const ab = ctl('g650.lc.autobrake'); // lower centre panel (G650ER photograph)
     ab.onWheel?.(-1, p(ab)); // OFF -> RTO
     ab.onWheel?.(-1, p(ab));
     step(0.5);
@@ -202,5 +202,40 @@ describe('G650 cockpit: controls drive the systems', () => {
     step(1);
     const dimmed = [1, 2].filter((n) => r.vars.get(V.duBrt(n as 1 | 2)) < 0.5 && r.vars.get(`display.epic.du${n}.brt`) < 0.5);
     expect(dimmed.length).toBeGreaterThan(0);
+  });
+
+  it('IRS MODE SELECT switchlights turn the IRUs off / on (alignment restarts)', { timeout: 120_000 }, async () => {
+    const { r, ctl, step } = await setup('ready_to_taxi');
+    step(1);
+    expect(r.vars.get('ahrs2.valid')).toBe(1);
+    click(ctl('g650.lc.irs2'));
+    step(1);
+    expect(r.vars.get(V.irsMode(2))).toBe(0);
+    expect(r.vars.get('ahrs2.valid')).toBe(0);
+    click(ctl('g650.lc.irs2'));
+    step(1);
+    expect(r.vars.get(V.irsMode(2))).toBe(2);
+    expect(r.vars.get('ahrs2.valid')).toBe(0); // aligning again
+  });
+
+  it('engine fire handle on the lower centre panel shuts off the engine; cockpit call chimes until RESET', { timeout: 120_000 }, async () => {
+    const { r, ctl, step } = await setup('ready_to_taxi');
+    step(1);
+    expect(r.vars.get('eng1.running')).toBe(1);
+    click(ctl('g650.lc.fire_l'));
+    step(20);
+    expect(r.vars.get(V.fireHandleL)).toBe(1);
+    expect(r.vars.get('eng1.running')).toBe(0);
+    // Momentary buttons: held for a few frames (as with a mouse press), then released.
+    const hold = (c: CockpitControl) => {
+      c.onPointerDown?.(p(c));
+      step(0.2);
+      c.onPointerUp?.(p(c));
+      step(0.3);
+    };
+    hold(ctl('g650.ped.call_crew'));
+    expect(r.vars.get(V.cabinCall)).toBe(1);
+    hold(ctl('g650.ped.call_reset'));
+    expect(r.vars.get(V.cabinCall)).toBe(0);
   });
 });

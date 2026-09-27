@@ -65,7 +65,9 @@ export function buildMainPanel(c: LonCockpitContext): void {
   const stbyX = -PFD_U / 2;
   const stby = c.headless ? null : new LongitudeStandbyDisplay({ vars: c.ctx.vars });
   const sub = main.subPanel({ name: 'stby', x: stbyX, y: 0.005, width: 0.098, height: 0.128, material: 'bezel', screws: false });
-  if (stby) sub.display(stby, 0, 0.012, 0.078, 0.078, { bezel: { border: 0.006, depth: 0.006 } });
+  // The DisplayManager reads `display.<id>.power` by default (missing = powered); point it at the
+  // standby bus load so the screen is dark with STBY PWR off (cold & dark QA finding).
+  if (stby) sub.display(stby, 0, 0.012, 0.078, 0.078, { bezel: { border: 0.006, depth: 0.006 }, display: { powerVar: 'elec.stby_inst_powered' } });
   sub.add(
     new RotaryKnob(env, {
       id: 'lon.mp.stby_baro',

@@ -227,18 +227,29 @@ export const MAIN_PANEL = {
  */
 export const DU_U = [-0.585, -0.2, 0.2, 0.585] as const;
 
-/** Lower centre panels either side of the pedestal under the MFDs (gear panel right, display / CAS controls left). */
-export const LOWER_CENTRE = { x: 14.548, zTop: -0.424, zBottom: -0.2, yIn: 0.212, yOut: 0.43, tiltDeg: 8 };
+/**
+ * Lower centre instrument panel: one strip under the two MFDs, in the plane of the display band, above the
+ * pedestal (G650ER photographs, Flickr jeffatchison 52948656184 / 52948654839, left to right): L ENG FIRE
+ * handle, BRAKE ACCUM PRESS gauge, AUTOBRAKE + IRS MODE SELECT, landing gear panel, R ENG FIRE handle (the LUC
+ * fire-protection drawings show the same red "L" / "R" DISCH handles). `x` / `zBottom` are its lower edge,
+ * `yIn` the pedestal half-width below it, `yOut` its half-width (the knee panels start there).
+ */
+export const LOWER_CENTRE = { center_m: [14.531, 0, -0.383] as BodyVec, width: 0.6, height: 0.09, x: 14.522, zTop: -0.428, zBottom: -0.34, yIn: 0.235, yOut: 0.3, tiltDeg: 12 };
 
-/** Centre pedestal (EST; dossier §8: MCDUs forward, thrust quadrant, trim, MCDU 3 aft). */
+/**
+ * Centre pedestal (G650ER photographs: MCDU 1 and MCDU 2 either side of the thrust-lever quadrant on the sloped
+ * forward section, FUEL CONTROL below the levers, SPEED BRAKE / MCDU 3 / FLAP + RAT handle across the top,
+ * then the INHIBIT / COCKPIT CALL, TRIM and blank blocks, cup holders aft; PARK BRAKE handle on the left side).
+ * Sizes EST from the MCDU (EPIC_HW 0.146 m wide) in the photographs.
+ */
 export const PEDESTAL = {
-  width: 0.42,
-  /** Sloped forward face carrying MCDU 1 and 2, from under the MFDs down / aft to the top surface. [x, z] */
-  fwdTop: [14.552, -0.424] as [number, number],
-  fwdBottom: [14.3, -0.33] as [number, number],
-  /** Top surface from the forward face aft, falling slightly. */
-  topFwd: [14.3, -0.33] as [number, number],
-  topAft: [13.3, -0.28] as [number, number],
+  width: 0.47,
+  /** Sloped forward face carrying MCDU 1 / thrust levers / MCDU 2, from under the lower centre panel down / aft. [x, z] */
+  fwdTop: [14.52, -0.34] as [number, number],
+  fwdBottom: [14.3, -0.23] as [number, number],
+  /** Top surface from the forward face aft, rising slightly. */
+  topFwd: [14.3, -0.23] as [number, number],
+  topAft: [13.55, -0.21] as [number, number],
 };
 
 /** Control wheels: hub positions (0.43 m ahead of and 0.48 m below the eye, EST from photographs). */

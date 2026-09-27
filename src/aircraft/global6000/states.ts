@@ -208,7 +208,7 @@ export function setG6kSwitches(ctx: Pick<SimContext, 'vars'>, sys: G6kSystems, s
     v.set(V.ltFlood(z), powered && night ? 0.3 : 0);
     v.set(V.ltDisplay(z), night ? 0.7 : 1);
   }
-  for (const z of ['l', 'c', 'r', 'cb', 'ovhd'] as const) v.set(V.ltIntegral(z), powered ? (night ? 0.6 : 0.9) : 0);
+  for (const z of ['l', 'c', 'r', 'cb', 'ovhd'] as const) v.set(V.ltIntegral(z), powered ? (night ? 0.8 : 0.9) : 0);
   v.set(V.ltMaster, powered ? 2 : 0);
   v.set(V.ltDome, 0);
   v.set(V.ltMap(1), 0);

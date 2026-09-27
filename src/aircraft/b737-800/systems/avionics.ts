@@ -143,7 +143,9 @@ export function createAvionics(ctx: SimContext, opts: AvionicsOptions = {}): Avi
           lateralModes: [...(AFCS_B737_AFDS.lateralModes ?? []), 'ROLLOUT'],
           labels: { ...AFCS_B737_AFDS.labels, lateral: { ...AFCS_B737_AFDS.labels.lateral, ROLLOUT: 'ROLLOUT' } },
           // Flare law: firmer touchdown (EST ~2-3 ft/s, typical 737 autoland) than the generic preset.
-          autoland: { ...AFCS_B737_AFDS.autoland, rollout: true, flareTauS: 4, touchdownVsFpm: 200 },
+          // LAND 3 holds through the flare and rollout (FCOM 4.20: the G/S is not used after FLARE; without this
+          // the FMA turned NO AUTOLAND 2 s after touchdown when the G/S went invalid on the ground).
+          autoland: { ...AFCS_B737_AFDS.autoland, rollout: true, flareTauS: 4, touchdownVsFpm: 200, holdStatusInFlare: true },
         },
       },
       trafficSource: tcas,

@@ -184,6 +184,11 @@ export function setG650Switches(ctx: Pick<SimContext, 'vars'>, sys: G650Systems,
   v.set(V.nwsPower, b(powered));
   v.set(V.terrInhibit, 0);
   v.set(V.gpwsInhibit, 0);
+  v.set(V.raasInhibit, 0);
+  // IRS MODE SELECT: ON in every powered state (the IRUs align on power-up), OFF cold & dark (SmartCockpit G650
+  // quiz: an IRU left ON after shutdown runs on the battery, amber ON BAT).
+  for (const n of [1, 2, 3] as const) v.set(V.irsMode(n), powered ? 2 : 0);
+  for (const k of ['crew', 'reset', 'privacy', 'aft_privacy'] as const) v.set(V.cockpitCall(k), 0);
   // ---- yoke switches / tiller handle (3D cockpit, systems/cockpitInputs.ts)
   for (const k of [V.yokeTrimL, V.yokeTrimR, V.yokeDiscL, V.yokeDiscR, V.tiller3d]) v.set(k, 0);
   // ---- doors

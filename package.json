@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:long": "cross-env AMG_LONG_TESTS=1 vitest run fullFlight",
+    "test:long": "cross-env AMG_LONG_TESTS=1 vitest run fullFlight.test performance.test",
     "test:all": "cross-env AMG_LONG_TESTS=1 vitest run",
     "jets-qa": "node scripts/jets-qa.mjs",
     "navdata": "node scripts/build-navdata.mjs",

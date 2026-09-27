@@ -9,7 +9,8 @@
  */
 import type { InitialState } from '../types';
 import type { SimContext } from '../../core/SimContext';
-import { ENG, FDM, AP, ADC } from '../../core/vars';
+import { ENG, FDM, AP, ADC, ENV } from '../../core/vars';
+import { julianDayFromDayOfYear, sunPosition } from '../../world/sky/solar';
 import type { FlightModel } from '../../physics/FlightModel';
 import type { Turbofan } from '../../physics/engines/Turbofan';
 import type { B738Systems } from './createSystems';
@@ -21,6 +22,23 @@ export const TAKEOFF_TRIM_UNITS = 5.0;
 /** Take-off flaps used by the presets (FCOM: 5 is the most common setting). */
 export const TAKEOFF_FLAP_LEVER = FLAP_LEVER.f5;
 
+/**
+ * Night for the presets (panel / flood / exterior lights). The app sets the UTC time and day of year before
+ * applyState but the world computes env.ambient_light only on its first frame afterwards, so ambient light
+ * alone read day at a night launch. The sun elevation at the aircraft is computed here from the time vars;
+ * night = sun below -3 deg (EST: between sunset and the end of civil twilight, -6 deg, cockpit panel lighting
+ * is needed; crews switch it on around sunset). Falls back to ambient light when no time is set.
+ */
+export function presetIsNight(v: SimContext['vars']): boolean {
+  if (v.has(ENV.timeUtcHours) && v.has(FDM.lat)) {
+    const year = new Date().getUTCFullYear();
+    const doy = v.has(ENV.dayOfYear) ? v.get(ENV.dayOfYear) : 172;
+    const sun = sunPosition(julianDayFromDayOfYear(year, doy, v.get(ENV.timeUtcHours)), v.get(FDM.lat), v.get(FDM.lon));
+    return sun.elevationDeg < -3;
+  }
+  return v.get(ENV.ambientLight, 1) < 0.5;
+}
+
 /** Writes the cockpit switch / lever vars for `s` (no system snapping). */
 export function setB738Switches(ctx: Pick<SimContext, 'vars'>, s: InitialState): void {
   const v = ctx.vars;
@@ -29,7 +47,7 @@ export function setB738Switches(ctx: Pick<SimContext, 'vars'>, s: InitialState):
   const moving = s === 'takeoff' || s === 'cruise' || s === 'approach';
   const inAir = s === 'cruise' || s === 'approach';
   const ground = !inAir;
-  const night = v.get('env.ambient_light', 1) < 0.5;
+  const night = presetIsNight(v);
   const fieldFt = Math.round(v.get(FDM.altMsl) - (inAir ? v.get(FDM.altAgl) : 0));
 
   // ------------------------------------------------ FLIGHT CONTROL panel (guarded switches stay in their normal position)
@@ -145,7 +163,9 @@ export function setB738Switches(ctx: Pick<SimContext, 'vars'>, s: InitialState):
   v.set(B738.grdCall, 0);
   v.set(B738.cvrTest, 0);
   v.set(B738.cvrErase, 0);
-  v.set(B738.domeLt, powered && night && ground ? 1 : 0);
+  // Dome OFF for taxi / take-off at night (night vision, outside scan; FCTM night operations). The presets
+  // start ready to move, so the dome stays off; the crew uses it at the gate.
+  v.set(B738.domeLt, 0);
   v.set(B738.ovhdPanelLt, powered && night ? 0.7 : powered ? 0.3 : 0);
   v.set(B738.cbPanelLt, powered && night ? 0.4 : 0);
   // ------------------------------------------------ AFT OVERHEAD
@@ -170,9 +190,12 @@ export function setB738Switches(ctx: Pick<SimContext, 'vars'>, s: InitialState):
   // ------------------------------------------------ FORWARD PANELS
   v.set(B738.lightsTest, 0);
   v.set(B738.nwsSw, 1);
-  v.set(B738.backgroundLt, powered && night ? 0.5 : 0);
+  // EST: low background / glareshield flood at night (both drive the glareshield floods); 0.5 / 0.3 washed the
+  // forward panel near-white in the night screenshots (3 cd floods ~0.3 m from the panel), well above the dim
+  // look of an NG panel at night, where the backlit legends carry the panel.
+  v.set(B738.backgroundLt, powered && night ? 0.12 : 0);
   v.set(B738.afdsFlood, powered && night ? 0.3 : 0);
-  v.set(B738.glareshieldFlood, powered && night ? 0.3 : 0);
+  v.set(B738.glareshieldFlood, powered && night ? 0.12 : 0); // EST: see BACKGROUND above (same flood zone)
   v.set(B738.gpwsFlapInh, 0);
   v.set(B738.gpwsGearInh, 0);
   v.set(B738.gpwsTerrInh, 0);

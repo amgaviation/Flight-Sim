@@ -103,7 +103,12 @@ export interface G650Systems {
   suite: EpicSuite | null;
 }
 
-/** IRU mode var: the G650 IRUs have no mode selector; they align on power-up (SCOPE: held at NAV). */
+/**
+ * Former single IRU mode var (kept for compatibility, no longer read). The G650 has an IRS MODE SELECT panel
+ * (lower centre instrument panel, G650ER photograph; SmartCockpit G650 avionics quiz: "IRS Mode Select panel",
+ * amber "ON BAT" when an IRU is left on after shutdown): one switchlight per IRU, `V.irsMode(n)` (2 = ON / NAV,
+ * aligns on power-up; 0 = OFF).
+ */
 export const IRS_MODE_VAR = 'ac.g650.irs_mode';
 
 /**
@@ -163,9 +168,8 @@ export function createSystems(ctx: SimContext, opts: G650SystemsOptions = {}): G
     new AirDataComputer(ctx, { index: 3, power: 'elec.adc3_powered', pitotProbe: 3, staticPort: 3 }),
     new AirDataComputer(ctx, { index: 4, power: 'elec.smc1_powered || elec.smc2_powered', pitotProbe: 4, staticPort: 3 }),
   ];
-  v.set(IRS_MODE_VAR, 2);
-  const irs = [1, 2, 3].map(
-    (s) => new Irs(ctx, { index: s, modeVar: IRS_MODE_VAR, power: `elec.irs${s}_powered`, requirePosition: true, gpsAutoPosition: true, gpsUpdating: true }),
+  const irs = ([1, 2, 3] as const).map(
+    (s) => new Irs(ctx, { index: s, modeVar: V.irsMode(s), power: `elec.irs${s}_powered`, requirePosition: true, gpsAutoPosition: true, gpsUpdating: true }),
   );
   const ra = [new RadioAltimeter(ctx, { index: 1, power: 'elec.ra_powered' }), new RadioAltimeter(ctx, { index: 2, power: 'elec.ra_powered' })];
 

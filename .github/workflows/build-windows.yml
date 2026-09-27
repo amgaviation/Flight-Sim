@@ -1,5 +1,5 @@
 # Builds the Windows installer + portable exe on every push (any branch) and on demand,
-# and runs typecheck/tests/web build and the full-flight check rides on Linux.
+# and runs typecheck/tests/web build and the long flight tests (check rides, performance) on Linux.
 name: build
 
 on:
@@ -43,7 +43,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      # One cold & dark to cold & dark flight per jet (tests/aircraft/*/verify/fullFlight.test.ts).
+      # One cold & dark to cold & dark flight per jet (tests/aircraft/*/verify/fullFlight.test.ts)
+      # and the published-performance flights (tests/aircraft/*/performance.test.ts).
       - run: npm run test:long
 
   windows:

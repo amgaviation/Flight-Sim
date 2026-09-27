@@ -287,7 +287,7 @@ describe('G650 overhead flows', () => {
     expect(v.get(V.ltMapL)).toBeGreaterThan(0.3);
     expect(v.get('ac.light.map_l')).toBeGreaterThan(0.3);
     // RAT: deployed on the ground can be re-stowed; the handle stays out in flight.
-    click(ctl('g650.oh.elec.rat_deploy'));
+    click(ctl('g650.ped.rat')); // RAT handle on the pedestal (G650ER photograph)
     step(0.5);
     expect(v.get(V.ratDeploy)).toBe(1);
   });

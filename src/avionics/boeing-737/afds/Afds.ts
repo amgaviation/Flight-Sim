@@ -548,7 +548,17 @@ export class B737Afds implements Subsystem {
     const v = this.vars;
     // VNAV capture of the MCP altitude -> VNAV ALT.
     if (a.vert === 'ALTS' && VNAV_MODES.has(this.prevVert) && this.prevVert !== 'ALTV') this.vnavCapture = true;
-    if (a.vert === 'ALT' && this.vnavCapture) this.vnavAlt = true;
+    if (a.vert === 'ALT' && this.vnavCapture) {
+      // FCOM 4.20: levelling at the FMC cruise altitude (MCP altitude = CRZ ALT) is VNAV PTH, not VNAV ALT
+      // (VNAV ALT is only for an MCP altitude that conflicts with the VNAV profile). The Afcs's VNAV press
+      // in the CRZ phase holds the current altitude in VALT (= VNAV PTH).
+      const pc = this.fmc?.perf.crzAltFt;
+      const crz = pc !== undefined && Number.isFinite(pc) ? pc : v.get(FMS.cruiseAltFt);
+      if (crz > 0 && Math.abs(v.get(AP.selAltitude) - crz) < 100 && v.getString(FMS.vnavPhase) === 'CRZ') {
+        this.vnavCapture = false;
+        a.press('VNAV');
+      } else this.vnavAlt = true;
+    }
     if (a.vert !== 'ALTS' && a.vert !== 'ALT') {
       this.vnavCapture = false;
       this.vnavAlt = false;

@@ -11,14 +11,15 @@
  *    CABIN PRESSURE (AUTO/SEMI + MANUAL pair, FLIGHT / LANDING, guarded DUMP, MAN HOLD), TEMP CONTROL (three
  *    zone COLD-HOT knobs with AUTO/MAN, L / R PACK, guarded RAM AIR), COCKPIT LIGHTS (PANEL, FLOOD, DOME, LAMP
  *    TEST);
- *    EMERGENCY POWER (OFF/ARM + ON), RAT deploy T-handle and RAT GEN, FLT CTRL BATTERIES (EBHA, UPS),
+ *    EMERGENCY POWER (OFF/ARM + ON), RAT GEN, FLT CTRL BATTERIES (EBHA, UPS),
  *    ELECTRICAL POWER CONTROL (L GEN / APU GEN / EXT PWR / R GEN, L / R BUS TIE, AC/DC RESET, GND SVC BUS,
  *    L / R MAIN TRU, CABIN / GALLEY MASTER, MAIN BATTERIES L / R), FUEL (L / R MAIN and ALT pumps, X-FLOW,
  *    INTER TANK, FUEL RETURN), HYDRAULICS (AUX PUMP and PWR XFR UNIT pairs OFF/ARM + ON), BLEED AIR (L ENG,
  *    APU, R ENG, ISOLATION OPEN / CLOSED pair);
- *    L ENG FIRE handle, ENGINE FIRE TEST (L / R LOOP A / B, FAULT TEST, bottle DISCH lights), APU CONTROL
- *    (MASTER, START, STOP, guarded FIRE EXT, TEST, RPM / EGT readout), ENGINE START (START MASTER, CRANK
- *    MASTER, CONT IGN, L / R ENG), R ENG FIRE handle.
+ *    ENGINE FIRE TEST (L / R LOOP A / B, FAULT TEST, bottle DISCH lights), APU CONTROL (MASTER, START, STOP,
+ *    guarded FIRE EXT, TEST, RPM / EGT readout), ENGINE START (START MASTER, CRANK MASTER, CONT IGN, L / R ENG),
+ *    MFD DISPLAY SWITCHING / DISPLAY SYSTEM CONTROL.
+ *  Not here (G650ER photographs): the engine fire handles (lower centre panel) and the RAT handle (pedestal).
  *  BREAKERS (aft): every breaker of the modelled network, by system (breakers.ts).
  *
  * Every control writes the var of the inventory (vars.ts) that the systems read; legends show system state
@@ -31,7 +32,7 @@
  * (no G650 panel drawing is public).
  */
 import * as THREE from 'three';
-import { GuardedButton, GuardedSwitch, PushButton, RotaryKnob, SelectorKnob, TBarHandle, ToggleSwitch, AnnunciatorLight } from '../../../../cockpit/controls';
+import { GuardedButton, GuardedSwitch, PushButton, RotaryKnob, SelectorKnob, ToggleSwitch, AnnunciatorLight } from '../../../../cockpit/controls';
 import type { Panel } from '../../../../cockpit/CockpitBuilder';
 import { placePanel } from '../../../../cockpit/frame';
 import { trimBoxGeometry } from '../../../../cockpit/geometry/structure';
@@ -41,6 +42,7 @@ import { CK, seg, type G650CockpitContext } from '../context';
 import { OH_BREAKERS, OH_FORWARD, OH_SYSTEMS, SL, segmentPlacement, type OhSegment } from './layout';
 import { section, sl, G650Readout } from './parts';
 import { fillCbPanel } from './breakers';
+import { addDisplaySwitching } from '../../../../avionics/honeywell-epic/cockpit';
 
 /** Display-side derived lamp vars of the overhead (written each frame; systems never read them). */
 export const OH = {
@@ -207,7 +209,7 @@ export function buildOverhead(c: G650CockpitContext): void {
     OH.oxyPower,
     c.canvas?.(192, 72),
   );
-  sp.display(oxyReadout, 0.117, 0.045, 0.056, 0.021, { bezel: { border: 0.003, depth: 0.004, material: 'bezel' }, display: { glass: true } });
+  sp.display(oxyReadout, 0.117, 0.045, 0.056, 0.021, { bezel: { border: 0.003, depth: 0.004, material: 'bezel' }, display: { glass: true, powerVar: OH.oxyPower } });
   sp.label('PSI', 0.117, 0.064, { height: 0.0019 });
 
   // ---------------------------------------------------------------- CABIN PRESSURE
@@ -346,30 +348,8 @@ export function buildOverhead(c: G650CockpitContext): void {
   sl(env, sp, { id: 'g650.oh.elec.emer_arm', label: 'EMERGENCY POWER OFF/ARM', var: V.emerPwr, name: 'OFF/ARM', values: [0, 1, 2], next: offArm, stateNames: ['OFF', 'ARM', 'ON'], segments: [seg.eq('ARM', 'green', V.emerPwr, 1), seg.eq('OFF', 'amber', V.emerPwr, 0)] }, 0.035, 0.18);
   sl(env, sp, { id: 'g650.oh.elec.emer_on', label: 'EMERGENCY POWER ON', var: V.emerPwr, name: 'ON', values: [0, 1, 2], next: onArm, stateNames: ['OFF', 'ARM', 'ON'], segments: [seg.on('ON', 'amber', V.ebattOn)] }, 0.064, 0.18);
   sl(env, sp, { id: 'g650.oh.elec.rat_gen', label: 'RAT GEN', var: V.ratGen, segments: [seg.on('ON', 'green', 'elec.rat_online'), seg.eq('OFF', 'amber', V.ratGen, 0)] }, 0.112, 0.18);
-  const rat = sp.add(
-    new TBarHandle(env, {
-      id: 'g650.oh.elec.rat_deploy',
-      var: V.ratDeploy,
-      label: 'RAT DEPLOY (pull)',
-      style: 'tbar',
-      rotate: 'none',
-      pullLength: 0.05,
-      legend: 'RAT',
-      material: 'paintYellow',
-      scale: 0.8,
-    }),
-    0.075,
-    0.237,
-  );
-  sp.label('RAT DEPLOY - PULL', 0.075, 0.222, { height: 0.0024 });
-  // The RAT cannot be re-stowed in flight (dossier §9.2): the handle stays out while airborne.
-  let ratOut = vars.get(V.ratDeploy) !== 0;
-  b.onUpdate(() => {
-    const now = vars.get(V.ratDeploy) !== 0;
-    if (ratOut && !now && vars.get('gear.air_ground') === 0) vars.set(V.ratDeploy, 1);
-    else ratOut = now;
-  });
-  void rat;
+  // The RAT deploy handle is on the pedestal (G650ER photograph: red "RAT" handle aft of the flap lever;
+  // cockpit/pedestal.ts). RAT GEN stays here.
   sp.label('FLT CTRL BATT', 0.075, 0.268, { height: 0.0022, weight: 800 });
   sl(env, sp, { id: 'g650.oh.elec.ebha', label: 'FLT CTRL BATTERY EBHA', var: V.ebhaBatt, name: null, segments: [seg.on('ON', 'amber', OH.fcsDisch('ebha')), seg.eq('OFF', 'amber', V.ebhaBatt, 0)] }, 0.05, 0.295);
   sl(env, sp, { id: 'g650.oh.elec.ups', label: 'FLT CTRL BATTERY UPS', var: V.upsBatt, name: null, segments: [seg.on('ON', 'amber', OH.fcsDisch('ups')), seg.eq('OFF', 'amber', V.upsBatt, 0)] }, 0.1, 0.295);
@@ -436,32 +416,11 @@ export function buildOverhead(c: G650CockpitContext): void {
 
   // ---------------------------------------------------------------- forward band: fire handles, FIRE TEST, APU, START
   const fy = 0.328;
-  const fireHandle = (i: 1 | 2, x: number) => {
-    const s = i === 1 ? 'L' : 'R';
-    sp.add(
-      new TBarHandle(env, {
-        id: `g650.oh.fire.handle_${s.toLowerCase()}`,
-        var: i === 1 ? V.fireHandleL : V.fireHandleR,
-        rotateVar: i === 1 ? V.fireDischL : V.fireDischR,
-        label: `${s} ENG FIRE handle (pull; rotate: outboard = shot 1 RIGHT bottle, inboard = shot 2 LEFT bottle)`,
-        style: 'fire',
-        rotate: 'discharge',
-        lightVar: `fire.eng${i}_warn`,
-        legend: `${s} ENG`,
-        scale: 1.1,
-      }),
-      x,
-      0.393,
-    );
-    sp.label(`${s} ENG FIRE`, x, fy + 0.012, { height: 0.0024, weight: 800 });
-    sp.label('PULL', x, 0.455, { height: 0.0024 });
-  };
+  // The L / R ENG FIRE handles are on the lower centre instrument panel (G650ER photographs; LUC fire drawings;
+  // cockpit/lowerCentre.ts).
   sp.line(0.01, fy, W - 0.01, fy);
-  fireHandle(1, 0.05);
-  fireHandle(2, W - 0.05);
-
   // ---- ENGINE FIRE TEST + bottle discharge lights
-  section(sp, 'FIRE TEST', 0.095, fy + 0.006, 0.228, 0.462);
+  section(sp, 'FIRE TEST', 0.01, fy + 0.006, 0.143, 0.462);
   const tests: [string, string, string, string][] = [
     ['test_la', 'L LOOP A', V.fireTestLA, 'fire.eng1_loopa_fault'],
     ['test_lb', 'L LOOP B', V.fireTestLB, 'fire.eng1_loopb_fault'],
@@ -469,20 +428,20 @@ export function buildOverhead(c: G650CockpitContext): void {
     ['test_rb', 'R LOOP B', V.fireTestRB, 'fire.eng2_loopb_fault'],
   ];
   tests.forEach(([id, name, v, fault], i) =>
-    sl(env, sp, { id: `g650.oh.fire.${id}`, label: `ENGINE FIRE TEST ${name}`, var: v, name: name.replace(' LOOP ', '\nLOOP '), mode: 'momentary', segments: [{ text: 'TEST', color: 'red', whenOn: true }, seg.on('FAULT', 'amber', fault)] }, 0.112 + i * 0.03, 0.368),
+    sl(env, sp, { id: `g650.oh.fire.${id}`, label: `ENGINE FIRE TEST ${name}`, var: v, name: name.replace(' LOOP ', '\nLOOP '), mode: 'momentary', segments: [{ text: 'TEST', color: 'red', whenOn: true }, seg.on('FAULT', 'amber', fault)] }, 0.027 + i * 0.03, 0.368),
   );
-  sl(env, sp, { id: 'g650.oh.fire.fault_test', label: 'FIRE DETECTION FAULT TEST', var: V.fireFaultTest, name: 'FAULT TEST', mode: 'momentary', segments: [seg.on('FAULT', 'amber', OH.fireFault)] }, 0.1615, 0.43);
+  sl(env, sp, { id: 'g650.oh.fire.fault_test', label: 'FIRE DETECTION FAULT TEST', var: V.fireFaultTest, name: 'FAULT TEST', mode: 'momentary', segments: [seg.on('FAULT', 'amber', OH.fireFault)] }, 0.0765, 0.43);
   const disch = (id: string, name: string, v: string, x: number) => {
     sp.add(new AnnunciatorLight(env, { id, label: name, width: 0.019, height: 0.012, segments: [{ text: ['BOTTLE', 'DISCH'], color: 'amber', var: v }] }), x, 0.432);
   };
-  disch('g650.oh.fire.bottle_l', 'LEFT FIRE BOTTLE DISCHARGED', 'fire.bottle_l_discharged', 0.117);
-  disch('g650.oh.fire.bottle_r', 'RIGHT FIRE BOTTLE DISCHARGED', 'fire.bottle_r_discharged', 0.206);
+  disch('g650.oh.fire.bottle_l', 'LEFT FIRE BOTTLE DISCHARGED', 'fire.bottle_l_discharged', 0.032);
+  disch('g650.oh.fire.bottle_r', 'RIGHT FIRE BOTTLE DISCHARGED', 'fire.bottle_r_discharged', 0.121);
 
   // ---- APU CONTROL (LUC apu)
-  section(sp, 'APU', 0.233, fy + 0.006, 0.45, 0.462);
-  sl(env, sp, { id: 'g650.oh.apu.master', label: 'APU MASTER', var: V.apuMaster, name: 'MASTER', segments: [seg.on('READY', 'green', OH.apuReady), seg.on('ON', 'cyan', V.apuMaster)] }, 0.255, 0.368);
-  sl(env, sp, { id: 'g650.oh.apu.start', label: 'APU START', var: V.apuStart, name: 'START', mode: 'momentary', segments: [seg.on('ON', 'cyan', 'apu.starting')] }, 0.284, 0.368);
-  sl(env, sp, { id: 'g650.oh.apu.stop', label: 'APU STOP', var: V.apuStop, name: 'STOP', mode: 'momentary', segments: [seg.on('COOL', 'amber', 'apu.cooldown')] }, 0.313, 0.368);
+  section(sp, 'APU', 0.148, fy + 0.006, 0.365, 0.462);
+  sl(env, sp, { id: 'g650.oh.apu.master', label: 'APU MASTER', var: V.apuMaster, name: 'MASTER', segments: [seg.on('READY', 'green', OH.apuReady), seg.on('ON', 'cyan', V.apuMaster)] }, 0.17, 0.368);
+  sl(env, sp, { id: 'g650.oh.apu.start', label: 'APU START', var: V.apuStart, name: 'START', mode: 'momentary', segments: [seg.on('ON', 'cyan', 'apu.starting')] }, 0.199, 0.368);
+  sl(env, sp, { id: 'g650.oh.apu.stop', label: 'APU STOP', var: V.apuStop, name: 'STOP', mode: 'momentary', segments: [seg.on('COOL', 'amber', 'apu.cooldown')] }, 0.228, 0.368);
   sp.add(
     new GuardedButton(env, {
       id: 'g650.oh.apu.fire_ext',
@@ -496,11 +455,11 @@ export function buildOverhead(c: G650CockpitContext): void {
       segments: [seg.on('FIRE', 'red', 'fire.apu_warn'), seg.on('DISCH', 'amber', 'fire.bottle_l_discharged')],
       guard: { color: 'red', close: 'free', var: V.apuFireExtGuard },
     }),
-    0.365,
+    0.28,
     0.37,
   );
-  sp.label('FIRE EXT', 0.365, 0.3515, { height: 0.0024 });
-  sl(env, sp, { id: 'g650.oh.apu.fire_test', label: 'APU FIRE TEST', var: V.apuFireTest, name: 'TEST', mode: 'momentary', segments: [{ text: 'TEST', color: 'red', whenOn: true }] }, 0.41, 0.368);
+  sp.label('FIRE EXT', 0.28, 0.3515, { height: 0.0024 });
+  sl(env, sp, { id: 'g650.oh.apu.fire_test', label: 'APU FIRE TEST', var: V.apuFireTest, name: 'TEST', mode: 'momentary', segments: [{ text: 'TEST', color: 'red', whenOn: true }] }, 0.325, 0.368);
   const apuReadout = new G650Readout(
     'g650.oh.apu_readout',
     vars,
@@ -511,15 +470,21 @@ export function buildOverhead(c: G650CockpitContext): void {
     OH.apuPower,
     c.canvas?.(192, 72),
   );
-  sp.display(apuReadout, 0.3, 0.428, 0.066, 0.025, { bezel: { border: 0.003, depth: 0.004, material: 'bezel' }, display: { glass: true } });
+  sp.display(apuReadout, 0.215, 0.428, 0.066, 0.025, { bezel: { border: 0.003, depth: 0.004, material: 'bezel' }, display: { glass: true, powerVar: OH.apuPower } });
 
   // ---- ENGINE START (LUC powerplant)
-  section(sp, 'ENGINE START', 0.455, fy + 0.006, 0.625, 0.462);
-  sl(env, sp, { id: 'g650.oh.eng.start_master', label: 'START MASTER', var: V.startMaster, name: 'START\nMASTER', segments: [{ text: 'ON', color: 'cyan', whenOn: true }] }, 0.48, 0.372);
-  sl(env, sp, { id: 'g650.oh.eng.crank_master', label: 'CRANK MASTER', var: V.crankMaster, name: 'CRANK\nMASTER', segments: [{ text: 'ON', color: 'cyan', whenOn: true }] }, 0.51, 0.372);
-  sl(env, sp, { id: 'g650.oh.eng.cont_ign', label: 'CONT IGN', var: V.contIgn, name: 'CONT\nIGN', segments: [{ text: 'ON', color: 'cyan', whenOn: true }] }, 0.6, 0.372);
-  sl(env, sp, { id: 'g650.oh.eng.start_l', label: 'L ENG START', var: V.startL, name: 'L ENG', mode: 'momentary', segments: [seg.on('ON', 'cyan', OH.startOn(1)), seg.on('ABORT', 'amber', 'fadec.eng1.abort')] }, 0.52, 0.43);
-  sl(env, sp, { id: 'g650.oh.eng.start_r', label: 'R ENG START', var: V.startR, name: 'R ENG', mode: 'momentary', segments: [seg.on('ON', 'cyan', OH.startOn(2)), seg.on('ABORT', 'amber', 'fadec.eng2.abort')] }, 0.56, 0.43);
+  section(sp, 'ENGINE START', 0.37, fy + 0.006, 0.54, 0.462);
+  sl(env, sp, { id: 'g650.oh.eng.start_master', label: 'START MASTER', var: V.startMaster, name: 'START\nMASTER', segments: [{ text: 'ON', color: 'cyan', whenOn: true }] }, 0.395, 0.372);
+  sl(env, sp, { id: 'g650.oh.eng.crank_master', label: 'CRANK MASTER', var: V.crankMaster, name: 'CRANK\nMASTER', segments: [{ text: 'ON', color: 'cyan', whenOn: true }] }, 0.425, 0.372);
+  sl(env, sp, { id: 'g650.oh.eng.cont_ign', label: 'CONT IGN', var: V.contIgn, name: 'CONT\nIGN', segments: [{ text: 'ON', color: 'cyan', whenOn: true }] }, 0.515, 0.372);
+  sl(env, sp, { id: 'g650.oh.eng.start_l', label: 'L ENG START', var: V.startL, name: 'L ENG', mode: 'momentary', segments: [seg.on('ON', 'cyan', OH.startOn(1)), seg.on('ABORT', 'amber', 'fadec.eng1.abort')] }, 0.435, 0.43);
+  sl(env, sp, { id: 'g650.oh.eng.start_r', label: 'R ENG START', var: V.startR, name: 'R ENG', mode: 'momentary', segments: [seg.on('ON', 'cyan', OH.startOn(2)), seg.on('ABORT', 'amber', 'fadec.eng2.abort')] }, 0.475, 0.43);
+
+  // ---- MFD DISPLAY SWITCHING / DISPLAY SYSTEM CONTROL (G650ER overhead photograph: in the systems panel;
+  // Epic helper, G550 OM 2A-31: MFD L / R NORM-PFD, DU 1-4 OFF-NORM).
+  section(sp, 'DISPLAY SWITCHING', 0.545, fy + 0.006, W - 0.01, 0.462);
+  addDisplaySwitching(b, sp, 0.562, 0.4, 0.0238);
+  sp.label('MFD             DISPLAY SYSTEM CONTROL', 0.628, 0.358, { height: 0.0021 });
 
   // ================================================================== BREAKERS
   const cb = segmentPanel(c, OH_BREAKERS, 'panel');

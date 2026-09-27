@@ -29,6 +29,13 @@ const RX_POWER: Record<(typeof ACP_CHANNELS)[number], string> = {
 export class G650AudioPanels implements Subsystem {
   readonly name = 'g650.audio_panels';
   private readonly names: { mic: string; tx: string; ptt: string; keyed: string; vol: string[]; rx: string[] }[];
+  // COCKPIT CALL panel (pedestal): edge detection of the buttons, latched states.
+  private prevCrew = 0;
+  private prevPriv = 0;
+  private prevAft = 0;
+  private chime = false;
+  private privacy = false;
+  private aftPrivacy = false;
 
   constructor(private readonly v: SimVars) {
     this.names = ([1, 2] as const).map((n) => ({
@@ -55,5 +62,21 @@ export class G650AudioPanels implements Subsystem {
         v.set(s.rx[i], rxOn ? Math.max(0, Math.min(1, v.get(s.vol[i]))) : 0);
       }
     }
+    // ---- COCKPIT CALL panel (pedestal, G650ER photograph: CREW, RESET, PRIVACY, AFT PRIVACY). EST function:
+    // CREW chimes a call to the cabin (latched until RESET), PRIVACY / AFT PRIVACY toggle the interphone
+    // privacy modes. SCOPE: the cabin is not simulated; the states light the switchlights (cockpit) only.
+    const crew = v.get(V.cockpitCall('crew'));
+    const priv = v.get(V.cockpitCall('privacy'));
+    const aft = v.get(V.cockpitCall('aft_privacy'));
+    if (pwr && crew !== 0 && this.prevCrew === 0) this.chime = true;
+    if (!pwr || v.get(V.cockpitCall('reset')) !== 0) this.chime = false;
+    if (priv !== 0 && this.prevPriv === 0) this.privacy = !this.privacy;
+    if (aft !== 0 && this.prevAft === 0) this.aftPrivacy = !this.aftPrivacy;
+    this.prevCrew = crew;
+    this.prevPriv = priv;
+    this.prevAft = aft;
+    v.set(V.cabinCall, this.chime ? 1 : 0);
+    v.set(V.privacy, pwr && this.privacy ? 1 : 0);
+    v.set(V.aftPrivacy, pwr && this.aftPrivacy ? 1 : 0);
   }
 }

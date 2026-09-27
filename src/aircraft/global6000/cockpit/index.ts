@@ -48,9 +48,15 @@ export interface G6kCockpit {
   ems: EmsCduLogic;
 }
 
+/**
+ * Default look-down at the design eye (EST): the upper AFD row spans ~19-34 deg below the eye (layout.ts), so a
+ * level view showed only the top half of the PFD; -12 deg keeps the glareshield / runway and the whole PFD in view.
+ */
+export const G6K_EYE_PITCH_DEG = -12;
+
 /** Preset cockpit views (body metres; yaw + right, pitch + up). The pilot eye is the default view. */
 export const G6K_VIEWS = [
-  { name: 'Copilot', position_m: EYE_R, yawDeg: 0, pitchDeg: -8 },
+  { name: 'Copilot', position_m: EYE_R, yawDeg: 0, pitchDeg: G6K_EYE_PITCH_DEG },
   { name: 'Glareshield (FCP / CTP)', position_m: [11.12, 0, -1.02] as [number, number, number], yawDeg: 0, pitchDeg: -14, fovDeg: 58 },
   { name: 'Centre panel (AFD 2 / 3, IESI, gear)', position_m: [11.02, 0, -0.86] as [number, number, number], yawDeg: 0, pitchDeg: -18, fovDeg: 58 },
   { name: 'MKP / CCP (FMS)', position_m: [11.0, -0.14, -0.78] as [number, number, number], yawDeg: 14, pitchDeg: -58, fovDeg: 50 },
@@ -87,9 +93,9 @@ export function buildG6kCockpit(ctx: SimContext, sys: G6kSystems, o: G6kCockpitO
   };
 
   // ---- lighting zones (systems/lighting.ts dimmer outputs) and real lights (<= 5, docs/modules/cockpit.md §11)
-  b.zone({ id: ZONE.centre, intensityVar: 'ac.light.panel_c', lagS: 0, gain: 1.4 }); // LED edge-lit panels (EST gain)
-  b.zone({ id: ZONE.left, intensityVar: 'ac.light.panel_l', lagS: 0, gain: 1.4 });
-  b.zone({ id: ZONE.right, intensityVar: 'ac.light.panel_r', lagS: 0, gain: 1.4 });
+  b.zone({ id: ZONE.centre, intensityVar: 'ac.light.panel_c', lagS: 0, gain: 1.9 }); // LED edge-lit panels (EST gain: 1.4 left the night legends barely legible from the seat; same as the overhead)
+  b.zone({ id: ZONE.left, intensityVar: 'ac.light.panel_l', lagS: 0, gain: 1.9 });
+  b.zone({ id: ZONE.right, intensityVar: 'ac.light.panel_r', lagS: 0, gain: 1.9 });
   for (const z of ['flood_l', 'flood_c', 'flood_r', 'dome']) b.zone({ id: z, intensityVar: `ac.light.${z}`, lagS: 0, color: 0xfff1dc });
   env.lighting.setAnnunciatorDimming(CK.annunBright, 0.3, false, CK.annunPower);
   // Glareshield floods over each pilot's panel and the overhead flood onto the pedestal (EST 4 cd LED floods).
@@ -120,6 +126,7 @@ export function buildG6kCockpit(ctx: SimContext, sys: G6kSystems, o: G6kCockpitO
   });
 
   const build = b.build();
+  build.eyePitchDeg = G6K_EYE_PITCH_DEG;
   const dispose = build.dispose?.bind(build);
   build.dispose = () => {
     ems.dispose();

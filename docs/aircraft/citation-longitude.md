@@ -816,7 +816,7 @@ Numbers from the last run: liftoff 127 KIAS (VR 110, V2 123) 1,879 ft from brake
 - **A/T MIN / MAX SPD** protection and the 2-nm approach-speed reduction are still not modelled; no autobrake exists on the
   Longitude, so none is modelled.
 - **A/T `reset()`** does not clear its touchdown timer (shared library); the Longitude avoids the latch through `resetAirGround`.
-- **Terrain map on the ground** paints the MFD map red (terrain within 100 ft of the aircraft) — shared G5000 map behaviour.
+- **Terrain map on the ground** (fixed in the integration QA): the MFD and PFD inset maps now default to Absolute (topographic) terrain like the M2; the TAWS pane stays Relative (EST default, not from the pilot's guide).
 - **Draw calls / triangles:** pilot view ~875 draw calls, cockpit 974 meshes / 354 k triangles (instanced bezel
   hardware 74 k, breaker panels 28 k), exterior 42 k triangles; SwiftShader runs ~4 fps (GPU-bound software rasteriser).
   No merge was done in this pass.
@@ -860,5 +860,5 @@ This pass re-walked the control inventory against the code (every `LON_VARS` con
 - **Liftoff speed** is still VR + 14-17 kt with the scripted 3°/s rotation (unchanged by the CG move). All-engine distances meet the FPG.
 - **Draw calls.** The remaining ~700 cockpit meshes are per-control moving parts: 58 breakers × 3 meshes, and ~250 push-button caps, lenses and legends. Instancing them needs per-instance transforms in the shared control library (not an additive change). The panels' static parts are already consolidated (`merge.ts`).
 - **Toggle middle-position legends** (GEN OFF, STBY PWR ON) are partly under the switch nut: this is the shared ToggleSwitch layout. They are still readable.
-- **MFD terrain on the ground** paints the whole map red: shared G5000 relative-terrain behaviour.
+- **MFD terrain on the ground**: fixed in the integration QA (maps default to Absolute terrain, see above).
 - The PITCH/ROLL DISCONNECT handle position, and whether the Longitude posts a CAS message for it, are not published. No CAS message was invented.

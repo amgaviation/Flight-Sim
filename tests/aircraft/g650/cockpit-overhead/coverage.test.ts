@@ -128,7 +128,7 @@ function gestures(c: CockpitControl): ((adv: (s: number) => void) => void)[] {
 }
 
 /** Ids built by the overhead / side-console builders. */
-export const isOverheadOrSide = (id: string): boolean => /^(g650\.(oh|cb|side|acp[12])\.|epic\.ccd[12]\.)/.test(id);
+export const isOverheadOrSide = (id: string): boolean => /^(g650\.(oh|cb|side|acp[12])\.|epic\.ccd[12]\.|epic\.(mfdsw|dusw)\d)/.test(id);
 
 describe('Gulfstream G650 overhead / breakers / side consoles: control coverage', () => {
   it('every overhead, breaker and side-console control changes a var a system reads or emits a handled event', { timeout: 600_000 }, async () => {

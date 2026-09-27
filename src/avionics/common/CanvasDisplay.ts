@@ -97,7 +97,8 @@ export abstract class CanvasDisplay implements CockpitDisplay {
   /** Seconds since the display last powered up. */
   protected timeS = 0;
 
-  private readonly powerVar: string | null;
+  /** Power var (null = always powered); read by the DisplayManager when the registration names none. */
+  readonly powerVar: string | null;
   private readonly brightnessVar: string | null;
   private readonly bootTimeS: number;
   private readonly applyBrightness: boolean;

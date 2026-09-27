@@ -878,8 +878,59 @@ the pilot's inboard armrest).
 - Waypoint idents shared with an airport's FAA LID resolve to the airport first (JST → KJST, HAR → KCXY) because the
   Fusion FMS has no duplicate-ident selection page (`src/avionics/collins-fusion/fms/pages.ts resolve`, other agent's
   module). The check ride uses RAV.
-- The AP/SP DISC var alone does not disconnect the AP; the 3D button emits `ap.disc` itself (hardware bindings must
-  emit the event too).
+- The AP/SP DISC var alone does not disconnect the AP; the 3D button emits `ap.disc` itself. Hardware bindings
+  work through `input.ap_disc`, which the AFCS reads directly (checked in §17).
 - Engaging the AP in the TO vertical mode reverts to PITCH (shared AFCS behaviour); the crew then selects FLC / VNAV.
 - The light-weight (73,000 lb) lift-off comes ~VR + 16 kt after a 2.5 °/s rotation (high thrust-to-weight
   acceleration during the rotation); take-off V-speeds remain the CLmax-derived EST values.
+
+## 17. Second adversarial review (abnormal items, rating logic, power transfers)
+
+`tests/aircraft/global6000/verify/abnormal.test.ts` (4 tests, ~16 s) adds the check-ride items the normal-procedure ride
+does not cover. Results with this build:
+
+| Item | Result |
+|---|---|
+| V1 cut at MTOW, SL ISA, slats / flaps 6 (failure `eng1.flameout` at V1 134 KIAS), rudder / 3° bank into the live engine, V2 + 3 | continued take-off; L ENG FLAMEOUT; windmill N1 ~11 %; ACMP 1B AUTO holds HYD 1 > 2,900 psi; AC buses back on VFG 3 / 4 after a one-to-two-frame transfer; TO rating held; **OEI gradient 400–1,000 ft 4.8 %** (14 CFR 25.121(b): ≥ 2.4 %) |
+| Engine failure at FL350 with the AP engaged | AP, ADC 1 / 2 and all four AFDs stay on through the ACPC / DCPC transfer |
+| Go-around on TO/GA from 1,500 ft (flaps 30, AP + A/T) | GA / GA, A/T GA, AP stays engaged, gear up at a positive rate, GA rating held, > 1,000 fpm, < 150 ft height loss |
+| EMER DEPRESS at FL410 | CABIN ALT (master warning), passenger masks + PASS OXY ON, cabin held at ~14,500 ft |
+
+**Defects found and fixed**
+
+| Defect | Fix |
+|---|---|
+| No engine failure in the failures catalogue: the classic V1 cut could not be given (only fire, FADEC freeze, starter) | `eng1.flameout` / `eng2.flameout` (createSystems.ts) gate the engine fuel consumer (fuel.ts); the FADEC latch posts L / R ENG FLAMEOUT |
+| An engine failure disconnected the autopilot: the break-power ACPC / DCPC transfer left DC ESS / DC BUS 1 dead for 1–2 steps, ADC 1 rebooted (3 s invalid), RA 1 rebooted, AFCS power dropped | `PowerHoldup` (systems/electrical.ts, EST 0.2 s, DO-160 section 16 power-interrupt ride-through) keeps the electronic boxes' `elec.<load>_powered` through a transfer; motors, lights and heaters still drop with the bus |
+| FADEC rating switched TO → GA → CLB at lift-off (gear down → GA, gear up → CLB) with the levers at MAX, so the EICAS target and the A/T N1 limit dropped to CLB at 400 ft | take-off thrust phase `V.toPhase` (logic.ts): TO held from the take-off roll to 1,500 ft RA or until both levers come back below the take-off position (EST thrust reduction altitude); `climbWhen: !toPhase` |
+| GA rating dropped to CLB as soon as the gear came up in a go-around (A/T still at MAX) | GA held while the AFCS vertical mode is GA (`ap.vert_code == 15`) |
+| EMER DEPRESS took the cabin to ~38,600 ft at FL410 (the outflow valves dumped to ambient) | EST outflow-valve cabin altitude limiter at 14,500 ft (`G6K_LIMITS.cabinLimiterFt`; Bombardier CRJ / Challenger EMER DEPRESS figure, 14 CFR 25.841(a)(2)), with 5 s rate anticipation (no overshoot above ~15,500 ft) |
+| Default pilot view level: the upper AFD row (19–34° below the eye) was half out of frame | `build.eyePitchDeg = -12` (G6K_EYE_PITCH_DEG, also the Copilot preset) |
+| Night: glareshield / main panel / pedestal legends barely legible (gain 1.4, INTEGRAL 0.6) | main-panel zones at gain 1.9 like the overhead; night initial states set INTEGRAL 0.8 |
+
+**Re-checked and left as they are**
+
+- The AP/SP DISC hardware binding does disconnect the AP: the AFCS reads `input.ap_disc` rising edges directly
+  (§16 note). The check ride emits `ap.disc` because it writes the 3D button's var, which the button itself turns
+  into the event.
+- Performance vs published data (§3): MTOW take-off, accelerate-stop, stall speeds, climb to FL410 and FL410 / FL350
+  cruise TAS and fuel flow still match. The light-weight lift-off ~VR + 15 kt matches the ~5–6 kt/s acceleration
+  at T/W 0.4 over a ~3 s rotation.
+- Light-weight climb 5,600 fpm at 250 KIAS / 4,500 ft (73,000 lb): consistent with the thrust lapse
+  (≈ 0.72 of static at M0.4, CLB) and L/D ≈ 15.6. AOPA gives only "> 3,000 fpm".
+- CABIN ALT 10,000 ft and the passenger masks at 14,000 ft remain EST (no public Global figure found).
+- Render budget: 1,035 draw calls / 769 k triangles in the pilot view under SwiftShader (≈ 4 fps software). 254 calls
+  are the collins-fusion MKP keyboards (one mesh per key, other module). The Global's own static geometry is
+  already consolidated (§16).
+
+**Still open**
+
+- The touchdown in the check ride is ~VAPP − 14 kt (108 KIAS at VAPP 122). The scripted flare holds the attitude too
+  long after the A/T RETARD. This is pilot technique in the test, not an FDM defect; the approach attitude (3.9°)
+  and touchdown attitude (7.9°) match the AAIB data.
+- No automatic relight or windmill restart model after `engN.flameout` is cleared: the crew restarts with START
+  (in-flight start envelope not modelled; TCDS 850 °C air-start ITT limit applies).
+- The EMER DEPRESS dump rate (up to ~80,000 fpm cabin climb) comes from the shared outflow-valve area. No public
+  Global outflow-valve data was found.
+- No rudder bias or thrust asymmetry compensation (the Global has none that is public). OEI directional control is
+  the pilot's.

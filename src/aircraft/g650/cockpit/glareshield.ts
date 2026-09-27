@@ -17,7 +17,7 @@ import { GLARE_FACE } from './layout';
 
 export function buildGlareshield(c: G650CockpitContext): void {
   const { b, env, suite } = c;
-  const face = b.panel({ name: 'g650.glareshield', center_m: GLARE_FACE.center_m, facing: 'aft', tiltDeg: GLARE_FACE.tiltDeg, width: GLARE_FACE.width, height: GLARE_FACE.height, material: 'glareshield', screws: false, radius: 0.01 });
+  const face = b.panel({ name: 'g650.glareshield', center_m: GLARE_FACE.center_m, facing: 'aft', tiltDeg: GLARE_FACE.tiltDeg, width: GLARE_FACE.width, height: GLARE_FACE.height, material: 'panel', screws: false, radius: 0.01 }); // grey face under the dark hood (photographs)
   if (suite) {
     addGuidancePanel(b, face, 0, 0.004, suite);
     addSmc(b, face, -0.495, 0.002, suite, 1);

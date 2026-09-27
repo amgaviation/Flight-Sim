@@ -4,8 +4,9 @@
  * For every registered CockpitDisplay the manager owns a CanvasTexture
  * (sRGB) on the display's canvas (HTMLCanvasElement or OffscreenCanvas) and
  * an unlit material on the display mesh, and each frame:
- *  - reads `display.<id>.power` (missing = powered): unpowered screens are
- *    black and are not rendered;
+ *  - reads the power var (missing = powered): `DisplayOptions.powerVar`, else
+ *    the display's own `powerVar` (CanvasDisplay), else `display.<id>.power`;
+ *    unpowered screens are black and are not rendered;
  *  - reads `display.<id>.brt` (0..1, missing = 1) and calls
  *    `display.setBrightness` when it changes; the screen material is dimmed
  *    only when the display does not implement setBrightness (displays that
@@ -236,7 +237,7 @@ export class DisplayManager {
         sched.force = true;
       },
       sched,
-      powerVar: options.powerVar ?? DISPLAY_VARS.power(display.id),
+      powerVar: options.powerVar ?? display.powerVar ?? DISPLAY_VARS.power(display.id),
       brtVar: options.brightnessVar ?? DISPLAY_VARS.brightness(display.id),
       readyVar: DISPLAY_VARS.ready(display.id),
       splash: null,

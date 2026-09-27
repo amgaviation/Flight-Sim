@@ -194,6 +194,13 @@ export function createLongitudeSystems(ctx: SimContext, opts: LongitudeSystemsOp
       },
       { noDisplays: opts.noDisplays },
     );
+    // Navigation-map terrain: Absolute (topographic) on the MFD and PFD inset maps, as the crew normally sets them
+    // (G5000 map settings Off / Absolute / Relative), same as the M2. EST: the suite's TAWS default (Relative) paints
+    // every map red on the ground (terrain within 100 ft of the aircraft); the TAWS pane stays Relative.
+    for (const k of ['mfd1', 'mfd2', 'pfd1', 'pfd2', 'inset1', 'inset2'] as const) {
+      const m = suite.system.maps[k];
+      if (m) m.terrain = 'topo';
+    }
   }
 
   // ---- engines / FADEC / autothrottle

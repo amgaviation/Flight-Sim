@@ -50,9 +50,13 @@ export const seg = {
   eq(text: string | string[], color: LegendSegment['color'], v: string, value: number): LegendSegment {
     return { text, color, var: v, test: (x: number) => x === value };
   },
-  /** Blue valve lights: lit dim (1) or bright (2). */
+  /**
+   * Blue valve lights: lit dim (1) or bright (2). FCOM 12.10 / 3.10: "illuminated bright blue - valve in
+   * transit or disagrees with the switch; illuminated dim blue - valve in the commanded position".
+   * EST: dim = 40 % of bright (the NG dim filament is clearly visible but much fainter).
+   */
   any(text: string | string[], color: LegendSegment['color'], v: string): LegendSegment {
-    return { text, color, var: v, test: (x: number) => x > 0 };
+    return { text, color, var: v, test: (x: number) => x > 0, level: (x: number) => (x >= 2 ? 1 : 0.4) };
   },
 };
 

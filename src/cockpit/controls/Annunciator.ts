@@ -35,6 +35,12 @@ export interface LegendSegment {
   /** Lit whenever the owning button's value is non-zero (latched ON legend). */
   whenOn?: boolean;
   style?: 'legend' | 'field';
+  /**
+   * Optional brightness factor (0..1) of the lit segment from the var value, e.g. the Boeing blue valve
+   * lights: dim when the valve is open / closed, bright in transit (`x => x >= 2 ? 1 : 0.4`). Default 1.
+   * Lamp test always lights at full brightness.
+   */
+  level?: (v: number) => number;
 }
 
 interface SegState {
@@ -118,13 +124,18 @@ export class LegendFace {
       const s = this.segs[i];
       const d = s.def;
       let lit = false;
+      let k = 1;
       if (d.var) {
         const x = v.get(d.var);
         lit = d.test ? d.test(x) : x !== 0;
+        if (lit && d.level) k = d.level(x);
       }
-      if (d.whenOn && ownerOn) lit = true;
+      if (d.whenOn && ownerOn) {
+        lit = true;
+        k = 1;
+      }
       s.lit = lit;
-      const target = lit || test ? this.intensity * level : 0;
+      const target = test ? this.intensity * level : lit ? this.intensity * level * k : 0;
       s.level = smoothTo(s.level, target, dt, 0.025, 1e-3);
       s.mat.emissiveIntensity = s.level;
     }

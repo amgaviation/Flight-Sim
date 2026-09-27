@@ -114,8 +114,8 @@ may ask for confirmation on first launch.
 
 ```bash
 npm run typecheck   # TypeScript (strict)
-npm test            # unit + headless integration tests (vitest), about 4.5 min
-npm run test:long   # the six full-flight check rides, cold & dark to cold & dark (about 10 min)
+npm test            # unit + headless integration tests (vitest), about 3-4 min
+npm run test:long   # long flight tests: six check rides + six performance flights (about 10 min)
 npm run build       # production bundle in dist/
 npm run smoke       # headless browser flight, ~40 numeric checks, screenshots in tests/output/
 npm run jets-qa     # every jet in every start state in the real app, screenshots in tests/output/jets/
@@ -125,9 +125,13 @@ The check rides (`tests/aircraft/<id>/verify/fullFlight.test.ts`) fly each
 jet through its cockpit controls only: power-up and engine start, FMS route
 and approach entry, taxi, takeoff, autopilot climb, cruise, VNAV descent, ILS
 capture, landing, rollout and shutdown, asserting CAS, flight-mode
-annunciations and published numbers at every phase. They are left out of
-`npm test` to keep it short (`AMG_LONG_TESTS=1` includes them); CI runs them
-in a separate job.
+annunciations and published numbers at every phase. The performance flights
+(`tests/aircraft/<id>/performance.test.ts`) check takeoff distance, climb
+time/fuel/distance, cruise speed and fuel flow, stall speeds and the overspeed
+warnings against the published AFM / Flight Planning Guide data. Both sets
+are left out of `npm test` to keep it short (`AMG_LONG_TESTS=1` includes
+them, e.g. `AMG_LONG_TESTS=1 npx vitest run tests/aircraft/g650`); CI runs
+them in a separate job.
 
 `docs/modules/qa.md` describes the full release pipeline, every smoke check,
 the `window.__sim` scripting API and the scripted test pilot.
@@ -189,46 +193,62 @@ aircraft dossier (`docs/aircraft/<id>.md`) has the full list.
   estimates where no public drawings exist (marked `EST` in the code and the
   dossiers).
 - Cockpit lighting: surfaces in shadow get little daylight fill, so white
-  legends under the glareshield (overhead edges, side and breaker panels) are
-  hard to read by day. Use the preset close-up views (`C`). At night the
-  backlit legends read well.
-- The default pilot view looks 8° down; at 16:9 the bottom row of PFD
-  softkeys can sit just below the screen edge until you look down.
+  legends under the glareshield (overhead edges, side and breaker panels,
+  the Global 6000 pedestal) are hard to read by day. Use the preset close-up
+  views (`C`). At night the backlit legends read well.
 - Radio audio (ATC, ident tones through the audio panels), cockpit doors,
   cabin interior lighting, weather radar returns, charts, CVR and ELT hold
   state only; there is no radio or weather model behind them.
 - FMS (shared nav library): the VNAV profile uses nominal leg lengths (big
-  fly-by turns can step the path), there is no deceleration segment before
-  the 250 kt / 10,000 ft limit, distance to destination can include the
-  missed approach or leave out a hold-in-lieu-of-procedure-turn leg, and the
-  thrust rating is not switched to CRZ automatically at level-off.
+  fly-by turns can step the path); only the Longitude plans the deceleration
+  to 250 kt before 10,000 ft (the others need SPD INTV / a manual speed);
+  distance to destination can include the missed approach; an approach
+  transition that starts with a hold-in-lieu-of-procedure-turn drops the hold.
 - Autothrottle MIN/MAX speed protection is not modelled. Hardware
   bindings that write only an autopilot-disconnect var (without sending the
   `ap.disc` event, as the 3D button does) do not disconnect the autopilot.
 - On the ground, the relative-terrain map layers paint the area around the
-  airport red or yellow (no suppression near runway elevation).
-- Lift-off in the hand-flown check rides comes 10-17 kt above VR because the
+  airport red or yellow (no suppression near runway elevation). The Citation
+  M2 and Longitude maps default to Absolute terrain, so only their TAWS pane
+  shows it; on the Epic, Fusion and 737 terrain displays it is still visible.
+- Lift-off in the hand-flown check rides comes 5-17 kt above VR because the
   scripted rotation is gentle; stall speeds and field lengths match the
   published data.
-- Frame rate: the flight decks draw 600-2,000 draw calls; on a real GPU this
-  is fine, under software rendering it is 4-5 fps.
+- Frame rate: the flight decks draw about 560-2,200 draw calls (circuit
+  breakers and keypad keys are one draw call per part; the shared controls
+  have no instancing). On a real GPU this is fine; under software rendering
+  it is about 4 fps.
 
 **Per aircraft**
 
-- *Citation M2:* no Gen2 autothrottle; climb fuel is about 25 % above the
-  Flight Planning Guide; the autopilot minimum-use heights are documented
-  but not enforced.
+- *Citation M2:* no Gen2 autothrottle; the 220 KIAS / M0.60 FMS climb
+  schedule, the ground safety-valve logic and the landing-elevation fallback
+  are estimates; the autopilot minimum-use heights are documented but not
+  enforced.
 - *Citation Longitude:* no autothrottle MIN/MAX SPD or 2 nm approach-speed
-  reduction; the synoptic page artwork is schematic.
-- *G650 / G800:* PERF INIT speed defaults are estimates; the G800 fifth
-  touch screen (jump seat), sidestick push-to-talk and force feel, and
-  triplex flight-control computer voting are not built.
+  reduction; the stabilizer trim is about 3-4 times too effective for its
+  CG (takeoff trim is set inside the green band rather than from the chart);
+  pilot gearing, roll coefficients and empty CG are estimates; the
+  synoptic page artwork is schematic.
+- *G650:* lift-off comes about at V2; "FCC Alternate Mode" and "Stall
+  Protection Unavail" show during the 4-minute IRS alignment (unverified);
+  runway-awareness (RAAS) callouts are not modelled; one brake accumulator
+  drives both gauge scales; backlighting does not follow MASTER CONTROL OFF.
+- *G800:* no microphone-select control (VHF 1 pilot, VHF 2 copilot); the
+  crew must select CRZ on the thrust rating page (no public source for an
+  automatic switch); the flap placard speeds are not drawn on the PFD; PERF
+  INIT speed defaults are the suite's, not the G800's; circuit breakers are
+  all mechanical.
 - *Global 6000:* V-speeds and the flaps 6 lift curve are estimates (no public
-  AFM tables); the pedestal EMS CDU duplicates the side-panel functions.
-- *737-800:* the autopilot keeps VNAV ALT instead of VNAV PTH when the MCP
-  altitude equals the cruise altitude (push VNAV at top of descent); the
-  idle descent path is steep; NO AUTOLAND shows 2 s after touchdown; V2 is a
-  few knots below 1.13 × the flaps-5 stall speed in the estimated tables.
+  AFM tables); no relight after an engine-flameout failure is cleared; the
+  EMER DEPRESS cabin limiter and mask altitudes are estimates; the two EMS
+  CDUs are not linked.
+- *737-800:* one FMC is modelled (the transfer switch only writes state);
+  weather radar, audio panels, speed/Mach trim and EEC ALTN are state or
+  annunciation only; the upper display's N1/EGT dials are drawn smaller than
+  on the aircraft; the FMA keeps ROLLOUT/FLARE after the aircraft stops with
+  the flight directors on; the VNAV descent has no 250 kt deceleration
+  (use SPD INTV).
 - *Cessna 172S (both):* not built yet.
 
 ## Data sources and licences
@@ -267,7 +287,7 @@ src/
   platform/    HTTP (dev proxy / Electron IPC), storage, environment
   App.ts, main.ts
 electron/      Electron main + preload (app:// protocol serves dist/)
-scripts/       nav data builder, smoke test
+scripts/       nav data builder, smoke test, jets QA (every jet in every start state)
 build/         app icon (generated by build/make-icon.mjs)
 docs/          ARCHITECTURE.md and per-module API references (docs/modules/*.md)
 tests/         unit tests and headless integration tests (tests/integration)

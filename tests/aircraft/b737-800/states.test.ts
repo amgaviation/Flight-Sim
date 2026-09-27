@@ -88,4 +88,31 @@ describe('state presets', () => {
       expect(v.get(FDM.crashed)).toBe(0);
     });
   }
+
+  it('night launch: presets light the panels from the launch time although ambient light still reads day', () => {
+    // The app sets env.time_utc_h / day_of_year before applyState; env.ambient_light (1 in the rig, as at app
+    // start) is only computed on the world's first frame. 06:00Z = 02:00 EDT at KTEB in July: night.
+    const night = makeB738({
+      state: 'ready_to_taxi',
+      beforeState: (ctx) => {
+        ctx.vars.set('env.time_utc_h', 6);
+        ctx.vars.set('env.day_of_year', 190);
+      },
+    });
+    expect(night.vars.get('env.ambient_light')).toBe(1);
+    expect(night.vars.get(B738.ovhdPanelLt)).toBeCloseTo(0.7, 5);
+    expect(night.vars.get(B738.cbPanelLt)).toBeCloseTo(0.4, 5);
+    expect(night.vars.get(B738.backgroundLt)).toBeGreaterThan(0);
+    expect(night.vars.get(B738.domeLt)).toBe(0); // dome off for taxi at night
+    // 17:00Z = 13:00 EDT: day values.
+    const day = makeB738({
+      state: 'ready_to_taxi',
+      beforeState: (ctx) => {
+        ctx.vars.set('env.time_utc_h', 17);
+        ctx.vars.set('env.day_of_year', 190);
+      },
+    });
+    expect(day.vars.get(B738.ovhdPanelLt)).toBeCloseTo(0.3, 5);
+    expect(day.vars.get(B738.cbPanelLt)).toBe(0);
+  });
 });

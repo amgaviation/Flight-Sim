@@ -1301,7 +1301,9 @@ export class Afcs implements Subsystem {
       if (this.vert === 'GS' && (this.vertArmed & ARM.FLARE) === 0 && !this.flareActive) this.vertArmed |= ARM.FLARE;
     }
     if (this.channels === 2) {
-      const navOk = v.get(this.nv(1).received) !== 0 && v.get(this.nv(2).received) !== 0 && v.get(this.nv(1).gsValid) !== 0 && v.get(this.nv(2).gsValid) !== 0;
+      const gsNeeded = !(al.holdStatusInFlare && (this.flareActive || this.lat === 'ROLLOUT'));
+      const navOk =
+        v.get(this.nv(1).received) !== 0 && v.get(this.nv(2).received) !== 0 && (!gsNeeded || (v.get(this.nv(1).gsValid) !== 0 && v.get(this.nv(2).gsValid) !== 0));
       const raOk = this.raOk && v.get(SENSOR_VARS.raValid(2), 1) !== 0;
       this.noAutolandT = navOk && raOk ? 0 : this.noAutolandT + dt;
       this.autoland = this.noAutolandT > 2 ? 'NO AUTOLAND' : raOk && navOk ? 'LAND 3' : 'LAND 2';

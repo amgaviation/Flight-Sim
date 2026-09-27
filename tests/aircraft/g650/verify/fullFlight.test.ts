@@ -120,6 +120,7 @@ describe('G650 check ride KSAV -> KATL (full normal procedure)', () => {
       v.set(V.ptu, 1);
       v.set(V.crewOxy, 1);
       v.set(V.paxOxy, 1);
+      for (const n of [1, 2, 3] as const) v.set(V.irsMode(n), 2); // IRS MODE SELECT: IRS 1-3 ON (align on power-up)
       r.run(3);
       expect(v.get('elec.l_ess_dc_v')).toBeGreaterThan(24.5);
       expect(v.get('elec.emer_dc_powered')).toBe(1);
@@ -455,6 +456,7 @@ describe('G650 check ride KSAV -> KATL (full normal procedure)', () => {
       r.run(240);
       log(r, 'cruise');
       expect(v.getString('ap.lat_active')).toBe('LNAV');
+      expect(v.getString('fadec.rating')).toBe('CRZ'); // FMS cruise phase: automatic CRZ thrust rating
       expect(Math.abs(v.get('adc1.alt_ft') - 30000)).toBeLessThan(60); // RVSM
       const crzMach = v.get(FDM.mach);
       expect(crzMach).toBeGreaterThan(0.7);
@@ -693,6 +695,7 @@ describe('G650 check ride KSAV -> KATL (full normal procedure)', () => {
       expect(v.get('eng1.running') + v.get('eng2.running')).toBe(0);
       expect(casActive(r, 'warning')).toEqual([]);
       expect(casActive(r, 'caution')).toEqual([]); // normal shutdown on the batteries: no amber messages
+      for (const n of [1, 2, 3] as const) v.set(V.irsMode(n), 0); // IRS OFF before the batteries (else ON BAT)
       for (const k of [V.ltBeacon, V.ltNav, V.seatBelt, V.emerPwr, V.ltEmer, V.ebhaBatt, V.upsBatt, V.battL, V.battR]) v.set(k, 0);
       r.run(5);
       log(r, 'cold & dark');

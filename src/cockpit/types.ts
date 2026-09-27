@@ -64,6 +64,12 @@ export interface CockpitDisplay {
   /** 0..1 brightness from the dimming system; displays black when unpowered. */
   setBrightness?(b: number): void;
   dispose?(): void;
+  /**
+   * Power var the display itself honours (0 = off; null = always powered). When present and the
+   * registration gives no `DisplayOptions.powerVar`, the DisplayManager follows it instead of
+   * `display.<id>.power`, so its power state, boot splash and render scheduling match the screen.
+   */
+  readonly powerVar?: string | null;
 }
 
 export interface CockpitLightingZone {

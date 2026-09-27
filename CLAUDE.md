@@ -6,8 +6,8 @@ A high-fidelity desktop flight simulator. Browser app (Vite + TypeScript + Three
 
 - `npm run dev`: dev server at http://localhost:5173
 - `npm run typecheck`: `tsc --noEmit` (TypeScript 7, strict)
-- `npm test`: vitest unit tests (`tests/**/*.test.ts`, `src/**/*.test.ts`), without the full-flight check rides
-- `npm run test:long`: the six full-flight check rides (`tests/aircraft/*/verify/fullFlight.test.ts`; excluded unless `AMG_LONG_TESTS=1`, so run a single one with `AMG_LONG_TESTS=1 npx vitest run <path>`)
+- `npm test`: vitest unit tests (`tests/**/*.test.ts`, `src/**/*.test.ts`), without the long flight tests
+- `npm run test:long`: the long flight tests: the six full-flight check rides (`tests/aircraft/*/verify/fullFlight.test.ts`) and the six published-performance flights (`tests/aircraft/*/performance.test.ts`). They are excluded unless `AMG_LONG_TESTS=1`, so run a single one with `AMG_LONG_TESTS=1 npx vitest run <path>`
 - `npm run jets-qa`: after a build, loads every jet in every initial state in headless Chromium and writes screenshots to `tests/output/jets/`
 - `npm run build`: production bundle into `dist/`
 - `npm run smoke`: headless Chromium boots the built app, flies a scripted scenario, and writes screenshots to `tests/output/`

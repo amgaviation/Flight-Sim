@@ -254,6 +254,11 @@ export interface AfcsConfig {
     rollout?: boolean;
     flareTauS?: number;
     touchdownVsFpm?: number;
+    /**
+     * Once FLARE is active the glideslope is no longer required for LAND 3 (the flare and rollout do not
+     * use it; it goes invalid on the ground), so the status holds through the rollout. Default false.
+     */
+    holdStatusInFlare?: boolean;
   };
   /** FD comes on with the AP. Default true. */
   fdAutoOn?: boolean;

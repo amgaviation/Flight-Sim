@@ -89,7 +89,10 @@ export function createEngines(ctx: SimContext): G650Engines {
       MCT: ratingTable(N1C_MCT, L.n1McPct),
     },
     initial: 'TO',
-    auto: { takeoff: 'TO', climb: 'CLB', goAround: 'GA', goAroundWhen: 'surf.flaps_deg > 5 && gear.air_ground == 0 && (gear.down_locked || surf.flaps_deg > 22)' },
+    // The FMS selects the rating automatically: TO on the ground, CLB after lift-off, CRZ once level in the FMS
+    // cruise phase, CLB again for a step climb / descent, GA in the approach configuration. EST (Primus Epic FMS
+    // thrust-mode logic; the crew can still select a rating through the fadec.rating event).
+    auto: { takeoff: 'TO', climb: 'CLB', cruise: 'CRZ', cruiseWhen: V.fmsCruise, climbWhen: `!${V.fmsCruise}`, goAround: 'GA', goAroundWhen: 'surf.flaps_deg > 5 && gear.air_ground == 0 && (gear.down_locked || surf.flaps_deg > 22)' },
   });
   const fadec = new ThrustLeverFadec(
     ctx,

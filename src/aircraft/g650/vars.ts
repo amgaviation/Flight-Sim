@@ -172,8 +172,17 @@ export const G650_VARS = {
   autobrake: `${P}autobrake`, // AUTOBRAKE rotary: -1 RTO, 0 OFF, 1 LOW, 2 MED, 3 HIGH
   nwsPower: `${P}nws_sw`, // NWS POWER (guarded, red): 1 ON, 0 OFF
   terrInhibit: `${P}taws.terr_inhibit`, // TERRAIN INHIBIT: 1 ON
-  gpwsInhibit: `${P}taws.gpws_inhibit`, // GPWS INHIBIT: 1 ON
+  gpwsInhibit: `${P}taws.gpws_inhibit`, // GPWS INHIBIT: 1 ON (no G650 pedestal switch in the photographs: state / TAWS input only)
   tiller: 'input.tiller',
+  // ---- added by the check-ride review (G650ER pedestal / lower centre panel photographs, Flickr jeffatchison
+  // 52948656184 / 52948654839; SmartCockpit G650 avionics quiz: "IRS Mode Select panel", amber "ON BAT")
+  irsMode: (n: 1 | 2 | 3) => `${P}irs${n}_mode`, // IRS MODE SELECT switchlight IRS n: 2 ON (NAV, aligns on power-up), 0 OFF
+  raasInhibit: `${P}taws.raas_inhibit`, // RAAS INHIBIT (pedestal): 1 = runway awareness callouts inhibited
+  cockpitCall: (k: CockpitCallKey) => `${P}call.${k}_btn`, // COCKPIT CALL panel buttons (pedestal): momentary / toggle 1
+  // Derived by systems/audio.ts (cabin interphone): latched call from the cockpit, privacy modes.
+  cabinCall: `${P}call.cabin_chime`, // 1 = cockpit call to the cabin chimed, until RESET
+  privacy: `${P}call.privacy_on`, // cockpit PRIVACY (cabin cannot listen in on the flight-deck interphone)
+  aftPrivacy: `${P}call.aft_privacy_on`, // AFT (cabin) PRIVACY
 
   // ======================================================== DOORS / RAMP (exterior + cabin agents)
   doorMain: 'ac.door.main', // 0 closed .. 1 open
@@ -217,6 +226,8 @@ export const G650_VARS = {
   hfrsOn: (i: number) => `${P}fuel.hfrs${i}_on`,
   noTakeoff: `${P}no_takeoff`,
   aircraftConfig: `${P}aircraft_config`, // speed brake with flaps 39 / gear down in flight
+  raasActive: `${P}taws.raas_active`, // RAAS available (TAWS powered, not inhibited)
+  fmsCruise: `${P}fms_cruise`, // airborne in the FMS cruise phase (VNAV CRZ): automatic CRZ thrust rating (engines.ts)
 
   // ======================================================== YOKE / TILLER (added with the cockpit build)
   // The app's input module rewrites input.pitch_trim_rate / input.ap_disc / input.tiller every frame, so the
@@ -247,6 +258,8 @@ export const G650_VARS = {
 /** ACP receiver channels (EST Primus Epic ACP layout: VHF 1-3, NAV 1-2, ADF, MKR). */
 export const ACP_CHANNELS = ['vhf1', 'vhf2', 'vhf3', 'nav1', 'nav2', 'adf', 'mkr'] as const;
 export type AcpChannel = (typeof ACP_CHANNELS)[number];
+/** COCKPIT CALL panel buttons (pedestal, G650ER photograph: CREW, RESET, PRIVACY, AFT PRIVACY). */
+export type CockpitCallKey = 'crew' | 'reset' | 'privacy' | 'aft_privacy';
 
 /** Every cockpit control var (inputs), for the "every control is consumed" audit test. */
 export const G650_CONTROL_VARS: string[] = [
@@ -275,7 +288,9 @@ export const G650_CONTROL_VARS: string[] = [
   G650_VARS.flapLever, G650_VARS.speedbrake, G650_VARS.gndSpoiler, G650_VARS.flapOride, G650_VARS.fltCtrlReset,
   G650_VARS.backupPitch, G650_VARS.rollMotor, G650_VARS.autoCenter, G650_VARS.ailTrimSw, G650_VARS.rudTrimSw,
   G650_VARS.gearHandle, G650_VARS.gearEmer, G650_VARS.gearLockRelease, G650_VARS.parkBrake, G650_VARS.autobrake, G650_VARS.nwsPower,
-  G650_VARS.terrInhibit, G650_VARS.gpwsInhibit,
+  G650_VARS.terrInhibit, G650_VARS.gpwsInhibit, G650_VARS.raasInhibit,
+  G650_VARS.irsMode(1), G650_VARS.irsMode(2), G650_VARS.irsMode(3),
+  G650_VARS.cockpitCall('crew'), G650_VARS.cockpitCall('reset'), G650_VARS.cockpitCall('privacy'), G650_VARS.cockpitCall('aft_privacy'),
   G650_VARS.doorMain, G650_VARS.doorBaggage, G650_VARS.doorExtBaggage,
   G650_VARS.yokeTrimL, G650_VARS.yokeTrimR, G650_VARS.yokeDiscL, G650_VARS.yokeDiscR, G650_VARS.tiller3d,
 ];

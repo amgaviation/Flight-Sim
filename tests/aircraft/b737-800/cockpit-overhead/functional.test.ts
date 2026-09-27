@@ -339,4 +339,22 @@ describe('737-800 overhead flows', () => {
     expect(v.get('ac.b738.acp3.keyed_tx')).toBe(2);
     build.dispose?.();
   });
+
+  it('blue valve lights: dim in the commanded position, bright in transit (FCOM 12.10)', () => {
+    const { v, ctl } = setup('ready_to_taxi');
+    const a = ctl<AnnunciatorLight>('b738.ovhd.fuel.xfeed_open');
+    const lens = a.face.group.children.find((c) => c.name.startsWith('legend:')) as THREE.Mesh;
+    const level = (x: number) => {
+      v.set(B738.lt.xfeedValveOpen, x); // lens only (no system step): the logic would rewrite the var
+      for (let i = 0; i < 120; i++) a.update(1 / 60);
+      return (lens.material as THREE.MeshStandardMaterial).emissiveIntensity;
+    };
+    const bright = level(2);
+    const dim = level(1);
+    const off = level(0);
+    expect(bright).toBeGreaterThan(0.2);
+    expect(dim / bright).toBeGreaterThan(0.3);
+    expect(dim / bright).toBeLessThan(0.5);
+    expect(off).toBeLessThan(0.01);
+  });
 });

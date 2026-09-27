@@ -570,15 +570,8 @@ describe('737-800 line check KLAX -> KSFO (full normal procedure)', () => {
         return v.get(FDM.altMsl) > 31900 && /VNAV (PTH|ALT)/.test(v.getString('ac.fma.pitch')) && Math.abs(v.get(FDM.vs)) < 200;
       });
       log(r, `top of climb (max ${maxIasBelow10k.toFixed(0)} KIAS below 10,000 ft, max bank ${maxBank.toFixed(0)} deg)`);
-      // FCOM 4.20: level at the FMC cruise altitude = VNAV PTH. KNOWN DEFECT (avionics suite, Afds.midProcess):
-      // an MCP altitude equal to the cruise altitude is captured as VNAV ALT; accepted here, reported.
-      expect(v.getString('ac.fma.pitch')).toMatch(/VNAV (PTH|ALT)/);
+      // FCOM 4.20: levelling at the FMC cruise altitude (MCP altitude = CRZ ALT) is VNAV PTH, not VNAV ALT.
       expect(v.getString('ac.fma.at')).toBe('FMC SPD');
-      if (v.getString('ac.fma.pitch') === 'VNAV ALT') {
-        // Workaround for the defect above: VNAV pushed again (the AFDS's documented VNAV ALT resume) -> VNAV PTH cruise.
-        mcp(r, 'vnav');
-        r.run(5);
-      }
       expect(v.getString('ac.fma.pitch')).toBe('VNAV PTH');
       expect(v.getString('ac.fma.roll')).toBe('LNAV');
       expect(maxIasBelow10k).toBeLessThan(262);
@@ -735,6 +728,7 @@ describe('737-800 line check KLAX -> KSFO (full normal procedure)', () => {
       let maxGs = 0;
       let revDeployed = false;
       let autobrakeOn = false;
+      let noAutolandInRollout = false;
       r.run(300, () => {
         const ra = v.get('ra1.alt_ft');
         if (!stab1000 && ra < 1000) {
@@ -757,6 +751,8 @@ describe('737-800 line check KLAX -> KSFO (full normal procedure)', () => {
         if (v.getString('ac.fma.pitch') === 'FLARE') flare = true;
         if (v.getString('ac.fma.at') === 'RETARD') retard = true;
         if (v.getString('ac.fma.roll') === 'ROLLOUT') rollout = true;
+        // FCOM 4.20: LAND 3 stays through the flare and the rollout (the G/S is not used after FLARE).
+        if (flare && v.getString('ac.fma.status') === 'NO AUTOLAND') noAutolandInRollout = true;
         if (Number.isNaN(tdVs) && v.get('gear.air_ground') === 1) {
           tdVs = v.get(FDM.vs);
           tdKt = v.get(FDM.ias);
@@ -779,6 +775,8 @@ describe('737-800 line check KLAX -> KSFO (full normal procedure)', () => {
       expect(flare).toBe(true);
       expect(retard).toBe(true);
       expect(rollout).toBe(true);
+      expect(noAutolandInRollout).toBe(false);
+      expect(v.getString('ac.fma.status')).toBe('LAND 3');
       expect(tdVs).toBeLessThan(0);
       expect(tdVs).toBeGreaterThan(-600);
       expect(tdKt).toBeGreaterThan(vref30 - 10);

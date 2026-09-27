@@ -254,6 +254,13 @@ export class G650Logic implements Subsystem {
       v.set(N.hfrs[i], this.hfrs[i] && !inhibit ? 1 : 0);
     }
 
+    // ---------------- FMS cruise phase for the automatic thrust rating (engines.ts: TO -> CLB -> CRZ).
+    v.set(V.fmsCruise, !ground && v.getString('fms.vnav_phase') === 'CRZ' ? 1 : 0);
+
+    // ---------------- RAAS INHIBIT (pedestal). SCOPE: the EGPWS runway awareness (RAAS) callouts are not modelled;
+    // the switch sets the RAAS availability state (switchlight legend) only.
+    v.set(V.raasActive, v.get('elec.taws_powered') !== 0 && v.get(V.raasInhibit) === 0 ? 1 : 0);
+
     // ---------------- takeoff configuration (LIM: takeoff prohibited outside Normal law; flaps 10/20)
     const flaps = v.get('surf.flaps_deg');
     const flapsTo = flaps > 8 && flaps < 22;
