@@ -58,6 +58,8 @@ export interface SteamRigOptions {
   world?: WorldQuery;
   utcH?: number;
   wind?: { dir: number; kt: number };
+  /** Start position (default the field reference point on its course). */
+  start?: { lat: number; lon: number; headingTrue: number };
 }
 
 export interface SteamRig {
@@ -108,8 +110,9 @@ export function makeSteamRig(o: SteamRigOptions): SteamRig {
   };
   const sys = createC172SteamSystems(ctx);
   const a = o.air;
-  if (a) fdm.reposition({ lat: field.lat, lon: field.lon, altFtMsl: a.altFtMsl, iasKt: a.iasKt, headingTrue: a.headingTrue ?? field.courseTrue });
-  else fdm.reposition({ lat: field.lat, lon: field.lon, onGround: true, headingTrue: field.courseTrue });
+  const st = o.start ?? { lat: field.lat, lon: field.lon, headingTrue: field.courseTrue };
+  if (a) fdm.reposition({ lat: st.lat, lon: st.lon, altFtMsl: a.altFtMsl, iasKt: a.iasKt, headingTrue: a.headingTrue ?? st.headingTrue });
+  else fdm.reposition({ lat: st.lat, lon: st.lon, onGround: true, headingTrue: st.headingTrue });
   applyC172SteamState(ctx, sys, o.state);
   const router = new CommandRouter(vars, events);
   router.setMap(C172_STEAM_INPUT_MAP);

@@ -7,6 +7,8 @@
  *   npx vitest run tests/aircraft/g650/fidelity/procedures-probe.test.ts
  */
 import { writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { G650_CHECKLISTS } from '../../../../src/aircraft/g650/checklists';
 import { G650_VARS as V } from '../../../../src/aircraft/g650/vars';
@@ -330,7 +332,7 @@ describe('G650 procedures probe', () => {
       r.run(2);
       log(`  GND SPLR OFF in cruise: CAS ${cas(r)}`);
     }
-    writeFileSync('/tmp/claude-0/g650-procedures-probe.txt', OUT.join('\n'));
+    writeFileSync(join(tmpdir(), 'g650-procedures-probe.txt'), OUT.join('\n'));
     expect(OUT.length).toBeGreaterThan(0);
   });
   it('targeted probes: FCS batteries, APU/bleed, start, alignment CAS, IRS ON BAT, takeoff config', () => {
@@ -443,7 +445,7 @@ describe('G650 procedures probe', () => {
       r.run(3);
       L.push(`  + EMER PWR OFF: irs1 powered ${v.get('elec.irs1_powered')} emer_dc ${v.get('elec.emer_dc_powered')} l_ess ${v.get('elec.l_ess_dc_powered')}`);
     }
-    writeFileSync('/tmp/claude-0/g650-procedures-probe2.txt', L.join('\n'));
+    writeFileSync(join(tmpdir(), 'g650-procedures-probe2.txt'), L.join('\n'));
     expect(L.length).toBeGreaterThan(0);
   });
   it('targeted probes 2: FCS battery back-feed after shutdown, PTU check on R start', () => {
@@ -502,7 +504,7 @@ describe('G650 procedures probe', () => {
       r2.run(5);
       L.push(`=== AUX PUMP ARM + pedals, engines off: aux on ${w.get('hyd.aux_on')} L ${w.get('hyd.left_psi').toFixed(0)} psi accum ${w.get('brakes.accum_psi').toFixed(0)} | CAS ${cas(r2)}`);
     }
-    writeFileSync('/tmp/claude-0/g650-procedures-probe3.txt', L.join('\n'));
+    writeFileSync(join(tmpdir(), 'g650-procedures-probe3.txt'), L.join('\n'));
     expect(L.length).toBeGreaterThan(0);
   });
   it('targeted probes 3: fire tests per switch, RAT / dual gen, flap override, relight', () => {
@@ -539,7 +541,7 @@ describe('G650 procedures probe', () => {
     x.set(V.raasInhibit, 1);
     f.run(2);
     L.push(`=== TERRAIN + RAAS INHIBIT ON: CAS ${cas(f)}`);
-    writeFileSync('/tmp/claude-0/g650-procedures-probe4.txt', L.join('\n'));
+    writeFileSync(join(tmpdir(), 'g650-procedures-probe4.txt'), L.join('\n'));
     expect(L.length).toBeGreaterThan(0);
   });
 });
