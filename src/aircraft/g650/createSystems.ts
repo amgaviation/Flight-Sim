@@ -234,6 +234,17 @@ export function createSystems(ctx: SimContext, opts: G650SystemsOptions = {}): G
         },
       },
     );
+    // PERF INIT speed schedule defaults for the G650 (the suite's generic defaults are 250 / M0.80 climb, which
+    // CONFIRM INIT then imposed on the FMS: found by tests/aircraft/g650/verify, VNAV climbed at 250 KIAS to FL300).
+    // EST schedule (dossier §6): climb 300 KIAS / M0.85, cruise M0.85 (GAC long-range cruise), descent M0.85 / 300.
+    const perf = suite.fmsShared.perf;
+    perf.tail = 'N650GD';
+    perf.climbKt = 300;
+    perf.climbMach = 0.85;
+    perf.cruiseKt = 300;
+    perf.cruiseMach = 0.85;
+    perf.descentKt = 300;
+    perf.descentMach = 0.85;
   }
 
   // ---- engines / FADEC / autothrottle
@@ -247,6 +258,13 @@ export function createSystems(ctx: SimContext, opts: G650SystemsOptions = {}): G
     servoPower: 'fbw.mode_code == 0',
     sensors: { valid: '(ahrs1.valid && adc1.valid)' },
     yawDamper: { withAp: false, requiredForAp: false }, // yaw damping is part of the FBW normal law
+    // Primus Epic: NAV pressed on the ground arms LNAV; it captures after lift-off while the FD keeps TO on the
+    // roll (found by tests/aircraft/g650/verify: LNAV went active on the runway before takeoff).
+    nav: { ...AFCS_PRIMUS_EPIC.nav, groundCapture: false },
+    // Primus Epic VNAV climbs in VFLCH at the FMS climb speed to the lower of the selected / FMS altitude and captures
+    // VASEL / VALT (code450 G450/G650 FMA list: VFLCH, VPATH, VASEL, VALT); ALTV never passes the selected altitude.
+    vnavClimb: true,
+    altvBoundBySel: true,
     disconnect: {
       ...AFCS_PRIMUS_EPIC.disconnect,
       auto: 'fbw.mode_code != 0 || fbw.aoa_limit',

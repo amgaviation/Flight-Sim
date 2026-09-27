@@ -93,8 +93,11 @@ export class G650Logic implements Subsystem {
 
     // ---------------- thrust levers
     v.set(V.toThrust, tla1 >= TLA.toRange || tla2 >= TLA.toRange ? 1 : 0);
-    v.set(V.idleBoth, Math.abs(tla1) <= TLA.idle && Math.abs(tla2) <= TLA.idle ? 1 : 0);
-    v.set(V.idleAny, Math.abs(tla1) <= TLA.idle || Math.abs(tla2) <= TLA.idle ? 1 : 0);
+    // "At idle" includes the integral reverse range aft of the idle stop: selecting reverse after touchdown must
+    // not stow the ground spoilers or disarm the autobrake (found by tests/aircraft/g650/verify: both dropped out
+    // the moment the reversers were raised, and the rollout ran on reverse thrust alone).
+    v.set(V.idleBoth, tla1 <= TLA.idle && tla2 <= TLA.idle ? 1 : 0);
+    v.set(V.idleAny, tla1 <= TLA.idle || tla2 <= TLA.idle ? 1 : 0);
     // LIM: "Idle reverse position by 60 KCAS": the FADEC fades reverse thrust to idle from 100 to 60 KCAS (EST onset).
     const revFrac = ias >= 100 ? 1 : ias <= 60 ? 0 : (ias - 60) / 40;
     v.set(N.tlaEff[1], tla1 >= 0 ? tla1 : Math.min(-0.03, tla1 * revFrac));

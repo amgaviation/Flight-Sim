@@ -98,8 +98,11 @@ export const G650_CAS: CasMessageDef[] = [
   { id: 'ptu_fail', text: 'PTU Hydraulic Fail', level: 'caution', when: `${V.ptuCmd} && hyd.left_psi < ${G650_LIMITS.hydLowPsi}`, delayS: 10, inhibit: TL },
   // ---- fuel
   ...lr('fuel_low', 'Fuel Level Low', 'caution', (x) => `fuel.tank${x.i - 1}_kg < ${FUEL_LOW_KG.toFixed(1)}`, { delayS: 5, inhibit: TL }),
-  ...lr('main_pump_fail', 'Main Fuel Pump Fail', 'caution', (x) => `${x.l === 'l' ? V.boostL : V.boostR} >= 1 && !fuel.boost_${x.l}_on && fuel.${x.tank}_usable_kg > 1`, { delayS: 3, inhibit: TL }),
-  ...lr('alt_pump_fail', 'Alt Fuel Pump Fail', 'caution', (x) => `${x.l === 'l' ? V.altL : V.altR} >= 1 && !fuel.alt_${x.l}_on && fuel.${x.tank}_usable_kg > 1`, { delayS: 3, inhibit: TL }),
+  // Pump fail needs the pump's bus powered: a dead bus is annunciated by its own power-fail message, and after
+  // engine shutdown on the batteries the MAIN DC buses (ALT pumps) are legitimately unpowered (found by
+  // tests/aircraft/g650/verify: "L-R Alt Fuel Pump Fail" after a normal shutdown). A pulled breaker still posts it.
+  ...lr('main_pump_fail', 'Main Fuel Pump Fail', 'caution', (x) => `${x.l === 'l' ? V.boostL : V.boostR} >= 1 && !fuel.boost_${x.l}_on && fuel.${x.tank}_usable_kg > 1 && elec.${x.l}_ess_dc_powered`, { delayS: 3, inhibit: TL }),
+  ...lr('alt_pump_fail', 'Alt Fuel Pump Fail', 'caution', (x) => `${x.l === 'l' ? V.altL : V.altR} >= 1 && !fuel.alt_${x.l}_on && fuel.${x.tank}_usable_kg > 1 && elec.${x.l}_main_dc_powered`, { delayS: 3, inhibit: TL }),
   ...lr('fuel_press', 'Engine Fuel Pressure', 'caution', (x) => `eng${x.i}.running && fuel.eng${x.i}_lowpress && !fuel.eng${x.i}_suction`, { delayS: 3, inhibit: TL }),
   { id: 'fuel_tank_temp_c', text: 'Fuel Tank Temperature', level: 'caution', when: '(fuel.left_temp_c < -34.5 && fuel.left_temp_c >= -37) || (fuel.right_temp_c < -34.5 && fuel.right_temp_c >= -37)', delayS: 10, inhibit: TL },
   { id: 'xflow_open_c', text: 'Fuel Crossflow Valve Open', level: 'caution', when: 'fuel.xflow_open', delayS: 600, inhibit: TL }, // LUC/SCQ: blue -> amber after 5-10 min

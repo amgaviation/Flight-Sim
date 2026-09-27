@@ -30,7 +30,8 @@ const CAB_RATE_K = 'ac.b738.ck.cab_rate_k';
 export function buildOverhead(c: B738CockpitContext): void {
   const { b, ctx } = c;
   const vars = ctx.vars;
-  b.zone({ id: 'ovhd', intensityVar: 'ac.light.panel_ovhd', gain: 1.1 });
+  // Gain EST: incandescent 5 V edge-lit overhead plates read brighter than the thin engraving suggests.
+  b.zone({ id: 'ovhd', intensityVar: 'ac.light.panel_ovhd', gain: 2.2 });
 
   const fwd = b.panel({ ...MOUNTS.overheadFwd, name: 'b738.ovhd', width: FWD.w, height: FWD.h, origin: 'top-left', material: 'panelDark', screws: false });
   buildForwardOverhead(c, fwd);

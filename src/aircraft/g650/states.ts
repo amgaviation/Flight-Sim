@@ -167,6 +167,15 @@ export function setG650Switches(ctx: Pick<SimContext, 'vars'>, sys: G650Systems,
   v.set(V.gearEmer, 0);
   v.set(V.gearLockRelease, 0);
   sys.gear.setDown(gearDown);
+  // Snap the debounced squat state (and the A/T touchdown bookkeeping) to the placement: the squat debounce
+  // otherwise starts from "air" for ~0.1 s after a ground placement, which the A/T took for a touchdown and then
+  // auto-disengaged on every later ground engagement (found by tests/aircraft/g650/verify: A/T would not engage
+  // for takeoff after a cold & dark start).
+  const placedOnGround = !inAir;
+  for (let i = 0; i < 3; i++) v.set(`gear.wow${i}`, placedOnGround ? 1 : 0);
+  sys.gear.reset();
+  v.set('gear.air_ground', placedOnGround ? 1 : 0);
+  sys.at.reset();
   v.set(V.parkBrake, moving ? 0 : 1);
   v.set(V.autobrake, s === 'takeoff' ? -1 : s === 'approach' ? 1 : 0);
   v.set(V.nwsPower, b(powered));

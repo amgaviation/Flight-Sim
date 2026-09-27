@@ -226,6 +226,13 @@ export function applyG6kState(ctx: SimContext, sys: G6kSystems, s: InitialState)
   const coldDark = s === 'cold_dark';
   const inAir = s === 'cruise' || s === 'approach';
   const fm = ctx.fdm as Partial<FlightModel> & SimContext['fdm'];
+  // Snap the debounced squat state and the A/T touchdown bookkeeping to the placement. Without it the A/T saw the
+  // ground placement as a touchdown and auto-disengaged ("after landing") every later ground engagement, so the FCP
+  // A/T could not be engaged for take-off (found by tests/aircraft/global6000/verify/fullFlight.test.ts).
+  for (let i = 0; i < 3; i++) v.set(`gear.wow${i}`, inAir ? 0 : 1);
+  sys.gear.reset();
+  v.set('gear.air_ground', inAir ? 0 : 1);
+  sys.at.reset();
 
   sys.fuel.snapValves();
   sys.lights.snap();

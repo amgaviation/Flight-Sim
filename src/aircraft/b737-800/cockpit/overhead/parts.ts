@@ -32,7 +32,7 @@ export const OZ = 'ovhd';
 export const MOD_W = 0.146;
 
 /** Legend size factor over the nominal heights used in the layout tables (EST: NG engraving ~2.5-3 mm caps). */
-export const TXT = 1.22;
+export const TXT = 1.35;
 
 /**
  * A Boeing overhead module plate on `parent` (top-left convention of the parent), centred at (x, y),
@@ -59,7 +59,7 @@ export class Ovhd {
     readonly p: Panel,
   ) {}
 
-  label(text: string, x: number, y: number, h = 0.0021, weight = 700): void {
+  label(text: string, x: number, y: number, h = 0.0021, weight = 800): void {
     this.p.label(text, x, y, { height: h * TXT, zone: OZ, weight });
   }
 

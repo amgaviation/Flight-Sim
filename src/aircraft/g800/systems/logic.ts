@@ -10,7 +10,7 @@
  */
 import type { SimVars } from '../../../core/SimVars';
 import type { Subsystem } from '../../types';
-import { ADC, ENG, ICE } from '../../../core/vars';
+import { ADC, ENG, FMS, ICE } from '../../../core/vars';
 import { EPIC_VARS } from '../../../avionics/honeywell-epic/vars';
 import { eprFromN1Br700 } from '../../../avionics/honeywell-epic/config';
 import { G800_LIMITS } from '../data';
@@ -219,6 +219,22 @@ export class G800Logic implements Subsystem {
         const m = this.hudMode[s];
         v.set(EPIC_VARS.svs(s + 1), m === 1 || m === 3 ? 1 : 0);
         v.set(EPIC_VARS.evs(s + 1), m === 2 || m === 3 ? 1 : 0);
+      }
+    }
+
+    // ---------------- GP-700 speed source FMS (MAN key off): the speed target follows the FMS speed schedule in every
+    // AFCS / autothrottle mode, not only in VNAV (G450/G650 AFCS: "FMS speed ... magenta speed target on the PFD";
+    // code450). The suite's MAN key only changed the GP window and the PFD colour, so FLCH / A/T SPD kept flying the
+    // last manual speed (found by tests/aircraft/g800/verify). EST: Mach when the FMS target is a Mach number.
+    if (v.get(EPIC_VARS.speedMan, 1) === 0) {
+      const kt = v.get(FMS.vnavTargetSpeedKt);
+      const mach = v.get(FMS.vnavTargetMach);
+      if (mach > 0.3) {
+        if (Math.abs(v.get('ap.sel_mach') - mach) > 0.0005) v.set('ap.sel_mach', Math.round(mach * 1000) / 1000);
+        v.set('ap.spd_is_mach', 1);
+      } else if (kt > 60) {
+        if (Math.abs(v.get('ap.sel_spd_kt') - kt) > 0.5) v.set('ap.sel_spd_kt', Math.round(kt));
+        v.set('ap.spd_is_mach', 0);
       }
     }
 

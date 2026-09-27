@@ -186,12 +186,7 @@ describe('737-800 overhead flows', () => {
     expect(lit('b738.ovhd.elec.apu_gen_off_bus')).toBe('APU GEN OFF BUS');
     expect(lit('b738.ovhd.apu.low_oil')).toBe('');
     // ---- APU GEN 1 and 2 ON: the APU replaces ground power on both buses.
-    console.log('DBG', v.get('elec.apu_gen_avail'), v.get('apu.gen_drive'), v.get(B738.xfrSrc(1)), v.get(B738.apuGenSw(1)), v.get(B738.fireHandleApu));
     wheel(ctl('b738.ovhd.elec.apu_gen1'), 1);
-    for (let k = 0; k < 4; k++) {
-      step(1 / 60);
-      console.log('DBG2', v.get(B738.xfrSrc(1)), v.get('apu.gen_drive'), v.get('apu.state'), v.get('apu.running'), v.get('apu.n_pct'), v.get(B738.apuSw), v.get('elec.apu_ecu_powered'), v.get('elec.batt_bus_powered'), v.get('fuel.apu_on'), v.get('apu.fault'), v.get('apu.avail'));
-    }
     step(0.5);
     wheel(ctl('b738.ovhd.elec.apu_gen2'), 1);
     step(1);

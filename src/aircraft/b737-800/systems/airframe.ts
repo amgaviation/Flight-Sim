@@ -133,7 +133,8 @@ export function createPressurization(ctx: Pick<SimContext, 'vars'>): Pressurizat
  */
 export function createApu(ctx: Pick<SimContext, 'vars'>): Apu {
   return new Apu(ctx.vars, {
-    master: `${B738.apuSw} >= 1 && elec.apu_ecu_powered`,
+    // ECU on the battery bus, with its power-interrupt ride-through (logic.ts `apu_ecu_hold`).
+    master: `${B738.apuSw} >= 1 && ac.b738.apu_ecu_hold`,
     // START is latched by the APU ECU and the start begins once the inlet door is fully open (FCOM 7.10).
     start: `ac.b738.apu_start_req && apu.door_open`,
     // Start converter unit on AC XFR 1 (full-strength start) or the battery bus.
@@ -258,7 +259,7 @@ export function createOxygen(ctx: Pick<SimContext, 'vars'>): OxygenSystem {
       id: s === 1 ? 'capt' : 'fo',
       bottle: 'crew',
       inUse: `press.cabin_alt_warn || ${B738.oxyMask(s)}`,
-      mode: `${B738.oxyEmer(s)} ? 2 : ${B738.oxyDiluter(s)} ? 0 : 1`,
+      mode: `ac.b738.oxy_mode${s}`, // logic.ts: EMERGENCY 2 / 100% 1 / N 0
       test: B738.oxyTest(s),
     })),
     pax: { kind: 'chemical', deploy: 'press.pax_masks', durationS: 720 },

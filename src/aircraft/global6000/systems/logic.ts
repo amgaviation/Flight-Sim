@@ -432,10 +432,13 @@ export class G6kPostLogic implements Subsystem {
       v.set(N.engFail[i], this.failed[i] ? 1 : 0);
     }
     // GXFC: "Initial yaw damper engagement is controlled by the flight guidance computer at IAC power up" (within 3 s).
+    // EST: the engagement waits for a valid IRS attitude / rate source (the yaw damper drops out without it, so an
+    // engagement at a cold-start power-up, before the IRS alignment, would be lost and YD OFF would show on the
+    // take-off; found by tests/aircraft/global6000/verify/fullFlight.test.ts).
     const pwr = v.get('elec.afcs1_powered') !== 0 || v.get('elec.afcs2_powered') !== 0;
     if (pwr && !this.afcsPowered) this.ydT = 3;
     if (!pwr) this.ydT = 0;
-    if (this.ydT > 0) {
+    if (this.ydT > 0 && v.get('ahrs1.valid') !== 0) {
       this.ydT -= dt;
       if (this.ydT <= 0) v.set('ap.yd_engaged', 1);
     }

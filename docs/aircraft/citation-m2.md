@@ -274,6 +274,12 @@ Takeoff speeds, SL ISA dry (FPG p.4):
   VPTH/ALTV (VNAV), GS, GP, TO, GA; bank 25° / low bank 15° (EST, systems preset `AFCS_GFC700_G3000`).
 - No autothrottle on 525-0800..1399 (autothrottle added for 525-0685 / 1400+ M2 Gen2, TCDS §A.II).
 - G3000 APR rule: with a LOC approach loaded the AFCS source switches to the localizer (tested).
+- AFM limitations quoted by a public M2 study guide ("Citation M2 Study Notes", captmoonbeam.com, via search
+  excerpt; secondary source): autopilot minimum use height 450 ft above the runway after takeoff, 1,000 ft AGL
+  en route / descent, 160 ft above the runway on a GS/GP approach; **autopilot and yaw damper disengaged for
+  takeoff and landing**. The check ride (§15) engages the AP above 450 ft and disconnects AP and YD at the
+  200 ft DA. SCOPE: the sim does not inhibit AP engagement below these heights (crew responsibility, as in
+  the aircraft).
 
 ## 7. Sim V-speed / TOLD
 `systems/told.ts` implements the G3000 PERF (TOLD) provider from the FPG tables (V1/VR/V2, BFL,
@@ -631,3 +637,50 @@ acceleration error, internal lamp on the panel-lights circuit; reads
 
 **Views added.** Headliner / crew oxygen, LH circuit breakers, RH circuit
 breakers; the Overhead view now looks at the compass / windshield header.
+
+## 15. Check ride (verification agent)
+
+Tests: `tests/aircraft/citation-m2/verify/` (`flightRig.ts` rig, `fullFlight.test.ts`,
+`alerts.test.ts`, `drawcalls.test.ts`).
+
+**Full flight** (`fullFlight.test.ts`, ~1 min headless): one continuous single-pilot flight KICT 19R ->
+PER -> FILUM -> ILS 17R KOKC at FL230, driven only through cockpit vars, GMC 710 keys, the G3000
+flight-plan / TOLD back end and the pilot's yoke / pedals / toe brakes (no autothrottle: a simple
+"hand on the levers" speed loop). Asserted at each step: cold & dark; SYSTEM TEST FIRE / ANNU lamps;
+battery starts R then L (peak ITT ~640 C, bus dip ~15 V, GEN OFF clears); AHRS / GPS valid; FMS route
+(the FILUM hold-in-lieu is removed for the straight-in, see below), W&F within 300 lb of the FDM,
+TOLD V1/VR/V2 96/100/107 and BFL 2,860 ft at 9,900 lb; taxi and line-up on the centre line; TO/GA
+-> FD TO/TO; TO detent N1 ~101.7 %, lift-off ~113 KIAS in ~1,970 ft (inside BFL/1.15); AP at > 450 ft
+(PIT/ROL, YD on), NAV -> FMS, flaps up at V2+10, CLB detent, FLC, VNAV armed (VPTH); FL230 in ~8 min
+(FPG FL250 9 min at MTOW), no cautions, cabin on schedule; cruise at the CRU detent limited to 255
+KIAS (359 KTAS, ~1,070 lb/h; FPG FL250 max cruise 377 KTAS / 1,122 lb/h) with the tanks decrementing at
+the engine flow; VPTH descent, baro STD / QNH at FL180; landing TOLD (VREF 107); flaps 15, APR ->
+LOC/GS armed, LOC then GS capture, gear down, flaps 35, VREF+5 stabilized at 1,000 ft within 0.5 dot;
+AP + YD off at the 200 ft DA; hand-flown flare, touchdown ~1,100 ft past the threshold; ground flaps
+60 deploy the speed brakes; stop inside the FPG landing distance; taxi clear; shutdown (throttles
+CUTOFF, no warnings, displays off, buses dead). Block ~39 min, ~510 lb fuel.
+
+**Spot checks** (`alerts.test.ts`): gear horn (< 130 KIAS, throttle idle, silenceable) and the
+non-silenceable flaps-35 horn; takeoff-configuration warning (flaps 35 / speed brakes / parking
+brake at TO thrust); speed-brake auto-retract with a throttle above ~85 % N2; ground flaps deploy the
+speed brakes on the ground only, GROUND FLAPS caution in flight; night detection for the presets.
+
+**Fixes made in this pass**
+- Night presets: `states.ts` decided "night" from `env.ambient_light`, which the world only computes on
+  its first frame, so night starts had every panel dimmer off. It now computes the sun elevation from
+  the clock the app sets before `applyState` (`isNightForPreset`, NOAA algorithm in
+  `world/sky/solar.ts`); the night screenshots show the panels backlit.
+- Render budget: the 63 circuit-breaker white bands (only visible with a breaker out) are hidden while
+  the breaker is in: cockpit 682 -> 618 draw calls, whole frame 835 -> 771 (smoke view, KTEB).
+- `fdm.ts` header said the empty CG was FS 247.0; the code (and the rest of the dossier) uses FS 250.0.
+
+**Known gaps found (not fixed, outside this aircraft's files)**
+- Shared nav library: an approach transition that starts with a hold-in-lieu-of-PT (HF) leg is
+  appended without the TF leg into the IAF, and the HF geometry length excludes the inbound distance,
+  so `fms.dist_to_dest_nm` / TOD are short by that leg (88 nm instead of 140 nm on KICT-KOKC).
+  Deleting the HF leg on the GTC (the crew's "straight-in" action) also drops its fix; the test
+  re-inserts FILUM.
+- Cockpit lighting (shared renderer): surfaces in shadow get almost no sky fill light, so white panel
+  legends in the glareshield's shadow are hard to read in daylight (every aircraft shows it).
+- G3000 (shared): the MFD navigation map defaults to relative terrain, which paints the whole map red
+  on the ground.

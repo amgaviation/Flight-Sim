@@ -107,7 +107,7 @@ function buildBreakers(b: CockpitBuilder, p: Panel, side: string, groups: Return
       const row = Math.floor(i / CB.cols);
       const inRow = Math.min(CB.cols, g.items.length - row * CB.cols);
       const xs = W / 2 - ((inRow - 1) * CB.pitch) / 2;
-      p.add(
+      const cb = p.add(
         new CircuitBreaker(b.env, {
           id: `m2.cb.${it.name}`,
           label: `${side === 'left' ? 'LH' : 'RH'} CB ${it.label}`,
@@ -120,6 +120,17 @@ function buildBreakers(b: CockpitBuilder, p: Panel, side: string, groups: Return
         xs + col * CB.pitch,
         yy + 0.004 + row * CB.rowPitch,
       );
+      // Draw-call saving (63 breakers): the white band is only visible with the breaker out, so it is
+      // hidden (not drawn) while the breaker is in.
+      const band = cb.object.getObjectByName('cbWhiteBand');
+      if (band) {
+        const v = b.env.vars;
+        const name = `cb.${it.name}`;
+        band.visible = v.get(name, 1) === 0;
+        b.onUpdate(() => {
+          band.visible = v.get(name, 1) === 0;
+        });
+      }
     });
     yy += Math.ceil(g.items.length / CB.cols) * CB.rowPitch;
   }

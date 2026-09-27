@@ -7,7 +7,7 @@
  * down, x forward, y right, z down. Longitudinal positions come from the
  * TCDS fuselage stations (inches aft of the TCDS datum, which is 94 in ahead
  * of the forward pressure bulkhead) through `fs()` in data.ts. The empty CG
- * is taken at FS 247.0 (EST, see below).
+ * is taken at FS 250.0 (EST, see below).
  *
  * Calibration targets (tests/aircraft/citation-m2):
  *  - Stall speeds (FPG p.32, KCAS at 10,700 lb): 98 clean, 92 flaps 15, 86 flaps 35.

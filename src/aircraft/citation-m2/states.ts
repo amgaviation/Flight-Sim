@@ -14,6 +14,21 @@ import type { M2Systems } from './createSystems';
 import { FLAP_DETENTS } from './data';
 import { CITATION_M2_FDM } from './fdm';
 import { M2, TLA } from './vars';
+import { julianDayFromDayOfYear, sunPosition } from '../../world/sky/solar';
+
+/**
+ * Night for the lighting presets. The app sets the clock (env.time_utc_h / env.day_of_year) before
+ * applyState but the world only computes env.ambient_light on its first frame, so the sun elevation is
+ * computed here (NOAA algorithm, world/sky/solar.ts). EST: the crew turns the panel / logo lights on
+ * once the sun is below +2 deg (dusk). Without a clock (headless tests) the ambient-light var decides.
+ */
+export function isNightForPreset(v: Pick<SimContext, 'vars'>['vars']): boolean {
+  if (v.has('env.time_utc_h') && v.has(FDM.lat)) {
+    const jd = julianDayFromDayOfYear(2026, Math.max(1, v.get('env.day_of_year', 172)), v.get('env.time_utc_h'));
+    return sunPosition(jd, v.get(FDM.lat), v.get(FDM.lon)).elevationDeg < 2;
+  }
+  return v.get('env.ambient_light', 1) < 0.5;
+}
 
 /** Normal takeoff pitch-trim setting (units): EST mid takeoff band, from computeTrim at 115 KIAS flaps 15 (tests). */
 export const TAKEOFF_TRIM = 0.3;
@@ -25,7 +40,7 @@ export function setM2Switches(ctx: Pick<SimContext, 'vars'>, s: InitialState): v
   const powered = !cold;
   const moving = s === 'takeoff' || s === 'cruise' || s === 'approach';
   const inAir = s === 'cruise' || s === 'approach';
-  const night = v.get('env.ambient_light', 1) < 0.5;
+  const night = isNightForPreset(v);
 
   // Electrical power panel
   v.set(M2.battSw, powered ? 1 : 0);
@@ -108,7 +123,6 @@ export function setM2Switches(ctx: Pick<SimContext, 'vars'>, s: InitialState): v
   v.set(AP.fdOn(1), powered ? 1 : 0);
   v.set(AP.fdOn(2), powered ? 1 : 0);
   v.set(AP.yd, inAir ? 1 : 0);
-  void inAir;
 }
 
 /** `AircraftInstance.applyState` of the Citation M2. */

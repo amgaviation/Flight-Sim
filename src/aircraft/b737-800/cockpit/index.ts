@@ -71,6 +71,8 @@ export function buildB738Cockpit(ctx: SimContext, sys: B738Systems, o: B738Cockp
       { name: 'Aft pedestal (radios / fire)', position_m: [13.2, -0.26, -0.3], yawDeg: 25, pitchDeg: -72, fovDeg: 58 },
       { name: 'Overhead', position_m: [13.42, -0.08, -0.42], yawDeg: 4, pitchDeg: 66, fovDeg: 72 },
       // Overhead / side-console agent views (cockpit/overhead, cockpit/side).
+      { name: 'Overhead left (FLT CONTROL / FUEL / ELEC)', position_m: [13.5, -0.3, -0.44], yawDeg: -4, pitchDeg: 68, fovDeg: 44 },
+      { name: 'Overhead right (AIR COND / BLEED / PRESS)', position_m: [13.5, 0.3, -0.44], yawDeg: 4, pitchDeg: 68, fovDeg: 44 },
       { name: 'Aft overhead (IRS / doors)', position_m: [13.22, -0.05, -0.45], yawDeg: 0, pitchDeg: 89, fovDeg: 80 },
       { name: 'Captain side console / P18 breakers', position_m: [13.45, -0.5, -0.4], yawDeg: -118, pitchDeg: -14, fovDeg: 72 },
       { name: 'F/O side console / P6 breakers', position_m: [13.45, 0.5, -0.4], yawDeg: 118, pitchDeg: -14, fovDeg: 72 },

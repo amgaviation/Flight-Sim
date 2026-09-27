@@ -36,7 +36,7 @@ const CB_GRID = { dx: 0.0305, dy: 0.044, title: 0.013, gap: 0.01, margin: 0.012,
 export function buildSideConsoles(c: B738CockpitContext): void {
   const { b, env, ctx } = c;
   const vars = ctx.vars;
-  b.zone({ id: 'cb', intensityVar: 'ac.light.cb', gain: 1.1 });
+  b.zone({ id: 'cb', intensityVar: 'ac.light.cb', gain: 2.2 });
   b.zone({ id: 'map_capt', intensityVar: 'ac.light.map_capt', color: 0xfff0d6 });
   b.zone({ id: 'map_fo', intensityVar: 'ac.light.map_fo', color: 0xfff0d6 });
   const ratings = new Map(c.sys.elec.breakerNames().map((x) => [x.name, x.ratingA]));

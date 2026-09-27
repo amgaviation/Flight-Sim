@@ -308,6 +308,18 @@ export function createSystems(ctx: SimContext, opts: G6kSystemsOptions = {}): G6
     limits: { ...AFCS_PROLINE_FUSION.limits, maxBankDeg: 27, lowBankDeg: 17, maxRollRateDps: 7.5, maxPitchUpDeg: 20, maxPitchDownDeg: -20, maxVsFpm: 8000 },
     yawDamper: { withAp: true, requiredForAp: false },
     cws: 'garmin', // TCS (touch control steering) on the control wheels (GXAG)
+    // LNAV / VOR / LOC pre-selected on the ground stay armed through the take-off roll (the TO lateral mode holds the
+    // runway track) and capture only once airborne (GXAF: take-off mode until a lateral mode captures). EST: capture at
+    // lift-off rather than the 400 ft AFE of later Collins FGS descriptions (the shared AFCS has no height gate).
+    nav: { ...AFCS_PROLINE_FUSION.nav, groundCapture: false },
+    // Pro Line Fusion VNAV climbs in VFLC toward the FCP / FMS altitude (FSB appendix 6: VNAV climb and descent).
+    vnavClimb: true,
+    // The FCP speed target is the FMS speed in SPD FMS (the Fusion FCP copies it into ap.sel_spd / ap.sel_mach) and the
+    // crew's in SPD MAN, so the VNAV modes fly the selected speed (Collins FCP SPD FMS / MAN).
+    vnavSpeedFromSelected: true,
+    // VNAV never descends through the FCP preselected altitude (Collins VNAV: the preselector altitude is always
+    // honoured; found by the full-flight verification: VALTS followed the next constraint through 5,000 ft selected).
+    altvBoundBySel: true,
     disconnect: {
       ...AFCS_PROLINE_FUSION.disconnect,
       // Stick pusher activation disconnects the AP (EST, standard SPS logic); EST 200 ft AGL minimum engage.

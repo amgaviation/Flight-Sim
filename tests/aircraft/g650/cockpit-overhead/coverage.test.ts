@@ -47,6 +47,14 @@ function systemReads(r: Rig): Set<string> {
     for (const n of recordReads(r.vars, () => r.run(s))) all.add(n);
   };
   run(2);
+  // In flight (climb phase): the CPC reads FLIGHT / LANDING only while scheduling the climb to the FMS cruise
+  // altitude. (This used to be covered by a spurious 0.1 s "airborne" squat blip after every ground placement,
+  // fixed in states.ts.)
+  const pos = { lat: r.vars.get('fdm.lat_deg'), lon: r.vars.get('fdm.lon_deg'), hdg: r.vars.get('fdm.hdg_true_deg') };
+  r.fdm.reposition({ lat: pos.lat, lon: pos.lon, altFtMsl: 8000, iasKt: 250, headingTrue: pos.hdg });
+  applyG650State(r.ctx, r.sys, 'cruise');
+  run(1);
+  r.fdm.reposition({ lat: pos.lat, lon: pos.lon, onGround: true, headingTrue: pos.hdg });
   for (const st of ['cold_dark', 'takeoff', 'ready_to_taxi'] as const) {
     applyG650State(r.ctx, r.sys, st);
     run(1);

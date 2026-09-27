@@ -143,6 +143,10 @@ export function createEngines(ctx: SimContext): G6kEngines {
     leverVar: (e) => V.tla(e as 1 | 2),
     power: 'elec.afcs1_powered || elec.afcs2_powered',
     servoRate: 0.12,
+    // EST gains: the default 0.02 / 0.08 speed loop hunted +/-15 % N1 with a ~20 s period on the flaps-30 approach
+    // (BR710 spool-up lag against the heavy landing-configuration drag); more IAS-trend damping, less gain.
+    speedKp: 0.01,
+    speedKd: 0.16,
     retardRate: 0.1,
     thrHoldKt: 60,
     thrHoldEndFt: 400,
@@ -152,6 +156,7 @@ export function createEngines(ctx: SimContext): G6kEngines {
     labels: { THR: 'THR', IDLE: 'IDLE', SPD: 'SPD', SPD_FMS: 'FMS SPD', MACH: 'MACH', HOLD: 'HOLD', TO: 'TO', GA: 'GA', RETARD: 'RETARD' },
     vmoKt: L.vmoKt,
     mmo: L.mmo,
+    vnavSpeedFromSelected: true, // Fusion FCP SPD FMS / MAN writes the FMS speed into the selected speed (createSystems.ts)
   });
   return { ratings, fadec, starts, at };
 }

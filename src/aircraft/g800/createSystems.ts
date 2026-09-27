@@ -181,6 +181,9 @@ export function createG800Systems(ctx: SimContext, opts: G800SystemsOptions = {}
     );
   }
 
+  // PERF INIT tail number: the first G800 flight-test aircraft, N800GA (the suite default is a G650 registration).
+  if (suite) suite.fmsShared.perf.tail = 'N800GA';
+
   // ---- engines / FADEC / autothrottle
   const eng = createEngines(ctx);
 
@@ -192,7 +195,18 @@ export function createG800Systems(ctx: SimContext, opts: G800SystemsOptions = {}
     servoPower: 'elec.afcs_powered && (elec.fcc_powered || elec.bfcu_powered)',
     sensors: { valid: 'ahrs1.valid && adc1.valid' },
     yawDamper: { withAp: false, requiredForAp: false },
-    gains: { gainRefKt: 250, pitchKp: 0.035, pitchKi: 0.01, pitchKq: 0.02, rollKp: 0.05, rollKi: 0.005, rollKp_rate: 0.04 },
+    // Armed LNAV / LOC capture only once airborne (Primus Epic: NAV armed on the ground captures after takeoff; the
+    // FD keeps TO on the roll). Found by tests/aircraft/g800/verify: LNAV went active on the runway.
+    nav: { ...AFCS_PRIMUS_EPIC.nav, groundCapture: false },
+    // Primus Epic VNAV climbs in VFLCH at the FMS climb speed to the lower of the selected / FMS altitude and captures
+    // VASEL / VALT (code450 G450/G650 FMA list: VFLCH, VPATH, VASEL, VALT). Without vnavClimb the VNAV key in the climb
+    // only armed VPATH (found by tests/aircraft/g800/verify). ALTV never passes the selected altitude.
+    vnavClimb: true,
+    altvBoundBySel: true,
+    // EST: FLCH speed gain 0.2 deg/kt (default 0.35). With the G800's high thrust-to-weight (T/W ~0.5 at light
+    // weight) a large FLCH speed step right after flap retraction made the default law pitch through the horizon
+    // (-4 deg, -2,300 fpm at 2,700 ft AGL; tests/aircraft/g800/verify). 0.2 keeps the climb positive.
+    gains: { gainRefKt: 250, pitchKp: 0.035, pitchKi: 0.01, pitchKq: 0.02, rollKp: 0.05, rollKi: 0.005, rollKp_rate: 0.04, flcKp: 0.2 },
   });
 
   // ---- stall warning: stick shaker before the FBW AoA limit (SCQ: "during an approaching stall, before the
@@ -287,6 +301,9 @@ export function createG800Systems(ctx: SimContext, opts: G800SystemsOptions = {}
       thrustAdvanced: `!${V.idleBoth}`,
       speedbrakeDown: `${V.speedbrake} < 0.02`,
       pedalDisarm: 0.25,
+      // EST: RTO stays armed while the crew holds the toe brakes for a static thrust set (Gulfstream AOM practice
+      // "hold brakes, set thrust, release"); pedals still disarm an active RTO.
+      pedalDisarmsArmedRto: false,
       rtoSpeedKt: 60,
       spinupKt: 60,
     },

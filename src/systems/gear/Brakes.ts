@@ -96,6 +96,12 @@ export interface AutobrakeConfig {
   speedbrakeDown?: Binding;
   /** Pedal deflection that disarms (0..1). Default 0.25 (EST). */
   pedalDisarm?: number;
+  /**
+   * Whether pedal braking disarms RTO while it is only armed (not yet active), e.g. holding the brakes
+   * on the runway while the thrust is set. Default true (previous behaviour). Aircraft whose RTO stays
+   * armed under static toe braking pass false; pedals still disarm an active RTO.
+   */
+  pedalDisarmsArmedRto?: boolean;
   /** RTO activation wheel speed (kt). Default 90. */
   rtoSpeedKt?: number;
   /** Main-wheel spin-up speed that activates landing autobrake (kt). Default 60. */
@@ -442,7 +448,7 @@ export class Brakes implements Subsystem {
     const sbStowed = sbDownNow && !this.prevSbDown && onGround;
     this.prevSbDown = sbDownNow;
     if ((this.abActive || this.abArmed) && lv) {
-      const pedalDisarm = pedal > (ab.pedalDisarm ?? 0.25);
+      const pedalDisarm = pedal > (ab.pedalDisarm ?? 0.25) && (this.abActive || !lv.rto || ab.pedalDisarmsArmedRto !== false);
       // Thrust advance disarms an active autobrake (landing: except the first 3 s after touchdown).
       const thrust = this.abActive && this.abAdvanced() && (lv.rto === true || !(this.touchdownT >= 0 && this.touchdownT < 3));
       // Speedbrake lever moved to DOWN on the ground after landing.

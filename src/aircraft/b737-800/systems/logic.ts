@@ -45,6 +45,8 @@ export class B738Logic implements Subsystem {
   private etS = [0, 0];
   private fdrHrs = 0;
   private apuStartReq = false;
+  /** Seconds since the APU ECU lost power (ride-through, see update). */
+  private apuEcuOffS = 1e9;
   /**
    * Set by the in-air state presets: engage CMD A (HDG SEL, ALT HOLD, A/T MCP SPD) as soon as the ADIRU
    * air data finishes its power-up self test (the A/P refuses engagement with invalid sensors).
@@ -104,6 +106,12 @@ export class B738Logic implements Subsystem {
     if (apuSw >= 1.5) this.apuStartReq = true;
     if (apuSw < 0.5 || v.get('apu.running') !== 0 || v.get('apu.fault') !== 0) this.apuStartReq = false;
     v.set('ac.b738.apu_start_req', this.apuStartReq ? 1 : 0);
+    // APU ECU power ride-through: a bus transfer (e.g. ground power -> APU generator, where the battery bus
+    // changes from TR3 to the battery) interrupts the battery bus for a few tens of ms; the ECU rides through
+    // interrupts up to 200 ms (DO-160 Section 16 power-interrupt class; EST for the 131-9B ECU) instead of
+    // shutting the APU down.
+    this.apuEcuOffS = v.get('elec.apu_ecu_powered') !== 0 ? 0 : this.apuEcuOffS + dt;
+    v.set('ac.b738.apu_ecu_hold', this.apuEcuOffS < 0.2 ? 1 : 0);
 
     // ---- Deferred A/P engagement of the in-air state presets.
     if (this.pendingApEngage && v.get('adc1.valid') !== 0 && v.get('ahrs1.valid') !== 0) {
@@ -180,6 +188,8 @@ export class B738Logic implements Subsystem {
       const w = v.get(B738.wiper(s));
       v.set(`ac.b738.wiper_rain_removal${s}`, w <= 0 ? 0 : w === 1 ? 0.4 : w === 2 ? 0.75 : 1);
     }
+    // ---- Crew oxygen mask regulators (side consoles): EMERGENCY (2) / 100% (1) / N diluter (0) -> OxygenSystem mode.
+    for (const s of SIDES) v.set(`ac.b738.oxy_mode${s}`, v.get(B738.oxyEmer(s)) !== 0 ? 2 : v.get(B738.oxyDiluter(s)) !== 0 ? 0 : 1);
     // ---- Alternate flaps drive running (electric motor load, electrical.ts).
     const altSw = v.get(B738.altFlapsSw);
     v.set('flaps.alt_moving', altSw !== 0 && v.get(B738.altFlapsArm) !== 0 && v.get('elec.alt_flaps_powered') !== 0 ? 1 : 0);
@@ -243,6 +253,7 @@ export class B738Logic implements Subsystem {
     this.batDisch = [0, 0, 0];
     this.maxAltFt = v.get('fdm.press_alt_ft');
     this.offSched = false;
+    this.apuEcuOffS = v.get('elec.apu_ecu_powered') !== 0 ? 0 : 1e9;
   }
 
   /** Failures of the aircraft-specific logic (ids under fail.b738.*). */
