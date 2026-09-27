@@ -79,7 +79,11 @@ export function buildM2Cockpit(ctx: SimContext, opts: M2CockpitOptions = {}): M2
       { name: 'GTC 570 (FMS)', position_m: [3.14, -0.08, -0.26], yawDeg: 8, pitchDeg: -42, fovDeg: 40 },
       { name: 'LH tilt panel / electrical', position_m: [3.18, -0.45, -0.28], yawDeg: -6, pitchDeg: -44, fovDeg: 45 },
       { name: 'RH tilt panel', position_m: [3.18, 0.42, -0.28], yawDeg: 8, pitchDeg: -44, fovDeg: 45 },
-      { name: 'Overhead', position_m: [3.0, -0.2, -0.42], yawDeg: 0, pitchDeg: 62, fovDeg: 60 },
+      { name: 'Overhead', position_m: [3.0, -0.12, -0.42], yawDeg: 0, pitchDeg: 38, fovDeg: 70 },
+      // Overhead / sidewall parts (cockpit/overhead, cockpit/side).
+      { name: 'Headliner / crew oxygen', position_m: [3.15, 0, -0.36], yawDeg: 180, pitchDeg: 66, fovDeg: 80 },
+      { name: 'LH circuit breakers', position_m: [3.12, -0.42, -0.25], yawDeg: -90, pitchDeg: -38, fovDeg: 55 },
+      { name: 'RH circuit breakers', position_m: [3.12, 0.42, -0.25], yawDeg: 90, pitchDeg: -38, fovDeg: 55 },
     ],
   });
   const env = b.env;

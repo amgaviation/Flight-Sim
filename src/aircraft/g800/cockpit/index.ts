@@ -53,6 +53,11 @@ export const G800_VIEWS = [
   { name: 'Overhead', position_m: [12.3, -0.3, -0.85] as [number, number, number], yawDeg: 14, pitchDeg: 62, fovDeg: 62 },
   { name: 'Left console / sidestick', position_m: [12.45, -0.5, -0.6] as [number, number, number], yawDeg: -55, pitchDeg: -50, fovDeg: 58 },
   { name: 'Fire handles', position_m: [12.6, -0.15, -0.85] as [number, number, number], yawDeg: 6, pitchDeg: 40, fovDeg: 45 },
+  // Views of the overhead / side-console builders (cockpit/overhead, cockpit/side).
+  { name: 'Overhead touch screens', position_m: [12.35, 0, -0.9] as [number, number, number], yawDeg: 0, pitchDeg: 72, fovDeg: 70 },
+  { name: 'Left console (tiller / O2)', position_m: [12.55, -0.6, -0.6] as [number, number, number], yawDeg: -122, pitchDeg: -53, fovDeg: 58 },
+  { name: 'Left CB panel', position_m: [12.02, -0.8, -0.32] as [number, number, number], yawDeg: -120, pitchDeg: -12, fovDeg: 50 },
+  { name: 'Right CB panel', position_m: [12.02, 0.8, -0.32] as [number, number, number], yawDeg: 120, pitchDeg: -12, fovDeg: 50 },
 ];
 
 export function buildG800Cockpit(ctx: SimContext, sys: G800Systems, o: G800CockpitOptions = {}): G800Cockpit {

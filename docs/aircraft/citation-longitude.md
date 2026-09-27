@@ -678,3 +678,60 @@ Code: `src/aircraft/citation-longitude/cockpit/` (everything except `overhead/` 
 - **Tiller.** It has no centring spring; it stays where it is left.
 - **Layout.** The GMC 710 key layout and the lower-panel positions are EST from photographs. The standby display position is EST.
 - **Exterior.** The flaps rotate about a hinge line; the Fowler translation is not modelled. The reversers are shown as two pivot doors per engine (EST).
+
+## 11. Overhead panel, side consoles and circuit breakers
+
+Code: `src/aircraft/citation-longitude/cockpit/overhead/index.ts`, `cockpit/side/index.ts`,
+`cockpit/side/breakers.ts`, `cockpit/side/oxygenMask.ts`. Tests:
+`tests/aircraft/citation-longitude/cockpit-overhead/`. Both builders are loaded by
+`cockpit/index.ts` through `import.meta.glob`.
+
+### 11.1 Overhead panel (EST geometry: 0.40 × 0.36 m, x 7.99 → 7.63, forward end 12° lower)
+
+| Row (fwd → aft) | Control | Var / effect |
+|---|---|---|
+| EXTERIOR LIGHTS | L LDG, R LDG, RECOG, PULSE, TAXI, WING INSP, TAIL FLOOD, ANTI COLL Korry buttons (white ON legend, EST colour) | `ac.lon.lt.*` → `LightingSystem` (OG 16-3/16-4) |
+| COCKPIT LIGHTS | PANEL (DAY at full), FLOOD, AUX dimmers; DOME toggle; EMER LTS OFF / ARM / ON (lever-locked out of OFF) | `ac.lon.lt.panel/flood/aux/dome/emer` |
+| PASS SIGNS / OXYGEN / TEST | PASS SAFETY OFF / SEAT BELT / PASS SAFETY; PASS OXY guarded NORM / MAN DEPLOY + PASS OXY ON lens; FIRE WARN TEST; ANNUN TEST | `ac.lon.lt.pass_safety`, `ac.lon.oxy.pax` (lens `oxy.pax_on`), `ac.lon.fire.test`, `alert.annun_test` |
+
+- Fixtures: dome light (spot, 6 cd EST, hot-battery load `dome_lt`), cockpit emergency-light lens
+  (`light.emer`), two flood-light eyeballs (the lights themselves are in `cockpit/index.ts`).
+- Not fitted, so not built: wipers (OG 12-3: hydrophobic coating), windshield-heat switches (automatic, OG 12-3),
+  storm lights (FLOOD at full is the thunderstorm setting; SCOPE).
+
+### 11.2 Side consoles (EST: y ±0.90, 0.16 m wide, top z 0.20)
+
+- Forward end: crew quick-donning mask in its stowage box (click = don / stow, `ac.lon.oxy.mask_l/_r`), regulator
+  NORM / 100 % / EMER (`ac.lon.oxy.mode` pilot, `ac.lon.oxy.mode_r` copilot), PRESS TO TEST (`ac.lon.oxy.test_l/_r`),
+  FLOW indicator (`oxy.pilot_flowing` / `oxy.copilot_flowing`).
+- Circuit breakers: one sidewall panel per side below the side-window sill (0.56 × 0.25 m, EST position, clear of
+  the armrests). Every network breaker ≤ 50 A is on a panel, grouped by bus (L: EMER, MISSION, MAIN / INTERIOR /
+  STBY / HOT BATT; R: EMER, MISSION, MAIN / INTERIOR / SERVICE), bound to `cb.<load>` / `cb.<load>_tripped`.
+  Feeders above 50 A (APU starter, PTCU motor, MAIN feeds, BUS TIE) are J-box current limiters, not panel breakers.
+  A network breaker missing from the table is placed automatically in an L/R MISC group.
+- No audio panel (G5000 audio is the GTC "Audio & Radios" page, OG 4), no jacks / PTT, no cockpit-door control (SCOPE).
+
+### 11.3 Systems changes made with this work
+
+- `vars.ts`: `ltDome`, `oxyModeR`, `oxyTestL/R`, `lampTest` (= `alert.annun_test`), added to `LON_CONTROL_VARS`.
+- `systems/electrical.ts`: load `dome_lt` on the hot L battery bus (1.2 A, 5 A breaker); GPU source resistance 1.5 mΩ
+  (the 4 mΩ default let the bus sag to ~27.2 V under the ground load, below the Li-ion EMF, so the batteries
+  discharged on ground power; OG 17-2 expects "BATT amps 0 or charging").
+- `systems/lighting.ts`: dimmer `dome` → `ac.light.dome`.
+- `systems/environment.ts`: copilot mask regulator `oxyModeR`; both masks get PRESS TO TEST.
+- `createSystems.ts`: the CAS lamp test is bound explicitly to `alert.annun_test` (same as the library default).
+- `states.ts`: resets the new vars.
+- `cockpit/index.ts`: two preset views (left / right console) and a re-aimed Overhead view.
+
+### 11.4 Verification
+
+- `coverage.test.ts`: 84 overhead / side / breaker controls, all bound (18 overhead, 8 side console, 58 breakers).
+- `breakers.test.ts`: every ≤ 50 A network breaker is on a panel; pulling PFD 1 / MFD / AHRS 2 / STBY INST / TAXI LTS /
+  DOME LT removes that load's power (AHRS 2 invalid, taxi light dark), pushing restores it; a short trips LDG LT L
+  (control pops, light dark), re-trips while the fault persists, and resets after it clears.
+- `flows.test.ts`: cold & dark → BATT → EXT PWR (AVAIL → ON, bus tie CLOSED, batteries not discharging) → APU GEN →
+  both engine generators (bus tie OPEN, generator CAS clear) through the cockpit controls; the lamp test is dark
+  unpowered and lights every lens and both masters when powered; EMER LTS ARM on total emergency-bus loss; PASS
+  SAFETY signs; FIRE WARN TEST; PASS OXY guard; crew-mask test, don and regulator.
+- Screenshots: `node scripts/lon-shots.mjs` with `SHOT_VIEWS=9` (views 6 overhead, 8 / 9 consoles); night with
+  `SHOT_TIME=02:00`.

@@ -291,6 +291,8 @@ export const B738 = {
   rudTrim: `${P}rud_trim`,
   /** Landing gear warning HORN CUTOUT push button (throttle quadrant). */
   hornCutout: `${P}horn_cutout`,
+  /** Captain's nose-wheel steering tiller handle in the 3D cockpit (-1 full left .. 1 full right = +/-78 deg). Merged with the hardware axis `input.tiller` by the logic into `tillerCmd`. */
+  tiller3d: `${P}tiller3d`,
 
   // ---------------------------------------------------------------- FIRE PROTECTION panel (aft pedestal)
   /** Engine 1 / 2 fire handle: IN (0) / PULLED (1). Unlocked by the fire warning or the override button. */
@@ -495,6 +497,8 @@ export const B738 = {
   recallActive: `${P}recall_active`,
   /** Wing anti-ice valves command. */
   wingAiValveCmd: `${P}wing_ai_valve_cmd`,
+  /** Tiller command for the nose-wheel steering: the larger of `input.tiller` and `tiller3d` (logic). */
+  tillerCmd: `${P}tiller_cmd`,
   /** Engine fuel shutoff (spar + engine valve) open commands. */
   engValveOpen: (i: Side) => `${P}eng_valve_open${i}`,
 } as const;
@@ -514,7 +518,7 @@ export const B738_DISPLAY_IDS = { isfd: 'b738_isfd', isdu: 'b738_isdu' } as cons
 export function b738ControlVars(): string[] {
   const out: string[] = [];
   const sides: Side[] = [1, 2];
-  const skip = new Set(['lt', 'fadecTla', 'xfrSrc', 'stbyOnBatt', 'stbyPumpCmd', 'stbyRudder', 'ptuCmd', 'gearXferUnit', 'recallActive', 'wingAiValveCmd', 'engValveOpen']);
+  const skip = new Set(['lt', 'fadecTla', 'xfrSrc', 'stbyOnBatt', 'stbyPumpCmd', 'stbyRudder', 'ptuCmd', 'gearXferUnit', 'recallActive', 'wingAiValveCmd', 'engValveOpen', 'tillerCmd']);
   const args: Record<string, readonly unknown[]> = {
     fltCtl: ['a', 'b'],
     spoilerSw: ['a', 'b'],

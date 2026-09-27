@@ -87,7 +87,8 @@ export function createPneumatics(ctx: Pick<SimContext, 'vars'>): PneumaticSystem
       {
         id: 'cabin',
         packs: ['acm', 'emer'],
-        target: `${M2.tempMode} == 0 ? 16 + 12 * ${M2.tempSel} : ac.m2.temp_man_target`,
+        // AUTO needs the temperature controller (TEMP CONT breaker, L XFEED); unpowered, the mixing valve holds (manual target).
+        target: `${M2.tempMode} == 0 && elec.temp_ctl_powered ? 16 + 12 * ${M2.tempSel} : ac.m2.temp_man_target`,
         volumeM3: 7.5,
         // People + avionics minus the vapor-cycle A/C (~3.5 kW cooling, EST).
         heatLoadW: `900 - elec.air_cond_powered * elec.air_cond_amps / 75 * 3500`,
@@ -130,7 +131,7 @@ export function createIce(ctx: Pick<SimContext, 'vars'>): IceProtection {
       { id: 'pitot2', output: ICE.pitot(2), ratePerMin: 0.5, speedExp: 0.5, protection: { kind: 'electric', active: 'elec.pitot_r_powered' } },
       { id: 'static1', output: ICE.static(1), ratePerMin: 0.2, speedExp: 0.5, protection: { kind: 'electric', active: 'elec.pitot_l_powered' } },
       { id: 'static2', output: ICE.static(2), ratePerMin: 0.2, speedExp: 0.5, protection: { kind: 'electric', active: 'elec.pitot_r_powered' } },
-      { id: 'ws1', output: ICE.windshield(1), ratePerMin: 0.2, protection: { kind: 'thermal', active: `max(clamp01(${M2.wsBleedSw(1)}) * pneu.ws_l_ok, ${M2.wsAlcoholSw} * 0.6, ${M2.airDistrib} * 0.2 * (pneu.pack_flow_kgs > 0.05))` } },
+      { id: 'ws1', output: ICE.windshield(1), ratePerMin: 0.2, protection: { kind: 'thermal', active: `max(clamp01(${M2.wsBleedSw(1)}) * pneu.ws_l_ok, ${M2.wsAlcoholSw} * elec.ws_alcohol_powered * 0.6, ${M2.airDistrib} * 0.2 * (pneu.pack_flow_kgs > 0.05))` } },
       { id: 'ws2', output: ICE.windshield(2), ratePerMin: 0.2, protection: { kind: 'thermal', active: `max(clamp01(${M2.wsBleedSw(2)}) * pneu.ws_r_ok, ${M2.airDistrib} * 0.2 * (pneu.pack_flow_kgs > 0.05))` } },
     ],
   });
@@ -178,8 +179,8 @@ export function createOxygen(ctx: Pick<SimContext, 'vars'>): OxygenSystem {
   return new OxygenSystem(ctx.vars, {
     bottles: [{ id: 'main', capacityL: 1416, fullPsi: 1850, lowPsi: 400 }],
     crew: [
-      { id: 'crew1', bottle: 'main', inUse: M2.maskOn(1), mode: M2.maskMode(1) },
-      { id: 'crew2', bottle: 'main', inUse: M2.maskOn(2), mode: M2.maskMode(2) },
+      { id: 'crew1', bottle: 'main', inUse: M2.maskOn(1), mode: M2.maskMode(1), test: 'ac.m2.mask1_test' }, // PRESS TO TEST on the mask stowage
+      { id: 'crew2', bottle: 'main', inUse: M2.maskOn(2), mode: M2.maskMode(2), test: 'ac.m2.mask2_test' }, // PRESS TO TEST on the mask stowage
     ],
     pax: { kind: 'gaseous', bottle: 'main', flowLpm: 25, deploy: `${M2.paxOxy} >= 1 && press.pax_masks` },
   });

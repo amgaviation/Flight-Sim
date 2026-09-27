@@ -108,6 +108,7 @@ export function setG800Switches(ctx: Pick<SimContext, 'vars'>, sys: G800Systems,
   v.set(V.ltSeatbelt, b(moving || s === 'ready_to_taxi'));
   v.set(V.ltNoSmoke, b(powered));
   v.set(V.ltDome, 0);
+  v.set(V.stormLt, 0);
   v.set(V.ltPanel, powered ? (night ? 0.6 : 0.3) : 0);
   v.set(V.ltFlood, powered && night ? 0.25 : 0);
   // ---- engine start / oxygen

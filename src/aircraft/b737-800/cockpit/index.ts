@@ -1,0 +1,151 @@
+/**
+ * Boeing 737-800 flight deck: assembles the structure, main instrument
+ * panel, glareshield (MCP / EFIS / master lights), forward electronic panel
+ * (CDUs), control stand, aft electronic panel, flight controls, lighting
+ * and the 737NG avionics suite displays into a `CockpitBuild`, and loads the
+ * overhead / side-console builders when their folders exist (contract in
+ * context.ts).
+ *
+ * Lighting (FCOM 1.30 "Lighting"; systems/airframe.ts createLighting
+ * dimmers, `ac.light.<id>`):
+ *  - 'panel': label / legend backlighting of the main deck, from the
+ *    brightest of the Captain, F/O and pedestal PANEL dimmers (SCOPE: one
+ *    backlight channel for the three dimmers; the overhead uses its own).
+ *  - 'flood': two glareshield flood lights over the main panel (GLARESHIELD
+ *    FLOOD and BACKGROUND knobs; the brighter drives them).
+ *  - 'afds': the MCP flood strip under the glareshield brow (AFDS FLOOD).
+ *  - 'ped_flood': pedestal flood light in the overhead aft of the MCP
+ *    (pedestal FLOOD knob). 'dome': the dome light (DOME switch).
+ *  Annunciators dim with the LIGHTS switch DIM (40 %, EST) and light with
+ *  TEST (the systems already drive the lamp vars; the cockpit lamp test lights
+ *  the suite lenses too). Real lights: 4 (docs/modules/cockpit.md §11).
+ */
+import * as THREE from 'three';
+import { CockpitBuilder, type CockpitBuildEx } from '../../../cockpit/CockpitBuilder';
+import { placePanel } from '../../../cockpit/frame';
+import type { SimContext } from '../../../core/SimContext';
+import type { B738Systems } from '../createSystems';
+import { B738 } from '../vars';
+import { CK, type B738CockpitContext } from './context';
+import { EYE_L, EYE_R, MOUNTS } from './layout';
+import { buildShell } from './shell';
+import { buildMainPanel } from './mainPanel';
+import { buildGlareshield } from './glareshield';
+import { buildPedestal } from './pedestal';
+import { buildAftPedestal } from './aftPedestal';
+import { buildFlightControls } from './flightControls';
+import { installRadioTuning } from './radioTuning';
+
+type OverheadModule = { buildOverhead?: (c: B738CockpitContext) => void };
+type SideModule = { buildSideConsoles?: (c: B738CockpitContext) => void };
+const OVERHEAD = import.meta.glob<OverheadModule>('./overhead/index.ts', { eager: true });
+const SIDE = import.meta.glob<SideModule>('./side/index.ts', { eager: true });
+
+export interface B738CockpitOptions {
+  /** No aircraft-owned canvas displays (node tests). */
+  headless?: boolean;
+  /** Skip the overhead / side-console builders even when present. */
+  mainOnly?: boolean;
+}
+
+export interface B738Cockpit {
+  build: CockpitBuildEx;
+  context: B738CockpitContext;
+}
+
+/** Derived flood var: the brighter of the glareshield flood and background knobs. */
+const FLOOD_VAR = 'ac.b738.ck.flood';
+const ANNUN_BRT = 'ac.b738.ck.annun_brt';
+
+export function buildB738Cockpit(ctx: SimContext, sys: B738Systems, o: B738CockpitOptions = {}): B738Cockpit {
+  const b = new CockpitBuilder(ctx, {
+    palette: 'boeing',
+    name: 'b737-800',
+    eyePosition_m: EYE_L,
+    views: [
+      { name: 'First Officer', position_m: EYE_R, yawDeg: 0, pitchDeg: -8 },
+      { name: 'MCP / glareshield', position_m: [13.98, -0.12, -0.42], yawDeg: 4, pitchDeg: -10, fovDeg: 42 },
+      { name: 'Centre panel', position_m: [13.92, -0.22, -0.34], yawDeg: 14, pitchDeg: -26, fovDeg: 48 },
+      { name: 'FMS / CDU', position_m: [13.9, -0.22, -0.2], yawDeg: 12, pitchDeg: -50, fovDeg: 45 },
+      { name: 'Throttle quadrant', position_m: [13.55, -0.3, -0.32], yawDeg: 22, pitchDeg: -58, fovDeg: 55 },
+      { name: 'Aft pedestal (radios / fire)', position_m: [13.2, -0.26, -0.3], yawDeg: 25, pitchDeg: -72, fovDeg: 58 },
+      { name: 'Overhead', position_m: [13.55, -0.3, -0.45], yawDeg: 10, pitchDeg: 62, fovDeg: 65 },
+    ],
+  });
+  const env = b.env;
+  const mount = (name: string, p: (typeof MOUNTS)[keyof typeof MOUNTS]) => {
+    const g = new THREE.Group();
+    g.name = `mount:${name}`;
+    placePanel(g, p);
+    b.root.add(g);
+    return g;
+  };
+  const disposers: (() => void)[] = [];
+  const c: B738CockpitContext = {
+    b,
+    env,
+    ctx,
+    sys,
+    headless: o.headless ?? false,
+    mounts: {
+      overheadFwd: mount('overheadFwd', MOUNTS.overheadFwd),
+      overheadAft: mount('overheadAft', MOUNTS.overheadAft),
+      sideLeft: mount('sideLeft', MOUNTS.sideLeft),
+      sideRight: mount('sideRight', MOUNTS.sideRight),
+    },
+    onDispose: (fn) => disposers.push(fn),
+  };
+
+  // ---- lighting zones and real lights
+  b.zone({ id: 'panel', intensityVar: CK.panelLight, gain: 1.1 });
+  b.zone({ id: 'flood', intensityVar: FLOOD_VAR, color: 0xffe2b8 });
+  b.zone({ id: 'afds', intensityVar: 'ac.light.flood_afds', color: 0xffe2b8 });
+  b.zone({ id: 'ped_flood', intensityVar: 'ac.light.flood_pedestal', color: 0xffe2b8 });
+  b.zone({ id: 'dome', intensityVar: 'ac.light.dome', color: 0xfff0dc });
+  env.lighting.setAnnunciatorDimming(ANNUN_BRT, 0.4);
+  env.lighting.lampTestVar = CK.lampTest;
+  // Glareshield floods under the brow, aimed at each pilot's DUs (EST 3 cd incandescent floods).
+  env.lighting.addFloodLight('flood.l', 'flood', [14.36, -0.55, -0.236], [14.56, -0.55, 0.0], b.root, 3, 60);
+  env.lighting.addFloodLight('flood.r', 'flood', [14.36, 0.55, -0.236], [14.56, 0.55, 0.0], b.root, 3, 60);
+  // Pedestal flood in the overhead aft of the glareshield (EST 4 cd).
+  env.lighting.addFloodLight('flood.ped', 'ped_flood', [13.75, 0, -0.95], [13.8, 0, 0.35], b.root, 4, 45);
+  // Dome light in the headliner (EST 6 cd).
+  env.lighting.addDomeLight('dome', 'dome', [13.2, 0, -1.2], b.root, 6);
+
+  buildShell(b);
+  // AFDS flood strip under the glareshield brow (lights the MCP face).
+  const strip = new THREE.MeshStandardMaterial({ color: 0x151515, emissive: 0xffe2b8, emissiveIntensity: 0, roughness: 0.6 });
+  env.materials.track(strip);
+  env.lighting.registerBacklight(strip, 'afds', 1.4);
+  b.structureMesh(new THREE.BoxGeometry(0.62, 0.004, 0.008), strip, [14.33, 0, -0.343], undefined, false).name = 'afds_flood_strip';
+
+  buildMainPanel(c);
+  buildGlareshield(c);
+  buildPedestal(c);
+  buildAftPedestal(c);
+  buildFlightControls(c);
+  c.onDispose(installRadioTuning(ctx));
+  if (!o.mainOnly) {
+    for (const m of Object.values(OVERHEAD)) m.buildOverhead?.(c);
+    for (const m of Object.values(SIDE)) m.buildSideConsoles?.(c);
+  }
+
+  // ---- derived display-side vars (systems never read these)
+  const vars = ctx.vars;
+  b.onUpdate(() => {
+    vars.set(CK.panelLight, Math.max(vars.get('ac.light.panel_capt'), vars.get('ac.light.panel_fo'), vars.get('ac.light.panel_pedestal')));
+    vars.set(FLOOD_VAR, Math.max(vars.get('ac.light.flood_gs'), vars.get('ac.light.background')));
+    const lt = vars.get(B738.lightsTest);
+    vars.set(CK.lampTest, lt >= 0.5 ? 1 : 0);
+    vars.set(ANNUN_BRT, lt <= -0.5 ? 0 : 1);
+  });
+
+  const build = b.build();
+  const baseDispose = build.dispose?.bind(build);
+  build.dispose = () => {
+    for (const d of disposers) d();
+    disposers.length = 0;
+    baseDispose?.();
+  };
+  return { build, context: c };
+}

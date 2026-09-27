@@ -104,7 +104,7 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): ElectricalNetwo
     dc('radar', 'l_main_dc', 4.0, 7.5),
     dc('fms', 'l_main_dc', 1.5, 5),
     dc('ice_det', 'l_main_dc', 0.6, 3),
-    dc('panel_lts', 'l_main_dc', `4 * ${V.ltPanel} + 3 * ${V.ltFlood} + 1.5 * ${V.ltDome}`, 10, { model: 'resistive' }),
+    dc('panel_lts', 'l_main_dc', `4 * ${V.ltPanel} + 3 * ${V.ltFlood} + 1.5 * ${V.ltDome} + 2 * ${V.stormLt}`, 10, { model: 'resistive' }),
     dc('ext_nav', 'l_main_dc', 2.0, 5, { enabled: V.ltNav, model: 'resistive' }),
     dc('ext_beacon', 'l_main_dc', 1.5, 5, { enabled: V.ltBeacon }),
     dc('ext_ldg_l', 'l_main_dc', 6.0, 10, { enabled: V.ltLandingL }),

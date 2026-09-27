@@ -68,6 +68,11 @@ export class B738Logic implements Subsystem {
       v.set(`ac.b738.rev_fault${i}`, (v.get(`fadec.eng${i}.rev_unlocked`) !== 0 || v.get(`eng${i}.reverser_pos`) > 0.05) && rev < 0.02 ? 1 : 0);
     }
 
+    // ---- Tiller: hardware axis and the 3D cockpit handle (whichever is deflected more) -> nose-wheel steering.
+    const tHw = v.get('input.tiller');
+    const t3 = v.get(B738.tiller3d);
+    v.set(B738.tillerCmd, Math.abs(tHw) >= Math.abs(t3) ? tHw : t3);
+
     // ---- Stab trim column cutout switches, bypassed by STAB TRIM OVERRIDE (FCOM 9.20).
     v.set('ac.b738.trim_column', v.get(B738.stabTrimOvrd) !== 0 ? 0 : v.get('input.pitch'));
     // Aileron trim: both switches must be moved in the same direction.

@@ -187,6 +187,7 @@ export function setB738Switches(ctx: Pick<SimContext, 'vars'>, s: InitialState):
   v.set(B738.stabTrimOvrd, 0);
   v.set(B738.rudTrim, 0);
   v.set(B738.hornCutout, 0);
+  v.set(B738.tiller3d, 0);
   // ------------------------------------------------ FIRE PANEL
   v.set(B738.fireHandleApu, 0);
   v.set(B738.fireRotApu, 0);

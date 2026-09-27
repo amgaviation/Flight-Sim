@@ -169,6 +169,11 @@ export function setLongitudeSwitches(ctx: Pick<SimContext, 'vars'>, sys: Longitu
   v.set(V.oxyMaskL, 0);
   v.set(V.oxyMaskR, 0);
   v.set(V.oxyMode, 0);
+  v.set(V.oxyModeR, 0);
+  v.set(V.oxyTestL, 0);
+  v.set(V.oxyTestR, 0);
+  v.set(V.ltDome, 0);
+  v.set(V.lampTest, 0);
 }
 
 /** `AircraftInstance.applyState` of the Longitude. */

@@ -183,6 +183,13 @@ export const LON_VARS = {
   yokeTrimCmd: `${P}yoke.trim_cmd`, // merged wheel trim command (pilot priority), read by the stabilizer trim
   tillerCmd: `${P}tiller_cmd`, // merged tiller command (hardware axis or 3D handle), read by the NWS
   discHeld: `${P}yoke.disc_held`, // either AP/TRIM DISC held
+
+  // ---------------- Overhead / side consoles (added by the overhead + side-console agent)
+  ltDome: `${P}lt.dome`, // overhead DOME light toggle: 0 OFF, 1 ON (hot battery bus, EST)
+  oxyModeR: `${P}oxy.mode_r`, // copilot mask regulator: 0 NORM, 1 100 %, 2 EMER (pilot = oxyMode)
+  oxyTestL: `${P}oxy.test_l`, // mask stowage PRESS TO TEST, momentary: 1 while held
+  oxyTestR: `${P}oxy.test_r`,
+  lampTest: 'alert.annun_test', // overhead ANNUN TEST button (momentary), read by the CAS and every lens
 } as const;
 
 /** Every cockpit control var (inputs), for the "every control is consumed" audit test. */
@@ -206,6 +213,7 @@ export const LON_CONTROL_VARS: string[] = [
   LON_VARS.ltMapL, LON_VARS.ltMapR,
   LON_VARS.oxyPax, LON_VARS.oxyMaskL, LON_VARS.oxyMaskR, LON_VARS.oxyMode,
   LON_VARS.yokeTrimL, LON_VARS.yokeTrimR, LON_VARS.yokeDiscL, LON_VARS.yokeDiscR, LON_VARS.tiller3d,
+  LON_VARS.ltDome, LON_VARS.oxyModeR, LON_VARS.oxyTestL, LON_VARS.oxyTestR, LON_VARS.lampTest,
 ];
 
 /** Events emitted by cockpit buttons (momentary commands). */

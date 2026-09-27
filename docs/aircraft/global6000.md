@@ -696,3 +696,56 @@ In the headless start test (`start.test.ts`):
 - The TRU feeder mapping (§5.1) is EST.
 - The ACMP breakers are single-phase equivalents of 3-phase breakers.
 - The IAC aural mute gates only the CAS voices and chimes. TAWS / TCAS / stall aurals are unaffected.
+
+## 14. Main cockpit, exterior and module (cockpit agent)
+
+**Files**
+
+| File | Contents |
+|---|---|
+| `index.ts` | `AircraftModule`: systems + cockpit + exterior + `applyG6kState` + checklists + input map |
+| `cockpit/layout.ts` | flight-deck geometry: fuselage sections (shared with the exterior), eye points, main panel, AFD / IESI / gear-panel positions, glareshield, windshield and side-window glazing, pedestal, yokes, pedals, seats, tiller, overhead / side mounts |
+| `cockpit/context.ts` | builder context, legend helpers, cockpit-derived lamp vars (`ac.g6k.ck.*`, never read by systems), overhead / side extension contract |
+| `cockpit/index.ts` | `buildG6kCockpit(ctx, sys, { mainOnly?, canvas? })`, lighting zones and lights, preset views `G6K_VIEWS`, glob-loads `cockpit/overhead/index.ts` and `cockpit/side/index.ts` |
+| `cockpit/shell.ts` | walls, headliner, frames, floor, bulkhead, crackle glareshield hood, pedestal body, knee panels, seats |
+| `cockpit/mainPanel.ts` | AFD 1-4 (T), IESI, landing-gear panel, limitation placards |
+| `cockpit/glareshield.ts` | FCP-5120, CTP 1 / 2, MASTER WARNING / CAUTION |
+| `cockpit/pedestal.ts` | MKP 1 / 2, CCP 1 / 2, quadrant, trims, AUTOBRAKE, GLD, EGPWS, IRS, DC PWR EMER OVRD, EMS CDU, COCKPIT LIGHTS, PARK/EMER BRAKE, RAT and gear manual release handles |
+| `cockpit/emsCdu.ts` | EMS CDU (EMER CNTL bus isolation, FIRE / STALL TEST) logic + display |
+| `cockpit/flightControls.ts` | yokes (AP/SP DISC, pitch trim, TCS, FPV CAGE, CHRONO), pedals, NOSE STEER handwheel |
+| `systems/cockpitInputs.ts` | merges the 3D wheel trim / AP-SP DISC / tiller vars with the hardware inputs (the input module rewrites `input.*` every frame) |
+| `exterior.ts` | procedural exterior (§14.3) |
+
+**14.1 Geometry decisions (EST)**
+
+- Design eye from §10 (x 10.9, y ∓0.49, z −1.02). With the GXAG eye height the inner crown is only ~0.34 m above
+  the eye, so the overhead mount sits ~0.27 m above the eye (not the 0.50–0.60 m of §10), and the floor is 1.22 m
+  below the eye.
+- Glareshield brow 0.19 m below and 0.70 m ahead of the eye (15° over-the-nose line); §10's "0.05 m below the eye"
+  would block the forward view. Upper AFD row 0.40 m below the eye at 0.78 m; AFD 3 directly under AFD 2; the
+  pedestal top 0.41 m above the floor runs under AFD 3.
+- Windshield: two main panes with a centre post and wrap-round side panes (loft band ±0.8 rad), two side windows per
+  side. The exterior glazing uses the same regions.
+
+**14.2 Control coverage**
+
+`tests/aircraft/global6000/cockpit-main/coverage.test.ts` actuates every main-cockpit control (≈130 incl. the
+Fusion hardware) and requires each to change a var a system reads or emit a handled event: 0 unbound.
+`functional.test.ts` checks system reactions (EMS CDU bus isolation and fire test, wheel trim and AP/SP DISC
+interrupt, tiller steering and the gear-handle lock, reverse-lever / thrust-lever interlock, flap lever, ENG RUN
+shutdown, master warning acknowledge, lamp test, FCP AP). Built here but placed on panels that belong to other
+inventory sections: the tiller (§12.5) and the EMS CDU (§12.1 / §12.4 TEST and EMER CNTL functions).
+
+SCOPE: control-wheel push-to-talk / intercom switches are not built (no radio-transmit model); the EMS CDU has no
+SSPC (circuit-breaker) pages; the handwheel has no centring spring.
+
+**14.3 Exterior**
+
+Length 30.3 m, span 28.65 m, height ~7.7 m (tested). Kinked planform (LE ~37°), four slat segments (extend and
+droop with `surf.slats`), inboard / outboard Fowler flaps (rotation + aft travel), ailerons, 4 MFS + 2 ground
+spoilers per wing, blended winglets, T-tail with a trimmable stabilizer (`trim.pitch_units` 0–14 = −2…+12°),
+elevators, rudder, BR710 nacelles on pylons with target-type reverser doors (Hurel-Dubois nacelle), twin-wheel
+gear retracting with `gear.pos*`, doors, compression, steering and wheel spin, 27 cabin windows (14 R / 13 L),
+entry / baggage / emergency-exit seams. Lights from `light.*` (systems/lighting.ts): nav, wing-tip and tail strobes,
+upper / lower beacons, wing-root landing lights and nose-gear landing lights (real spot lights, candela ×
+`world.render_units_per_lux`), taxi / recognition, wing inspection, logo, emergency.

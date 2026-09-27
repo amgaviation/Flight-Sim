@@ -31,6 +31,8 @@ export function createLighting(ctx: Pick<SimContext, 'vars'>): LightingSystem {
       { id: 'panel', knob: V.ltPanel, power: 'elec.panel_lts_powered', output: ['ac.light.panel'] },
       { id: 'flood', knob: V.ltFlood, power: 'elec.panel_lts_powered', output: ['ac.light.flood'] },
       { id: 'dome', knob: V.ltDome, power: 'elec.panel_lts_powered', output: ['ac.light.dome'] },
+      // STORM (overhead COCKPIT LIGHTS switch): white storm floods at full brightness (EST: GVI-family storm function).
+      { id: 'storm', knob: V.stormLt, power: 'elec.panel_lts_powered', output: ['ac.light.storm'] },
       { id: 'seatbelt', knob: V.ltSeatbelt, power: 'elec.cabin_signs_powered', output: ['ac.light.seatbelt'] },
       { id: 'no_smoking', knob: V.ltNoSmoke, power: 'elec.cabin_signs_powered', output: ['ac.light.no_smoking'] },
     ],

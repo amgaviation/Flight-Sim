@@ -55,6 +55,8 @@ export function createLighting(ctx: Pick<SimContext, 'vars'>): LightingSystem {
       { id: 'aux', knob: V.ltAux, power: 'elec.panel_lts_powered', output: ['ac.light.aux'] },
       { id: 'map_l', knob: V.ltMapL, power: 'elec.emer_l_powered', output: ['ac.light.map_l'] },
       { id: 'map_r', knob: V.ltMapR, power: 'elec.emer_r_powered', output: ['ac.light.map_r'] },
+      // Overhead DOME light (on/off, hot battery bus; added with the overhead panel, EST).
+      { id: 'dome', knob: V.ltDome, power: 'elec.dome_lt_powered', output: ['ac.light.dome'] },
       // Display brightness (G5000 display.<id>.brt), never fully dark (EST min 5 %).
       { id: 'pfd_l', knob: V.ltPfdL, min: 0.05, output: ['display.pfd1.brt'] },
       { id: 'gtc_l', knob: V.ltGtcL, min: 0.05, output: ['display.gtc1.brt'] },

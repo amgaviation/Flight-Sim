@@ -203,8 +203,9 @@ export function createOxygen(ctx: Pick<SimContext, 'vars'>): OxygenSystem {
     // EST: 115 ft^3 (3,256 L NTPD) composite bottle at 1,850 psi (Citation family standard / optional 77 ft^3).
     bottles: [{ id: 'main', capacityL: 3256, fullPsi: 1850, lowPsi: 400 }],
     crew: [
-      { id: 'pilot', bottle: 'main', inUse: V.oxyMaskL, mode: V.oxyMode },
-      { id: 'copilot', bottle: 'main', inUse: V.oxyMaskR, mode: V.oxyMode },
+      // Each crew mask has its own regulator (NORM / 100 % / EMER) and PRESS TO TEST (side-console stowage boxes).
+      { id: 'pilot', bottle: 'main', inUse: V.oxyMaskL, mode: V.oxyMode, test: V.oxyTestL },
+      { id: 'copilot', bottle: 'main', inUse: V.oxyMaskR, mode: V.oxyModeR, test: V.oxyTestR },
     ],
     pax: { kind: 'gaseous', deploy: 'press.pax_masks', bottle: 'main', flowLpm: 30 },
   });

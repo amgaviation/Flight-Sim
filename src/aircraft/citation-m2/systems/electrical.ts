@@ -110,7 +110,9 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): ElectricalNetwo
     load('cabin_fan', 'r_xfeed', `${M2.cabinFan} * 4`, { shed: `!${onGroundOrBothGens}` }, 10),
     load('cabin_lts', 'r_xfeed', 5, { enabled: M2.cabinLt, shed: `!${onGroundOrBothGens}` }, 7.5),
     load('pax_signs', 'r_xfeed', 0.5, { enabled: `${M2.paxSafety} >= 1` }, 3),
-    load('inverter', 'r_xfeed', 3, { shed: `!${onGroundOrBothGens}` }, 25), // 500 W inverter, cabin outlets idle (EST)
+    // 500 W inverter: the outlet's switch turns it on when a plug is inserted (CAE CJ-family differences p. 5-26); copilot
+    // sidewall outlet (cockpit/side). EST 2.5 A DC for a typical ~50 W device plus inverter losses.
+    load('inverter', 'r_xfeed', 2.5, { enabled: 'ac.m2.ac_outlet_plug', shed: `!${onGroundOrBothGens}` }, 25),
     // Vapor-cycle A/C: ground only with GPU or the right engine running; sheds in flight with a generator off (S&D15 §9.5).
     load('air_cond', 'r_xfeed', 75, {
       enabled: `${M2.airCondSw} && (gear.air_ground == 0 || elec.gpu_online || ${ENG.running(2)})`,

@@ -54,8 +54,11 @@ export function buildLongitudeCockpit(ctx: SimContext, sys: LongitudeSystems, su
       { name: 'Pilot lower panel', position_m: [7.86, -0.42, -0.24], yawDeg: -2, pitchDeg: -32, fovDeg: 50 },
       { name: 'Pedestal', position_m: [7.42, -0.22, -0.36], yawDeg: 24, pitchDeg: -66, fovDeg: 60 },
       { name: 'MFD GTCs (FMS)', position_m: [7.92, -0.08, -0.2], yawDeg: 8, pitchDeg: -52, fovDeg: 45 },
-      { name: 'Overhead', position_m: [7.58, -0.3, -0.58], yawDeg: 12, pitchDeg: 62, fovDeg: 60 },
+      { name: 'Overhead', position_m: [7.52, -0.22, -0.56], yawDeg: 22, pitchDeg: 64, fovDeg: 55 },
       { name: 'Tiller / left console', position_m: [7.62, -0.45, -0.4], yawDeg: -40, pitchDeg: -45, fovDeg: 55 },
+      // Added with the side consoles (cockpit/side): oxygen masks and circuit-breaker panels.
+      { name: 'Left console (O2, breakers)', position_m: [7.5, -0.5, -0.3], yawDeg: -80, pitchDeg: -30, fovDeg: 62 },
+      { name: 'Right console (O2, breakers)', position_m: [7.5, 0.5, -0.3], yawDeg: 80, pitchDeg: -30, fovDeg: 62 },
     ],
   });
   const env = b.env;

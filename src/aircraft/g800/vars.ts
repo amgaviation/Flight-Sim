@@ -91,6 +91,9 @@ export const G800_VARS = {
 
   // =============================================================== OVERHEAD hardware (few physical items)
   fireTest: `${P}fire_test`, // FIRE TEST button, momentary 1 (overhead aft, SYSTEM TEST area)
+  // STORM light switch (overhead COCKPIT LIGHTS, cockpit-overhead agent): 0 OFF, 1 ON - all flood / dome lighting to full
+  // brightness for lightning (EST: GVI-family storm function; drives the 'storm' dimmer in systems/lighting.ts).
+  stormLt: `${P}storm_lt`,
   gpuAvail: `${P}gpu_avail`, // ground service: AC cart connected (set by the states / menu), not a cockpit control
 
   // =============================================================== GLARESHIELD

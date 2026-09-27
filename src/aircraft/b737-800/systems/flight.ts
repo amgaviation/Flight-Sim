@@ -210,7 +210,7 @@ export function createFlightControls(ctx: SimContext): FlightControlBlocks {
   });
 
   const steering = new NosewheelSteering(ctx, {
-    tiller: { maxDeg: 78 },
+    tiller: { maxDeg: 78, input: B738.tillerCmd },
     pedals: { maxDeg: 7 },
     power: `${B738.nwsSw} != 0 ? ${HYD_A} : ${HYD_B}`,
     engage: 'gear.down_locked',

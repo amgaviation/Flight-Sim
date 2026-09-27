@@ -121,8 +121,11 @@ async function main() {
     }
     if (PARTS.includes('views')) {
       const n = Number(process.env.SHOT_VIEWS || 7);
+      // SHOT_VIEW_LIST=9,10: only screenshot these view indices (the others are cycled through quickly).
+      const only = process.env.SHOT_VIEW_LIST ? process.env.SHOT_VIEW_LIST.split(',').map(Number) : null;
       for (let i = 1; i <= n; i++) {
         await page.evaluate(() => window.__sim.emit('view.cockpit'));
+        if (only && !only.includes(i)) continue;
         await frames(5);
         await sleep(500);
         const vn = await page.evaluate(() => document.body.innerText.match(/Cockpit: [^\n]*/)?.[0] ?? '');

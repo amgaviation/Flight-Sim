@@ -306,6 +306,7 @@ export function createLongitudeSystems(ctx: SimContext, opts: LongitudeSystemsOp
   const cas = new CasManager(ctx, {
     messages: LONGITUDE_CAS,
     power: 'elec.emer_l_powered || elec.emer_r_powered',
+    lampTest: V.lampTest, // overhead ANNUN TEST (same var as the library default, bound explicitly)
     // OG 3-3/3-4: TOPI from 85 kt until 400 ft / 30 s airborne; LOPI below 400 ft RA until 50 kt.
     phase: { takeoffInhibit: { fromKt: 85, toFt: 400, maxAfterLiftoffS: 30 }, landingInhibit: { belowFt: 400, untilKt: 50 } },
     sinks: suite ? [suite.casModel] : [],

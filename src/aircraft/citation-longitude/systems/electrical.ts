@@ -120,6 +120,9 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): ElectricalNetwo
     load('cabin_r', 'int_r', 18, {}, 30),
     // ---- STANDBY
     load('stby_inst', 'stby', 1.5, {}, 5),
+    // ---- HOT BATT L: cockpit dome light (EST: Citation-family entry/dome lighting on the hot battery bus so it
+    // works with the batteries off; ~30 W LED fixture). Added with the overhead panel.
+    load('dome_lt', 'hot_l', 1.2, { enabled: V.ltDome, model: 'resistive' }, 5),
     // ---- SERVICE (R): refuel panel, service lights (EST)
     load('service', 'svc', 1, {}, 5),
   ];
@@ -146,7 +149,10 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): ElectricalNetwo
       // OG 5-3: PTCU generator mode 28 V, 200 A max; drive = PTCU hydraulic motor speed fraction x 100 (logic.ts).
       { id: 'ptcu_gen', bus: 'mission_r', kind: 'generator', regulatedV: 27.8, ratedA: LON_LIMITS.ptcuGenA, drive: 'hyd.ptcu_gen_drive', minDrive: 90 },
     ],
-    externals: [{ id: 'gpu', bus: 'mission_l', type: 'dc', available: V.extPwrAvail, switch: V.extPwr, voltage: 28 }],
+    // GPU: 28 V regulated at the aircraft receptacle (EST: remote-sensing ground power unit, 1.5 mOhm cable/contactor
+    // drop). With the library default 4 mOhm the bus sagged to ~27.2 V under the ~180 A ground load, below the Li-ion
+    // battery EMF, so the batteries discharged on ground power (OG 17-2 expects "BATT Amps 0 or Charging").
+    externals: [{ id: 'gpu', bus: 'mission_l', type: 'dc', available: V.extPwrAvail, switch: V.extPwr, voltage: 28, resistanceOhm: 0.0015 }],
     links: [
       { id: 'batt_l_rly', a: 'hot_l', b: 'emer_l', closed: `${V.battL} && !fail.elec.batt_l_rly`, coil: contactor },
       { id: 'batt_r_rly', a: 'hot_r', b: 'emer_r', closed: `${V.battR} && !fail.elec.batt_r_rly`, coil: contactor },
