@@ -11,7 +11,7 @@
  *   SHOT_AIRCRAFT (citation-longitude), SHOT_AIRPORT (KTEB), SHOT_RUNWAY (01), SHOT_STATE (ready_to_taxi),
  *   SHOT_TIME (15:00), SHOT_WEATHER (cavok), SHOT_PARTS (cockpit,views,exterior), SHOT_EVAL (JS run in the
  *   page before the shots, e.g. "__sim.set('ac.lon.lt.ldg_l',1)"), SHOT_WAIT_S (sim seconds before shots, 4),
- *   CHROMIUM_PATH, HTTPS_PROXY, SMOKE_CA_FILE (see scripts/smoke.mjs).
+ *   SHOT_OUT (output folder instead of tests/output/<aircraft>), CHROMIUM_PATH, HTTPS_PROXY, SMOKE_CA_FILE (see scripts/smoke.mjs).
  */
 import http from 'node:http';
 import crypto from 'node:crypto';
@@ -22,7 +22,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = process.env.SHOT_DIST ? path.resolve(process.env.SHOT_DIST) : path.join(ROOT, 'dist');
 const AC = process.env.SHOT_AIRCRAFT || 'g800';
-const OUT = path.join(ROOT, 'tests', 'output', AC);
+const OUT = process.env.SHOT_OUT ? path.resolve(process.env.SHOT_OUT) : path.join(ROOT, 'tests', 'output', AC);
 const CHROMIUM = process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
 const PARTS = (process.env.SHOT_PARTS || 'cockpit,views,exterior').split(',');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.wasm': 'application/wasm', '.gz': 'application/octet-stream' };
