@@ -59,7 +59,8 @@ const ADI_G1K: AttitudeStyle = {
   bank: { ...ADI_GARMIN.bank, radius: 200 },
 };
 /** Airspeed tape: 340 px for 60 kt = 5.67 px/kt (PG: "60 knots of airspeed viewable"). */
-const SPD_G1K: SpeedTapeStyle = { ...SPEED_TAPE_GARMIN, palette: P, typeface: TF, pxPerKt: 340 / 60, labelSize: 20, readoutW: 70, readoutH: 38, readoutSize: 24, rollWindowH: 58 };
+/** Off-scale V-speed values are not listed beside the tape; below 20 KIAS the PFD lists them itself (drawVspeedList). */
+const SPD_G1K: SpeedTapeStyle = { ...SPEED_TAPE_GARMIN, palette: P, typeface: TF, pxPerKt: 340 / 60, labelSize: 20, readoutW: 70, readoutH: 38, readoutSize: 24, rollWindowH: 58, offscaleList: 'none' };
 /** Altimeter: 340 px for 600 ft (PG: "600 feet of barometric altitude"). */
 const ALT_G1K: AltitudeTapeStyle = { ...ALT_TAPE_GARMIN, palette: P, typeface: TF, pxPerFt: 340 / 600, labelSize: 19, readoutW: 100, readoutH: 38, readoutSize: 23, rollWindowH: 60 };
 const HSI_G1K: HsiStyle = { ...HSI_GARMIN, palette: P, typeface: TF, labelSize: 19, majorTickLen: 16, minorTickLen: 9 };
@@ -157,7 +158,7 @@ export class PfdRenderer {
   }
 
   private placeInset(): void {
-    this.inset.setRect(this.rev ? { x: 1024 - 204, y: 478, w: 202, h: 227 } : { x: 0, y: 478, w: 240, h: 227 });
+    this.inset.setRect(this.rev ? { x: 1024 - 204, y: 488, w: 202, h: 217 } : { x: 0, y: 478, w: 240, h: 227 });
   }
 
   /** Lower right window rectangle (narrower in reversionary mode). */
@@ -409,6 +410,7 @@ export class PfdRenderer {
     this.spd.draw(ctx);
     if (!this.spd.state.valid) this.redX(ctx, this.spd.x, this.spd.y, this.spd.w, this.spd.h);
     this.drawTas(ctx, dcl);
+    this.drawVspeedList(ctx);
     this.alt.draw(ctx);
     this.vsi.draw(ctx);
     if (!this.alt.state.valid) this.redX(ctx, this.alt.x, this.alt.y, this.alt.w + 48, this.alt.h);
@@ -447,7 +449,7 @@ export class PfdRenderer {
     const mapMode = v.get(G1K.pfdMap);
     if (!dcl && !this.hsiMapOn && mapMode !== PFD_MAP.off) {
       this.inset.draw(ctx);
-      const r = this.rev ? { x: 1024 - 204, y: 478, w: 202, h: 227 } : { x: 0, y: 478, w: 240, h: 227 };
+      const r = this.rev ? { x: 1024 - 204, y: 488, w: 202, h: 217 } : { x: 0, y: 478, w: 240, h: 227 };
       box(ctx, r.x, r.y, r.w, r.h, '', G1K_COLORS.boxBorder, 1.5);
     }
     // CAS window (PG Appendix A: up to 12 lines; opens when messages exist).
@@ -503,6 +505,25 @@ export class PfdRenderer {
       if (lbl % 30 === 0) TF.draw(ctx, fmtInt(lbl === 0 ? 360 : lbl), x, y - 12, 12, P.white, 'center', 'middle', '#000000');
     }
     ctx.restore();
+  }
+
+  /**
+   * Below 20 KIAS the enabled V-speed references are listed at the bottom of the airspeed tape (the bugs
+   * are off the tape; PG §2.1 "Vspeed References").
+   */
+  private drawVspeedList(ctx: Ctx2D): void {
+    const sys = this.sys;
+    if (this.spd.state.valid && this.spd.state.ias >= 20) return;
+    const defs = sys.refs.vspeeds.defs;
+    let y = this.spd.y + this.spd.h - 12;
+    for (let i = defs.length - 1; i >= 0; i--) {
+      const d = defs[i];
+      if (!sys.refs.vspeeds.on(d.id)) continue;
+      box(ctx, this.spd.x + 4, y - 9, 16, 18, '#000000', '');
+      TF.draw(ctx, d.label, this.spd.x + 12, y, 14, P.cyan, 'center', 'middle');
+      TF.draw(ctx, fmtInt(sys.refs.vspeeds.value(d.id)), this.spd.x + this.spd.w - 6, y, 15, P.cyan, 'right', 'middle');
+      y -= 20;
+    }
   }
 
   private drawTas(ctx: Ctx2D, dcl: boolean): void {

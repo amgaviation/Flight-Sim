@@ -92,8 +92,10 @@ async function main(): Promise<void> {
     vars.set('ac.c172.s_batt_a', 0);
   };
   setTruth(0);
-  suite.radios?.gps?.forceAcquired();
   if (state !== 'boot' && state !== 'splash') suite.applyState(ground ? 'ready_to_taxi' : approach ? 'approach' : 'cruise');
+  suite.radios?.gps?.forceAcquired();
+  // One update so the GPS position is valid before the flight plan identifiers are resolved (nearest first).
+  for (const s of systems) s.update(1 / 60);
 
   const fpl = suite.system.fpl!;
   if (approach) {
@@ -145,7 +147,8 @@ async function main(): Promise<void> {
     setTruth(t);
     for (const s of systems) s.update(dt);
   };
-  for (let i = 0; i < 2 * 60; i++) step(1 / 60);
+  // 'splash': run past the 15 s GDU boot to the MFD power-on page.
+  for (let i = 0; i < (state === 'splash' ? 17 : 2) * 60; i++) step(1 / 60);
   if (!ground) {
     events.emit('g1k.pfd.key_ap');
     if (approach) {

@@ -24,7 +24,7 @@ import {
   type Page,
 } from '../state/pages';
 import type { G1000System } from '../state/System';
-import { G1K, vn } from '../vars';
+import { vn } from '../vars';
 import { G1K_PALETTE, TF, winBox } from './style';
 
 const P = G1K_PALETTE;
@@ -134,7 +134,7 @@ export function drawPage(ctx: Ctx2D, sys: G1000System, page: Page, r: Rect, time
   else if (page instanceof NearestAirportsPage) drawNearest(ctx, page, body, time);
   else if (page instanceof AlertsPage) drawAlerts(ctx, sys, page, body);
   else if (page instanceof FplPage) drawFpl(ctx, page, body, time);
-  else if (page instanceof DirectToPage) drawDto(ctx, sys, page, body, time);
+  else if (page instanceof DirectToPage) drawDto(ctx, page, body, time);
   else if (page instanceof ProcLoadingPage) drawProcLoad(ctx, page, body, time);
   else if (page instanceof ProcPage) drawProc(ctx, page, body);
   else if (page instanceof DmePage) drawDme(ctx, sys, page, body, time);
@@ -273,7 +273,7 @@ function drawFpl(ctx: Ctx2D, p: FplPage, r: Rect, time: number): void {
   if (p.insertError) TF.draw(ctx, p.insertError, r.x + r.w / 2, r.y + r.h - 8, 12, P.amber, 'center', 'middle');
 }
 
-function drawDto(ctx: Ctx2D, sys: G1000System, p: DirectToPage, r: Rect, time: number): void {
+function drawDto(ctx: Ctx2D, p: DirectToPage, r: Rect, time: number): void {
   const f = p.form;
   let y = r.y + 10;
   TF.draw(ctx, 'WPT', r.x, y, 12, P.white, 'left', 'middle');
@@ -291,10 +291,10 @@ function drawDto(ctx: Ctx2D, sys: G1000System, p: DirectToPage, r: Rect, time: n
   TF.draw(ctx, Number.isFinite(bd.dist) ? join2(fmtDist(bd.dist), 'NM') : '__._NM', r.x + r.w, y, 14, P.white, 'right', 'middle');
   y += 22;
   TF.draw(ctx, 'CRS', r.x, y, 12, P.white, 'left', 'middle');
-  drawField(ctx, f, 'crs', join2(val(f, 'crs'), '°'), r.x + 90, y, 14, P.cyan, 'right', time);
+  const crs = val(f, 'crs');
+  drawField(ctx, f, 'crs', crs === '0' ? '___°' : join2(crs, '°'), r.x + 90, y, 14, P.cyan, 'right', time);
   y += 30;
-  drawField(ctx, f, 'activate', 'Activate?', r.x + r.w / 2, y, 15, P.white, 'center', time);
-  void sys;
+  drawField(ctx, f, 'activate', 'Activate?', r.x + r.w / 2, y, 15, p.target ? P.white : P.grey, 'center', time);
 }
 
 function drawProc(ctx: Ctx2D, p: ProcPage, r: Rect): void {
@@ -356,7 +356,6 @@ function drawDme(ctx: Ctx2D, sys: G1000System, p: DmePage, r: Rect, time: number
   const ok = v.get(vn(NAV.dmeValid, rx)) >= 0.5;
   TF.draw(ctx, fmtNav(v.get(vn(NAV.activeFreq, rx))), r.x + r.w, r.y + 12, 14, P.white, 'right', 'middle');
   TF.draw(ctx, ok ? join2(fmtFixed(v.get(vn(NAV.dmeNm, rx)), 1), 'NM') : '---.-NM', r.x + r.w, r.y + 34, 14, P.green, 'right', 'middle');
-  void G1K;
 }
 
 /** Bearing / distance helper for the MFD pages (re-exported). */

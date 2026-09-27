@@ -216,7 +216,7 @@ export class TopBar {
     }
   }
 
-  /** Vertical reference next to the active vertical mode: ↑500FPM, 7500FT, 90KT, 5.0°. */
+  /** Vertical reference next to the active vertical mode (PG Table 7-2): VS ↑500FPM, ALT 7500FT, FLC 90KT. */
   private vertRef(vert: string): string {
     const v = this.sys.vars;
     switch (vert) {
@@ -225,17 +225,16 @@ export class TopBar {
         return join2(fpm >= 0 ? join2('↑', fmtInt(fpm)) : join2('↓', fmtInt(-fpm)), 'FPM');
       }
       case 'ALT':
-      case 'ALTS':
         return join2(fmtInt(Math.round(v.get('ap.alt_ref_ft', v.get(AP.selAltitude)) / 10) * 10), 'FT');
+      case 'ALTS':
+        // "The Selected Altitude is shown as the Altitude Reference beside the 'ALTS' annunciation" (PG §7.3).
+        return join2(fmtInt(v.get(AP.selAltitude)), 'FT');
       case 'ALTV':
         return join2(fmtInt(v.get(FMS.vnavTargetAltFt)), 'FT');
       case 'FLC':
         return join2(fmtInt(v.get(AP.selSpeed)), 'KT');
-      case 'PIT': {
-        const p = v.get('ap.pitch_ref_deg');
-        return Number.isFinite(p) ? join2(fmtFixed(Math.abs(p), 1), p >= 0 ? '°↑' : '°↓') : '';
-      }
       default:
+        // PIT, LVL, VPTH, GS, GP, GA: no reference in the status box (PG Table 7-2).
         return '';
     }
   }

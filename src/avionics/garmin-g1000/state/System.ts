@@ -240,7 +240,9 @@ export class G1000System implements Subsystem {
     init(G1K.metersOverlay, 0);
     init(G1K.obs, 0);
     init(G1K.obsCourse, 360);
-    init(G1K.svt, this.cfg.terrain === 'SVT' ? 1 : 0);
+    // SCOPE: no synthetic terrain imagery is rendered, so SVT starts off (PFD Opt > SVT > Terrain turns on
+    // the SVT symbology: flight path marker and horizon heading labels).
+    init(G1K.svt, 0);
     init(G1K.svtPathways, 0);
     init(G1K.svtHdgLabels, 1);
     init(G1K.svtAptSigns, 1);

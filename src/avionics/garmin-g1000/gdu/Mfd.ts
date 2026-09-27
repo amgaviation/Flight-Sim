@@ -39,6 +39,8 @@ export class MfdRenderer {
   readonly eis: EisRenderer;
   readonly top: TopBar;
   private readonly navMap: G1kMap;
+  /** Map in the left part of the WPT / NRST / FPL pages (own-ship centred in that area). */
+  private readonly splitMap: G1kMap;
   private readonly trafficMap: G1kMap;
   private readonly terrainMap: G1kMap;
   private time = 0;
@@ -47,6 +49,7 @@ export class MfdRenderer {
     this.eis = new EisRenderer(sys);
     this.top = new TopBar(sys);
     this.navMap = new G1kMap(sys, 'nav', BODY);
+    this.splitMap = new G1kMap(sys, 'nav', { x: BODY.x, y: BODY.y, w: Math.round(BODY.w * 0.52), h: BODY.h });
     this.trafficMap = new G1kMap(sys, 'traffic', BODY);
     this.terrainMap = new G1kMap(sys, 'terrain', BODY);
   }
@@ -56,7 +59,8 @@ export class MfdRenderer {
     this.top.update(dt);
     this.eis.update(dt);
     const id = this.sys.mfd.basePage.id;
-    if (id === 'map_nav' || id === 'wpt_apt' || id.startsWith('nrst') || id === 'fpl') this.navMap.update(dt);
+    if (id === 'map_nav') this.navMap.update(dt);
+    else if (id === 'wpt_apt' || id.startsWith('nrst') || id === 'fpl') this.splitMap.update(dt);
     else if (id === 'map_traffic') this.trafficMap.update(dt);
     else if (id === 'map_terrain') this.terrainMap.update(dt);
   }
@@ -103,12 +107,7 @@ export class MfdRenderer {
     const split = page instanceof AirportInfoPage || page instanceof NearestAirportsPage || page instanceof NearestNavaidPage || id === 'fpl';
     const data: Rect = split ? { x: r.x + r.w * 0.52, y: r.y + 24, w: r.w * 0.48 - 8, h: r.h - 28 } : { x: r.x + 12, y: r.y + 24, w: r.w - 24, h: r.h - 28 };
     if (split) {
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(r.x, r.y, r.w * 0.52, r.h);
-      ctx.clip();
-      this.navMap.draw(ctx);
-      ctx.restore();
+      this.splitMap.draw(ctx);
       line(ctx, r.x + r.w * 0.52, r.y, r.x + r.w * 0.52, r.y + r.h, G1K_COLORS.boxBorder, 1);
     }
     if (page instanceof AirportInfoPage) this.drawAirportInfo(ctx, page, data);

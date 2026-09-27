@@ -93,8 +93,8 @@ const FUS: [number, number, number, number][] = [
   [0, 1.62, 0.64, 0.52], // firewall
   [12, 1.66, 0.62, 0.55], // windshield base
   [30, 1.88, 0.61, 0.56],
-  [42, 1.98, 0.61, 0.56], // wing leading edge / windshield top
-  [85, 1.98, 0.62, 0.56],
+  [42, 2.02, 0.61, 0.56], // wing leading edge / windshield top (skin meets the wing root lower surface)
+  [85, 2.02, 0.62, 0.56],
   [105, 1.93, 0.66, 0.54],
   [130, 1.72, 0.74, 0.47], // rear window (Omni-Vision) aft end
   [160, 1.55, 0.84, 0.37],
@@ -196,7 +196,8 @@ export function createC172Exterior(vars: SimVars, opts: C172ExteriorOptions = {}
   }
   // Windows (dark glass laid on the skin): windshield, door windows, rear side windows, rear window.
   const winStrip = (s0: number, s1: number, th0: number, th1: number, name: string, parent: THREE.Object3D) =>
-    mesh(loftFuselage(P, sta(s1), sta(s0), th0, th1, 10, 6, { inset: -0.006 }), glass, name, parent);
+    // Tessellated like the skin (~2 in per segment) and 1 cm proud so the curved skin never pokes through.
+    mesh(loftFuselage(P, sta(s1), sta(s0), th0, th1, Math.max(8, Math.round((s1 - s0) / 2)), 16, { inset: -0.01 }), glass, name, parent);
   const cockpitGlass = new THREE.Group();
   cockpitGlass.name = 'cockpit_glass';
   root.add(cockpitGlass);
@@ -414,6 +415,18 @@ export function createC172Exterior(vars: SimVars, opts: C172ExteriorOptions = {}
     travel: number;
   }
   const legs: Leg[] = [];
+  /** Teardrop wheel fairing (three-local: x lateral half-width, y half-height, z half-length, -z forward). */
+  const fairingGeometry = (hw: number, hh: number, hl: number): THREE.BufferGeometry => {
+    const g = track(new THREE.SphereGeometry(1, 24, 14));
+    const pos = g.getAttribute('position');
+    for (let i = 0; i < pos.count; i++) {
+      const z = pos.getZ(i);
+      const taper = z > 0 ? 1 - 0.6 * z : 1; // aft half tapers to a rounded tail
+      pos.setXYZ(i, pos.getX(i) * hw * taper, pos.getY(i) * hh * (z > 0 ? 1 - 0.35 * z : 1), z * hl);
+    }
+    g.computeVertexNormals();
+    return g;
+  };
   const wheel = (radius: number, width: number, parent: THREE.Object3D): THREE.Object3D => {
     const w = new THREE.Group();
     const tg = track(new THREE.TorusGeometry(radius * 0.72, radius * 0.28, 10, 24));
@@ -444,9 +457,10 @@ export function createC172Exterior(vars: SimVars, opts: C172ExteriorOptions = {}
     leg.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), axle.clone().sub(hip).normalize());
     const w = wheel(0.222, 0.15, steer);
     w.position.copy(axle);
-    const fairing = mesh(track(new THREE.SphereGeometry(1, 20, 12)), paint, 'wheel_fairing', steer);
-    fairing.scale.set(0.12, 0.26, 0.52);
-    fairing.position.copy(axle).add(new THREE.Vector3(0, 0.03, 0.05));
+    // Speed fairing (EST ~38 in long, 16 in tall, 9 in wide): blunt nose, tapered tail, the tyre
+    // showing ~1.5 in below it.
+    const fairing = mesh(fairingGeometry(0.115, 0.2, 0.5), paint, 'wheel_fairing', steer);
+    fairing.position.copy(axle).add(new THREE.Vector3(0, 0.03, 0.1));
     legs.push({ index: idx, strut, steer, wheel: w, radius: 0.222, travel: 0.15 });
   }
   // Nose: air/oil strut from the lower cowl, 5.00-5 tyre (EST 15 in), fairing; steerable.
@@ -462,9 +476,8 @@ export function createC172Exterior(vars: SimVars, opts: C172ExteriorOptions = {}
     const oleo = mesh(track(new THREE.CylinderGeometry(0.03, 0.03, top.distanceTo(bl(...axleB)) + 0.05, 10)), metal, 'nose_oleo', strut);
     oleo.position.copy(top).add(bl(...axleB)).multiplyScalar(0.5);
     const w = wheel(0.19, 0.13, steer);
-    const fairing = mesh(track(new THREE.SphereGeometry(1, 20, 12)), paint, 'nose_fairing', steer);
-    fairing.scale.set(0.1, 0.22, 0.42);
-    fairing.position.set(0, 0.03, 0.04);
+    const fairing = mesh(fairingGeometry(0.1, 0.18, 0.42), paint, 'nose_fairing', steer);
+    fairing.position.set(0, 0.03, 0.08);
     legs.push({ index: 0, strut, steer, wheel: w, radius: 0.19, travel: 0.18 });
   }
 
