@@ -30,20 +30,37 @@
  * position legends are backlit by the INTEGRAL OVHD dimmer (zone
  * 'panel_ovhd', systems/lighting.ts `ac.light.panel_ovhd`).
  *
- * SCOPE (not built, no system to drive): AUX PRESS PBA and the pack LO /
- * HIGH flow legend (the FCOM does not describe their function in the public
- * chapter), the "EMS" legend next to BATT MASTER, the gasper, the standby
- * compass and the CVR area microphone. The Global has no windshield wipers
- * (no WIPER control on the FCOM overhead).
+ * Global Vision changes (fix round 1, photos EB190582 crops e_ovhd / e_bleed /
+ * e_elec_eng / e_press_lts and N835GL top edge): CABIN SYSTEMS module (CABIN
+ * OUTLETS, CABIN POWER) aft left above AURAL WARNING; AUX PRESS (clear guard)
+ * between the L / R MAN TEMP HOT / COLD toggles; PACK CONTROL LO / NORM / HIGH
+ * (/ MAN, GX PTG 13) rotary; ENGINE START rotary L CRANK / AUTO / R CRANK,
+ * IGNITION and MODE L / R N1 / EPR toggles; EMER DC PWR (red guard) and RAT
+ * GEN (clear guard) on ELECTRICAL; PRESSURIZATION order AUTO/MAN, MAN ALT,
+ * LDG ELEV MAN / FMS + UP / DN, RATE, with EMER DEPRESS (yellow guard) and
+ * DITCHING (clear guard); WINDSHIELD HEAT OFF/RESET - ON rotaries; LANDING
+ * lights PULSE / OFF / STEADY and TAXI/RECOG WINGTIP / OFF / ON; the pressure
+ * differential WARNING placard; one continuous tapered console with carbon
+ * side trim and chrome gaspers at the aft corners; forward-edge fitting strip
+ * with the READING LIGHT switches (map / reading lights, V.ltMap), two
+ * gaspers, the STANDBY COMPASS (pull down to open) and the NO SMOKING sign.
+ * The FIRE handles stay on the aft strip of the GX FCOM drawing: the Vision
+ * photographs do not show that part of the overhead.
+ * SCOPE: the "EMS" position of BATT MASTER and the CVR area microphone are not
+ * built. The Global has no windshield wipers (no WIPER control on the FCOM
+ * overhead).
  */
 import * as THREE from 'three';
-import { GuardedButton, GuardedSwitch, PushButton, RotaryKnob, SelectorKnob, TBarHandle, ToggleSwitch } from '../../../../cockpit/controls';
+import { AnnunciatorLight, GuardedButton, GuardedSwitch, PushButton, RotaryKnob, SelectorKnob, TBarHandle, ToggleSwitch } from '../../../../cockpit/controls';
 import type { LegendSegment } from '../../../../cockpit/controls';
 import type { Panel } from '../../../../cockpit/CockpitBuilder';
 import { G6K_LIMITS } from '../../data';
 import { G6K_VARS as V } from '../../vars';
 import { seg, type G6kCockpitContext } from '../context';
-import { MODULES, OVHD, px, py, SZ } from './layout';
+import { MODULES, OVHD, OVHD_FWD_EDGE, px, py, SZ } from './layout';
+import { gasper } from '../mainPanel';
+import { g6kFinish } from '../finish';
+import { CompassCard } from './compass';
 
 /** Backlighting zone of the overhead (INTEGRAL OVHD knob, systems/lighting.ts dimmer 'panel_ovhd'). */
 export const OVHD_ZONE = 'panel_ovhd';
@@ -55,7 +72,6 @@ export const OH = {
   apuGenFail: 'ac.g6k.ck.oh.apu_gen_fail',
   ratGenFail: 'ac.g6k.ck.oh.rat_gen_fail',
   xfeedFail: 'ac.g6k.ck.oh.xfeed_fail',
-  startInProg: (i: 1 | 2) => `ac.g6k.ck.oh.start${i}`,
 } as const;
 
 type Seg = LegendSegment;
@@ -88,7 +104,7 @@ function pba(k: Ctx, o: { id: string; label: string; v: string; x: number; y: nu
 }
 
 /** Guarded switchlight (red or clear cover) at drawing (x, y) pt. */
-function guardedPba(k: Ctx, o: { id: string; label: string; v: string; x: number; y: number; segs: Seg[]; name: string; color?: 'red' | 'clear' | 'black'; guardVar?: string }): void {
+function guardedPba(k: Ctx, o: { id: string; label: string; v: string; x: number; y: number; segs: Seg[]; name: string; color?: 'red' | 'clear' | 'black' | 'yellow'; guardVar?: string }): void {
   k.p.add(
     new GuardedButton(k.c.env, {
       id: o.id,
@@ -225,6 +241,8 @@ export function buildOverhead(c: G6kCockpitContext): void {
   divider(228, 428, 312, 428); // FUEL | ENGINE
   divider(415, 386, 517, 386); // EXTERNAL LIGHTS | PASS SIGNS
 
+  buildConsole(k);
+  buildFittings(k);
   buildFire(k);
   buildAft(k);
   buildHydraulic(k);
@@ -244,7 +262,6 @@ export function buildOverhead(c: G6kCockpitContext): void {
     sw: V.gen(n),
     run: n <= 2 ? 'eng1.running' : 'eng2.running',
   }));
-  const starts = ([1, 2] as const).map((i) => ({ out: OH.startInProg(i), cmd: `fadec.eng${i}.starter_cmd` }));
   b.onUpdate(() => {
     for (let i = 0; i < gens.length; i++) {
       const g = gens[i];
@@ -253,7 +270,84 @@ export function buildOverhead(c: G6kCockpitContext): void {
     vars.set(OH.apuGenFail, (vars.get('elec.apu_gen_tripped') !== 0 || vars.get('fail.elec.apu_gen') !== 0) && vars.get(V.apuGen) === 1 && vars.get('apu.avail') !== 0 ? 1 : 0);
     vars.set(OH.ratGenFail, vars.get(V.ratDeployed) !== 0 && vars.get(V.ratGen) === 1 && vars.get('elec.rat_gen_online') === 0 && vars.get(V.ratDrive) > G6K_LIMITS.ratShedKias + 10 ? 1 : 0);
     vars.set(OH.xfeedFail, (vars.get(V.xfeed) === 1) !== (vars.get('fuel.xfeed_open') !== 0) && vars.get('fuel.xfeed_transit') === 0 && vars.get('elec.xfeed_valve_powered') !== 0 ? 1 : 0);
-    for (let i = 0; i < starts.length; i++) vars.set(starts[i].out, vars.get(starts[i].cmd) > 0 ? 1 : 0);
+  });
+}
+
+/**
+ * One continuous tapered console (photo e_ovhd): a carbon-fibre shell behind the painted modules, wider at the
+ * forward edge than aft, with chrome gasper eyeballs at the aft corners and the forward fitting strip (EST outline
+ * from the photograph; carbon weave not rendered).
+ */
+function buildConsole(k: Ctx): void {
+  const { env } = k.c;
+  const fin = g6kFinish(env);
+  const shape = new THREE.Shape();
+  const pt = (x: number, y: number) => [px(x), -py(y)] as const;
+  shape.moveTo(...pt(170, 652));
+  shape.lineTo(...pt(476, 652));
+  shape.lineTo(...pt(528, 352));
+  shape.lineTo(...pt(522, 316));
+  shape.lineTo(...pt(126, 316));
+  shape.lineTo(...pt(120, 352));
+  shape.closePath();
+  const g = new THREE.ExtrudeGeometry(shape, { depth: 0.09, bevelEnabled: false });
+  g.translate(0, 0, -0.092);
+  k.c.b.trackGeometry(g);
+  const m = new THREE.Mesh(g, fin.carbon);
+  m.userData.cockpitStatic = true;
+  m.name = 'overhead_carbon';
+  k.p.addObject(m, 0, 0);
+  gasper(k.c, k.p, 'ovhd_aft_l', px(192), py(582), 'OVERHEAD AFT LEFT', Z);
+  gasper(k.c, k.p, 'ovhd_aft_r', px(452), py(582), 'OVERHEAD AFT RIGHT', Z);
+}
+
+/**
+ * Forward-edge fitting strip above the windshield (photo N835GL top edge): READING LIGHT switch at each corner (the
+ * map / reading lamp beside it, V.ltMap), two gaspers, the STANDBY COMPASS (pull down to open) and the NO SMOKING
+ * sign (lit from the PASS SIGNS logic, `ac.light.no_smoking`).
+ */
+function buildFittings(k: Ctx): void {
+  const { env, b } = k.c;
+  const y = 334;
+  for (const n of [1, 2] as const) {
+    const x = n === 1 ? 152 : 497;
+    const zone = n === 1 ? 'map_l' : 'map_r';
+    // Switch and lamp head straight on the carbon strip (the photo's small plate is part of the strip).
+    const x0 = px(x) - 0.025;
+    const y0 = py(y) - 0.018;
+    k.p.label('READING LIGHT', x0 + 0.025, y0 + 0.006, { height: 0.0019, zone: Z });
+    k.p.add(new ToggleSwitch(env, { id: `g6k.ovhd.reading_light${n}`, label: `${n === 1 ? 'PILOT' : 'COPILOT'} READING LIGHT`, var: V.ltMap(n), positions: ['OFF', 'ON'], values: [0, 1], labels: { positions: true, height: 0.0017, zone: Z }, scale: 0.65 }), x0 + 0.018, y0 + 0.022);
+    // Lamp head (emissive lens in zone map_l / map_r).
+    const lampG = env.geometry.get('g6k.maplamp', () => new THREE.CylinderGeometry(0.009, 0.011, 0.016, 16).rotateX(Math.PI / 2).translate(0, 0, 0.008));
+    const lens = (env.materials.custom('gloss', 0xfff4de, 0.3) as THREE.MeshStandardMaterial).clone();
+    lens.emissive = new THREE.Color(0xfff1dc);
+    env.materials.track(lens);
+    env.lighting.registerBacklight(lens, zone, 3);
+    const lamp = new THREE.Mesh(lampG, env.materials.get('plasticBlack'));
+    const glass = new THREE.Mesh(new THREE.CircleGeometry(0.0085, 16).translate(0, 0, 0.0165), lens);
+    b.trackGeometry(glass.geometry);
+    lamp.add(glass);
+    k.p.addObject(lamp, x0 + 0.038, y0 + 0.022, { z: 0.002 });
+  }
+  gasper(k.c, k.p, 'ovhd_fwd_l', px(222), py(y), 'OVERHEAD FORWARD LEFT', Z);
+  gasper(k.c, k.p, 'ovhd_fwd_r', px(427), py(y), 'OVERHEAD FORWARD RIGHT', Z);
+  // STANDBY COMPASS: stowed in the strip; the PUSH / PULL cover toggles V.compassOpen; the card hangs below when open.
+  k.p.add(
+    new PushButton(env, { id: 'g6k.ovhd.compass', label: 'STANDBY COMPASS (pull down to open)', var: V.compassOpen, mode: 'toggle', style: 'key', width: 0.06, height: 0.034, capMaterial: 'plasticBlack', engraved: 'STBY COMPASS', engravedHeight: 0.0026, zone: Z }),
+    px(324),
+    py(y + 2),
+  );
+  k.p.placard({ text: 'STANDBY COMPASS\nPULL DOWN TO OPEN', height: 0.0018, style: 'plate', zone: Z }, px(356), py(y + 6));
+  const fwdEdge = OVHD_FWD_EDGE();
+  const face = b.panel({ name: 'stby_compass', center_m: [fwdEdge[0] - 0.02, 0, fwdEdge[2] + 0.055], facing: 'aft', tiltDeg: -8, width: 0.075, height: 0.04, material: 'plasticBlack', screws: false, radius: 0.008 });
+  face.group.userData.cockpitDynamic = true;
+  if (k.c.canvas !== null) face.display(new CompassCard(k.c.ctx.vars, k.c.canvas ?? undefined), 0, 0, 0.062, 0.023, { bezel: false });
+  // NO SMOKING sign on the aft face of the strip (lit by the pass-sign logic).
+  const sign = b.panel({ name: 'no_smoking_sign', center_m: [fwdEdge[0] - 0.004, 0, fwdEdge[2] + 0.012], facing: 'aft', width: 0.11, height: 0.018, material: 'plasticBlack', screws: false, radius: 0.003 });
+  sign.add(new AnnunciatorLight(env, { id: 'g6k.ovhd.no_smoking_sign', label: 'NO SMOKING SIGN', width: 0.1, height: 0.013, segments: [seg.on('NO SMOKING', 'white', 'ac.light.no_smoking')] }), 0, 0);
+  const vars = k.c.ctx.vars;
+  k.c.b.onUpdate(() => {
+    face.group.visible = vars.get(V.compassOpen) !== 0;
   });
 }
 
@@ -309,8 +403,14 @@ function buildFire(k: Ctx): void {
 
 /** Aft strip: DOME, TEMPERATURE, RECIRC / TRIM AIR / RAM AIR, AURAL WARNING, ELT. */
 function buildAft(k: Ctx): void {
-  // DOME light (dossier 12.1: aft module; EST position left of the TEMPERATURE knobs).
-  toggle(k, { id: 'g6k.ovhd.dome', label: 'DOME LIGHT', v: V.ltDome, x: 256, y: 555, positions: ['OFF', 'ON'], values: [0, 1], name: 'DOME' });
+  // DOME light (dossier 12.1: aft module; EST position on the fire-handle strip: the Vision photographs show CABIN
+  // SYSTEMS where the GX drawing had room for it).
+  toggle(k, { id: 'g6k.ovhd.dome', label: 'DOME LIGHT', v: V.ltDome, x: 402, y: 598, positions: ['OFF', 'ON'], values: [0, 1], name: 'DOME' });
+
+  // CABIN SYSTEMS (photo e_ovhd: aft-left module above AURAL WARNING): CABIN OUTLETS and CABIN POWER PBAs.
+  title(k, 'CABIN SYSTEMS', 272, 574, 70);
+  pba(k, { id: 'g6k.ovhd.cabin_outlets', label: 'CABIN OUTLETS', v: V.cabinOutlets, x: 250, y: 552, segs: [seg.eq('OFF', 'white', V.cabinOutlets, 0)], name: 'CABIN OUTLETS' });
+  pba(k, { id: 'g6k.ovhd.cabin_power', label: 'CABIN POWER', v: V.cabinPwr, x: 294, y: 552, segs: [seg.eq('OFF', 'white', V.cabinPwr, 0)], name: 'CABIN POWER' });
 
   // TEMPERATURE COCKPIT / FWD CABIN / AFT CABIN (16 .. 30 degC, dossier 5.7).
   title(k, 'TEMPERATURE', 362, 568, 80);
@@ -382,9 +482,11 @@ function buildElectrical(k: Ctx): void {
   for (const n of [1, 2, 3, 4] as const)
     pba(k, { id: `g6k.ovhd.gen${n}`, label: `GEN ${n}`, v: V.gen(n), x: gx[n - 1], y: 392, segs: [seg.on('FAIL', 'amber', OH.genFail(n)), seg.eq('OFF', 'white', V.gen(n), 0)], name: `GEN ${n}` });
   cap(k, 'PUSH OFF/RESET', 177, 383, 0.0019);
-  pba(k, { id: 'g6k.ovhd.apu_gen', label: 'APU GEN', v: V.apuGen, x: 150, y: 370, segs: [seg.on('FAIL', 'amber', OH.apuGenFail), seg.eq('OFF', 'white', V.apuGen, 0)], name: 'APU GEN' });
-  pba(k, { id: 'g6k.ovhd.rat_gen', label: 'RAT GEN', v: V.ratGen, x: 205, y: 370, segs: [seg.on('FAIL', 'amber', OH.ratGenFail), seg.eq('OFF', 'white', V.ratGen, 0)], name: 'RAT GEN' });
-  cap(k, 'PUSH OFF/RESET', 177, 364, 0.0019);
+  // EMER DC PWR (photo e_elec_eng: red-guarded PBA below GEN 1; the DC power emergency override, V.dcEmerOvrd).
+  guardedPba(k, { id: 'g6k.ovhd.dc_emer_ovrd', label: 'EMER DC PWR', v: V.dcEmerOvrd, x: 150, y: 370, segs: [seg.on('OVRD', 'amber', V.dcEmerOvrd)], name: 'EMER DC PWR', color: 'red', guardVar: V.dcEmerOvrdGuard });
+  pba(k, { id: 'g6k.ovhd.apu_gen', label: 'APU GEN', v: V.apuGen, x: 177, y: 370, segs: [seg.on('FAIL', 'amber', OH.apuGenFail), seg.eq('OFF', 'white', V.apuGen, 0)], name: 'APU GEN' });
+  // RAT GEN: clear flip guard (photo e_elec_eng).
+  guardedPba(k, { id: 'g6k.ovhd.rat_gen', label: 'RAT GEN', v: V.ratGen, x: 205, y: 370, segs: [seg.on('FAIL', 'amber', OH.ratGenFail), seg.eq('OFF', 'white', V.ratGen, 0)], name: 'RAT GEN', color: 'clear', guardVar: V.ratGenGuard });
 }
 
 /** FUEL panel (GXFU): WING XFER, L / R AUX PUMP, XFEED SOV, L / R PRI PUMP, AFT XFER, L / R RECIRC. */
@@ -428,15 +530,32 @@ function buildFuel(k: Ctx): void {
   cap(k, 'AFT XFER', 270, 448, 0.0023);
 }
 
-/** ENGINE panel: IGNITION, L / R CRANK, L / R START; APU rotary OFF / RUN / START (spring to RUN). */
+/**
+ * ENGINE panel (photo e_elec_eng; GX PTG 17 "ENGINE START Selector AUTO / L-R CRANK"): START rotary L CRANK / AUTO
+ * / R CRANK (auto start = ENGINE RUN ON with START at AUTO, engines.ts), IGNITION PBA (ON = continuous), MODE L / R
+ * toggles N1 (up) / EPR (down); APU rotary OFF / RUN / START (spring to RUN).
+ */
 function buildEngine(k: Ctx): void {
   title(k, 'ENGINE', 270, 422, 50);
-  pba(k, { id: 'g6k.ovhd.ignition', label: 'IGNITION (continuous)', v: V.ignition, x: 247, y: 405, segs: [seg.on('ON', 'white', V.ignition)], name: 'IGNITION' });
+  knob(k, {
+    id: 'g6k.ovhd.eng_start',
+    label: 'ENGINE START',
+    v: V.engStartSel,
+    x: 246,
+    y: 404,
+    positions: [
+      { value: -1, label: 'L CRANK', angle: -50 },
+      { value: 0, label: 'AUTO', angle: 0 },
+      { value: 1, label: 'R CRANK', angle: 50 },
+    ],
+    name: 'START',
+    initial: 1,
+  });
+  pba(k, { id: 'g6k.ovhd.ignition', label: 'IGNITION (continuous)', v: V.ignition, x: 272, y: 405, segs: [seg.on('ON', 'white', V.ignition)], name: 'IGNITION' });
+  cap(k, 'MODE', 298, 418, 0.0023);
   for (const i of [1, 2] as const) {
     const S = i === 1 ? 'L' : 'R';
-    pba(k, { id: `g6k.ovhd.crank${i}`, label: `${S} CRANK`, v: V.engCrank(i), x: i === 1 ? 270 : 293, y: 405, segs: [seg.on('ON', 'white', V.engCrank(i))], name: `${S} CRANK` });
-    // L / R START: momentary; FADEC automatic start, IN PROG while the starter is engaged (EST legend).
-    pba(k, { id: `g6k.ovhd.start${i}`, label: `${S} ENG START`, v: V.engStart(i), x: i === 1 ? 245 : 296, y: 380, mode: 'momentary', segs: [seg.on(['IN', 'PROG'], 'white', OH.startInProg(i))], name: `${S} START` });
+    toggle(k, { id: `g6k.ovhd.eng_mode${i}`, label: `${S} ENGINE MODE N1 / EPR`, v: V.engN1Mode(i), x: i === 1 ? 291 : 305, y: 402, positions: ['EPR', 'N1'], values: [0, 1], name: S });
   }
   knob(k, {
     id: 'g6k.ovhd.apu',
@@ -456,10 +575,31 @@ function buildEngine(k: Ctx): void {
 
 /** BLEED / AIR CONDITIONING and ANTI-ICE (IAMS). */
 function buildAir(k: Ctx): void {
-  // PACK CONTROL NORM / MAN and the L / R MAN TEMP knobs (COLD .. HOT pack outlet in MAN).
-  tempKnob(k, { id: 'g6k.ovhd.man_temp_l', label: 'L MAN TEMP', v: V.packManTemp('l'), x: 337, y: 504, min: 0, max: 1, step: 0.05, unit: '', name: 'L MAN TEMP' });
-  tempKnob(k, { id: 'g6k.ovhd.man_temp_r', label: 'R MAN TEMP', v: V.packManTemp('r'), x: 391, y: 504, min: 0, max: 1, step: 0.05, unit: '', name: 'R MAN TEMP' });
-  toggle(k, { id: 'g6k.ovhd.pack_ctl', label: 'PACK CONTROL', v: V.packCtlMan, x: 364, y: 486, positions: ['MAN', 'NORM'], values: [1, 0], initial: 1, name: 'PACK CONTROL' });
+  // L / R MAN TEMP: spring-loaded HOT (up / aft) / COLD toggles (photo e_bleed) slewing the pack manual outlet demand
+  // while PACK CONTROL is at MAN (vision.ts).
+  for (const s of ['l', 'r'] as const) {
+    const S = s.toUpperCase();
+    toggle(k, { id: `g6k.ovhd.man_temp_${s}`, label: `${S} MAN TEMP`, v: V.packManTempSw(s), x: s === 'l' ? 337 : 391, y: 503, positions: ['COLD', '', 'HOT'], values: [-1, 0, 1], initial: 1, springs: { 0: 1, 2: 1 }, name: `${S} MAN TEMP` });
+  }
+  // AUX PRESS (clear guard, photo e_bleed; GX PTG 13-24 auxiliary pressurization through the trim air valves).
+  guardedPba(k, { id: 'g6k.ovhd.aux_press', label: 'AUX PRESS', v: V.auxPress, x: 364, y: 503, segs: [seg.on('ON', 'white', V.auxPress)], name: 'AUX PRESS', color: 'clear', guardVar: V.auxPressGuard });
+  // PACK CONTROL rotary LO / NORM / HIGH (photo) / MAN (GX PTG 13 "PACK CONTROL Selector ... NORM, LO, HIGH, MAN"; the
+  // MAN position is hidden under the knob in the photograph, EST angle).
+  knob(k, {
+    id: 'g6k.ovhd.pack_ctl',
+    label: 'PACK CONTROL',
+    v: V.packFlowSel,
+    x: 364,
+    y: 480,
+    positions: [
+      { value: 0, label: 'LO', angle: -90 },
+      { value: 1, label: 'NORM', angle: 0 },
+      { value: 2, label: 'HIGH', angle: 90 },
+      { value: 3, label: 'MAN', angle: 180 },
+    ],
+    name: 'PACK CONTROL',
+    initial: 1,
+  });
   for (const s of ['l', 'r'] as const) {
     const S = s.toUpperCase();
     pba(k, { id: `g6k.ovhd.pack_${s}`, label: `${S} PACK`, v: V.pack(s), x: s === 'l' ? 334 : 395, y: 479, segs: [seg.on('FAIL', 'amber', `pneu.pack_${s}_trip`), seg.eq('OFF', 'white', V.pack(s), 0)], name: `${S} PACK` });
@@ -501,24 +641,42 @@ function buildAir(k: Ctx): void {
 
 /** PRESSURIZATION and WINDSHIELD HEAT. */
 function buildPress(k: Ctx): void {
-  title(k, 'PRESSURIZATION', 466, 514, 90);
-  pba(k, { id: 'g6k.ovhd.press_mode', label: 'PRESSURIZATION AUTO/MAN', v: V.pressAutoMan, x: 429, y: 496, values: [0, 2], segs: [seg.eq('MAN', 'white', V.pressAutoMan, 2)], name: 'AUTO/MAN' });
-  toggle(k, { id: 'g6k.ovhd.man_alt', label: 'MAN ALT', v: V.pressManAlt, x: 450, y: 495, positions: ['DN', '', 'UP'], values: [-1, 0, 1], initial: 1, springs: { 0: 1, 2: 1 }, name: 'MAN ALT' });
-  toggle(k, { id: 'g6k.ovhd.ldg_elev', label: 'LDG ELEV', v: V.ldgElevSlew, x: 467, y: 495, positions: ['DN', '', 'UP'], values: [-1, 0, 1], initial: 1, springs: { 0: 1, 2: 1 }, name: 'LDG ELEV' });
-  toggle(k, { id: 'g6k.ovhd.press_rate', label: 'MAN RATE', v: V.pressManRate, x: 484, y: 495, positions: ['NORM', 'HIGH'], values: [0.5, 1], name: 'RATE' });
-  pba(k, { id: 'g6k.ovhd.ldg_elev_fms', label: 'LDG ELEV FMS / MAN', v: V.ldgElevFms, x: 503, y: 496, segs: [seg.eq('MAN', 'white', V.ldgElevFms, 0)], name: 'LDG ELEV' });
-  guardedPba(k, { id: 'g6k.ovhd.emer_depress', label: 'EMER DEPRESS', v: V.emerDepress, x: 429, y: 474, segs: [seg.on('ON', 'white', V.emerDepress)], name: 'EMER DEPRESS', guardVar: V.emerDepressGuard });
+  // Placard above the module (photo e_press_lts, red border).
+  k.p.placard({ text: 'WARNING - PRESSURE DIFFERENTIAL SHALL NOT EXCEED\n0.1 PSI DURING TAXI AND 1.0 PSI ON INITIAL LANDING', height: 0.0019, style: 'warning', zone: Z }, px(466), py(532));
+  title(k, 'PRESSURIZATION', 466, 514, 60);
+  cap(k, 'MAN', 432, 514, 0.0026);
+  cap(k, 'AUTO', 504, 514, 0.0026);
+  pba(k, { id: 'g6k.ovhd.press_mode', label: 'PRESSURIZATION AUTO/MAN', v: V.pressAutoMan, x: 430, y: 496, values: [0, 2], segs: [seg.eq('MAN', 'white', V.pressAutoMan, 2)], name: 'AUTO/MAN' });
+  toggle(k, { id: 'g6k.ovhd.man_alt', label: 'MAN ALT', v: V.pressManAlt, x: 449, y: 495, positions: ['DN', '', 'UP'], values: [-1, 0, 1], initial: 1, springs: { 0: 1, 2: 1 }, name: 'MAN ALT' });
+  // LDG ELEV: MAN / FMS toggle, then the UP / DN slew toggle (photo e_press_lts).
+  cap(k, 'LDG ELEV', 473, 507.5, 0.0024);
+  toggle(k, { id: 'g6k.ovhd.ldg_elev_fms', label: 'LDG ELEV MAN / FMS', v: V.ldgElevFms, x: 465, y: 495, positions: ['FMS', 'MAN'], values: [1, 0], initial: 0 });
+  toggle(k, { id: 'g6k.ovhd.ldg_elev', label: 'LDG ELEV UP / DN', v: V.ldgElevSlew, x: 481, y: 495, positions: ['DN', '', 'UP'], values: [-1, 0, 1], initial: 1, springs: { 0: 1, 2: 1 } });
+  toggle(k, { id: 'g6k.ovhd.press_rate', label: 'MAN RATE', v: V.pressManRate, x: 500, y: 495, positions: ['NORM', 'HIGH'], values: [0.5, 1], name: 'RATE' });
+  guardedPba(k, { id: 'g6k.ovhd.emer_depress', label: 'EMER DEPRESS', v: V.emerDepress, x: 430, y: 474, segs: [seg.on('ON', 'white', V.emerDepress)], name: 'EMER DEPRESS', color: 'yellow', guardVar: V.emerDepressGuard });
   cap(k, 'OUTFLOW VALVE', 460, 486, 0.0022);
   for (const n of [1, 2] as const)
     pba(k, { id: `g6k.ovhd.ofv${n}`, label: `OUTFLOW VALVE ${n} CLOSED`, v: V.outflowClosed(n), x: n === 1 ? 451 : 469, y: 474, segs: [seg.on('CLOSED', 'white', V.outflowClosed(n))], name: String(n) });
-  guardedPba(k, { id: 'g6k.ovhd.ditching', label: 'DITCHING', v: V.ditching, x: 495, y: 474, segs: [seg.on('ON', 'white', V.ditching)], name: 'DITCHING' });
+  guardedPba(k, { id: 'g6k.ovhd.ditching', label: 'DITCHING', v: V.ditching, x: 495, y: 474, segs: [seg.on('ON', 'white', V.ditching)], name: 'DITCHING', color: 'clear' });
 
   title(k, 'WINDSHIELD HEAT', 462, 461, 70);
+  // L / R: OFF/RESET - ON rotaries, no lit legend (photo e_press_lts); heat status on the synoptic / CAS.
   for (const s of ['l', 'r'] as const) {
     const v = s === 'l' ? V.wshldL : V.wshldR;
-    pba(k, { id: `g6k.ovhd.wshld_${s}`, label: `${s.toUpperCase()} WINDSHIELD HEAT`, v, x: s === 'l' ? 448 : 478, y: 449, segs: [seg.on('ON', 'green', V.wshldOn(s))], name: s.toUpperCase() });
+    knob(k, {
+      id: `g6k.ovhd.wshld_${s}`,
+      label: `${s.toUpperCase()} WINDSHIELD HEAT`,
+      v,
+      x: s === 'l' ? 448 : 478,
+      y: 447,
+      positions: [
+        { value: 0, label: 'OFF/RESET', angle: -35 },
+        { value: 1, label: 'ON', angle: 10 },
+      ],
+      initial: 1,
+    });
+    cap(k, s.toUpperCase(), s === 'l' ? 452 : 482, 457, 0.0023);
   }
-  cap(k, 'PUSH OFF/RESET', 463, 441, 0.0019);
 }
 
 /** EXTERNAL LIGHTS, PASS SIGNS and EMER LIGHTS (GXLT). */
@@ -534,14 +692,17 @@ function buildLights(k: Ctx): void {
   for (const [id, name, x] of row1) toggle(k, { id: `g6k.ovhd.lt_${id}`, label: `${name} LIGHTS`, v: vOf[id], x, y: 414, positions: ['OFF', 'ON'], values: [0, 1], name });
   toggle(k, { id: 'g6k.ovhd.lt_beacon', label: 'BEACON', v: V.ltBeacon, x: 452, y: 414, positions: ['RED', 'OFF', 'WHT'], values: [1, 0, 2], initial: 1, name: 'BEACON' });
   cap(k, 'LANDING', 452, 406, 0.0023);
+  // LANDING L WING / NLG / R WING: PULSE (up) / OFF / STEADY (GX PTG 15-28: PULSE = 45 pulses per minute, L / R wing
+  // alternately); TAXI/RECOG: WINGTIP (up) / OFF / ON (PTG 15-28, photo e_press_lts).
   const row2: [string, string, number][] = [
     ['ldg_l', 'L WING', 436],
     ['ldg_n', 'NLG', 452],
     ['ldg_r', 'R WING', 468],
-    ['taxi', 'TAXI/RECOG', 494],
   ];
-  for (const [id, name, x] of row2) toggle(k, { id: `g6k.ovhd.lt_${id}`, label: `${id === 'taxi' ? '' : 'LANDING '}${name} LIGHTS`, v: vOf[id], x, y: 391, positions: ['OFF', 'ON'], values: [0, 1], name: id === 'taxi' ? name : '' });
-  for (const [, name, x] of row2.slice(0, 3)) cap(k, name, x, 400, 0.0021);
+  for (const [id, name, x] of row2)
+    toggle(k, { id: `g6k.ovhd.lt_${id}`, label: `LANDING ${name} LIGHTS`, v: vOf[id], x, y: 391, positions: ['STEADY', 'OFF', 'PULSE'], values: [1, 0, 2], initial: 1 });
+  for (const [, name, x] of row2) cap(k, name, x, 400, 0.0021);
+  toggle(k, { id: 'g6k.ovhd.lt_taxi', label: 'TAXI/RECOG LIGHTS', v: vOf.taxi, x: 494, y: 391, positions: ['ON', 'OFF', 'WINGTIP'], values: [1, 0, 2], initial: 1, name: 'TAXI/RECOG' });
 
   title(k, 'PASS SIGNS', 445, 382, 36);
   title(k, 'EMER LIGHTS', 495, 382, 26);

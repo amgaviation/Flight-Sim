@@ -187,6 +187,7 @@ export const CB_TABLE: CbEntry[] = [
   e('recirc_fans', 'RECIRC FANS', 'AIR COND/PRESS', 'AC 3', 'ACPC'),
   e('cabin_ac', 'AC 2 CABIN FEED', 'ELEC', 'AC 2', 'ACPC'),
   e('cabin_ac2', 'AC 3 CABIN FEED', 'ELEC', 'AC 3', 'ACPC'),
+  e('cabin_outlets', 'CABIN OUTLETS', 'ELEC', 'AC 3', 'ACPC'), // EST name / location
   e('av_batt_chgr', 'AV BATT CHGR', 'ELEC', 'AC 2', 'CCBP'),
   e('apu_batt_chgr', 'APU BATT CHGR', 'ELEC', 'AC 3', 'CCBP'),
   e('apu_oil_heat', 'APU OIL HEAT', 'APU', 'AC 4', 'ACPC'),

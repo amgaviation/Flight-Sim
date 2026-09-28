@@ -45,6 +45,10 @@ export class G800Logic implements Subsystem {
   private fcsLatched = false;
   private ptuLatch = false;
   private auxLatch = false;
+  /** AC / DC RESET: one reset per flight (code450 G700/G800 electrical: "One time use"). */
+  private readonly elecResetEdge = new Edge();
+  private elecResetUsed = false;
+  private elecResetT = 0;
 
   constructor(private readonly vars: SimVars) {}
 
@@ -59,6 +63,9 @@ export class G800Logic implements Subsystem {
     this.auxLatch = v.get(V.auxPumpOn) !== 0 && v.get(V.auxPump) === 1;
     this.yawCenterEdge.reset(v.get(V.yawTrimCenter) !== 0);
     this.resetEdge.reset(v.get(V.fltCtrlReset) !== 0);
+    this.elecResetEdge.reset(v.get(V.elecReset) !== 0);
+    this.elecResetUsed = false;
+    this.elecResetT = 0;
     for (let s = 0; s < 2; s++) {
       const r = v.get(V.hudRocker(s === 0 ? 1 : 2));
       this.hudUp[s].reset(r > 0.5);
@@ -96,29 +103,49 @@ export class G800Logic implements Subsystem {
     const rsrc = idg2 ? 1 : apu ? 2 : gpu ? 3 : 0;
     v.set(L_AC_SRC, lsrc);
     v.set(R_AC_SRC, rsrc);
-    v.set(V.busTieCmd, v.get(V.busTie) === 1 && (lsrc === 0) !== (rsrc === 0) ? 1 : 0);
+    // BUS TIE AUTO needs the OHPTS key and both L / R BUS TIE switchlights (G600 ELECTRICAL POWER CONTROL, blue AUTO) in AUTO.
+    const tieAuto = v.get(V.busTie) === 1 && v.get(V.busTieL, 1) === 1 && v.get(V.busTieR, 1) === 1;
+    v.set('ac.g800.bus_tie_auto', tieAuto ? 1 : 0);
+    v.set(V.busTieCmd, tieAuto && (lsrc === 0) !== (rsrc === 0) ? 1 : 0);
+    // AC / DC RESET (ELECTRICAL POWER CONTROL): resets tripped GCUs once when the fault has cleared ("one time use",
+    // code450 G700/G800 electrical study sheets); re-armed on the ground (EST). The pulse feeds the IDG reset bindings.
+    if (this.elecResetEdge.rise(v.get(V.elecReset) !== 0) && !this.elecResetUsed) {
+      this.elecResetT = 0.5;
+      if (!onGround) this.elecResetUsed = true;
+    }
+    if (onGround && v.get(V.elecReset) === 0) this.elecResetUsed = false;
+    this.elecResetT = Math.max(0, this.elecResetT - dt);
+    v.set('ac.g800.elec_reset_pulse', this.elecResetT > 0 ? 1 : 0);
 
     // ---------------- RAT: manual deployment only (SCQ); cannot be re-stowed in flight.
     if (v.get(V.ratDeploy) !== 0) this.ratLatched = true;
     else if (onGround) this.ratLatched = false;
     v.set(V.ratDeployed, this.ratLatched ? 1 : 0);
     v.set(V.ratSpeed, this.ratLatched ? v.get('fdm.ias_kt') : 0); // physical turbine speed from the airflow
-    v.set('ac.g800.rat_mode', v.get('elec.rat_online') !== 0 && v.get('elec.l_main_ac_powered') === 0 && v.get('elec.r_main_ac_powered') === 0 ? 1 : 0);
+    v.set('ac.g800.rat_mode', v.get(V.ratGen, 1) === 1 && v.get('elec.rat_online') !== 0 && v.get('elec.l_main_ac_powered') === 0 && v.get('elec.r_main_ac_powered') === 0 ? 1 : 0);
 
     // ---------------- emergency batteries: ARM connects them when an ESS DC bus drops below 20 V (SCQ)
     const essL = v.get('elec.l_ess_dc_v');
     const essR = v.get('elec.r_ess_dc_v');
+    // EMERGENCY POWER ON / ARM / OFF switchlights (code450 G700/G800 electrical): ON forces the E-batts on.
     if (v.get(V.emerPwr) === 0) this.ebattLatched = false;
+    else if (v.get(V.emerPwr) === 2) this.ebattLatched = true;
     else if (this.essWasUp && (essL < G800_LIMITS.emerBattArmV || essR < G800_LIMITS.emerBattArmV)) this.ebattLatched = true;
     if (essL > 22 && essR > 22) this.essWasUp = true;
     v.set(V.ebattOn, this.ebattLatched ? 1 : 0);
 
-    // ---------------- engine start: START MASTER + START button (FADEC auto start); CRANK MASTER dry motoring
-    const master = v.get(V.startMaster) === 1;
+    // ---------------- engine start. G700/G800 AutoStart (code450 powerplant study sheets): "initiated by positioning the
+    // fuel control switch to RUN and momentarily depressing the ENGINE START switch" (forward overhead strip). The OHPTS
+    // ENGINE page START MASTER + L / R START keys (shared Epic page) request the same FADEC auto start; CRANK MASTER dry motoring.
+    const engStart = v.get(V.engStartBtn) !== 0;
+    const autoAny = v.get('fadec.eng1.auto_starter') !== 0 || v.get('fadec.eng2.auto_starter') !== 0;
+    const master = v.get(V.startMaster) === 1 || autoAny;
     const crank = v.get(V.crankMaster) === 1;
     for (let i = 1; i <= 2; i++) {
       const btn = v.get(i === 1 ? V.startL : V.startR) !== 0;
-      v.set(V.startReq(i), master && btn ? 1 : 0);
+      const fuelRun = v.get(i === 1 ? V.runL : V.runR) === 1;
+      const req = (v.get(V.startMaster) === 1 && btn) || (engStart && fuelRun && v.get(ENG.running(i)) === 0);
+      v.set(V.startReq(i), req ? 1 : 0);
       const auto = v.get(`fadec.eng${i}.auto_starter`) !== 0;
       const dry = crank && btn && v.get(ENG.n2(i)) < G800_LIMITS.starterCutoutN2Pct;
       v.set(`fadec.eng${i}.starter_cmd`, auto || dry ? 1 : 0);
@@ -183,6 +210,31 @@ export class G800Logic implements Subsystem {
     // ---------------- steering: tiller priority (left seat, FSB 9.4 b), else hardware tiller axis
     const tiller = v.get(V.tiller);
     v.set(V.steerCmd, Math.abs(tiller) > 0.02 ? tiller : v.get('input.tiller'));
+    // PEDAL STEER switchlight (BJT500: "the pedal steering switchlight and tiller ... on the left side ledge"): OFF removes
+    // only the rudder-pedal steering authority (FSB App. 4: +/-7 deg); the tiller keeps working.
+    v.set(V.pedalSteerCmd, v.get(V.pedalSteer, 1) === 1 ? v.get('input.yaw') : 0);
+
+    // ---------------- pedestal PITCH TRIM split switch (G600 BL7C0705 p_trim; code450: "any pitch trim movement resulting from
+    // an independent switch-half actuation indicates a system malfunction"): both halves in the same direction trim.
+    const ta = v.get(V.altTrimA);
+    const tb = v.get(V.altTrimB);
+    v.set(V.altTrimCmd, ta !== 0 && ta === tb ? ta : 0);
+
+    // ---------------- main door (DOORS panel, G600 BL7C0705 p_eng): electrically actuated airstair door, EST 10 s travel;
+    // OPEN / close commands only on the ground, powered, with SAFETY off. SCOPE: no door-seal / handle logic.
+    const dCmd = v.get(V.doorOpenCmd, -1);
+    if (dCmd >= 0 && onGround && v.get(V.doorSafety) === 0 && v.get('elec.l_ess_dc_powered') !== 0) {
+      const pos = v.get('ac.door.main');
+      const tgt = dCmd >= 0.5 ? 1 : 0;
+      const step = dt / 10;
+      v.set('ac.door.main', pos + Math.max(-step, Math.min(step, tgt - pos)));
+    }
+
+    // ---------------- WARN INHIBIT (glareshield; code450 G700 taxi checklist "WARN INHIBIT . . . INHIBIT"): EST function -
+    // holds nuisance cautions back from 80 KIAS on the takeoff roll to 400 ft RA (CAS 'when' clauses read the window).
+    const ra = v.get('ra1.alt_ft', 9999);
+    const toWindow = v.get(V.warnInhibit) !== 0 && v.get(V.toThrust) !== 0 && ((onGround && ias > 80) || (!onGround && ra < 400));
+    v.set('ac.g800.warn_inh_active', toWindow ? 1 : 0);
 
     // ---------------- ELDAC (engine-loss directional assist, FSB App. 4): rudder against thrust asymmetry, airborne only.
     // EST: feed-forward 0.3 rudder equivalent per unit asymmetry (fraction of rated thrust), active above 15 %

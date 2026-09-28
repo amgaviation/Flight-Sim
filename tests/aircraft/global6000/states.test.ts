@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { makeRig, FIELD, posted } from './helpers';
-import { G6K_VARS, G6K_CONTROL_VARS } from '../../../src/aircraft/global6000/vars';
+import { G6K_GASPERS, G6K_VARS, G6K_CONTROL_VARS } from '../../../src/aircraft/global6000/vars';
 import { G6K_CAS } from '../../../src/aircraft/global6000/systems/cas';
 import { G6K_CHECKLISTS } from '../../../src/aircraft/global6000/checklists';
 import { horizDist } from '../../physics/helpers';
@@ -165,7 +165,7 @@ describe('Global 6000 control audit', () => {
 
 /** True when the var-name builder `f` produces `name` for one of the usual arguments. */
 function builds(f: (...a: unknown[]) => string, name: string): boolean {
-  const one = [1, 2, 3, 4, 'l', 'c', 'r', 'cb', 'ovhd', 'apu', '1b', '2b', '3a', '3b', 'dc_bus1', 'dc_bus2', 'dc_ess', 'batt_bus', 'pax', 'emer', 'bag', 'aft_eqpt', 'svc_large', 'svc_small'];
+  const one = [1, 2, 3, 4, 'l', 'c', 'r', 'cb', 'ovhd', 'apu', '1b', '2b', '3a', '3b', 'dc_bus1', 'dc_bus2', 'dc_ess', 'batt_bus', 'pax', 'emer', 'bag', 'aft_eqpt', 'svc_large', 'svc_small', ...G6K_GASPERS];
   const args: unknown[][] = [...one.map((a) => [a]), ...['l', 'r', 'apu'].flatMap((z) => [[z, 1], [z, 2]])];
   for (const a of args) {
     try {

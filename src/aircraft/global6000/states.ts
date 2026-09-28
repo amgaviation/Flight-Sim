@@ -17,7 +17,7 @@ import { ENG, FDM, SURF } from '../../core/vars';
 import type { FlightModel } from '../../physics/FlightModel';
 import type { Turbofan } from '../../physics/engines/Turbofan';
 import { FLAP_DETENTS, G6K_LIMITS } from './data';
-import { G6K_VARS as V } from './vars';
+import { G6K_GASPERS, G6K_VARS as V } from './vars';
 import type { G6kSystems } from './createSystems';
 
 /** Take-off stabilizer (units, EST mid-CG setting inside the 4.5-11 green band). */
@@ -60,6 +60,8 @@ export function setG6kSwitches(ctx: Pick<SimContext, 'vars'>, sys: G6kSystems, s
   v.set(V.ratGen, 1);
   v.set(V.battMaster, b(powered));
   v.set(V.cabinPwr, b(powered));
+  v.set(V.cabinOutlets, b(powered));
+  v.set(V.ratGenGuard, 0);
   for (const bus of ['dc_bus1', 'dc_bus2', 'dc_ess', 'batt_bus'] as const) v.set(V.dcBusIsol(bus), 0);
   v.set(V.extAcAvail, 0);
   v.set(V.extDcAvail, 0);
@@ -95,6 +97,7 @@ export function setG6kSwitches(ctx: Pick<SimContext, 'vars'>, sys: G6kSystems, s
   v.set(V.engStart(2), 0);
   v.set(V.engCrank(1), 0);
   v.set(V.engCrank(2), 0);
+  v.set(V.engStartSel, 0); // START AUTO
   v.set(V.ignition, 0);
   // ---- FUEL (all normal / AUTO, crossfeed closed)
   for (const x of ['l', 'r'] as const) {
@@ -115,7 +118,12 @@ export function setG6kSwitches(ctx: Pick<SimContext, 'vars'>, sys: G6kSystems, s
   v.set(V.trimAir, 1);
   v.set(V.recircFan, 1);
   v.set(V.ramAir, 0);
-  v.set(V.packCtlMan, 0); // PACK CONTROL NORM
+  v.set(V.packCtlMan, 0);
+  v.set(V.packFlowSel, 1); // PACK CONTROL NORM
+  v.set(V.packManTempSw('l'), 0);
+  v.set(V.packManTempSw('r'), 0);
+  v.set(V.auxPress, 0);
+  v.set(V.auxPressGuard, 0);
   v.set(V.packManTemp('l'), 0.5);
   v.set(V.packManTemp('r'), 0.5);
   v.set(V.zoneTemp(1), 21);
@@ -159,6 +167,17 @@ export function setG6kSwitches(ctx: Pick<SimContext, 'vars'>, sys: G6kSystems, s
   v.set(V.crewOxy, b(powered));
   v.set(V.paxOxy, 1);
   v.set(V.hudPower, b(powered));
+  v.set(V.hudBrt, powered ? 0.7 : 0);
+  v.set(V.hudMode, 0);
+  v.set(V.hudModeBtn, 0);
+  v.set(V.hudStow, 1);
+  v.set(V.evsGain, 0.5);
+  v.set(V.evsCal, 0);
+  v.set(V.yokePtt(1), 0);
+  v.set(V.yokePtt(2), 0);
+  v.set(V.fdrEvent, 0);
+  v.set(V.compassOpen, 0);
+  for (const g of G6K_GASPERS) v.set(V.gasper(g), 0.5);
   // ---- PEDESTAL
   v.set(V.tla(1), 0);
   v.set(V.tla(2), 0);
@@ -205,11 +224,16 @@ export function setG6kSwitches(ctx: Pick<SimContext, 'vars'>, sys: G6kSystems, s
   for (const n of [1, 2, 3] as const) v.set(V.irsMode(n), powered ? 2 : 0);
   // ---- COCKPIT LIGHTS
   for (const z of ['l', 'c', 'r'] as const) {
-    v.set(V.ltFlood(z), powered && night ? 0.3 : 0);
     v.set(V.ltDisplay(z), night ? 0.7 : 1);
   }
   for (const z of ['l', 'c', 'r', 'cb', 'ovhd'] as const) v.set(V.ltIntegral(z), powered ? (night ? 0.8 : 0.9) : 0);
-  v.set(V.ltMaster, powered ? 2 : 0);
+  v.set(V.ltArea, powered && night ? 0.3 : 0);
+  v.set(V.ltMaster, powered ? 2 : 0); // MASTER INTEG ON
+  v.set(V.ltPbaDim, night ? 0 : 1); // PBA DIM at night, BRT by day
+  v.set(V.ltCtp(1), night ? 0.7 : 1);
+  v.set(V.ltCtp(2), night ? 0.7 : 1);
+  v.set(V.ltEyeRef, 0);
+  v.set(V.ltFoot, 0);
   v.set(V.ltDome, 0);
   v.set(V.ltMap(1), 0);
   v.set(V.ltMap(2), 0);

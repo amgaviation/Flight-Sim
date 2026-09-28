@@ -161,6 +161,36 @@ export function setG800Switches(ctx: Pick<SimContext, 'vars'>, sys: G800Systems,
   v.set(V.tiller, 0);
   // ---- doors (ramp service state)
   v.set('ac.door.main', b(s === 'cold_dark'));
+  v.set(V.doorOpenCmd, b(s === 'cold_dark'));
+  v.set(V.doorSafety, 0);
+  // ---- fix-round-1 hardware (forward overhead strip, ELECTRICAL POWER CONTROL, ENGINE CONTROL, glareshield, pedestal, HUD)
+  v.set(V.fcsBattEbha, b(powered));
+  v.set(V.fcsBattUps, b(powered));
+  v.set(V.engStartBtn, 0);
+  v.set(V.fireApuDisch, 0);
+  v.set(V.ratGen, 1);
+  v.set(V.elecReset, 0);
+  v.set(V.busTieL, 1);
+  v.set(V.busTieR, 1);
+  v.set(V.engAlt(1), 0);
+  v.set(V.engAlt(2), 0);
+  v.set(V.warnInhibit, b(s === 'takeoff'));
+  v.set(V.altTrimA, 0);
+  v.set(V.altTrimB, 0);
+  v.set(V.pedalSteer, 1);
+  v.set(V.hudStow, b(powered));
+  v.set(V.hudAuto, 1);
+  v.set(V.hudBrt, 0.8);
+  v.set(V.hudContr, 0.7);
+  v.set(V.hudVideoBrt, 0.5);
+  for (const side of [1, 2] as const) {
+    v.set(V.visor(side), 0);
+    v.set(V.table(side), 0);
+    v.set(V.armTilt(side), 0.5);
+    v.set(V.pedalAdj(side), 0.5);
+  }
+  v.set(V.obsMask, 0);
+  v.set(V.obsMaskMode, 0);
   v.set('ac.door.baggage', 0);
 }
 

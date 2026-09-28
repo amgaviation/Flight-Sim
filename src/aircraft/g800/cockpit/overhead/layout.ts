@@ -1,19 +1,24 @@
 /**
- * G800 overhead geometry (body metres; EST from G500/G600/G700 flight-deck photographs, scaled
- * from the OHPTS size EPIC_HW.ohpts 0.19 x 0.114 m).
+ * G800 overhead geometry (body metres; EST, scaled from the OHPTS size EPIC_HW.ohpts 0.19 x 0.114 m in the
+ * G600 BL7C0705 and G500 BL7C0670 overhead photographs).
  *
- * The panel starts just aft of the main cockpit's fire-handle strip (layout.ts FIRE_STRIP,
- * x 12.86 .. 12.94) and runs aft ~0.64 m. It hangs slightly below the curved headliner as an
- * overhead console (the console body closes the gap to the skin), and its forward end is lower
- * than its aft end so the faces tilt toward the crew. The three OHPTS sit side by side in one
- * row (BJT500 "three identical ... touchscreens"), 0.21 m pitch (bezel 0.01 m each side).
+ * The overhead console runs from the windshield header aft ~0.8 m, hanging below the curved headliner (the console
+ * body closes the gap to the skin), forward end lower so the faces tilt toward the crew. Forward to aft (photo):
+ *  - the forward strip: EMERGENCY POWER, BATTERIES, COCKPIT LIGHTS, ENGINE START, APU FIRE EXT, APU CONTROL,
+ *    CABIN MASTERS;
+ *  - OHPTS 1 and 2 side by side;
+ *  - ELECTRICAL POWER CONTROL (left), OHPTS 3 (centre) and the DOORS / ENGINE CONTROL / BLEED AIR / CABIN
+ *    PRESSURE CONTROL stack (right);
+ *  - two chrome gasper / reading-light assemblies;
+ *  - the two CB panels (grids A-G x 1-6).
+ * Panel coordinates: centred, u right (+y body), v aft (+ = toward the tail).
  */
 import type { BodyVec } from '../../../../cockpit/frame';
 
-const X_FWD = 12.84;
-const LENGTH = 0.64;
-const TILT = -8; // deg, forward end lower
-const Z_FWD = -1.238; // ~45 mm below the headliner at the forward corners (glazing.topZ)
+const X_FWD = 12.94;
+const LENGTH = 0.8;
+const TILT = -6; // deg, forward end lower
+const Z_FWD = -1.225;
 
 export const OVHD = {
   length: LENGTH,
@@ -22,8 +27,21 @@ export const OVHD = {
   center_m: [X_FWD - LENGTH / 2, 0, Z_FWD - (LENGTH / 2) * Math.sin((-TILT * Math.PI) / 180)] as BodyVec,
   /** Console body height above the panel face (closes to the headliner). */
   bodyDepth: 0.1,
-  /** Row centres (panel v, + = aft). */
-  rows: { a: -0.255, ohpts: -0.095, b: 0.065, c: 0.21 },
-  /** OHPTS 1..3 centres (panel u, + = right). */
-  ohptsX: [-0.21, 0, 0.21] as const,
+  /** Forward strip centre (v) and height. */
+  strip: { v: -0.368, h: 0.06 },
+  /** OHPTS 1 / 2 (forward pair) and OHPTS 3 (centre, aft) centres [u, v]. */
+  ohpts: [
+    [-0.11, -0.25],
+    [0.11, -0.25],
+    [0, -0.075],
+  ] as const,
+  /** ELECTRICAL POWER CONTROL sub-panel (centre [u, v], size). */
+  elec: { u: -0.228, v: -0.075, w: 0.2, h: 0.16 },
+  /** DOORS / ENGINE CONTROL / BLEED AIR / CABIN PRESSURE CONTROL stack. */
+  stack: { u: 0.228, v: -0.06, w: 0.2, h: 0.25 },
+  /** Gasper / reading-light assemblies. */
+  gasperV: 0.11,
+  gasperU: 0.2,
+  /** CB panels: centre v, size, left / right centre u. */
+  cb: { v: 0.272, w: 0.31, h: 0.245, u: 0.163 },
 };

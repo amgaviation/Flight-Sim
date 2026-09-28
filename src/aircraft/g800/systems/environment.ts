@@ -141,7 +141,7 @@ export function createApu(ctx: Pick<SimContext, 'vars'>): Apu {
     starterNominalV: 24,
     starterPeakA: 600, // EST: RE220 DC starter inrush on a 53 Ah NiCd
     fuelAvailable: 'fuel.apu_on',
-    fire: `fire.apu_warn || ${V.fireHandleApu} == 1`,
+    fire: `fire.apu_warn || ${V.fireApuDisch} == 1 || ${V.fireHandleApu} == 1`,
     bleedLoad: 'clamp01(pneu.apu_bleed_flow_kgs / 0.8)',
     genLoad: 'clamp01(elec.apu_gen_load_pct / 100)',
     maxBleedPsi: 48,
@@ -166,8 +166,20 @@ export function createFire(ctx: Pick<SimContext, 'vars'>): FireProtection {
     zones: [
       { id: 'eng1', loops: 2, handle: V.fireHandleL, discharge: [{ bottle: 'bottle_r', command: shot1(V.fireRotL) }, { bottle: 'bottle_l', command: shot2(V.fireRotL) }], power: 'elec.fire_det_powered' },
       { id: 'eng2', loops: 2, handle: V.fireHandleR, discharge: [{ bottle: 'bottle_r', command: shot1(V.fireRotR) }, { bottle: 'bottle_l', command: shot2(V.fireRotR) }], power: 'elec.fire_det_powered' },
-      // GVI: the APU uses the LEFT bottle; the ECU shuts the APU down on a fire (SCQ).
-      { id: 'apu', loops: 1, handle: V.fireHandleApu, discharge: [{ bottle: 'bottle_l', command: shot2(V.fireRotApu) }], power: 'elec.fire_det_powered' },
+      // G700/G800 (code450 fire protection study sheets): no APU fire handle; the guarded APU FIRE EXT switchlight on the
+      // forward overhead strip fires the LEFT bottle ("Disch 2") into the APU. APU Fire: "APU MASTER ... OFF; APU FIRE EXT ...
+      // PRESS". Squibs armed with the APU MASTER off or the button pushed (EST); the ECU shuts the APU down on a fire (SCQ).
+      // The legacy handle vars (fire_apu_handle / fire_apu_rot) are still honoured (no hardware writes them).
+      {
+        id: 'apu',
+        loops: 1,
+        handle: `${V.fireApuDisch} || ${V.apuMaster} == 0 || ${V.fireHandleApu}`,
+        discharge: [
+          { bottle: 'bottle_l', command: `${V.fireApuDisch} > 0.5` },
+          { bottle: 'bottle_l', command: shot2(V.fireRotApu) },
+        ],
+        power: 'elec.fire_det_powered',
+      },
       // Aft baggage smoke detector (C450 "Aft Baggage Smoke" red): detection only, no bottle.
       { id: 'baggage', loops: 1, handle: 0, power: 'elec.fire_det_powered' },
     ],
@@ -190,6 +202,8 @@ export function createOxygen(ctx: Pick<SimContext, 'vars'>): OxygenSystem {
     crew: [
       { id: 'pilot', bottle: 'crew', inUse: V.oxyMask(1), mode: V.oxyMode(1) },
       { id: 'copilot', bottle: 'crew', inUse: V.oxyMask(2), mode: V.oxyMode(2) },
+      // Observer (jump seat) mask on the right aft bulkhead (G500 BL7C0670 photograph).
+      { id: 'observer', bottle: 'crew', inUse: V.obsMask, mode: V.obsMaskMode },
     ],
     pax: { kind: 'gaseous', deploy: `press.pax_masks && ${V.oxyPax} != 0`, bottle: 'pax', flowLpm: 60 },
   });

@@ -1,5 +1,5 @@
 /**
- * G800 side consoles and sidewall circuit-breaker panels (mount contract in ../context.ts).
+ * G800 side consoles and the observer station (mount contract in ../context.ts).
  *
  * Outboard consoles, aft of the sidestick pods built by the main cockpit (layout.ts STICK_POD):
  *  - left : nosewheel steering TILLER (FSB GVIII-G700 §9.4 b: tiller on the left side only;
@@ -7,16 +7,17 @@
  *           side ledge, aft of the sidestick"), crew oxygen mask stowage box with the mask
  *           regulator selector (NORM / 100 % / EMER) and the mask flow indicator;
  *  - right: copilot oxygen mask box, regulator and flow indicator.
- *  The NOSEWHEEL STEERING switch and the CCDs are built by the main cockpit (not here).
+ *  The NOSEWHEEL STEERING switch, PEDAL STEER switchlight and the CCDs are built by the main cockpit.
  *
- * Sidewalls aft of the seats: pilot and copilot circuit-breaker panels (breakers.ts).
+ * Observer station on the right aft bulkhead behind the copilot (G500 BL7C0670 photograph c_right; BJT500
+ * "the jumpseater has a dedicated touchscreen controller"): EROS-type mask stowage (`ac.g800.oxy_mask3`, observer
+ * crew station of the oxygen system) with its regulator, and the COMM JACKS panel (headset / mic receptacles:
+ * connectors, not controls). SCOPE: the fifth (jump-seat) TSC is a blank housing - the Epic suite models four TSCs.
  *
- * Not fitted / not built (see docs/aircraft/g800.md §10.2): windshield wipers (Airframer / PPG
- * G650 release: the PPG "Surface Seal" water-repellent coating is the primary rain-removal system,
- * "enabling Gulfstream to certify the aircraft without windshield wipers"; PPG also supplies the
- * G500/G600 flight-deck windows. EST: the G800, a GVI-fuselage derivative, is the same), hardware audio control
- * panels (Symmetry audio is on the touch-screen controllers' RADIOS app), a flight-deck door
- * control (no G800 door-lock system data).
+ * Circuit breakers: on the aft overhead (cockpit/overhead/breakers.ts) and the TSC ECB page (fix round 1).
+ *
+ * Not fitted / not built (see docs/aircraft/g800.md §10.2): windshield wipers (PPG "Surface Seal" coating, G650 /
+ * G500 / G600 flight-deck windows), hardware audio control panels (Symmetry audio is on the TSC RADIOS app).
  *
  * Positions EST from G500/G600/G700 flight-deck photographs.
  */
@@ -26,29 +27,23 @@ import { trimBoxGeometry } from '../../../../cockpit/geometry/structure';
 import { G800_LIMITS } from '../../data';
 import { G800_VARS as V } from '../../vars';
 import type { G800CockpitContext } from '../context';
-import { halfWidth } from '../glazing';
-import { MOUNTS, SHELL_INSET } from '../layout';
-import { CB_PANEL_LEFT, CB_PANEL_RIGHT, cbPanelSize, fillCbPanel } from './breakers';
+import { MOUNTS } from '../layout';
 import { MaskStowage, Tiller } from './controls';
 
-/** Sidewall CB panels: centre x / z (body), EST behind each seat below the aft side window (sill z -0.52). */
-const CB_PANEL = { x: 11.76, z: -0.2 };
+/** Observer station panel on the right aft bulkhead (body centre, EST behind the copilot seat). */
+const OBS = { x: 11.62, y: 0.86, z: -0.12, w: 0.22, h: 0.3 };
 
 export function buildSideConsoles(c: G800CockpitContext): void {
-  const { b, env, sys } = c;
+  const { b, env } = c;
 
   // =============================================================== outboard consoles
   for (const side of [1, 2] as const) {
     const m = side === 1 ? MOUNTS.sideLeft : MOUNTS.sideRight;
     const s = side === 1 ? 'L' : 'R';
     const outb = side === 1 ? -1 : 1; // panel u toward the sidewall
-    // The panel face stands 6 mm proud of the console body top built by the main cockpit (CONSOLE.topZ; body z down, so
-    // minus = up): at the same height the body top covered the flat legends, the O2 FLOW lamp and the regulator.
+    // The panel face stands 6 mm proud of the console body top built by the main cockpit (CONSOLE.topZ).
     const center_m: [number, number, number] = [m.center_m[0], m.center_m[1], m.center_m[2] - 0.006];
     const con = b.panel({ name: `g800.side_${s.toLowerCase()}`, ...m, center_m, material: 'panelDark', screws: { kind: 'dzus', diameter: 0.006, inset: 0.008 }, radius: 0.01 });
-    // Oxygen mask stowage box (aft), regulator and flow indicator (dossier §9.4).
-    // Box aft; the regulator selector and the flow indicator in a row just forward of it, where the pilot sees them
-    // over the armrest (EST layout).
     const maskV = -0.12;
     const maskU = 0.02 * -outb;
     const ctlV = maskV + 0.12;
@@ -83,42 +78,51 @@ export function buildSideConsoles(c: G800CockpitContext): void {
       maskU - outb * 0.035,
       ctlV,
     );
-    con.label('PULL MASK - SQUEEZE RED TABS', 0.02 * -outb, maskV - 0.085, { height: 0.0027, weight: 700 });
-
     if (side === 1) {
-      // Tiller (forward end of the mount, just aft of the sidestick pod).
       con.add(new Tiller(env, { id: 'g800.side.tiller', label: 'NOSEWHEEL TILLER', var: V.tiller, maxDeg: G800_LIMITS.tillerSteerDeg }), 0, 0.14);
       con.label('STEER', 0, 0.075, { height: 0.0034, weight: 700 });
     }
   }
 
-  // =============================================================== sidewall CB panels
-  // CB panel paint: mid grey with white legends (EST, GVI-family CB panels) so the legends read in daylight.
-  const cbPaint = env.materials.custom('paint', '#676b71', 0.6);
-  const ratings = new Map(sys.elec.breakerNames().map((x) => [x.name, x.ratingA] as [string, number]));
-  for (const side of [1, 2] as const) {
-    const groups = side === 1 ? CB_PANEL_LEFT : CB_PANEL_RIGHT;
-    const [w, h] = cbPanelSize(groups);
-    const sgn = side === 1 ? -1 : 1;
-    // Flat panel standing off the curved sidewall at its closest point (upper edge), with a backing box.
-    const yWall = Math.min(halfWidth(CB_PANEL.x, CB_PANEL.z - h / 2, SHELL_INSET), halfWidth(CB_PANEL.x, CB_PANEL.z + h / 2, SHELL_INSET));
-    const y = sgn * (yWall - 0.03);
-    const box = trimBoxGeometry(w + 0.02, h + 0.02, 0.06, 0.006);
-    const bm = b.structureMesh(box, 'panelDark', [CB_PANEL.x, y + sgn * 0.03, CB_PANEL.z]);
-    bm.rotation.y = Math.PI / 2;
-    bm.name = `cb_panel_box_${side}`;
-    const p = b.panel({
-      name: `g800.cb_${side === 1 ? 'l' : 'r'}`,
-      center_m: [CB_PANEL.x, y, CB_PANEL.z],
-      facing: side === 1 ? 'right' : 'left',
-      width: w,
-      height: h,
-      origin: 'top-left',
-      material: cbPaint,
-      screws: { kind: 'dzus', diameter: 0.006, inset: 0.007, pitch: 0.15 },
-      radius: 0.006,
-    });
-    fillCbPanel(env, p, groups, ratings);
+  // =============================================================== observer station (right aft bulkhead)
+  const obs = b.panel({ name: 'g800.obs', center_m: [OBS.x, OBS.y, OBS.z], facing: 'left', width: OBS.w, height: OBS.h, material: 'panelDark', screws: { kind: 'dzus', diameter: 0.006, inset: 0.008 }, radius: 0.01 });
+  // Jump-seat TSC housing (SCOPE: blank screen, the suite models TSC 1-4 only).
+  const tscBox = new THREE.Mesh(trimBoxGeometry(0.12, 0.17, 0.02, 0.006), env.materials.get('bezelGloss'));
+  b.trackGeometry(tscBox.geometry);
+  obs.addObject(tscBox, 0, 0.055, { z: 0.01 });
+  const blank = new THREE.Mesh(new THREE.PlaneGeometry(0.1, 0.14), env.materials.get('lcdOff'));
+  b.trackGeometry(blank.geometry);
+  obs.addObject(blank, 0, 0.055, { z: 0.0205 });
+  // Observer O2 mask box and regulator.
+  obs.add(new MaskStowage(env, { id: 'g800.side.mask3', label: 'OBSERVER O2 MASK', var: V.obsMask, size: [0.09, 0.1, 0.045] }), -0.05, -0.095);
+  obs.add(
+    new SelectorKnob(env, {
+      id: 'g800.side.oxy_mode3',
+      label: 'OBSERVER MASK REGULATOR',
+      var: V.obsMaskMode,
+      positions: [
+        { value: 0, label: 'NORM', angle: -40 },
+        { value: 1, label: '100%', angle: 0 },
+        { value: 2, label: 'EMER', angle: 40 },
+      ],
+      initial: 0,
+      diameter: 0.014,
+      labelHeight: 0.0024,
+      title: 'O2',
+    }),
+    0.06,
+    -0.075,
+  );
+  // COMM JACKS (headset / mic receptacles).
+  obs.label('COMM JACKS', 0.06, -0.108, { height: 0.0024, weight: 700 });
+  const jack = env.geometry.get('g800.jack', () => new THREE.CylinderGeometry(0.0055, 0.0055, 0.006, 16).rotateX(Math.PI / 2).translate(0, 0, 0.003));
+  for (const [dx, name] of [
+    [-0.012, 'HEADSET'],
+    [0.012, 'MIC'],
+  ] as const) {
+    const j = new THREE.Mesh(jack, env.materials.get('chrome'));
+    j.userData.cockpitStatic = true;
+    obs.addObject(j, 0.06 + dx, -0.125);
+    obs.label(name, 0.06 + dx, -0.137, { height: 0.0017, weight: 700 });
   }
-  void THREE;
 }

@@ -49,6 +49,7 @@ import { createHydraulics, hydFrac } from './systems/hydraulic';
 import { createPneumatics, createPressurization, createIce, createApu, createFire, createOxygen } from './systems/environment';
 import { createEngines, TLA } from './systems/engines';
 import { G6kLogic, G6kPostLogic } from './systems/logic';
+import { G6kVisionLogic } from './systems/vision';
 import { G6K_CAS } from './systems/cas';
 import { createLighting } from './systems/lighting';
 import { G6kCockpitInputs } from './systems/cockpitInputs';
@@ -181,6 +182,7 @@ export function createSystems(ctx: SimContext, opts: G6kSystemsOptions = {}): G6
   const v = ctx.vars;
   const failures = new FailureManager(v, { events: ctx.events, seed: 6000 });
   const logic = new G6kLogic(v);
+  const vision = new G6kVisionLogic(v, ctx.events ?? null);
   const elecPkg = createElectrical(ctx);
   const elec = elecPkg.net;
   const busControl = new BusPowerControl(elecPkg.selectors);
@@ -268,6 +270,8 @@ export function createSystems(ctx: SimContext, opts: G6kSystemsOptions = {}): G6
         airframe: GLOBAL6000_AIRFRAME,
         engines: BR710A2_20_ENGINES,
         sensors: { comCount: 3 },
+        // Global Vision CTP (photo N835GL): no CRS knobs on the FCP; the CTP TUNE/DATA knob sets the course on the PFD page.
+        ctpCourseOnPfdPage: true,
         power: {
           afd: ['elec.afd1_powered', 'elec.afd2_powered', 'elec.afd3_powered', 'elec.afd4_powered'],
           ctp: ['elec.ctp1_powered', 'elec.ctp2_powered'],
@@ -535,6 +539,7 @@ export function createSystems(ctx: SimContext, opts: G6kSystemsOptions = {}): G6
   const list: Subsystem[] = [
     failures,
     logic,
+    vision,
     busControl,
     elec,
     holdup,

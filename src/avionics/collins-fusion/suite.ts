@@ -48,6 +48,7 @@ import { FmsWindowModel } from './fms/window';
 import { PfdRenderer } from './displays/pfd';
 import { EicasWindow } from './displays/eicas';
 import { MapWindow } from './displays/map';
+import { FCP_WINDOWS, fcpWindowId, mkpScratchId } from './visionHardware';
 import { FmsTextWindow } from './displays/fmsText';
 import { SynopticsWindow } from './displays/synoptics';
 import { ChecklistWindow } from './displays/checklistWin';
@@ -118,6 +119,7 @@ export class FusionSuite {
   private readonly offs: (() => void)[] = [];
   private readonly svsRunways: SvsRunway[] = [];
   private identT = 0;
+  private readonly fcpWinBrt: string[];
   private slow = 0;
 
   constructor(host: FusionSuiteHost, config: FusionSuiteConfig) {
@@ -157,7 +159,7 @@ export class FusionSuite {
       powered: () => this.sidePower.fcp() >= 0.5,
       approachInfo: () => this.approachInfo(),
     });
-    this.ctpLogic = new CtpLogic(vars, events, { sensors: cfg.sensors, powered: (s) => this.sidePower.ctp[s - 1]() >= 0.5 });
+    this.ctpLogic = new CtpLogic(vars, events, { sensors: cfg.sensors, powered: (s) => this.sidePower.ctp[s - 1]() >= 0.5, courseOnPfdPage: cfg.ctpCourseOnPfdPage });
     this.fmsHost = new FmsHost(vars, events, this.fms, host.nav ?? null, cfg);
     this.fmsWin = [
       new FmsWindowModel(1, this.fmsHost, vars, () => this.sidePower.mkp[0]() >= 0.5),
@@ -236,6 +238,11 @@ export class FusionSuite {
     const iesiId = `${p}.iesi`;
     this.iesi = new IesiDisplay({ id: iesiId, vars, sensors: cfg.sensors, pixelRatio: pr, canvas: canvasOf() });
     this.addPower(iesiId, pw.iesi);
+    // (Appended by global6000.) Global Vision FCP readout windows and MKP scratchpad strips (visionHardware.ts): powered
+    // with the FCP / MKP; the FCP BRT knob (FUSION_VARS.fcpBrt) sets the readout brightness (update()).
+    this.fcpWinBrt = FCP_WINDOWS.map((w) => DISPLAY_VARS.brightness(fcpWindowId(p, w)));
+    for (const w of FCP_WINDOWS) this.addPower(fcpWindowId(p, w), pw.fcp);
+    for (const s of [1, 2] as const) this.addPower(mkpScratchId(p, s), pw.mkp?.[s - 1]);
 
     // ---------------------------------------------------------- events
     for (const s of [1, 2] as const) {
@@ -247,6 +254,21 @@ export class FusionSuite {
             vars.set(FUSION_VARS.chronoS(s), 0);
             vars.set(FUSION_VARS.chronoRun(s), 0);
           } else vars.set(FUSION_VARS.chronoRun(s), vars.getBool(FUSION_VARS.chronoRun(s)) ? 0 : 1);
+        }),
+        // (Appended by global6000.) Global Vision CTP keys handled here: PFD [FULL/HALF] toggles the on-side PFD display
+        // (AFD 1 / 4) between the full and the half (PFD + MFW) format; RANGE [-] [+] steps the on-side map range.
+        events.on(FUSION_EVENTS.ctpKey(s), (pl) => {
+          const k = String(pl ?? '');
+          if (k !== 'PFD_FMT' && k !== 'RNG+' && k !== 'RNG-') return;
+          if (!(this.sidePower.ctp[s - 1]() >= 0.5)) return;
+          if (k === 'PFD_FMT') {
+            const n = s === 1 ? 1 : 4;
+            this.layout.setFull(n, !vars.getBool(FUSION_VARS.afdFull(n)));
+          } else {
+            const mw = this.windows.map[s - 1] as MapWindow;
+            if (k === 'RNG+') mw.map.rangeUp();
+            else mw.map.rangeDown();
+          }
         }),
       );
       if (!vars.has(FUSION_VARS.sysPage(s))) vars.set(FUSION_VARS.sysPage(s), SysPage.Status);
@@ -340,6 +362,8 @@ export class FusionSuite {
   update(dt: number): void {
     const v = this.vars;
     for (let i = 0; i < this.power.length; i++) v.set(this.power[i].id, this.power[i].eval() >= 0.5 ? 1 : 0);
+    const fb = Math.max(0.05, v.get(FUSION_VARS.fcpBrt, 1));
+    for (let i = 0; i < this.fcpWinBrt.length; i++) v.set(this.fcpWinBrt[i], fb);
     this.sources.update();
     this.layout.tick();
     this.cursor.update(dt);

@@ -1,329 +1,303 @@
 /**
- * Gulfstream G800 overhead panel (Symmetry flight deck), built on the overhead mount
- * (contract in ../context.ts; the ENGINE / APU FIRE handle strip at the very forward edge is
- * built by the main cockpit, layout.ts FIRE_STRIP, and this panel starts just aft of it).
+ * Gulfstream G800 overhead panel (Symmetry flight deck), built on the overhead mount (contract in ../context.ts).
  *
- * Sources:
- *  - BJT500 (Business Jet Traveler, "Pilot report: Gulfstream G500"): "The overhead panel is
- *    wonderfully clean, with three identical Esterline Korry touchscreens replacing what seems
- *    like the gazillion overhead switchlights, knobs, and buttons on the G450/G550." The three
- *    overhead panel touch screens (OHPTS) are built with the Epic suite helper `addOhpts` and
- *    host the ELEC / FUEL / HYD / ECS / ICE / LIGHTS / ENGINE pages (src/avionics/honeywell-epic
- *    logic/overhead.ts), writing the same `GULFSTREAM_OVERHEAD_VARS` the systems read.
- *  - FlightGlobal, "Analysis: Gulfstream raises super-large bar with G500" (2018; paywalled, the
- *    wording is from the search-engine excerpt, not verified against the full text): the G500 keeps
- *    "only four traditional panels: engine start, electrical power control, bleed air and cabin
- *    pressure control" besides the three OHPTS. They are built here as hardware Korry switchlights
- *    writing the SAME vars as the touch keys (a touch or a switch press has the same effect, as the
- *    Epic suite's `addOverheadSwitches` does for the G650). Legends and positions follow the
- *    GV-family (G450/G550/G650) panels of the same names (code450 checklists: ELECTRIC POWER
- *    CONTROL, ENGINE START with START MASTER / CRANK MASTER, BLEED AIR, CABIN PRESSURE CONTROL
- *    AUTO / SEMI / MANUAL). EST: exact switch arrangement from GVI/GVIII overhead photographs.
- *  - Dossier docs/aircraft/g800.md §9.7: FIRE TEST button and the manual RAT T-handle are
- *    physical overhead items.
- *  - EST (no public G800 drawing): SYSTEM TEST (FIRE TEST + LAMP TEST), EMER LTS guarded switch
- *    and the COCKPIT LIGHTS dimmers (PANEL / FLOOD, DOME, STORM) as hardware on the aft overhead,
- *    as on the GVI (G650ER overhead photograph: SYSTEM TEST, EMERGENCY POWER, FIRE TEST ...).
- *    On the G800 the lamp test is also a touch function; the hardware LAMP TEST writes the
- *    standard `alert.annun_test` var that the CAS manager and every lamp read.
+ * Arrangement and hardware from the G600 flight-deck photographs (Wikimedia Commons BL7C0705, crops p_strip0-2,
+ * p_elec2, p_eng, p_cb) and the G500 overhead (BL7C0670 c_ovhd); the G500 / G600 / G700 / G800 share the Symmetry
+ * overhead (BJT500: "three identical Esterline Korry touchscreens replacing ... the gazillion overhead switchlights").
+ * Functions of the switchlights from the code450 G700 / G800 system study sheets (electrical: BATTERIES MAIN /
+ * FCS, EMERGENCY POWER ON / ARM / OFF, RAT GEN, AC / DC RESET, L / R BUS TIE AUTO; fire: APU FIRE EXT with the
+ * FIRE legend next to APU CONTROL MASTER, START / STOP; powerplant: ENGINE START with its ON lamp):
  *
- * Panel convention: facing down, label "up" = aft. Coordinates (x, y) centred: x right (+y body),
- * y toward the tail. The forward end is slightly lower than the aft end.
+ *  forward strip  : EMERGENCY POWER (ON / ARM / OFF, clear guards), BATTERIES (MAIN L / R; FCS EBHA / UPS under
+ *                   clear guards), COCKPIT LIGHTS (large dimmer), ENGINE START (round, ON lamp), APU FIRE EXT
+ *                   (red-hatched guard, FIRE legend), APU CONTROL (MASTER, START / STOP), CABIN MASTERS
+ *                   (CABIN, GALLEY);
+ *  OHPTS 1 / 2    : side by side (Epic `addOhpts`);
+ *  centre row     : ELECTRICAL POWER CONTROL (RAT GEN clear-guarded, RESET, L GEN, APU GEN, EXT PWR, R GEN,
+ *                   L / R BUS TIE with bus flow lines), OHPTS 3, and the stack DOORS (OPEN clear-guarded, SAFETY)
+ *                   | ENGINE CONTROL (L ENG, R ENG) / BLEED AIR (L ENG and R ENG clear-guarded, APU, ISOLATION,
+ *                   flow lines) / CABIN PRESSURE CONTROL (FAULT / MANUAL, CABIN ALT DESCEND / HOLD / CLIMB spring
+ *                   rotary, "CAUTION MAX ΔP 0.3 PSI TAKEOFF & LANDING");
+ *  aft            : two chrome gasper / reading-light assemblies, then the two CB panels (breakers.ts).
+ *
+ * Legends are partly illegible at photo resolution: small position legends above the forward-strip switchlights are
+ * EST from the study-sheet drawings. Every switchlight writes the same var as the matching OHPTS touch key (a touch or
+ * a press has the same effect). Functions kept on the OHPTS pages only (no hardware in the photographs): packs, ram
+ * air, isolation CLOSED, SEMI landing elevation, dump, start / crank master, continuous ignition, lighting, fire test.
  */
 import * as THREE from 'three';
-import { GuardedButton, GuardedSwitch, PushButton, RotaryKnob, SelectorKnob, TBarHandle, ToggleSwitch } from '../../../../cockpit/controls';
+import { GuardedButton, PushButton, RotaryKnob, SelectorKnob } from '../../../../cockpit/controls';
 import type { Panel } from '../../../../cockpit/CockpitBuilder';
 import type { LegendSegment } from '../../../../cockpit/controls/Annunciator';
 import { trimBoxGeometry } from '../../../../cockpit/geometry/structure';
 import { addOhpts } from '../../../../avionics/honeywell-epic/cockpit';
-import { ALERT } from '../../../../core/vars';
 import { G800_VARS as V } from '../../vars';
 import type { G800CockpitContext } from '../context';
 import { OVHD } from './layout';
+import { buildOverheadBreakers } from './breakers';
 
-/** Korry switchlight size on the overhead (EST: Esterline Korry 0.75 x 0.68 in rectangular caps, GV-family overhead). */
+/** Korry switchlight size on the overhead (EST: Esterline Korry 0.75 x 0.68 in caps, as in the photographs). */
 const KW = 0.019;
 const KH = 0.017;
-/** Legend heights (m): engraved control names, position legends and group titles (EST ~1/8 in, 7/64 in, 9/64 in). */
-const NAME_H = 0.0032;
-const POS_H = 0.0028;
-const TITLE_H = 0.0036;
+/** Legend heights (m): engraved control names, group titles (EST ~1/8 in, 9/64 in). */
+const NAME_H = 0.0028;
+const TITLE_H = 0.0034;
 
 type Seg = LegendSegment;
-/** Display-side derived lamp var (cockpit only, systems never read it): GPU connected but not on line. */
-const CK_GPU_AVAIL = 'ac.g800.ck.gpu_avail';
-const lit = (text: string, color: Seg['color'], varName: string, test?: (v: number) => boolean): Seg => ({ text, color, var: varName, test });
+/** Display-side derived lamp vars (cockpit only, systems never read them). */
+const CK = {
+  gpuAvail: 'ac.g800.ck.gpu_avail',
+  ebhaOn: 'ac.g800.ck.ebha_on',
+  upsOn: 'ac.g800.ck.ups_on',
+  autostart: 'ac.g800.ck.autostart',
+  battLDis: 'ac.g800.ck.batt_l_dis',
+  battRDis: 'ac.g800.ck.batt_r_dis',
+};
+const lit = (text: string | string[], color: Seg['color'], varName: string, test?: (v: number) => boolean): Seg => ({ text, color, var: varName, test });
 const isZero = (v: number) => v === 0;
 
 export function buildOverhead(c: G800CockpitContext): void {
   const { b, env, suite } = c;
   const P = OVHD;
-
   const vars = c.ctx.vars;
   b.onUpdate(() => {
-    vars.set(CK_GPU_AVAIL, vars.get('elec.gpu_avail') !== 0 && vars.get('elec.gpu_online') === 0 ? 1 : 0);
+    vars.set(CK.gpuAvail, vars.get('elec.gpu_avail') !== 0 && vars.get('elec.gpu_online') === 0 ? 1 : 0);
+    const noAc = vars.get('elec.emer_ac_powered') === 0;
+    vars.set(CK.ebhaOn, vars.get(V.fcsBattEbha) !== 0 && noAc && vars.get('elec.emer_dc_powered') !== 0 ? 1 : 0);
+    vars.set(CK.upsOn, vars.get(V.fcsBattUps) !== 0 && noAc && vars.get('elec.ups_powered', vars.get('elec.fcc_powered')) !== 0 ? 1 : 0);
+    vars.set(CK.autostart, vars.get('fadec.eng1.auto_starter') !== 0 || vars.get('fadec.eng2.auto_starter') !== 0 ? 1 : 0);
+    // MAIN battery switchlights light while the battery discharges (powering the ESS DC buses, APU start, AUX pump).
+    vars.set(CK.battLDis, vars.get(V.battL) !== 0 && vars.get('elec.batt_l_amps') < -3 ? 1 : 0);
+    vars.set(CK.battRDis, vars.get(V.battR) !== 0 && vars.get('elec.batt_r_amps') < -3 ? 1 : 0);
   });
 
-  // ---- STORM light zone: one white storm flood in the overhead console aimed at the main panel
-  // (EST 12 cd LED; written by systems/lighting.ts 'storm' dimmer from the STORM switch below).
-  b.zone({ id: 'storm', intensityVar: 'ac.light.storm', lagS: 0, color: 0xffffff });
-  env.lighting.addStormLight('storm', 'storm', [P.center_m[0] + 0.3, 0, P.center_m[2] + 0.02], [13.36, 0, -0.35], b.root, 12);
+  // Panel paint: Symmetry graphite (EST from the G500 / G600 overhead photographs).
+  const paint = env.materials.custom('paint', '#34373b', 0.62);
+  const ov = b.panel({ name: 'g800.ovhd', center_m: P.center_m, facing: 'down', tiltDeg: P.tiltDeg, width: P.width, height: P.length, material: paint, screws: false, radius: 0.02 });
 
-  // Panel paint: Symmetry medium-dark grey (EST from G500/G600 overhead photographs), a shade lighter than the
-  // main-panel grey so the downward-facing overhead does not read black under the cabin's bounce light.
-  const paint = env.materials.custom('paint', '#4a4d52', 0.62);
-  const ov = b.panel({ name: 'g800.ovhd', center_m: P.center_m, facing: 'down', tiltDeg: P.tiltDeg, width: P.width, height: P.length, material: paint, screws: { kind: 'dzus', diameter: 0.007, inset: 0.009, pitch: 0.24 }, radius: 0.012 });
-
-  // ---- structure: the overhead console body behind the panel face, closing it up to the curved headliner
-  // (in the panel frame: u across, v along, n toward the crew; the body extends behind the face, -n).
-  const bodyMesh = new THREE.Mesh(trimBoxGeometry(P.width + 0.03, P.length + 0.02, P.bodyDepth, 0.01), env.materials.get('panelDark'));
+  // ---- structure: the overhead console body behind the panel face, closing it up to the curved headliner.
+  const bodyMesh = new THREE.Mesh(trimBoxGeometry(P.width + 0.03, P.length + 0.02, P.bodyDepth, 0.012), env.materials.get('panelDark'));
   bodyMesh.name = 'overhead_body';
   b.trackGeometry(bodyMesh.geometry);
   ov.addObject(bodyMesh, 0, 0, { z: -P.bodyDepth / 2 - 0.004 });
 
-  // Engraved names above the switchlights: 3.2 mm white Gothic (EST: GV-family overhead legends ~1/8 in; the
-  // control's default 2.6 mm engraving is unreadable at the ~0.9 m eye-to-overhead distance).
-  const nameAbove = (panel: Panel, text: string, x: number, y: number) => panel.label(text, x, y + KH / 2 + 0.0062, { height: NAME_H, weight: 700 });
-  const korry = (panel: Panel, x: number, y: number, o: ConstructorParameters<typeof PushButton>[1], name: string) => {
-    nameAbove(panel, name, x, y);
+  const nameAbove = (panel: Panel, text: string, x: number, y: number, up = 1) => panel.label(text, x, y + up * (KH / 2 + 0.0055), { height: NAME_H, weight: 700 });
+  const korry = (panel: Panel, x: number, y: number, o: ConstructorParameters<typeof PushButton>[1], name: string | null, up = 1) => {
+    if (name) nameAbove(panel, name, x, y, up);
     return panel.add(new PushButton(env, { style: 'korry', width: KW, height: KH, layout: 'split', ...o }), x, y);
   };
+  const guarded = (panel: Panel, x: number, y: number, o: ConstructorParameters<typeof GuardedButton>[1], name: string | null, color: 'clear' | 'red' = 'clear', up = 1) => {
+    if (name) nameAbove(panel, name, x, y, up);
+    return panel.add(new GuardedButton(env, { style: 'korry', width: KW, height: KH, layout: 'split', name: false, ...o, guard: { color, close: 'free' } }), x, y);
+  };
 
-  // =============================================================== row A (forward): ELECTRIC POWER CONTROL + ENGINE START
+  // =============================================================== forward strip
   {
-    const yA = P.rows.a;
-    ov.bracket('ELECTRIC POWER CONTROL', -0.105, yA + 0.058, 0.4, { height: TITLE_H });
-    const cols = [-0.28, -0.19, -0.1, -0.01, 0.08];
-    const r1 = yA + 0.018;
-    const r2 = yA - 0.03;
-    // GV family: a generator switchlight shows amber OFF whenever its generator is not on line (dark-cockpit legend).
-    korry(ov, cols[0], r1, { id: 'g800.oh.gen_l', label: 'L GEN', var: V.genL, mode: 'toggle', segments: [lit('OFF', 'amber', 'elec.idg1_online', isZero), lit('ON', 'white', V.genL)] }, 'L GEN');
-    korry(ov, cols[1], r1, { id: 'g800.oh.apu_gen', label: 'APU GEN', var: V.apuGen, mode: 'toggle', segments: [lit('OFF', 'amber', 'elec.apu_gen_online', isZero), lit('ON', 'white', V.apuGen)] }, 'APU GEN');
-    korry(ov, cols[2], r1, { id: 'g800.oh.gpu', label: 'GPU', var: V.gpu, mode: 'toggle', segments: [lit('AVAIL', 'white', CK_GPU_AVAIL), lit('ON', 'green', 'elec.gpu_online')] }, 'GPU');
-    korry(ov, cols[3], r1, { id: 'g800.oh.gen_r', label: 'R GEN', var: V.genR, mode: 'toggle', segments: [lit('OFF', 'amber', 'elec.idg2_online', isZero), lit('ON', 'white', V.genR)] }, 'R GEN');
-    korry(ov, cols[4], r1, { id: 'g800.oh.bus_tie', label: 'BUS TIE', var: V.busTie, mode: 'toggle', initial: 1, stateNames: ['OPEN', 'AUTO'], segments: [lit('OPEN', 'white', V.busTie, isZero), lit('CLOSED', 'white', 'elec.ac_tie_closed')] }, 'BUS TIE');
-    korry(ov, cols[0], r2, { id: 'g800.oh.batt_l', label: 'L BATT', var: V.battL, mode: 'toggle', segments: [lit('OFF', 'white', V.battL, isZero), lit('DISCH', 'amber', 'elec.batt_l_amps', (a) => a < -8)] }, 'L BATT');
-    korry(ov, cols[1], r2, { id: 'g800.oh.batt_r', label: 'R BATT', var: V.battR, mode: 'toggle', segments: [lit('OFF', 'white', V.battR, isZero), lit('DISCH', 'amber', 'elec.batt_r_amps', (a) => a < -8)] }, 'R BATT');
-    // EMER PWR OFF / ARM (SCQ: the emergency batteries connect when an ESS DC bus drops below 20 V).
-    ov.add(
-      new GuardedButton(env, {
-        id: 'g800.oh.emer_pwr',
-        label: 'EMER PWR',
-        var: V.emerPwr,
-        mode: 'toggle',
-        style: 'korry',
-        width: KW,
-        height: KH,
-        layout: 'split',
-        stateNames: ['OFF', 'ARM'],
-        segments: [lit('ON', 'amber', V.ebattOn), lit('ARMED', 'white', V.emerPwr)],
-        name: false,
-        guard: { color: 'clear', close: 'free' },
-      }),
-      cols[2],
-      r2,
-    );
-    nameAbove(ov, 'EMER PWR', cols[2], r2);
-    korry(ov, cols[3], r2, { id: 'g800.oh.apu_master', label: 'APU MASTER', var: V.apuMaster, mode: 'toggle', segments: [lit('ON', 'white', V.apuMaster), lit('AVAIL', 'green', 'apu.avail')] }, 'APU MASTER');
-    korry(ov, cols[4], r2, { id: 'g800.oh.apu_start', label: 'APU START', var: V.apuStart, mode: 'momentary', segments: [lit('START', 'white', 'apu.starting'), lit('FAULT', 'amber', 'apu.fault')] }, 'APU START');
-    ov.line(-0.33, yA - 0.058, 0.12, yA - 0.058);
-
-    ov.bracket('ENGINE START', 0.225, yA + 0.058, 0.2, { height: TITLE_H });
-    const ec = [0.155, 0.225, 0.295];
-    korry(ov, ec[0], r1, { id: 'g800.oh.start_master', label: 'START MASTER', var: V.startMaster, mode: 'toggle', segments: [lit('ON', 'white', V.startMaster)] }, 'START MSTR');
-    korry(ov, ec[1], r1, { id: 'g800.oh.crank_master', label: 'CRANK MASTER', var: V.crankMaster, mode: 'toggle', segments: [lit('ON', 'white', V.crankMaster)] }, 'CRANK MSTR');
-    korry(ov, ec[2], r1, { id: 'g800.oh.cont_ign', label: 'CONT IGN', var: V.contIgn, mode: 'toggle', segments: [lit('ON', 'white', V.contIgn)] }, 'CONT IGN');
-    // START buttons are momentary; the FADEC runs the autostart. Legend: start (ATS) valve open.
-    korry(ov, 0.175, r2, { id: 'g800.oh.start_l', label: 'L ENG START', var: V.startL, mode: 'momentary', segments: [lit('VALVE\nOPEN', 'white', 'pneu.ats_l_valve_open'), lit('ABORT', 'amber', 'fadec.eng1.abort')] }, 'L START');
-    korry(ov, 0.275, r2, { id: 'g800.oh.start_r', label: 'R ENG START', var: V.startR, mode: 'momentary', segments: [lit('VALVE\nOPEN', 'white', 'pneu.ats_r_valve_open'), lit('ABORT', 'amber', 'fadec.eng2.abort')] }, 'R START');
-  }
-
-  // =============================================================== OHPTS row (three touch screens)
-  {
-    const y = P.rows.ohpts;
-    // Recessed dark surround behind the three touch screens (the screens' own bezels come from addOhpts).
-    ov.line(-0.325, y + 0.075, 0.325, y + 0.075, 0.0008);
-    ov.line(-0.325, y - 0.075, 0.325, y - 0.075, 0.0008);
-    if (suite) {
-      for (let n = 1; n <= 3; n++) addOhpts(ov, P.ohptsX[n - 1], y, suite, n);
+    const s = P.strip;
+    const st = ov.subPanel({ name: 'g800.ovhd_strip', x: 0, y: s.v, width: P.width - 0.03, height: s.h, material: paint, thickness: 0.004, radius: 0.006 });
+    const y = -0.006;
+    const dx = 0.04;
+    const title = (t: string, x: number, w: number) => st.label(t, x, s.h / 2 - 0.007, { height: TITLE_H, weight: 700 });
+    const sep = (x: number) => st.line(x, -s.h / 2 + 0.006, x, s.h / 2 - 0.004, 0.0009);
+    // EMERGENCY POWER ON / ARM / OFF (code450 G700/G800 electrical: E-batts ON with FWD / AFT lamps, ARM, OFF).
+    const ep = -0.265;
+    title('EMERGENCY POWER', ep, 0.1);
+    const emer: [string, number, number, Seg[]][] = [
+      ['ON', 2, ep - 0.03, [lit('FWD', 'amber', V.ebattOn), lit('AFT', 'amber', V.ebattOn)]],
+      ['ARM', 1, ep, [lit('ARM', 'white', V.emerPwr, (v) => v === 1)]],
+      ['OFF', 0, ep + 0.03, [lit('OFF', 'white', V.emerPwr, isZero)]],
+    ];
+    for (const [n, val, x, segs] of emer) {
+      guarded(st, x, y, { id: `g800.oh.emer_${n.toLowerCase()}`, label: `EMERGENCY POWER ${n}`, var: `ac.g800.ck.emer_btn_${n.toLowerCase()}`, mode: 'momentary', segments: segs, onChange: (x) => void (x !== 0 && vars.set(V.emerPwr, val)) }, n);
     }
-  }
-
-  // =============================================================== row B: BLEED AIR + CABIN PRESSURE CONTROL
-  {
-    const yB = P.rows.b;
-    ov.bracket('BLEED AIR', -0.165, yB + 0.058, 0.3, { height: TITLE_H });
-    const r1 = yB + 0.018;
-    const r2 = yB - 0.03;
-    korry(ov, -0.29, r1, { id: 'g800.oh.bleed_l', label: 'L ENG BLEED', var: V.bleedL, mode: 'toggle', segments: [lit('OFF', 'white', V.bleedL, isZero), lit('FAIL', 'amber', 'pneu.bleed_l_trip')] }, 'L ENG');
-    korry(ov, -0.165, r1, { id: 'g800.oh.bleed_apu', label: 'APU BLEED', var: V.bleedApu, mode: 'toggle', segments: [lit('ON', 'white', V.bleedApu), lit('OPEN', 'green', 'pneu.apu_bleed_valve_open')] }, 'APU');
-    korry(ov, -0.04, r1, { id: 'g800.oh.bleed_r', label: 'R ENG BLEED', var: V.bleedR, mode: 'toggle', segments: [lit('OFF', 'white', V.bleedR, isZero), lit('FAIL', 'amber', 'pneu.bleed_r_trip')] }, 'R ENG');
-    // Isolation valve AUTO / OPEN / CLOSED (dossier §4.4).
-    ov.add(
-      new SelectorKnob(env, {
-        id: 'g800.oh.iso',
-        label: 'ISOLATION',
-        var: V.isoValve,
-        positions: [
-          { value: 0, label: 'CLOSED', angle: -40 },
-          { value: 1, label: 'AUTO', angle: 0 },
-          { value: 2, label: 'OPEN', angle: 40 },
-        ],
-        initial: 1,
-        diameter: 0.016,
-        labelHeight: POS_H,
-        title: 'ISOLATION',
-      }),
-      -0.225,
-      r2 - 0.002,
-    );
-    korry(ov, -0.1, r2, { id: 'g800.oh.pack_l', label: 'L PACK', var: V.packL, mode: 'toggle', segments: [lit('OFF', 'white', V.packL, isZero), lit('FAIL', 'amber', 'pneu.pack_l_trip')] }, 'L PACK');
-    korry(ov, -0.04, r2, { id: 'g800.oh.pack_r', label: 'R PACK', var: V.packR, mode: 'toggle', segments: [lit('OFF', 'white', V.packR, isZero), lit('FAIL', 'amber', 'pneu.pack_r_trip')] }, 'R PACK');
-    ov.add(
-      new GuardedButton(env, {
-        id: 'g800.oh.ram_air',
-        label: 'RAM AIR',
-        var: V.ramAir,
-        mode: 'toggle',
-        style: 'korry',
-        width: KW,
-        height: KH,
-        layout: 'split',
-        stateNames: ['CLOSED', 'OPEN'],
-        segments: [lit('OPEN', 'white', V.ramAir)],
-        name: false,
-        guard: { color: 'red', close: 'free' },
-      }),
-      -0.29,
-      r2,
-    );
-    nameAbove(ov, 'RAM AIR', -0.29, r2);
-    ov.line(-0.33, yB - 0.058, 0.0, yB - 0.058);
-
-    ov.bracket('CABIN PRESSURE CONTROL', 0.17, yB + 0.058, 0.3, { height: TITLE_H });
-    ov.add(
-      new SelectorKnob(env, {
-        id: 'g800.oh.press_mode',
-        label: 'CABIN PRESS MODE',
-        var: V.pressMode,
-        positions: [
-          { value: 0, label: 'AUTO', angle: -40 },
-          { value: 1, label: 'SEMI', angle: 0 },
-          { value: 2, label: 'MAN', angle: 40 },
-        ],
-        initial: 0,
-        diameter: 0.016,
-        labelHeight: POS_H,
-        title: 'MODE',
-      }),
-      0.06,
-      r1 - 0.012,
-    );
-    ov.add(
+    sep(ep + 0.052);
+    // BATTERIES: MAIN L / R, FCS EBHA / UPS (clear guards).
+    const bt = -0.14;
+    title('BATTERIES', bt, 0.14);
+    korry(st, bt - 0.045, y, { id: 'g800.oh.batt_l', label: 'MAIN BATT L', var: V.battL, mode: 'toggle', segments: [lit('ON', 'amber', CK.battLDis)] }, 'MAIN L');
+    korry(st, bt - 0.015, y, { id: 'g800.oh.batt_r', label: 'MAIN BATT R', var: V.battR, mode: 'toggle', segments: [lit('ON', 'amber', CK.battRDis)] }, 'MAIN R');
+    guarded(st, bt + 0.015, y, { id: 'g800.oh.fcs_ebha', label: 'FCS BATT EBHA', var: V.fcsBattEbha, mode: 'toggle', segments: [lit('ON', 'amber', CK.ebhaOn)] }, 'EBHA');
+    guarded(st, bt + 0.045, y, { id: 'g800.oh.fcs_ups', label: 'FCS BATT UPS', var: V.fcsBattUps, mode: 'toggle', segments: [lit('ON', 'amber', CK.upsOn)] }, 'UPS');
+    sep(bt + 0.067);
+    // COCKPIT LIGHTS: one large dimmer (panel backlighting; floods / dome on the OHPTS LIGHTS page).
+    const cl = -0.045;
+    title('COCKPIT LIGHTS', cl, 0.06);
+    st.add(
       new RotaryKnob(env, {
-        id: 'g800.oh.ldg_elev',
-        label: 'LDG ELEV',
-        outer: { var: V.pressLdgElev, min: -1000, max: 15000, step: 100, accel: { fastStep: 1000 }, label: 'LDG ELEV', format: (v) => `${Math.round(v)} FT` },
-        cap: 'knurled',
-        diameter: 0.016,
-        pointer: 'none',
+        id: 'g800.oh.ckpt_lts',
+        label: 'COCKPIT LIGHTS',
+        outer: { var: V.ltPanel, min: 0, max: 1, step: 0.05, angleRange: [-135, 135], label: 'COCKPIT LIGHTS', format: (v) => (v <= 0.001 ? 'OFF' : `${Math.round(v * 100)} %`) },
+        cap: 'dimmer',
+        diameter: 0.028,
+        pointer: 'line',
       }),
-      0.14,
-      r1 - 0.012,
+      cl,
+      y - 0.002,
     );
-    ov.label('LDG ELEV', 0.14, r1 - 0.036, { height: NAME_H, weight: 700 });
-    ov.add(
-      new ToggleSwitch(env, {
-        id: 'g800.oh.press_man',
-        label: 'MANUAL RATE',
-        var: V.pressManual,
-        positions: ['DESC', 'HOLD', 'CLIMB'],
-        values: [-1, 0, 1],
-        initial: 1,
-        springs: { 0: 1, 2: 1 },
-        labels: { name: 'MAN', positions: true, height: POS_H },
-      }),
-      0.215,
-      r1 - 0.012,
+    sep(cl + 0.035);
+    // ENGINE START (round push-button with an ON lamp; AutoStart).
+    const es = 0.012;
+    title('ENGINE', es, 0.04);
+    st.add(
+      new PushButton(env, { id: 'g800.oh.eng_start', label: 'ENGINE START', var: V.engStartBtn, mode: 'momentary', style: 'round', width: 0.02, engraved: 'START', engravedHeight: 0.0022, lightBar: { var: CK.autostart, color: 'blue' } }),
+      es,
+      y - 0.002,
     );
-    ov.add(
-      new GuardedSwitch(env, {
-        id: 'g800.oh.dump',
-        label: 'CABIN DUMP',
-        var: V.pressDump,
-        positions: ['OFF', 'DUMP'],
-        guard: { color: 'red', guardedPosition: 0 },
-        labels: { name: 'DUMP', positions: false, height: POS_H },
-      }),
-      0.29,
-      r1 - 0.012,
+    sep(es + 0.027);
+    // APU FIRE EXT (red / black hatched guard), APU CONTROL MASTER + START / STOP.
+    const af = 0.063;
+    title('APU FIRE EXT', af, 0.05);
+    guarded(st, af, y, { id: 'g800.oh.apu_fire_ext', label: 'APU FIRE EXT', var: V.fireApuDisch, mode: 'momentary', layout: 'stack', segments: [lit('FIRE', 'red', 'fire.apu_warn')] }, null, 'red');
+    sep(af + 0.025);
+    const ac = 0.122;
+    title('APU CONTROL', ac, 0.07);
+    korry(st, ac - 0.017, y, { id: 'g800.oh.apu_master', label: 'APU MASTER', var: V.apuMaster, mode: 'toggle', segments: [lit('ON', 'white', V.apuMaster), lit('AVAIL', 'green', 'apu.avail')] }, 'MASTER');
+    korry(
+      st,
+      ac + 0.017,
+      y,
+      {
+        id: 'g800.oh.apu_start',
+        label: 'APU START / STOP',
+        var: V.apuStart,
+        mode: 'momentary',
+        segments: [lit('START', 'white', 'apu.starting'), lit('FAULT', 'amber', 'apu.fault')],
+        // STOP: pressed with the APU running = normal shutdown (cool-down run in the APU model). EST.
+        onChange: (x) => void (x !== 0 && vars.get('apu.avail') !== 0 && vars.set(V.apuMaster, 0)),
+      },
+      'START/STOP',
     );
+    sep(ac + 0.044);
+    // CABIN MASTERS: CABIN, GALLEY.
+    const cm = 0.2;
+    title('CABIN MASTERS', cm, 0.07);
+    korry(st, cm - 0.017, y, { id: 'g800.oh.cabin_master', label: 'CABIN MASTER', var: V.cabinMaster, mode: 'toggle', segments: [lit('OFF', 'white', V.cabinMaster, isZero)] }, 'CABIN');
+    korry(st, cm + 0.017, y, { id: 'g800.oh.galley_master', label: 'GALLEY MASTER', var: V.galleyMaster, mode: 'toggle', segments: [lit('OFF', 'white', V.galleyMaster, isZero)] }, 'GALLEY');
+    void dx;
+    // Gaspers under the strip (forward lip), EST positions.
+    for (const u of [-0.28, 0.28]) addGasper(c, ov, u, s.v + 0.005, 0.016, false);
   }
 
-  // =============================================================== row C: SYSTEM TEST, EMER LTS, COCKPIT LIGHTS, RAT
+  // =============================================================== OHPTS 1 / 2 / 3
+  if (suite) for (let n = 1; n <= 3; n++) addOhpts(ov, P.ohpts[n - 1][0], P.ohpts[n - 1][1], suite, n);
+
+  // =============================================================== ELECTRICAL POWER CONTROL (left of OHPTS 3)
   {
-    const yC = P.rows.c;
-    ov.bracket('SYSTEM TEST', -0.255, yC + 0.05, 0.13, { height: TITLE_H });
-    korry(ov, -0.29, yC + 0.01, { id: 'g800.oh.fire_test', label: 'FIRE TEST', var: V.fireTest, mode: 'momentary', segments: [lit('FIRE\nTEST', 'white', V.fireTest)] }, 'FIRE');
-    korry(ov, -0.22, yC + 0.01, { id: 'g800.oh.lamp_test', label: 'LAMP TEST', var: ALERT.annunTest, mode: 'momentary', segments: [lit('LAMP\nTEST', 'white', ALERT.annunTest)] }, 'LAMP');
-
-    // EMER LTS OFF / ARM / ON, guarded in ARM (EST: typical Part 25 emergency lighting switch, 14 CFR 25.812(d)).
-    ov.add(
-      new GuardedSwitch(env, {
-        id: 'g800.oh.emer_lts',
-        label: 'EMER LTS',
-        var: V.ltEmer,
-        positions: ['OFF', 'ARM', 'ON'],
-        values: [0, 1, 2],
-        initial: 1,
-        guard: { color: 'red', guardedPosition: 1 },
-        labels: { name: 'EMER LTS', positions: true, height: POS_H },
-      }),
-      -0.13,
-      yC + 0.006,
-    );
-
-    ov.bracket('COCKPIT LIGHTS', 0.07, yC + 0.05, 0.28, { height: TITLE_H });
-    const dimmer = (id: string, label: string, varName: string, x: number) => {
-      ov.add(
-        new RotaryKnob(env, {
-          id,
-          label,
-          outer: { var: varName, min: 0, max: 1, step: 0.05, angleRange: [-135, 135], label, format: (v) => (v <= 0.001 ? 'OFF' : `${Math.round(v * 100)} %`) },
-          cap: 'dimmer',
-          diameter: 0.017,
-          pointer: 'line',
-        }),
-        x,
-        yC + 0.006,
-      );
-      ov.label(label, x, yC - 0.02, { height: NAME_H, weight: 700 });
-    };
-    dimmer('g800.oh.panel_dim', 'PANEL', V.ltPanel, -0.04);
-    dimmer('g800.oh.flood_dim', 'FLOOD', V.ltFlood, 0.03);
-    ov.add(new ToggleSwitch(env, { id: 'g800.oh.dome', label: 'DOME', var: V.ltDome, positions: ['OFF', 'ON'], labels: { name: 'DOME', positions: true, height: POS_H } }), 0.1, yC + 0.006);
-    ov.add(new ToggleSwitch(env, { id: 'g800.oh.storm', label: 'STORM', var: V.stormLt, positions: ['OFF', 'ON'], labels: { name: 'STORM', positions: true, height: POS_H } }), 0.165, yC + 0.006);
-
-    // RAT manual deploy T-handle (dossier §9.7; SCQ: "manual deployment only (handle/cable)"). Same var as the touch key.
-    ov.add(
-      new TBarHandle(env, {
-        id: 'g800.oh.rat',
-        label: 'RAT DEPLOY',
-        var: V.ratDeploy,
-        valueIn: 0,
-        valueOut: 1,
-        style: 'tbar',
-        material: 'knobRed',
-        legend: 'RAT',
-        pullLength: 0.04,
-        scale: 0.85,
-      }),
-      0.265,
-      yC + 0.004,
-    );
-    ov.label('RAT - PULL TO DEPLOY', 0.265, yC - 0.036, { height: POS_H });
+    const e = P.elec;
+    const ep = ov.subPanel({ name: 'g800.ovhd_elec', x: e.u, y: e.v, width: e.w, height: e.h, material: paint, thickness: 0.004, radius: 0.006 });
+    ep.label('ELECTRICAL POWER CONTROL', 0, e.h / 2 - 0.012, { height: TITLE_H, weight: 700 });
+    ep.line(-e.w / 2 + 0.01, e.h / 2 - 0.004, e.w / 2 - 0.01, e.h / 2 - 0.004, 0.0009);
+    const r1 = 0.036;
+    const r2 = -0.006;
+    const r3 = -0.05;
+    guarded(ep, -0.05, r1, { id: 'g800.oh.rat_gen', label: 'RAT GEN', var: V.ratGen, mode: 'toggle', initial: 1, stateNames: ['OFF', 'AUTO'], segments: [lit('OFF', 'amber', V.ratGen, isZero), lit('ON', 'white', 'ac.g800.rat_mode')] }, 'RAT GEN');
+    ep.line(0.0, r1 + 0.02, -0.012, r1 - 0.02, 0.0009);
+    korry(ep, 0.05, r1, { id: 'g800.oh.elec_reset', label: 'AC / DC RESET', var: V.elecReset, mode: 'momentary', segments: [lit('AC', 'white', V.elecReset), lit('DC', 'white', V.elecReset)] }, 'RESET');
+    const gx = [-0.072, -0.024, 0.024, 0.072];
+    // Generator switchlights: amber OFF when not on line (pushed out or tripped), green ON on line (code450 G700/G800).
+    korry(ep, gx[0], r2, { id: 'g800.oh.gen_l', label: 'L GEN', var: V.genL, mode: 'toggle', segments: [lit('ON', 'green', 'elec.idg1_online'), lit('OFF', 'amber', 'elec.idg1_online', isZero)] }, 'L GEN');
+    korry(ep, gx[1], r2, { id: 'g800.oh.apu_gen', label: 'APU GEN', var: V.apuGen, mode: 'toggle', segments: [lit('ON', 'green', 'elec.apu_gen_online'), lit('OFF', 'amber', V.apuGen, isZero)] }, 'APU GEN');
+    korry(ep, gx[2], r2, { id: 'g800.oh.gpu', label: 'EXT PWR', var: V.gpu, mode: 'toggle', segments: [lit('AVAIL', 'blue', CK.gpuAvail), lit('ON', 'amber', 'elec.gpu_online')] }, 'EXT PWR');
+    korry(ep, gx[3], r2, { id: 'g800.oh.gen_r', label: 'R GEN', var: V.genR, mode: 'toggle', segments: [lit('ON', 'green', 'elec.idg2_online'), lit('OFF', 'amber', 'elec.idg2_online', isZero)] }, 'R GEN');
+    // L / R BUS TIE (blue AUTO), names below the switchlights as in the photograph; bus flow lines.
+    korry(ep, -0.06, r3, { id: 'g800.oh.bus_tie_l', label: 'L BUS TIE', var: V.busTieL, mode: 'toggle', initial: 1, stateNames: ['OPEN', 'AUTO'], segments: [lit('AUTO', 'blue', V.busTieL), lit('OPEN', 'white', V.busTieL, isZero)] }, 'L BUS TIE', -1);
+    korry(ep, 0.06, r3, { id: 'g800.oh.bus_tie_r', label: 'R BUS TIE', var: V.busTieR, mode: 'toggle', initial: 1, stateNames: ['OPEN', 'AUTO'], segments: [lit('AUTO', 'blue', V.busTieR), lit('OPEN', 'white', V.busTieR, isZero)] }, 'R BUS TIE', -1);
+    ep.line(-0.06 + KW / 2, r3, 0.06 - KW / 2, r3, 0.0012);
+    for (const x of gx) ep.line(x, r2 - KH / 2, x, r3 + (Math.abs(x) > 0.05 ? KH / 2 : 0), 0.0012);
   }
 
-  // =============================================================== aft: placards
-  ov.placard({ text: 'G800  -  OVERHEAD', height: 0.0024, style: 'engraved' }, 0, P.length / 2 - 0.02);
+  // =============================================================== DOORS | ENGINE CONTROL / BLEED AIR / CABIN PRESSURE CONTROL
+  {
+    const k = P.stack;
+    const sp = ov.subPanel({ name: 'g800.ovhd_stack', x: k.u, y: k.v, width: k.w, height: k.h, material: paint, thickness: 0.004, radius: 0.006 });
+    // DOORS (aft-left) and ENGINE CONTROL (aft-right).
+    const yd = 0.088;
+    sp.label('DOORS', -0.05, yd + 0.03, { height: TITLE_H, weight: 700 });
+    guarded(sp, -0.07, yd, { id: 'g800.oh.door_open', label: 'MAIN DOOR OPEN', var: V.doorOpenCmd, mode: 'toggle', stateNames: ['CLOSE', 'OPEN'], layout: 'stack', segments: [lit('OPEN', 'amber', 'ac.door.main', (x) => x > 0.02)] }, 'OPEN');
+    korry(sp, -0.03, yd, { id: 'g800.oh.door_safety', label: 'DOOR SAFETY', var: V.doorSafety, mode: 'toggle', layout: 'stack', segments: [lit('ON', 'amber', V.doorSafety)] }, 'SAFETY');
+    sp.line(-0.004, yd - 0.018, 0.004, yd + 0.036, 0.0012);
+    sp.label('ENGINE CONTROL', 0.055, yd + 0.03, { height: TITLE_H, weight: 700 });
+    for (const [i, x] of [
+      [1, 0.035],
+      [2, 0.075],
+    ] as const) {
+      korry(sp, x, yd, { id: `g800.oh.eng_ctl_${i === 1 ? 'l' : 'r'}`, label: `ENGINE CONTROL ${i === 1 ? 'L' : 'R'} ENG`, var: V.engAlt(i), mode: 'toggle', stateNames: ['EPR', 'ALT'], layout: 'stack', segments: [lit('ALT', 'white', V.engAlt(i))] }, i === 1 ? 'L ENG' : 'R ENG');
+    }
+    sp.line(-k.w / 2 + 0.01, 0.058, k.w / 2 - 0.01, 0.058, 0.0009);
+    // BLEED AIR: L / R ENG under clear guards (amber OFF), APU, ISOLATION, flow lines.
+    const yb = 0.018;
+    sp.label('BLEED AIR', 0, 0.047, { height: TITLE_H, weight: 700 });
+    guarded(sp, -0.06, yb, { id: 'g800.oh.bleed_l', label: 'L ENG BLEED', var: V.bleedL, mode: 'toggle', segments: [lit('OFF', 'amber', V.bleedL, isZero), lit('FAIL', 'amber', 'pneu.bleed_l_trip')] }, 'L ENG');
+    korry(sp, 0, yb, { id: 'g800.oh.bleed_apu', label: 'APU BLEED', var: V.bleedApu, mode: 'toggle', segments: [lit('ON', 'white', V.bleedApu), lit('OPEN', 'green', 'pneu.apu_bleed_valve_open')] }, 'APU');
+    guarded(sp, 0.06, yb, { id: 'g800.oh.bleed_r', label: 'R ENG BLEED', var: V.bleedR, mode: 'toggle', segments: [lit('OFF', 'amber', V.bleedR, isZero), lit('FAIL', 'amber', 'pneu.bleed_r_trip')] }, 'R ENG');
+    // ISOLATION: AUTO / OPEN (CLOSED only on the OHPTS ECS page, SCOPE).
+    korry(sp, 0, yb - 0.04, { id: 'g800.oh.iso', label: 'ISOLATION', var: V.isoValve, mode: 'toggle', values: [1, 2], initial: 1, stateNames: ['AUTO', 'OPEN'], segments: [lit('OPEN', 'white', 'pneu.iso_open')] }, 'ISOLATION');
+    const lw = 0.0012;
+    sp.line(-0.06, yb - KH / 2, -0.06, yb - 0.04, lw);
+    sp.line(-0.06, yb - 0.04, -KW / 2, yb - 0.04, lw);
+    sp.line(0.06, yb - KH / 2, 0.06, yb - 0.04, lw);
+    sp.line(0.06, yb - 0.04, KW / 2, yb - 0.04, lw);
+    sp.line(0, yb - KH / 2, 0, yb - 0.024, lw);
+    sp.line(0, yb - 0.024, 0.06, yb - 0.024, lw);
+    sp.line(-k.w / 2 + 0.01, -0.052, k.w / 2 - 0.01, -0.052, 0.0009);
+    // CABIN PRESSURE CONTROL: FAULT / MANUAL (AUTO <-> MANUAL), CABIN ALT DESCEND / HOLD / CLIMB (spring to HOLD).
+    sp.label('CABIN PRESSURE CONTROL', 0, -0.064, { height: TITLE_H, weight: 700 });
+    korry(sp, -0.055, -0.093, { id: 'g800.oh.press_mode', label: 'CABIN PRESSURE FAULT / MANUAL', var: V.pressMode, mode: 'toggle', values: [0, 2], stateNames: ['AUTO', 'MANUAL'], segments: [lit('FAULT', 'amber', 'press.auto_fail'), lit('MANUAL', 'white', V.pressMode, (x) => x === 2)] }, 'FAULT/MANUAL');
+    sp.label('CAUTION\nMAX ΔP 0.3 PSI\nTAKEOFF & LANDING', -0.055, -0.113, { height: 0.0021, weight: 700, anchor: 'top' });
+    sp.add(
+      new SelectorKnob(env, {
+        id: 'g800.oh.cabin_alt',
+        label: 'CABIN ALT',
+        var: V.pressManual,
+        positions: [
+          { value: -1, label: 'DESCEND', angle: -45, spring: 1 },
+          { value: 0, label: 'HOLD', angle: 0 },
+          { value: 1, label: 'CLIMB', angle: 45, spring: 1 },
+        ],
+        initial: 1,
+        cap: 'bar',
+        diameter: 0.02,
+        labelHeight: 0.0024,
+        title: 'CABIN ALT',
+      }),
+      0.045,
+      -0.102,
+    );
+  }
+
+  // =============================================================== gasper / reading-light assemblies
+  for (const u of [-P.gasperU, P.gasperU]) addGasper(c, ov, u, P.gasperV, 0.03, true);
+
+  // =============================================================== CB panels (aft)
+  buildOverheadBreakers(c, ov, paint);
+}
+
+/**
+ * Chrome eyeball gasper (and, for the large aft assemblies, a reading-light lens beside it): structure only
+ * (SCOPE: air outlets and the reading lights are not modelled; the reading lights share the 'flood' zone look).
+ */
+function addGasper(c: G800CockpitContext, panel: Panel, u: number, v: number, r: number, reading: boolean): void {
+  const { b, env } = c;
+  const geo = env.geometry.get(`g800.gasper.${r}`, () => {
+    const ring = new THREE.CylinderGeometry(r, r * 1.08, r * 0.35, 28);
+    ring.rotateX(Math.PI / 2);
+    ring.translate(0, 0, r * 0.17);
+    return ring;
+  });
+  const ball = env.geometry.get(`g800.gasper_ball.${r}`, () => new THREE.SphereGeometry(r * 0.62, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2).rotateX(Math.PI / 2).translate(0, 0, r * 0.2));
+  const g = new THREE.Group();
+  const m1 = new THREE.Mesh(geo, env.materials.get('chrome'));
+  const m2 = new THREE.Mesh(ball, env.materials.get('chrome'));
+  g.add(m1, m2);
+  if (reading) {
+    const lens = new THREE.Mesh(env.geometry.get('g800.reading_lens', () => new THREE.CircleGeometry(r * 0.55, 20).translate(0, 0, 0.004)), env.materials.get('plasticBlack'));
+    lens.position.x = u < 0 ? r * 1.6 : -r * 1.6;
+    const bezel = new THREE.Mesh(geo, env.materials.get('chrome'));
+    bezel.scale.setScalar(0.7);
+    bezel.position.x = lens.position.x;
+    g.add(bezel, lens);
+  }
+  for (const o of g.children) o.userData.cockpitStatic = true;
+  panel.addObject(g, u, v);
+  void b;
 }

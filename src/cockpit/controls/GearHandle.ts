@@ -16,7 +16,7 @@ import type { SimVars } from '../../core/SimVars';
 import type { ControlPointer } from '../types';
 import { COCKPIT_SOUNDS } from '../types';
 import type { CockpitEnv } from '../env';
-import type { LampColor } from '../materials';
+import type { LampColor, MaterialName } from '../materials';
 import { ControlBase, type ControlOptions } from './ControlBase';
 import { SwitchLogic } from './logic/SwitchLogic';
 import { leverArmGeometry, leverKnobGeometry, quadrantSlotGeometry } from '../geometry/levers';
@@ -39,6 +39,9 @@ export interface GearHandleOptions extends ControlOptions {
   knobScale?: number;
   /** Engraved position labels beside the slot (default true). */
   labels?: boolean;
+  /** (Appended by global6000.) Knob (wheel) material, default 'knobWhite'; arm material, default 'chrome'. */
+  knobMaterial?: MaterialName;
+  armMaterial?: MaterialName;
 }
 
 export class GearHandle extends ControlBase {
@@ -161,8 +164,8 @@ export class GearHandle extends ControlBase {
     const ks = this.o.knobScale ?? 1;
     this.object.add(this.swing);
     this.swing.add(this.slide);
-    this.mesh(this.geo(`gear.arm.${len}`, () => leverArmGeometry(len, 0.012, 0.009)), 'chrome', this.slide);
-    const knob = this.mesh(this.geo(`lever.knob.gear.${ks}`, () => leverKnobGeometry('gear', ks)), 'knobWhite', this.slide);
+    this.mesh(this.geo(`gear.arm.${len}`, () => leverArmGeometry(len, 0.012, 0.009)), this.o.armMaterial ?? 'chrome', this.slide);
+    const knob = this.mesh(this.geo(`lever.knob.gear.${ks}`, () => leverKnobGeometry('gear', ks)), this.o.knobMaterial ?? 'knobWhite', this.slide);
     knob.position.z = len;
     // Hub lamps: a lens disc on the wheel face.
     const lights = this.o.lights ?? [];

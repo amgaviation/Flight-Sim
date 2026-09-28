@@ -114,6 +114,15 @@ export class TouchScreenLogic {
     return this.byId.has(id);
   }
 
+  /** Appends a page (aircraft-specific touch applications); returns false when the id already exists. */
+  addPage(page: TouchPage): boolean {
+    if (this.byId.has(page.id)) return false;
+    this.byId.set(page.id, this.pages.length);
+    this.pages.push(page);
+    this.version++;
+    return true;
+  }
+
   hit(x: number, y: number): TouchWidget | null {
     const ws = this.current.widgets;
     for (let i = ws.length - 1; i >= 0; i--) {

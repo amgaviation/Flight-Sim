@@ -18,7 +18,7 @@ import { makeRig } from '../helpers';
 import { G6K_VARS as V } from '../../../../src/aircraft/global6000/vars';
 import { gestures, hasListener, recordReads, recordWrites, systemReads } from './harness';
 
-const MINE = /^g6k\.(ovhd|side|cb)\./;
+const MINE = /^g6k\.(ovhd|side|cb|gasper)\./;
 
 describe('Global 6000 overhead / side consoles / CCBP: control coverage', () => {
   it('every overhead, side-console, EMS CDU and breaker control drives a system', { timeout: 300_000 }, () => {
@@ -32,13 +32,14 @@ describe('Global 6000 overhead / side consoles / CCBP: control coverage', () => 
       'g6k.side.oxy_flow2': ['oxy.copilot_flowing'],
       'g6k.side.pax_on': ['oxy.pax_on'],
       'g6k.side.pax_low': ['oxy.pax_low'],
+      'g6k.ovhd.no_smoking_sign': ['ac.light.no_smoking'],
     };
     // Operating conditions some controls need before a system looks at them (the systems read these vars only then).
     const PRECONDITION: Record<string, () => void> = {
       'g6k.ovhd.ext_ac': () => r.vars.set(V.extAcAvail, 1), // ground power cart connected
       'g6k.ovhd.ext_dc': () => r.vars.set(V.extDcAvail, 1),
-      'g6k.ovhd.man_temp_l': () => r.vars.set(V.packCtlMan, 1), // PACK CONTROL MAN
-      'g6k.ovhd.man_temp_r': () => r.vars.set(V.packCtlMan, 1),
+      'g6k.ovhd.man_temp_l': () => r.vars.set(V.packFlowSel, 3), // PACK CONTROL MAN
+      'g6k.ovhd.man_temp_r': () => r.vars.set(V.packFlowSel, 3),
       'g6k.side.oxy_mode1': () => (r.vars.set(V.oxyMask(1), 1), r.vars.set(V.crewOxy, 1)), // mask out of the box, supply open: regulator in use
       'g6k.side.oxy_mode2': () => (r.vars.set(V.oxyMask(2), 1), r.vars.set(V.crewOxy, 1)),
     };

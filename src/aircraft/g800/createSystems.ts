@@ -49,6 +49,10 @@ import { createEngines } from './systems/engines';
 import { G800Logic, G800PostLogic } from './systems/logic';
 import { G800_CAS } from './systems/cas';
 import { G800Audio } from './systems/audio';
+import { G800Hud } from './systems/hud';
+import { installG800TscApps } from './systems/tscApps';
+import { G800SfdMenu } from './systems/sfdMenu';
+import { G800Furnishings } from './systems/furnishings';
 import { createLighting } from './systems/lighting';
 import { G800_CHECKLISTS } from './checklists';
 
@@ -65,6 +69,7 @@ export interface G800Systems {
   logic: G800Logic;
   post: G800PostLogic;
   audio: G800Audio;
+  hud: G800Hud;
   elec: ElectricalNetwork;
   fuel: FuelSystem;
   hyd: HydraulicSystem;
@@ -187,6 +192,8 @@ export function createG800Systems(ctx: SimContext, opts: G800SystemsOptions = {}
 
   // PERF INIT tail number: the first G800 flight-test aircraft, N800GA (the suite default is a G650 registration).
   if (suite) suite.fmsShared.perf.tail = 'N800GA';
+  // G800 TSC applications: FLT CTL (autobrake, ground spoilers, roll / yaw trim) and ECB (electronic breakers).
+  if (suite) installG800TscApps(suite, ctx.vars, elec.breakerNames().map((b) => b.name));
 
   // ---- engines / FADEC / autothrottle
   const eng = createEngines(ctx);
@@ -219,7 +226,9 @@ export function createG800Systems(ctx: SimContext, opts: G800SystemsOptions = {}
 
   // ---- fly-by-wire (two dual-channel FCCs + BFCU, SCQ; four modes normal/alternate/direct/backup, BJT500).
   // Actuators: left and right hydraulics on every surface + EBHAs on the rudder, ailerons, elevators (SCQ).
-  const ebha = 'clamp01(elec.emer_dc_v / 24) * 0.6'; // EST: electric backup at reduced rate
+  // EST: electric backup at reduced rate. The EBHA battery feeds the EBHA bus while its BATTERIES FCS EBHA switchlight is ON
+  // (code450 G700/G800 electrical: FCS batteries power their buses when no AC is produced; charged from the EMER AC bus).
+  const ebha = `(${V.fcsBattEbha} || elec.emer_ac_powered) ? clamp01(elec.emer_dc_v / 24) * 0.6 : 0`;
   const fbw = new FlyByWire(ctx, {
     power: 'elec.fcc_powered || elec.bfcu_powered',
     actuators: { pitch: [hydFrac('left'), hydFrac('right'), ebha], roll: [hydFrac('left'), hydFrac('right'), ebha], yaw: [hydFrac('left'), hydFrac('right'), ebha] },
@@ -237,7 +246,7 @@ export function createG800Systems(ctx: SimContext, opts: G800SystemsOptions = {}
       alphaLimitRateGain: 0,
     },
     roll: { maxRateDps: 15, bankHoldDeg: 33, maxBankDeg: 67 },
-    trimSwitchVars: [V.ssTrim(1), V.ssTrim(2)],
+    trimSwitchVars: [V.ssTrim(1), V.ssTrim(2), V.altTrimCmd], // grip trim switches + the pedestal PITCH TRIM split switch
     speedSync: `(input.ap_disc || ${V.ssDisc(1)} || ${V.ssDisc(2)}) && !ap.engaged`, // hardware button or either 3D grip button
     addVars: { yaw: [V.eldac] },
   });
@@ -275,7 +284,7 @@ export function createG800Systems(ctx: SimContext, opts: G800SystemsOptions = {}
   // Steer-by-wire: tiller (left seat) +/-80 deg EST; pedals +/-7 deg (FSB App. 4); left hydraulics.
   const steering = new NosewheelSteering(ctx, {
     tiller: { input: V.steerCmd, maxDeg: G800_LIMITS.tillerSteerDeg },
-    pedals: { maxDeg: G800_LIMITS.pedalSteerDeg },
+    pedals: { maxDeg: G800_LIMITS.pedalSteerDeg, input: V.pedalSteerCmd }, // PEDAL STEER switchlight gates the pedal input (logic.ts)
     power: 'elec.nws_ctl_powered && hyd.left_psi > 1000',
     engage: `${V.nwsSw} == 1`,
     rateDegPerS: 30,
@@ -338,6 +347,7 @@ export function createG800Systems(ctx: SimContext, opts: G800SystemsOptions = {}
   const disc = new DisconnectAlerts(ctx, {});
   const post = new G800PostLogic(ctx.vars);
   const audio = new G800Audio(ctx.vars);
+  const hud = new G800Hud(ctx.vars);
   const lights = createLighting(ctx);
 
   const list: Subsystem[] = [
@@ -358,7 +368,7 @@ export function createG800Systems(ctx: SimContext, opts: G800SystemsOptions = {}
     gear,
     ...(radios ? [radios] : []),
     ...(fms ? [fms] : []),
-    ...(suite ? [suite.system] : []),
+    ...(suite ? [suite.system, new G800SfdMenu(ctx.events, suite)] : []),
     eng.ratings,
     afcs,
     eng.at,
@@ -378,6 +388,8 @@ export function createG800Systems(ctx: SimContext, opts: G800SystemsOptions = {}
     tcas,
     tocw,
     audio,
+    hud,
+    new G800Furnishings(ctx.vars),
     cas,
     disc,
     post,
@@ -401,6 +413,7 @@ export function createG800Systems(ctx: SimContext, opts: G800SystemsOptions = {}
     logic,
     post,
     audio,
+    hud,
     elec,
     fuel,
     hyd,

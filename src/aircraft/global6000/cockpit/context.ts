@@ -26,6 +26,7 @@ import type { CockpitEnv } from '../../../cockpit/env';
 import type { SimContext } from '../../../core/SimContext';
 import type { FusionSuite } from '../../../avionics/collins-fusion';
 import type { LegendSegment } from '../../../cockpit/controls';
+import type { Panel } from '../../../cockpit/CockpitBuilder';
 import type { G6kSystems } from '../createSystems';
 import type { DisplayCanvas } from '../../../avionics/common/CanvasDisplay';
 
@@ -42,7 +43,21 @@ export interface G6kCockpitContext {
   canvas?: 'dom' | 'offscreen' | DisplayCanvas | null;
   /** Extra clean-ups run by the build's dispose() (event subscriptions of cockpit-owned logic). */
   disposers?: (() => void)[];
+  /**
+   * Outboard main-panel wings (Global Vision, photo N835GL), origin 'top-left', built by mainPanel.ts: the side
+   * builder mounts EMS CDU 1 / 2 (`WING_SLOTS.ems`) and the STALL PUSHER plates (`WING_SLOTS.pusher`) on them.
+   */
+  wings?: { left: Panel; right: Panel };
 }
+
+/** Wing panel slots (top-left origin, m; x measured from the wing's outboard edge, mirrored by the builders). */
+export const WING_SLOTS = {
+  /** STALL PUSHER plate centre (outboard top) and gasper centre (inboard top, beside the PFD). */
+  pusher: { x: 0.075, y: 0.052, w: 0.105, h: 0.058 },
+  gasper: { x: 0.245, y: 0.05 },
+  /** EMS CDU top-left corner. */
+  ems: { x: 0.03, y: 0.12 },
+} as const;
 
 /** Switchlight legends (Bombardier convention: dark = normal; white status, amber caution, green / cyan advisory). */
 export const seg = {

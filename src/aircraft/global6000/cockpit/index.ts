@@ -15,6 +15,7 @@
  * all (`alert.annun_test`).
  */
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { CockpitBuilder, type CockpitBuildEx } from '../../../cockpit/CockpitBuilder';
 import { placePanel } from '../../../cockpit/frame';
 import type { SimContext } from '../../../core/SimContext';
@@ -28,7 +29,7 @@ import { buildMainPanel } from './mainPanel';
 import { buildGlareshield } from './glareshield';
 import { buildPedestal } from './pedestal';
 import { buildFlightControls } from './flightControls';
-import type { EmsCduLogic } from './emsCdu';
+import { G6K_PALETTE } from './finish';
 
 type OverheadModule = { buildOverhead?: (c: G6kCockpitContext) => void };
 type SideModule = { buildSideConsoles?: (c: G6kCockpitContext) => void };
@@ -45,7 +46,6 @@ export interface G6kCockpitOptions {
 export interface G6kCockpit {
   build: CockpitBuildEx;
   context: G6kCockpitContext;
-  ems: EmsCduLogic;
 }
 
 /**
@@ -57,22 +57,22 @@ export const G6K_EYE_PITCH_DEG = -12;
 /** Preset cockpit views (body metres; yaw + right, pitch + up). The pilot eye is the default view. */
 export const G6K_VIEWS = [
   { name: 'Copilot', position_m: EYE_R, yawDeg: 0, pitchDeg: G6K_EYE_PITCH_DEG },
-  { name: 'Glareshield (FCP / CTP)', position_m: [11.12, 0, -1.02] as [number, number, number], yawDeg: 0, pitchDeg: -14, fovDeg: 58 },
-  { name: 'Centre panel (AFD 2 / 3, IESI, gear)', position_m: [11.02, 0, -0.86] as [number, number, number], yawDeg: 0, pitchDeg: -18, fovDeg: 58 },
-  { name: 'MKP / CCP (FMS)', position_m: [11.0, -0.14, -0.78] as [number, number, number], yawDeg: 14, pitchDeg: -58, fovDeg: 50 },
-  { name: 'Pedestal', position_m: [10.62, -0.16, -1.02] as [number, number, number], yawDeg: 20, pitchDeg: -60, fovDeg: 60 },
-  { name: 'Pedestal aft (EMS CDU, lights, IRS)', position_m: [10.55, -0.14, -0.8] as [number, number, number], yawDeg: 30, pitchDeg: -72, fovDeg: 50 },
-  { name: 'Overhead', position_m: [10.74, 0, -0.84] as [number, number, number], yawDeg: 0, pitchDeg: 84, fovDeg: 78 },
-  { name: 'NOSE STEER / left console', position_m: [10.92, -0.5, -0.95] as [number, number, number], yawDeg: -48, pitchDeg: -45, fovDeg: 55 },
+  { name: 'Glareshield (FCP / CTP / HUD)', position_m: [11.12, 0, -1.02] as [number, number, number], yawDeg: 0, pitchDeg: -14, fovDeg: 58 },
+  { name: 'Centre panel (AFD 2, IESI / TAWS, GEAR AND BRAKES)', position_m: [11.08, 0, -0.95] as [number, number, number], yawDeg: 0, pitchDeg: -22, fovDeg: 56 },
+  { name: 'AFD 3, MKP and throttle quadrant', position_m: [10.95, 0, -0.9] as [number, number, number], yawDeg: 0, pitchDeg: -50, fovDeg: 58 },
+  { name: 'Pedestal (CCP, flaps, park brake, lights)', position_m: [10.7, 0, -0.95] as [number, number, number], yawDeg: 0, pitchDeg: -68, fovDeg: 62 },
+  { name: 'Pedestal aft (trims, GLD, IRS)', position_m: [10.5, 0, -0.8] as [number, number, number], yawDeg: 0, pitchDeg: -82, fovDeg: 55 },
+  { name: 'Overhead', position_m: [10.7, 0, -0.84] as [number, number, number], yawDeg: 0, pitchDeg: 84, fovDeg: 78 },
+  { name: 'NOSE STEER / left console', position_m: [10.92, -0.6, -0.95] as [number, number, number], yawDeg: -40, pitchDeg: -50, fovDeg: 55 },
   // Overhead / side-console builders (cockpit/overhead, cockpit/side):
   { name: 'Overhead from the pilot seat', position_m: [10.88, -0.45, -1.0] as [number, number, number], yawDeg: 40, pitchDeg: 72, fovDeg: 80 },
-  { name: 'Pilot side panel (EMS CDU 1)', position_m: [10.95, -0.72, -0.8] as [number, number, number], yawDeg: -62, pitchDeg: -32, fovDeg: 55 },
-  { name: 'Copilot side console (EMS CDU 2, PASS OXY)', position_m: [10.9, 0.62, -0.85] as [number, number, number], yawDeg: 70, pitchDeg: -42, fovDeg: 62 },
+  { name: 'Pilot panel wing (STALL PUSHER, EMS CDU 1)', position_m: [11.1, -0.62, -0.95] as [number, number, number], yawDeg: -22, pitchDeg: -28, fovDeg: 50 },
+  { name: 'Copilot panel wing (EMS CDU 2) and side console', position_m: [11.1, 0.62, -0.95] as [number, number, number], yawDeg: 22, pitchDeg: -28, fovDeg: 50 },
   { name: 'Cockpit circuit breaker panel (aft bulkhead)', position_m: [9.92, -0.62, -0.9] as [number, number, number], yawDeg: 176, pitchDeg: -3, fovDeg: 45 },
 ];
 
 export function buildG6kCockpit(ctx: SimContext, sys: G6kSystems, o: G6kCockpitOptions = {}): G6kCockpit {
-  const b = new CockpitBuilder(ctx, { palette: 'bombardier', name: 'global6000', eyePosition_m: EYE_L, views: G6K_VIEWS });
+  const b = new CockpitBuilder(ctx, { palette: G6K_PALETTE, name: 'global6000', eyePosition_m: EYE_L, views: G6K_VIEWS });
   const env = b.env;
   const mount = (name: string, p: (typeof MOUNTS)[keyof typeof MOUNTS]) => {
     const g = new THREE.Group();
@@ -103,11 +103,25 @@ export function buildG6kCockpit(ctx: SimContext, sys: G6kSystems, o: G6kCockpitO
   env.lighting.addFloodLight('flood.r', 'flood_r', [11.5, 0.5, -0.8], [11.62, 0.5, -0.35], b.root, 4, 60);
   env.lighting.addFloodLight('flood.c', 'flood_c', [10.95, 0, -1.3], [10.9, 0, -0.42], b.root, 4, 55);
   env.lighting.addDomeLight('dome', 'dome', [10.4, 0, -1.34], b.root, 3);
+  // EYE REF light (GX PTG 15-12, eye-reference orientation lamp; EST: a small lamp on the centre windshield post) and
+  // FOOT (floor) lights under the knee panels (PTG 15-13): emissive lamps in their own zones.
+  for (const z of ['eye_ref', 'foot']) b.zone({ id: z, intensityVar: `ac.light.${z}`, lagS: 0, color: 0xfff1dc, gain: 2 });
+  const lampMat = (zone: string) => {
+    const m = new THREE.MeshStandardMaterial({ color: 0x302e2a, emissive: 0xfff1dc, emissiveIntensity: 0, roughness: 0.3 });
+    env.materials.track(m);
+    env.lighting.registerBacklight(m, zone, 3);
+    return m;
+  };
+  const eye = b.structureMesh(new THREE.SphereGeometry(0.008, 12, 8), lampMat('eye_ref'), [11.3, 0, -1.2], undefined, false);
+  eye.name = 'eye_ref_light';
+  // Both footwell strips in one mesh (local x = body y).
+  const footG = mergeGeometries([new THREE.BoxGeometry(0.2, 0.006, 0.02).translate(-0.5, 0, 0), new THREE.BoxGeometry(0.2, 0.006, 0.02).translate(0.5, 0, 0)], false)!;
+  b.structureMesh(footG, lampMat('foot'), [11.58, 0, -0.215], undefined, false).name = 'foot_lights';
 
   buildShell(b);
   buildMainPanel(c);
   buildGlareshield(c);
-  const { ems } = buildPedestal(c, o.canvas);
+  buildPedestal(c);
   buildFlightControls(c);
   if (!o.mainOnly) {
     for (const m of Object.values(OVERHEAD)) m.buildOverhead?.(c);
@@ -120,8 +134,8 @@ export function buildG6kCockpit(ctx: SimContext, sys: G6kSystems, o: G6kCockpitO
   b.onUpdate(() => {
     const pwr = vars.get('elec.dc_ess_powered') !== 0 || vars.get('elec.batt_bus_powered') !== 0 ? 1 : 0;
     vars.set(CK.annunPower, pwr);
-    vars.set(CK.emsPower, pwr);
-    vars.set(CK.annunBright, vars.get(V.ltMaster, 2) === 1 ? 0 : 1);
+    // PBA DIM / BRT (GX PTG 15-13 "Pushbutton annunciator lights ... single switch DIM/BRT").
+    vars.set(CK.annunBright, vars.get('ac.light.pba', 1) < 0.5 ? 0 : 1);
     vars.set(CK.gearRed, vars.get(red[0]) !== 0 || vars.get(red[1]) !== 0 || vars.get(red[2]) !== 0 ? 1 : 0);
   });
 
@@ -129,9 +143,8 @@ export function buildG6kCockpit(ctx: SimContext, sys: G6kSystems, o: G6kCockpitO
   build.eyePitchDeg = G6K_EYE_PITCH_DEG;
   const dispose = build.dispose?.bind(build);
   build.dispose = () => {
-    ems.dispose();
     for (const d of c.disposers ?? []) d();
     dispose?.();
   };
-  return { build, context: c, ems };
+  return { build, context: c };
 }

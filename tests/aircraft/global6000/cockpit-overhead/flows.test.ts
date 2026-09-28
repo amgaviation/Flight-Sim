@@ -96,16 +96,17 @@ describe('Global 6000 overhead flows', () => {
     expect(lit(ctl('g6k.ovhd.apu_gen'))).toBe('');
     expect(v.get('elec.ac_bus1_powered')).toBe(1);
 
-    // Hydraulic 3A ON (toggle), right engine: ENG RUN R (pedestal) + R START (overhead): IN PROG, then VFGs 3 / 4.
+    // Hydraulic 3A ON (toggle), right engine: overhead START rotary at AUTO, then ENGINE RUN R ON (pedestal) starts the
+    // FADEC auto start (GX PTG 17-42), then VFGs 3 / 4.
     click('g6k.ovhd.hyd_3a');
     step(0.5);
     expect(v.get(V.hydPump('3a'))).toBe(2);
+    expect(v.get(V.engStartSel)).toBe(0);
     click('g6k.ped.run2');
     step(1);
     expect(v.get(V.engRun(2))).toBe(1);
-    hold(k, 'g6k.ovhd.start2', 0.3);
     step(3);
-    expect(lit(ctl('g6k.ovhd.start2'))).toContain('IN PROG');
+    expect(v.get('fadec.eng2.starter_cmd')).toBeGreaterThan(0);
     t = 0;
     while (v.get('eng2.running') === 0 && t < 90) {
       step(1);
@@ -115,7 +116,7 @@ describe('Global 6000 overhead flows', () => {
     step(10);
     expect(v.get('elec.gen3_online')).toBe(1);
     expect(v.get('elec.gen4_online')).toBe(1);
-    expect(lit(ctl('g6k.ovhd.start2'))).toBe('');
+    expect(v.get('fadec.eng2.starter_cmd')).toBe(0);
     // GEN 3 OFF: OFF legend, its bus transfers (AC BUS 3 stays powered by priority).
     click('g6k.ovhd.gen3');
     step(2);
@@ -196,7 +197,9 @@ describe('Global 6000 overhead flows', () => {
     // Hold the LDG ELEV toggle UP (upper half of the hit box) for 2 s.
     hold(k, 'g6k.ovhd.ldg_elev', 2, new THREE.Vector3(0, 0.008, 0.01));
     expect(v.get(V.ldgElevFms)).toBe(0);
-    expect(lit(ctl('g6k.ovhd.ldg_elev_fms'))).toBe('MAN');
+    // LDG ELEV MAN / FMS is a toggle on the Vision overhead (photo e_press_lts): it follows the logic to MAN.
+    step(0.2);
+    expect(ctl('g6k.ovhd.ldg_elev_fms').tooltip?.() ?? '').toContain('MAN');
     expect(v.get(V.ldgElevFt)).toBeGreaterThan(e0 + 500);
     expect(v.get(V.ldgElevSlew)).toBe(0); // spring-loaded back to centre
     click('g6k.ovhd.ldg_elev_fms');

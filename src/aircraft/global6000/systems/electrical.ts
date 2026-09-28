@@ -185,7 +185,7 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): G6kElectrical {
     dc('nav_lts', 'dc_bus1', 3, 5, { enabled: V.ltNav }),
     dc('beacon', 'dc_bus1', 3, 5, { enabled: V.ltBeacon }),
     dc('logo', 'dc_bus1', 3, 5, { enabled: V.ltLogo }),
-    dc('flood_lts', 'dc_bus1', `2 * (${V.ltFlood('l')} + ${V.ltFlood('c')} + ${V.ltFlood('r')})`, 7.5, { model: 'resistive' }),
+    dc('flood_lts', 'dc_bus1', `6 * ${V.ltArea}`, 7.5, { model: 'resistive' }), // AREA knob (Vision pedestal) drives the cockpit area / flood lights
     dc('integral_lts', 'dc_bus1', `1 * (${V.ltIntegral('l')} + ${V.ltIntegral('c')} + ${V.ltIntegral('r')} + ${V.ltIntegral('cb')} + ${V.ltIntegral('ovhd')})`, 7.5, { model: 'resistive' }),
     dc('hud', 'dc_bus1', `4 * ${V.hudPower}`, 7.5),
     // ------------------------------------------------ DC BUS 2
@@ -200,7 +200,8 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): G6kElectrical {
     dc('ldg_lt_r', 'dc_bus2', 8, 15, { enabled: V.ltLdgR }),
     dc('strobe', 'dc_bus2', 5, 7.5, { enabled: V.ltStrobe }),
     dc('wing_insp', 'dc_bus2', 3, 5, { enabled: V.ltWing }),
-    dc('dome_map_lts', 'dc_bus2', `0.5 * ${V.ltDome} + 0.3 * (${V.ltMap(1)} + ${V.ltMap(2)})`, 5, { model: 'resistive' }),
+    // Dome, map, EYE REF (EST 0.2 A) and FOOT floor lights (EST 0.5 A) on the DOME/MAP LTS breaker (EST grouping).
+    dc('dome_map_lts', 'dc_bus2', `0.5 * ${V.ltDome} + 0.3 * (${V.ltMap(1)} + ${V.ltMap(2)}) + 0.2 * (${V.ltEyeRef} == 1) + 0.5 * (${V.ltFoot} == 1)`, 5, { model: 'resistive' }),
     dc('cabin_dc', 'dc_bus2', 20, 40, { enabled: V.cabinPwr, shed: `${airborne} && ${V.singleGen}` }),
     dc('pass_signs', 'dc_bus2', 0.5, 3),
     // ------------------------------------------------ DC EMER (hot from both battery direct buses)
@@ -238,6 +239,9 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): G6kElectrical {
     ac('recirc_fans', 'ac_bus3', `600 * ${V.recircFan}`, 10),
     ac('cabin_ac', 'ac_bus2', `6000 * (${V.cabinPwr} != 0)`, 60, { shed: `${airborne} && ${V.singleGen}` }), // galley / cabin (EST)
     ac('cabin_ac2', 'ac_bus3', `4000 * (${V.cabinPwr} != 0)`, 40, { shed: `${airborne} && ${V.singleGen}` }),
+    // CABIN SYSTEMS / CABIN OUTLETS PBA (overhead): cabin 115 VAC 60 Hz outlets. EST 1,000 VA (no public load figure),
+    // shed with CABIN POWER on a single generator.
+    ac('cabin_outlets', 'ac_bus3', `1000 * (${V.cabinOutlets} != 0)`, 15, { shed: `${airborne} && ${V.singleGen}` }),
     ac('av_batt_chgr', 'ac_bus2', 150, 5), // GXEL: AV BATT charger on AC BUS 2
     ac('apu_batt_chgr', 'ac_bus3', 150, 5), // APU BATT charger on AC BUS 3
     ac('apu_oil_heat', 'ac_bus4', 100, 5), // GXAPU CB: APU OIL HEAT AC 4

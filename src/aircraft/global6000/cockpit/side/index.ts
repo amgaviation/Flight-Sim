@@ -7,11 +7,16 @@
  * (flight compartment arrangement, pilot's / copilot's side console and side
  * panel, aft view of the 280 bulkhead) and CSP 700-5000-6 chapter 7 (EMS,
  * CCBP):
- *  - SIDE PANEL (sidewall, facing the seat; FCOM 01-10-38 / -45): Electrical
- *    Management System CDU (emsCdu.ts), STALL PUSHER ON / OFF switch (+ this
- *    build: MAP LT dimmer and, pilot side, the optional HUD power switch;
- *    EST positions). SCOPE: the clock (CHR / ET) and the gasper are not built
- *    (the Fusion displays carry the clock; no gasper airflow model).
+ *  - EMS CDU 1 / 2 (emsCdu.ts): on the Global Vision deck they sit in the
+ *    outboard wings of the main panel below the STALL PUSHER plates (photo
+ *    N835GL, crops c_lwing / c_rwing), not on the sidewall side panels of the
+ *    Global Express FCOM drawing; this builder mounts them on `c.wings`
+ *    (built by mainPanel.ts with the STALL PUSHER switches and gaspers). The
+ *    map / reading lights are the READING LIGHT switches on the overhead
+ *    forward edge (overhead/index.ts). The HUD has no cockpit power switch on
+ *    the Vision deck (it is powered through its DC BUS 1 breaker; brightness
+ *    and mode on the glareshield HUD knob). SCOPE: the clock (the Fusion
+ *    displays carry the clock).
  *  - SIDE CONSOLE (horizontal, outboard of the seat; FCOM 01-10-37 / -46):
  *    oxygen mask / regulator stowage box (N / 100 %, RESET / TEST, flow
  *    blinker), headset panel (jacks only), and on the copilot's console the
@@ -35,25 +40,24 @@ import { AnnunciatorLight, CircuitBreaker, PushButton, RotaryKnob, SelectorKnob,
 import type { Panel } from '../../../../cockpit/CockpitBuilder';
 import { trimBoxGeometry } from '../../../../cockpit/geometry/structure';
 import { G6K_VARS as V } from '../../vars';
-import { seg, type G6kCockpitContext } from '../context';
-import { FLOOR_Z, MOUNTS, TILLER } from '../layout';
+import { seg, WING_SLOTS, type G6kCockpitContext } from '../context';
+import { FLOOR_Z, MAIN_PANEL, MOUNTS } from '../layout';
 import { X_AFT } from '../shell';
 import { CCBP_ENTRIES } from './cbTable';
 import { EmsCduUnit, EmsShared, addEmsCduUnit, EMS_UNIT } from './emsCdu';
+import { g6kFinish } from '../finish';
 import { MaskStowage } from './oxygenMask';
 
 /** Side console top (EST: armrest height, MOUNTS.side*; left console stops short of the NOSE STEER handwheel). */
 export const SIDE_CONSOLE = {
   xAft: 10.36,
-  xFwdLeft: TILLER.center_m[0] - 0.075,
+  xFwdLeft: 11.22, // the NOSE STEER tiller hub is set flush into the forward end of the left console (photo)
   xFwdRight: 11.22,
   topZ: MOUNTS.sideLeft.center_m[2],
   y: Math.abs(MOUNTS.sideLeft.center_m[1]),
   width: 0.24,
 };
 
-/** Side panel (sidewall, facing the seat) between the console and the side-window sill, ahead of the seat (EST). */
-export const SIDE_PANEL = { x: 11.1, y: 1.165, z: -0.48, length: 0.3, height: 0.22, tiltDeg: 6 };
 
 /** Cockpit Circuit Breaker Panel on the 280 bulkhead behind the pilot (EST size / position from FCOM 01-10-36). */
 export const CCBP = { x: X_AFT + 0.012, y: -0.66, z: -0.86, width: 0.3, height: 0.17 };
@@ -67,8 +71,13 @@ export function buildSideConsoles(c: G6kCockpitContext): void {
   // EMS CDU power (07-20-30 / -38): CDU 1 PWR B (BATT BUS); CDU 2 PWR A (APU BATT) / PWR B (BATT BUS).
   const units = [new EmsCduUnit(1, shared, c.ctx.events, 'ac.g6k.ck.ems1_pwr'), new EmsCduUnit(2, shared, c.ctx.events, 'ac.g6k.ck.ems2_pwr')];
   const canvas = c.canvas;
-  buildSide(c, 'left', units[0], canvas);
-  buildSide(c, 'right', units[1], canvas);
+  buildSide(c, 'left');
+  buildSide(c, 'right');
+  // EMS CDU 1 / 2 in the main-panel wings.
+  if (c.wings) {
+    addEmsCduUnit(c.env, c.wings.left, 1, WING_SLOTS.ems.x, WING_SLOTS.ems.y, units[0], canvas, vars);
+    addEmsCduUnit(c.env, c.wings.right, 2, MAIN_PANEL.wing.w - WING_SLOTS.ems.x - EMS_UNIT.w, WING_SLOTS.ems.y, units[1], canvas, vars);
+  }
   buildCcbp(c);
 
   b.onUpdate((dt) => {
@@ -89,7 +98,7 @@ export function buildSideConsoles(c: G6kCockpitContext): void {
   });
 }
 
-function buildSide(c: G6kCockpitContext, side: 'left' | 'right', unit: EmsCduUnit, canvas: G6kCockpitContext['canvas']): void {
+function buildSide(c: G6kCockpitContext, side: 'left' | 'right'): void {
   const { b, env } = c;
   const S = SIDE_CONSOLE;
   const sgn = side === 'left' ? -1 : 1;
@@ -102,8 +111,10 @@ function buildSide(c: G6kCockpitContext, side: 'left' | 'right', unit: EmsCduUni
   const len = xFwd - S.xAft;
   const xc = (xFwd + S.xAft) / 2;
   const bodyH = FLOOR_Z - S.topZ - 0.004;
-  b.structureMesh(trimBoxGeometry(S.width, bodyH, len, 0.01), 'panelDark', [xc, sgn * S.y, S.topZ + 0.004 + bodyH / 2]).name = `console_${side}`;
-  const con = b.panel({ name: `side_console_${side}`, center_m: [xc, sgn * S.y, S.topZ], facing: 'up', width: S.width, height: len, origin: 'top-left', material: 'panel', radius: 0.008, screws: { kind: 'dzus', diameter: 0.0065, inset: 0.008, pitch: 0.25 } });
+  // Tan-leather side console (photo EB190582 e_tiller / e_lconsole).
+  const fin = g6kFinish(env);
+  b.structureMesh(trimBoxGeometry(S.width, bodyH, len, 0.01), fin.tan, [xc, sgn * S.y, S.topZ + 0.004 + bodyH / 2]).name = `console_${side}`;
+  const con = b.panel({ name: `side_console_${side}`, center_m: [xc, sgn * S.y, S.topZ], facing: 'up', width: S.width, height: len, origin: 'top-left', material: fin.tan, radius: 0.008, screws: false });
   // Panel frame: x from the outboard (left console) / inboard (right console) edge, y aft from the forward end.
   const inb = (d: number) => (side === 'left' ? S.width - d : d); // x at distance d from the inboard edge
 
@@ -196,70 +207,6 @@ function buildSide(c: G6kCockpitContext, side: 'left' | 'right', unit: EmsCduUni
     con.add(new AnnunciatorLight(env, { id: 'g6k.side.pax_low', label: 'PASS OXY LOW', width: 0.014, height: 0.01, segments: [seg.on('LOW', 'amber', 'oxy.pax_low')] }), inb(0.175), py - 0.004);
   }
 
-  // ---------------- side panel on the sidewall (facing the seat)
-  const P = SIDE_PANEL;
-  const sp = b.panel({
-    name: `side_panel_${side}`,
-    center_m: [P.x, sgn * P.y, P.z],
-    facing: side === 'left' ? 'right' : 'left',
-    tiltDeg: P.tiltDeg,
-    width: P.length,
-    height: P.height,
-    origin: 'top-left',
-    material: 'panel',
-    radius: 0.01,
-    screws: { kind: 'dzus', diameter: 0.0065, inset: 0.008, pitch: 0.2 },
-  });
-  const housing = new THREE.Mesh(new THREE.BoxGeometry(P.length + 0.02, P.height + 0.02, 0.05), env.materials.get('panelDark'));
-  b.trackGeometry(housing.geometry);
-  housing.userData.cockpitStatic = true;
-  sp.addObject(housing, P.length / 2, P.height / 2, { z: -0.026 });
-  // Panel x runs forward on the left wall and aft on the right wall (viewer's right): place the EMS CDU at the
-  // aft end (nearest the seat, FCOM 01-10-38 item 1) and the switches forward of it.
-  const fwdX = (d: number) => (side === 'left' ? P.length - d : d); // x at distance d from the forward end
-  const U = EMS_UNIT;
-  addEmsCduUnit(env, sp, n, side === 'left' ? 0.015 : P.length - 0.015 - U.w, 0.03, unit, canvas, c.ctx.vars);
-  // STALL PUSHER ON / OFF (FCOM 01-10-38 item 2).
-  sp.add(
-    new ToggleSwitch(env, { id: `g6k.side.pusher${n}`, label: `STALL PUSHER (${who})`, var: V.pusher(n), positions: ['OFF', 'ON'], values: [0, 1], initial: 1, labels: { positions: true, height: 0.0022, zone }, scale: 0.9 }),
-    fwdX(0.065),
-    0.07,
-  );
-  sp.label('STALL', fwdX(0.065), 0.034, { height: 0.0028, zone });
-  sp.label('PUSHER', fwdX(0.065), 0.04, { height: 0.0028, zone });
-  // MAP LT dimmer (V.ltMap; EST position).
-  sp.add(
-    new RotaryKnob(env, {
-      id: `g6k.side.map${n}`,
-      label: `${who} MAP LIGHT`,
-      cap: 'dimmer',
-      diameter: 0.014,
-      zone,
-      outer: { var: V.ltMap(n), min: 0, max: 1, step: 0.05, angleRange: [-140, 140], label: 'MAP LT', format: (x) => (x <= 0.001 ? 'OFF' : x >= 0.999 ? 'BRT' : `${Math.round(x * 100)} %`) },
-    }),
-    fwdX(0.065),
-    0.135,
-  );
-  sp.label('MAP LT', fwdX(0.065), 0.115, { height: 0.0026, zone });
-  sp.label('OFF      BRT', fwdX(0.065), 0.153, { height: 0.0019, zone });
-  if (side === 'left') {
-    // HUD power (optional equipment, dossier 12.5; EST position).
-    sp.add(new ToggleSwitch(env, { id: 'g6k.side.hud', label: 'HUD POWER', var: V.hudPower, positions: ['OFF', 'ON'], values: [0, 1], labels: { positions: true, height: 0.0022, zone }, scale: 0.8 }), fwdX(0.065), 0.19);
-    sp.label('HUD', fwdX(0.065), 0.17, { height: 0.0026, zone });
-  }
-  // Map light head on the side-window sill above the panel (emissive, zone map_l / map_r; EST).
-  const lampG = env.geometry.get('g6k.maplamp', () => new THREE.CylinderGeometry(0.009, 0.011, 0.018, 16).rotateX(Math.PI / 2).translate(0, 0, 0.009));
-  const lampLens = env.materials.custom('gloss', 0xfff4de, 0.3);
-  const lens = (lampLens as THREE.MeshStandardMaterial).clone();
-  lens.emissive = new THREE.Color(0xfff1dc);
-  env.materials.track(lens);
-  env.lighting.registerBacklight(lens, side === 'left' ? 'map_l' : 'map_r', 3);
-  const lamp = new THREE.Mesh(lampG, env.materials.get('plasticBlack'));
-  const glass = new THREE.Mesh(new THREE.CircleGeometry(0.0085, 16).translate(0, 0, 0.0185), lens);
-  b.trackGeometry(glass.geometry);
-  lamp.add(glass);
-  sp.addObject(lamp, fwdX(0.03), 0.012, { z: 0.004 });
-  sp.label(`EMS CDU ${n}`, side === 'left' ? 0.015 + U.w / 2 : P.length - 0.015 - U.w / 2, 0.019, { height: 0.0026, zone });
 }
 
 /** CCBP: thermal breakers grouped by bus, with the rating on each collar (07-20-1). */

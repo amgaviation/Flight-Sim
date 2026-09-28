@@ -6,14 +6,17 @@
  * (black crackle finish, following the windshield base) with its soffit,
  * the centre pedestal body, knee panels / footwells and the two crew seats.
  *
- * Sources: dossier §10 (EST geometry), layout.ts. Interior finish: "Leather
- * wraps the pilot seats and sidewalls ... carbon fiber panel inserts" (AOPA,
- * "First look at the Global 6000", 2012): dark grey leather sidewalls and a
- * light headliner (EST shades from photographs).
+ * Sources: dossier §10 (EST geometry), layout.ts. Interior finish (Global
+ * Vision, photos N835GL / EB190582; AOPA "First look at the Global 6000",
+ * 2012: "Leather wraps the pilot seats and sidewalls ... carbon fiber panel
+ * inserts"): tan leather sidewalls and pedestal rails, carbon-fibre lower
+ * sidewalls, light headliner, black windshield posts and frames, cream crew
+ * seats (palette, finish.ts). Shades EST from the photographs.
  */
 import * as THREE from 'three';
 import type { CockpitBuilder } from '../../../cockpit/CockpitBuilder';
-import { floorGeometry, pedestalGeometry, trimBoxGeometry } from '../../../cockpit/geometry/structure';
+import { floorGeometry, trimBoxGeometry } from '../../../cockpit/geometry/structure';
+import { g6kFinish } from './finish';
 import { bl } from '../../../cockpit/frame';
 import { loftFuselage } from '../../_test/loft';
 import { A_PILLAR, FLOOR_Z, G6K_FUSELAGE as F, GLARE_HOOD, MAIN_PANEL, PEDESTAL, SEAT_L, SEAT_R, SIDE_WINDOWS, WINDSHIELD } from './layout';
@@ -60,7 +63,7 @@ function glareshieldHood(): THREE.BufferGeometry {
   // Brow: rolled lip down the aft edge (quarter round, 28 mm).
   const base = pos.length / 3;
   const segs = 5;
-  const R = 0.028;
+  const R = 0.014; // EST: a tight brow so the FCP readout windows stay visible from the design eye
   const w0 = interiorHalfWidth(h.aftX, h.topZ) - 0.004;
   for (let k = 0; k <= segs; k++) {
     const a = (k / segs) * (Math.PI / 2);
@@ -88,11 +91,12 @@ function glareshieldHood(): THREE.BufferGeometry {
 
 export function buildShell(b: CockpitBuilder): void {
   const m = b.env.materials;
-  // Dark grey leather sidewalls (AOPA), warm light-grey headliner and window frames (EST from photographs).
-  const wall = m.custom('plastic', 0x3b3d40, 0.7);
-  const leather = m.get('leather');
+  // Vision finish (finish.ts): tan leather sidewall band, carbon lower walls, light headliner, black frames / posts.
+  const fin = g6kFinish(b.env);
+  const wall = fin.carbon;
+  const leather = fin.tan;
   const head = m.custom('plastic', 0xc9c6c0, 0.8);
-  const frame = m.custom('plastic', 0x6e6f72, 0.7);
+  const frame = fin.black;
   const TWO_PI = 2 * Math.PI;
   const inward = { inset: INSET, inward: true };
   const ws = WINDSHIELD;
@@ -111,8 +115,8 @@ export function buildShell(b: CockpitBuilder): void {
   // Headliner between the side windows, aft bulkhead to the windshield header.
   add(loftFuselage(F, X_AFT, ws.headerX, -sw.roof, sw.roof, 16, 14, inward), head, 'headliner');
   // Walls beside the windshield below the side-pane line (A-pillar to the sill).
-  add(loftFuselage(F, ws.headerX, noseX, ws.halfAngle + A_PILLAR, sw.sill, 8, 4, inward), wall, 'ws_side_r');
-  add(loftFuselage(F, ws.headerX, noseX, -sw.sill, -ws.halfAngle - A_PILLAR, 8, 4, inward), wall, 'ws_side_l');
+  add(loftFuselage(F, ws.headerX, noseX, ws.halfAngle + A_PILLAR, sw.sill, 8, 4, inward), frame, 'ws_side_r');
+  add(loftFuselage(F, ws.headerX, noseX, -sw.sill, -ws.halfAngle - A_PILLAR, 8, 4, inward), frame, 'ws_side_l');
   // Nose closure ahead of the windshield base (behind the panel; blocks light leaks).
   add(loftFuselage(F, ws.baseX, noseX, -ws.halfAngle - A_PILLAR, ws.halfAngle + A_PILLAR, 3, 12, inward), wall, 'nose_closure');
   // Solid wall between the aft side window and the bulkhead, and between the side windows and the windshield.
@@ -161,21 +165,37 @@ export function buildShell(b: CockpitBuilder): void {
   const back = trimBoxGeometry(mp.width, mp.height + 0.1, 0.3, 0.01);
   add(back, 'panelDark', 'panel_backing').position.copy(bl(mp.center_m[0] + 0.24, 0, mp.center_m[2])); // front face ahead of the tilted panel's top edge
 
-  // Centre pedestal: sloped forward section (MKPs) and the main box.
+  // Centre pedestal: steep forward face (AFD 3) and the flat top, extruded side profile; tan-leather side rails on
+  // both top edges and down the forward face (photos N835GL / EB190582).
   const P = PEDESTAL;
-  const topLen = P.topFwd[0] - P.topAft[0];
-  add(pedestalGeometry(P.width, topLen, FLOOR_Z - P.topAft[1], FLOOR_Z - P.topFwd[1], 0.012), 'panelDark', 'pedestal').position.copy(bl((P.topFwd[0] + P.topAft[0]) / 2, 0, FLOOR_Z));
-  const fwdLen = P.fwdTop[0] - P.fwdBottom[0];
-  add(pedestalGeometry(P.width, fwdLen + 0.02, FLOOR_Z - P.fwdBottom[1], FLOOR_Z - P.fwdTop[1], 0.008), 'panelDark', 'pedestal_fwd').position.copy(bl((P.fwdTop[0] + P.fwdBottom[0]) / 2, 0, FLOOR_Z));
+  const prof = (w: number, lift: number) => {
+    const sh = new THREE.Shape();
+    // Shape in (body x, -body z); extruded along the width.
+    sh.moveTo(P.topAft[0], -FLOOR_Z);
+    sh.lineTo(P.topAft[0], -P.topAft[1] + lift);
+    sh.lineTo(P.topFwd[0], -P.topFwd[1] + lift);
+    sh.lineTo(P.fwdTop[0], -P.fwdTop[1] + lift);
+    sh.lineTo(P.fwdTop[0] + 0.12, -P.fwdTop[1] + lift);
+    sh.lineTo(P.fwdTop[0] + 0.12, -FLOOR_Z);
+    sh.closePath();
+    const g = new THREE.ExtrudeGeometry(sh, { depth: w, bevelEnabled: false });
+    g.translate(0, 0, -w / 2);
+    // (x_body, -z_body, e) -> local (x = e, y = -z_body, z = -x_body).
+    g.rotateY(Math.PI / 2);
+    g.scale(1, 1, 1);
+    return g;
+  };
+  add(prof(P.width, -0.012), 'panelDark', 'pedestal');
+  for (const side of [-1, 1]) add(prof(0.022, 0.01), leather, `pedestal_rail_${side < 0 ? 'l' : 'r'}`).position.x = side * (P.width / 2 + 0.011);
 
-  // Knee panels under the outboard main panel and the forward footwell bulkheads (dark).
-  const kneeTop = -0.24;
+  // Knee panels (tan leather) under the main panel either side of the pedestal and the forward footwell bulkheads.
+  const kneeTop = -0.34;
   const kneeH = FLOOR_Z - kneeTop;
   for (const side of [-1, 1]) {
-    const yIn = P.width / 2 + 0.01;
+    const yIn = P.width / 2 + 0.022;
     const yOut = 0.95;
     const kw = yOut - yIn;
-    add(trimBoxGeometry(kw, 0.03, 0.06, 0.008), 'panelDark', 'knee_bolster').position.copy(bl(11.6, side * (yIn + kw / 2), kneeTop + 0.015));
+    add(trimBoxGeometry(kw, 0.03, 0.06, 0.008), leather, 'knee_bolster').position.copy(bl(11.62, side * (yIn + kw / 2), kneeTop + 0.015));
     const well = new THREE.PlaneGeometry(kw, kneeH);
     add(well, 'panelDark', 'footwell').position.copy(bl(11.95, side * (yIn + kw / 2), kneeTop + kneeH / 2));
   }

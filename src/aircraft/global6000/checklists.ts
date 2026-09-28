@@ -64,10 +64,11 @@ export const G6K_CHECKLISTS: Checklist[] = [
     phase: 'Ground',
     items: [
       { challenge: 'Duct pressure', response: 'CHECK (APU bleed)', check: (v) => v.get('pneu.l_duct_psi') > 25 },
-      { challenge: 'R ENG RUN', response: 'RUN', check: on(V.engRun(2)) },
-      { challenge: 'R START', response: 'PUSH, start monitored', check: (v) => v.get('eng2.running') !== 0 },
-      { challenge: 'L ENG RUN', response: 'RUN', check: on(V.engRun(1)) },
-      { challenge: 'L START', response: 'PUSH, start monitored', check: (v) => v.get('eng1.running') !== 0 },
+      // GX PTG 17-42 auto start: START selector AUTO, IGNITION normal, thrust levers IDLE, then ENGINE RUN ON.
+      { challenge: 'START selector', response: 'AUTO', check: (v) => v.get(V.engStartSel) === 0 },
+      { challenge: 'Thrust levers', response: 'IDLE', check: (v) => v.get(V.tla(1)) < 0.05 && v.get(V.tla(2)) < 0.05 },
+      { challenge: 'R ENGINE RUN', response: 'ON, start monitored', check: (v) => v.get(V.engRun(2)) === 1 && v.get('eng2.running') !== 0 },
+      { challenge: 'L ENGINE RUN', response: 'ON, start monitored', check: (v) => v.get(V.engRun(1)) === 1 && v.get('eng1.running') !== 0 },
       { challenge: 'N2 / ITT / oil pressure', response: 'STABILISED', check: (v) => v.get('eng1.n2_pct') > G6K_LIMITS.n2IdleMinPct && v.get('eng2.n2_pct') > G6K_LIMITS.n2IdleMinPct },
       { challenge: 'GEN 1 - 4', response: 'ON LINE', check: (v) => [1, 2, 3, 4].every((n) => v.get(`elec.gen${n}_online`) !== 0) },
     ],
@@ -94,7 +95,7 @@ export const G6K_CHECKLISTS: Checklist[] = [
       { challenge: 'FLIGHT SPOILER lever', response: 'RETRACT', check: (v) => v.get(V.flightSpoiler) < 0.05 },
       { challenge: 'GND LIFT DUMPING', response: 'NORMAL (not OFF)', check: off(V.gldOff) },
       { challenge: 'Transponder', response: 'TA/RA' },
-      { challenge: 'STROBE / landing lights', response: 'ON', check: (v) => v.get(V.ltStrobe) === 1 && v.get(V.ltLdgL) === 1 && v.get(V.ltLdgR) === 1 },
+      { challenge: 'STROBE / landing lights', response: 'ON (STEADY / PULSE)', check: (v) => v.get(V.ltStrobe) === 1 && v.get(V.ltLdgL) !== 0 && v.get(V.ltLdgR) !== 0 },
       { challenge: 'PARK/EMER BRAKE', response: 'RELEASED', check: (v) => v.get(V.parkBrake) < 0.05 },
       { challenge: 'CAS', response: 'NO CONFIG messages', check: (v) => v.get(V.noTakeoff) === 0 },
     ],
@@ -137,7 +138,7 @@ export const G6K_CHECKLISTS: Checklist[] = [
       { challenge: 'Gear', response: 'DN, 3 green', check: (v) => v.get('gear.down_locked') !== 0 },
       { challenge: 'Slats / flaps', response: '30', check: (v) => v.get(V.flapLever) === 4 && v.get(SURF.flapsDeg) > 29 },
       { challenge: 'FLIGHT SPOILER lever', response: 'RETRACT', check: (v) => v.get(V.flightSpoiler) < 0.05 },
-      { challenge: 'Landing lights', response: 'ON', check: (v) => v.get(V.ltLdgL) === 1 && v.get(V.ltLdgR) === 1 },
+      { challenge: 'Landing lights', response: 'ON', check: (v) => v.get(V.ltLdgL) !== 0 && v.get(V.ltLdgR) !== 0 }, // STEADY or PULSE
     ],
   },
   {

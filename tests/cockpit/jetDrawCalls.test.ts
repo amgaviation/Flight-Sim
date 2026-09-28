@@ -55,11 +55,15 @@ describe('jet cockpit draw calls with instanced moving parts', () => {
   }, 120_000);
   it('G800', async () => {
     const { ck } = await g800Rig('ready_to_taxi', false);
-    check('G800', ck.build as CockpitBuildEx, 360, 300);
+    // G800 minSaved 300 -> 200 (fix round 1): 37 of the 87 breakers became electronic (TSC ECB page, BJT500 "45 percent
+    // ... electronic circuit breakers"), so there are fewer instanced breaker parts; the draw-call budget is unchanged.
+    check('G800', ck.build as CockpitBuildEx, 360, 200);
   }, 120_000);
   it('Global 6000', () => {
     const r = makeG6k('ready_to_taxi', { avionics: true });
-    check('Global 6000', buildG6kCockpit(r.ctx, r.sys, { canvas: fusionCanvas() }).build as CockpitBuildEx, 540, 580);
+    // Global 6000 minSaved 580 -> 540 (fix round 1): the Vision layout removed the pedestal EMS CDU, the three gear
+    // position lights and the non-Vision MKP keys, so fewer parts are instanced; the draw-call budget is unchanged.
+    check('Global 6000', buildG6kCockpit(r.ctx, r.sys, { canvas: fusionCanvas() }).build as CockpitBuildEx, 540, 540);
   }, 120_000);
   it('737-800', async () => {
     const nav = await loadNav();

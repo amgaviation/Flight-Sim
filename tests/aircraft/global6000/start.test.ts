@@ -64,11 +64,13 @@ describe('Global 6000 cold & dark start', () => {
     expect(v.get('hyd.sys3_psi')).toBeGreaterThan(2800); // 3A on the APU generator
     expect(v.get('pneu.l_duct_psi')).toBeGreaterThan(30);
 
-    // ENGINE START: right engine first (EST order), ENG RUN then START.
+    // ENGINE START: right engine first (EST order); START selector AUTO, ENGINE RUN ON starts the FADEC auto start
+    // (GX PTG 17-42).
+    expect(v.get(V.engStartSel)).toBe(0);
     for (const side of [2, 1] as const) {
       v.set(V.engRun(side), 1);
       r.run(0.5);
-      press(r, V.engStart(side));
+      expect(v.get(`fadec.eng${side}.starter_cmd`)).toBeGreaterThan(0);
       let peakItt = 0;
       let lightOff = NaN;
       let idleT = NaN;

@@ -87,7 +87,7 @@ describe('Global 6000 procedures audit', () => {
     expect(out.length).toBeGreaterThan(0);
   });
 
-  it('ENG RUN ON alone (ENG START AUTO in the GX/XRS FCOM) does not start the engine', { timeout: 300_000 }, () => {
+  it('START AUTO + ENGINE RUN ON starts the engine (GX PTG 17-42 auto start); L CRANK dry-motors the left engine', { timeout: 300_000 }, () => {
     const r = makeRig('cold_dark');
     const v = r.vars;
     v.set(V.battMaster, 1);
@@ -102,24 +102,24 @@ describe('Global 6000 procedures audit', () => {
     v.set(V.apuBleed, 1);
     v.set(V.xbleed, 1);
     r.run(10);
+    expect(v.get(V.engStartSel)).toBe(0); // START selector at AUTO
     v.set(V.engRun(2), 1);
-    let n2 = 0;
-    r.run(60, () => {
-      n2 = Math.max(n2, v.get('eng2.n2_pct'));
-    });
-    console.log('[proc] APU avail', v.get('apu.avail'), 'duct', v.get('pneu.l_duct_psi').toFixed(1), 'ENG RUN R ON only: max N2 in 60 s', n2.toFixed(1), 'running', v.get('eng2.running'));
-    expect(v.get('eng2.running')).toBe(0);
-    // the START PBA then starts it
-    v.set(V.engStart(2), 1);
-    r.run(0.3);
-    v.set(V.engStart(2), 0);
     r.run(70, () => v.get('eng2.running') !== 0);
-    console.log('[proc] after R START push: running', v.get('eng2.running'), 'N2', v.get('eng2.n2_pct').toFixed(1), 'rating', v.getString('fadec.rating'));
-    // Shutdown checklist items straight after a start (no 3 min idle cool-down enforced / cautioned)
-    v.set(V.engRun(2), 0);
+    console.log('[proc] ENG RUN R ON with START AUTO: running', v.get('eng2.running'), 'N2', v.get('eng2.n2_pct').toFixed(1));
+    expect(v.get('eng2.running')).toBe(1);
+    // Dry crank (PTG 17-48): ENGINE RUN OFF, START to L CRANK: the starter motors the left engine, no fuel.
+    v.set(V.engStartSel, -1);
+    let n2 = 0;
+    r.run(20, () => {
+      n2 = Math.max(n2, v.get('eng1.n2_pct'));
+    });
+    expect(v.get('fadec.eng1.starter_cmd')).toBeGreaterThan(0);
+    expect(n2).toBeGreaterThan(10);
+    expect(v.get('eng1.running')).toBe(0);
+    expect(v.get('eng1.ff_pph')).toBeLessThan(1);
+    v.set(V.engStartSel, 0); // back to AUTO stops the crank
     r.run(2);
-    const cas = r.sys.cas.list.filter((e) => e.active).map((e) => `${e.level}:${e.text}`);
-    console.log('[proc] ENG RUN OFF 70 s after start: CAS', cas.join(','));
+    expect(v.get('fadec.eng1.starter_cmd')).toBe(0);
   });
 
   it('cruise / approach FADEC rating and AFTER TAKEOFF CLB check', () => {

@@ -395,6 +395,11 @@ export interface FusionSuiteConfig {
   fuelUnit?: 'lb' | 'kg';
   /** Transition altitude (ft) for FL display in the FMS. */
   transitionAltFt?: number;
+  /**
+   * (Appended by global6000.) Global Vision CTP: the TUNE/DATA knob sets the on-side selected course while the CTP
+   * shows its PFD page (TUNE/MENU key), instead of switching back to the radio page. Default false.
+   */
+  ctpCourseOnPfdPage?: boolean;
 }
 
 export interface FusionResolvedConfig extends Required<Omit<FusionSuiteConfig, 'sensors' | 'events' | 'power' | 'checklists' | 'casChecklists' | 'synopticBindings'>> {
@@ -422,6 +427,7 @@ export function resolveConfig(c: FusionSuiteConfig): FusionResolvedConfig {
     afdBootS: c.afdBootS ?? 18, // EST: IMA avionics power-up with display self test, typical 15-20 s
     fuelUnit: c.fuelUnit ?? 'lb',
     transitionAltFt: c.transitionAltFt ?? 18000, // FAA transition altitude (14 CFR 91.121)
+    ctpCourseOnPfdPage: c.ctpCourseOnPfdPage ?? false,
     scales: engineScales(c.engines),
   };
 }

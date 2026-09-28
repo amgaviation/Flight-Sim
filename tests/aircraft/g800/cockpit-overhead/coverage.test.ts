@@ -15,6 +15,7 @@ import { AnnunciatorLight } from '../../../../src/cockpit/controls';
 import { applyG800State } from '../../../../src/aircraft/g800/states';
 import type { Rig } from '../helpers';
 import { fullCockpit, ptr } from './util';
+import { mechanicalBreakers } from '../../../../src/aircraft/g800/cbTable';
 
 const MINE = /^g800\.(oh|side|cb)\./;
 
@@ -128,7 +129,7 @@ describe('G800 overhead / side consoles: control coverage', () => {
     // Operating conditions some controls need to act (their consumers ignore them otherwise, as in the aircraft).
     const PRECONDITION: Record<string, () => void> = {
       'g800.oh.gpu': () => r.vars.set('ac.g800.gpu_avail', 1), // GPU switch only matters with a cart connected
-      'g800.oh.press_man': () => r.vars.set('ac.press.mode_sw', 2), // MAN RATE acts in MANUAL mode
+      'g800.oh.cabin_alt': () => r.vars.set('ac.press.mode_sw', 2), // CABIN ALT acts in MANUAL mode
     };
     const mine = build.controls.filter((c) => MINE.test(c.id));
     for (const c of mine) {
@@ -160,7 +161,7 @@ describe('G800 overhead / side consoles: control coverage', () => {
     console.log(`G800 overhead/side/CB: ${report.length} controls, ${report.length - unbound.length} bound.\n${report.map((x) => `  ${x.bound ? 'OK ' : '-- '} ${x.id.padEnd(28)} ${x.via}`).join('\n')}`);
     expect(unbound).toEqual([]);
     expect(report.filter((x) => x.id.startsWith('g800.oh.')).length).toBeGreaterThanOrEqual(28);
-    expect(report.filter((x) => x.id.startsWith('g800.cb.')).length).toBe(r.sys.elec.breakerNames().length);
+    expect(report.filter((x) => x.id.startsWith('g800.cb.')).length).toBe(mechanicalBreakers().length);
     // The three overhead touch screens are mounted.
     const ids = build.displays.map((d) => d.display.id);
     for (const n of [1, 2, 3]) expect(ids).toContain(`epic.ohpts${n}`);

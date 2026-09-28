@@ -94,66 +94,95 @@ export function edgeX(z: number, sillZ: number, roofZ: number, xAtSill: number, 
   return xAtSill + (xAtRoof - xAtSill) * t;
 }
 
-/** Main instrument panel (display band): face tilted 12 deg back (dossier §9.0). */
+/** Main instrument panel (display band): face tilted 12 deg back (dossier §9.0). Just wider than the four DUs. */
 export const MAIN_PANEL = {
   center_m: [13.36, 0, -0.35] as BodyVec,
   tiltDeg: 12,
-  width: 1.56,
+  width: 1.34,
   height: 0.29,
 };
-/** DU centres on the main panel (u m from the panel centre): MFDs nearly abutting at the centre, PFDs ahead of each pilot (EST). */
-export const DU_U = [-0.575, -0.19, 0.19, 0.575] as const;
-/** Outboard TSCs: on the panel wings outboard of the PFDs, yawed toward each pilot (BJT500 "one each outboard"). */
-export const OUTBOARD_TSC = { y: 0.86, x: 13.3, z: -0.34, yawDeg: 28, tiltDeg: 14 };
+/**
+ * DU centres on the main panel (u m from the panel centre). The four DUs form one continuous band with ~1 cm between
+ * bezels (G600 BL7C0704 / BL7C0705: DU1 178-340 px, DU2 347-515, DU3 522-688, DU4 697-863): pitch = bezel width
+ * (0.282 + 2 x 0.016 m) + 0.011 m. The PFD centres (y +-0.49) stay within 6 cm of each pilot's eye line (y +-0.55).
+ */
+export const DU_U = [-0.4875, -0.1625, 0.1625, 0.4875] as const;
+/**
+ * Outboard TSCs: directly outboard of DU1 / DU4 on the DU centreline, toed in toward each pilot (G600 BL7C0704 /
+ * BL7C0705; BJT500 "one each outboard"). SCOPE: the real units are portrait; the shared Symmetry TSC page layouts
+ * are landscape (800 x 480), so the screen stays landscape in a housing at the portrait unit's position.
+ */
+export const OUTBOARD_TSC = { y: 0.755, x: 13.335, z: -0.35, yawDeg: 20, tiltDeg: 12 };
 
-/** Glareshield: GP-700 / SFD face under the brow and the hood top (see shell.ts). */
+/**
+ * Glareshield pod (G600 BL7C0704 g600_gp.jpg): one rounded pod standing proud of the stitched glareshield, holding
+ * (outboard to inboard each side) a column of three stacked switchlights, the SFD with its MENU button and BARO
+ * knob, and the guidance-panel core. EST 0.92 m wide x 0.105 m tall, scaled from the DU band in the photograph.
+ */
 export const GLARE_FACE = {
   center_m: [13.222, 0, -0.586] as BodyVec,
   tiltDeg: 24,
-  width: 1.7,
-  height: 0.1,
+  width: 0.92,
+  height: 0.105,
 };
+/** Pod layout (panel u, m): end switchlight columns, SFD centres, SFD bezel controls, GP core width. */
+export const GLARE_POD = { endU: 0.41, sfdU: 0.3, bezelU: 0.214, coreW: 0.37 };
 export const GLARE_HOOD = { browX: 13.2, topZ: -0.636 };
 
-/** Centre pedestal (dossier §9.0: 0.40 m wide; BJT500: TSCs forward, CCDs on the pedestal). */
+/**
+ * Centre pedestal (G600 BL7C0704 / BL7C0705, G500 BL7C0670 c_ped): a narrow centre channel (power levers, FUEL
+ * CONTROL, speed brake, flaps, trims) flanked by raised wings carrying the two pedestal TSCs (forward) and the CCD
+ * grips (aft); parking brake in its own recess aft-left, a storage bin aft-right, two cupholders and a brushed
+ * bumper across the aft end.
+ */
 export const PEDESTAL = {
-  width: 0.4,
-  /** Sloped forward face carrying the two pedestal TSCs, from under the MFDs down/aft to the top surface. [x, z] */
-  fwdTop: [13.31, -0.2] as [number, number],
-  fwdBottom: [13.13, -0.03] as [number, number],
-  /** Top surface, sloping down aft (dossier §9.0: 8 deg EST, kept shallow here for the quadrant). */
-  topFwd: [13.13, -0.03] as [number, number],
+  width: 0.44,
+  /** Sloped forward face carrying the two pedestal TSCs on the wings, tilted up toward the crew. [x, z] */
+  fwdTop: [13.27, -0.105] as [number, number],
+  fwdBottom: [13.12, -0.03] as [number, number],
+  /** Top surface, sloping down aft. */
+  topFwd: [13.12, -0.03] as [number, number],
   topAft: [12.18, 0.05] as [number, number],
+  /** Centre channel half-width and wing TSC centre (u). */
+  channelHalf: 0.05,
+  tscU: 0.14,
 };
 
-/** Knee panels either side of the pedestal under the MFDs (gear handle right, CAS scroll left). */
-export const KNEE_PANEL = { x: 13.33, zTop: -0.215, zBottom: 0.02, yIn: 0.205, yOut: 0.4, tiltDeg: 6 };
+/**
+ * Lower centre panel between the DU band and the pedestal TSC wings (G600 BL7C0704 g600_center, BL7C0705 crop
+ * g6_lowctr): L / R engine fire handles at the ends, the red lit EMER LDG GEAR handle left of centre, the landing
+ * gear handle with its green lights and LOCK RELEASE right of centre. Faces aft, 10 deg back.
+ */
+export const LOWER_CTR = { center_m: [13.345, 0, -0.158] as BodyVec, tiltDeg: 10, width: 0.46, height: 0.095 };
 
 /** Side consoles (outboard of each seat): top surface height and extent (dossier §9.0). */
 export const CONSOLE = { topZ: 0.02, yIn: 0.8, xFwd: 13.12, xAft: 12.05 };
-/** Sidesticks: on the forward part of each console (dossier §9.0 / §9.3). */
-export const STICK_L: [number, number, number] = [12.78, -0.93, CONSOLE.topZ];
-export const STICK_R: [number, number, number] = [12.78, 0.93, CONSOLE.topZ];
-/** Sidestick module plate (armrest pod) on each console, from the forward end to just aft of the stick. */
-export const STICK_POD = { xFwd: 13.02, xAft: 12.56, y: 0.94, width: 0.2 };
+/**
+ * Sidesticks: at the forward end of each ledge right beside the outboard TSC, in a square silver bezel, with the
+ * armrest (TILT ADJ) aft of it (G600 BL7C0704 p_stick).
+ */
+export const STICK_L: [number, number, number] = [12.98, -0.93, CONSOLE.topZ];
+export const STICK_R: [number, number, number] = [12.98, 0.93, CONSOLE.topZ];
+/** Sidestick module plate (pod) on each console, from the forward end to the armrest. */
+export const STICK_POD = { xFwd: 13.1, xAft: 12.56, y: 0.94, width: 0.2 };
 
-/** Rudder pedal pivots (hanging pedals under the panel). */
-export const PEDALS_L: [number, number, number] = [13.42, -0.55, 0.2];
-export const PEDALS_R: [number, number, number] = [13.42, 0.55, 0.2];
+/** Rudder pedal pivots: floor-hinged pedals (G600 BL7C0705 p_leftlow). */
+export const PEDALS_L: [number, number, number] = [13.4, -0.55, FLOOR_Z - 0.02];
+export const PEDALS_R: [number, number, number] = [13.4, 0.55, FLOOR_Z - 0.02];
 
 /** Crew seat reference (floor point under the front of the seat pan). */
 export const SEAT_L: [number, number, number] = [12.8, -0.55, FLOOR_Z];
 export const SEAT_R: [number, number, number] = [12.8, 0.55, FLOOR_Z];
 
 /**
- * Engine / APU fire handles: a strip at the forward edge of the overhead just aft of the windshield header
- * (GVI family arrangement, G650ER overhead photograph as in docs/aircraft/g650.md §9; EST for the G800).
+ * HUD combiner (pilot side, G700/G800 HUD / EFVS; FSB App. 4 HUD rocker; G600 BL7C0704 shows the combiner deployed
+ * in front of the pilot). EST 0.27 m ahead of the design eye, 30 x 24 deg field of view (HGS-class).
  */
-export const FIRE_STRIP = { center_m: [12.9, 0, -1.3] as BodyVec, tiltDeg: -14, width: 0.42, height: 0.085 };
+export const HUD = { eyeDist: 0.27, fovHDeg: 30, fovVDeg: 24 };
 
 /**
- * Mount frames for the builders owned by other agents (contract in context.ts).
- * Overhead: from just aft of the fire-handle strip to x ~12.25 (dossier §9.0), 0.55 m wide, forward end lower.
+ * Mount frames for the builders (contract in context.ts).
+ * Overhead: from the windshield header to x ~12.2 (dossier §9.0), forward end lower.
  * Side consoles: the console tops aft of the sidestick pods (tiller, oxygen masks), x 12.05 -> 12.55.
  */
 export const MOUNTS = {

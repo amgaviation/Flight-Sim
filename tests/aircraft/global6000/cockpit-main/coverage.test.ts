@@ -154,11 +154,8 @@ describe('Global 6000 cockpit: control coverage', () => {
       'g6k.ped.rev1': () => r.vars.set('ac.tla1', 0),
       'g6k.ped.rev2': () => r.vars.set('ac.tla2', 0),
     };
-    const INDICATORS: Record<string, string[]> = {
-      'g6k.mp.gear_lt_l': ['gear.green1', 'gear.red1'],
-      'g6k.mp.gear_lt_n': ['gear.green0', 'gear.red0'],
-      'g6k.mp.gear_lt_r': ['gear.green2', 'gear.red2'],
-    };
+    // The Vision GEAR AND BRAKES panel has no gear position lights (photo N835GL): no indicator on the main cockpit.
+    const INDICATORS: Record<string, string[]> = {};
     const emitted: string[] = [];
     const off = r.events.onAny((n) => emitted.push(n));
     const report: { id: string; bound: boolean; via: string }[] = [];

@@ -11,12 +11,11 @@ import { makeRig } from '../helpers';
 import { fakeCanvas } from '../../../avionics/collins-fusion/helpers';
 import { buildG6kCockpit } from '../../../../src/aircraft/global6000/cockpit';
 import { G6K_VARS as V } from '../../../../src/aircraft/global6000/vars';
-import { CK } from '../../../../src/aircraft/global6000/cockpit/context';
 import type { InitialState } from '../../../../src/aircraft/types';
 
-function setup(state: InitialState, o: Parameters<typeof makeRig>[1] = {}) {
+function setup(state: InitialState, o: Parameters<typeof makeRig>[1] = {}, mainOnly = true) {
   const r = makeRig(state, { avionics: true, ...o });
-  const { build } = buildG6kCockpit(r.ctx, r.sys, { mainOnly: true, canvas: fakeCanvas() });
+  const { build } = buildG6kCockpit(r.ctx, r.sys, { mainOnly, canvas: fakeCanvas() });
   build.root.updateMatrixWorld(true);
   const byId = new Map(build.controls.map((c) => [c.id, c]));
   const ctl = (id: string): CockpitControl => {
@@ -47,31 +46,28 @@ function click(c: CockpitControl, button: 0 | 1 | 2 = 0, target?: THREE.Object3D
 }
 
 describe('Global 6000 cockpit: controls drive the systems', () => {
-  it('EMS CDU: AC BUS 1 MAN OFF isolates the bus; TEST page FIRE TEST held runs the fire test', { timeout: 120_000 }, () => {
-    const { r, ctl, step } = setup('ready_to_taxi');
+  it('EMS CDU 1 (main-panel wing): EMER CNTL AC BUS 1 MAN OFF isolates the bus; TEST FIRE TEST runs the fire test', { timeout: 120_000 }, () => {
+    const { r, ctl, step } = setup('ready_to_taxi', {}, false);
     step(1);
     expect(r.vars.get('elec.ac_bus1_powered')).toBe(1);
-    const left = ctl('g6k.ems.lsk_l') as KeyPad;
-    left.press('L1');
+    // Vision layout: the EMS CDUs are in the outboard wings of the main panel, the pedestal has none.
+    expect(() => ctl('g6k.ems.lsk_l')).toThrow();
+    (ctl('g6k.side.ems1_emer') as KeyPad).press('EMER');
     step(0.2);
-    left.logic.release('L1');
+    const left = ctl('g6k.side.ems1_l') as KeyPad;
+    left.press('L1');
     step(1);
     expect(r.vars.get(V.acBusIsol(1))).toBe(1);
     expect(r.vars.get('elec.ac_bus1_powered')).toBe(0);
     left.press('L1');
-    left.logic.release('L1');
     step(1);
     expect(r.vars.get('elec.ac_bus1_powered')).toBe(1);
-    (ctl('g6k.ems.pages') as KeyPad).press('TEST');
+    (ctl('g6k.side.ems1_fn') as KeyPad).press('TEST');
     step(0.1);
-    expect(r.vars.get(CK.emsPage)).toBe(1);
-    left.logic.press('L1'); // held
+    (ctl('g6k.side.ems1_r') as KeyPad).press('R1'); // FIRE TEST
     step(1);
     expect(r.vars.get(V.fireTest)).toBe(1);
     expect(r.vars.get('fire.eng1_warn') + r.vars.get('fire.test')).toBeGreaterThan(0);
-    left.logic.release('L1');
-    step(0.2);
-    expect(r.vars.get(V.fireTest)).toBe(0);
   });
 
   it('control-wheel pitch trim moves the stabilizer; AP/SP DISC held interrupts it', { timeout: 120_000 }, () => {
@@ -152,24 +148,27 @@ describe('Global 6000 cockpit: controls drive the systems', () => {
     expect(r.vars.get('eng1.running')).toBe(0);
   });
 
-  it('MASTER WARNING acknowledges the CAS; LAMP TEST lights the annunciators; FCP AP engages the autopilot in flight', { timeout: 120_000 }, () => {
-    const { r, ctl, step } = setup('cruise', { weightLb: 78000, air: { altFtMsl: 35000, iasKt: 260 } });
+  it('MASTER WARNING/CAUTION acknowledges the CAS; EMS LAMP TEST lights the annunciators; FCP AP engages the autopilot in flight', { timeout: 120_000 }, () => {
+    const { r, ctl, step } = setup('cruise', { weightLb: 78000, air: { altFtMsl: 35000, iasKt: 260 } }, false);
     step(1);
     r.sys.failures.trigger('fire.eng1');
     step(2);
     expect(r.vars.get('alert.master_warning')).toBe(1);
-    const mw = ctl('g6k.gs.mw_l');
+    expect(() => ctl('g6k.gs.mc_l')).toThrow(); // one combined MASTER WARNING/CAUTION switchlight per side
+    const mw = ctl('g6k.gs.mwc_l');
     mw.onPointerDown?.(p(mw));
     step(0.15);
     mw.onPointerUp?.(p(mw));
     step(0.5);
     expect(r.vars.get('alert.master_warning')).toBe(0);
-    const lt = ctl('g6k.ped.lamp_test');
-    lt.onPointerDown?.(p(lt));
-    step(0.2);
+    // LAMP TEST is on the EMS CDU TEST CONTROL page (GX PTG 15-19), not a pedestal switch.
+    expect(() => ctl('g6k.ped.lamp_test')).toThrow();
+    (ctl('g6k.side.ems1_fn') as KeyPad).press('TEST');
+    step(0.1);
+    (ctl('g6k.side.ems1_r') as KeyPad).press('R5'); // LAMP TEST 1
+    step(0.3);
     expect(r.vars.get('alert.annun_test')).toBe(1);
-    lt.onPointerUp?.(p(lt));
-    step(0.2);
+    step(11);
     expect(r.vars.get('alert.annun_test')).toBe(0);
     // AP was engaged by the cruise state: FCP AP disengages, pressing again re-engages.
     expect(r.vars.get('ap.engaged')).toBe(1);

@@ -6,10 +6,12 @@
  * the guidance panel, the panel shroud, the centre pedestal body, the two
  * side consoles (sidestick armrests) and the crew seats.
  *
- * Sources: layout.ts (dossier §9.0 geometry, EST from photographs). The
- * Symmetry flight deck has a light-grey trimmed interior with a black
- * glareshield and dark-grey panels (G500/G600/G700 press photographs, EST
- * colours: palette 'gulfstream').
+ * Sources: layout.ts (dossier §9.0 geometry, EST from photographs). Colours
+ * (G600 / G500 EBACE photographs, fix round 1): dark charcoal sidewalls, window
+ * surrounds and A-pillars, a light-grey headliner, a stitched dark leather-like
+ * glareshield with only the guidance-panel pod standing proud, black leather seats
+ * (palette G800_PALETTE in index.ts). Aft pedestal: two cupholders, a storage bin
+ * aft-right and a brushed bumper with a vent grille (G500 BL7C0670 c_ped).
  */
 import * as THREE from 'three';
 import type { CockpitBuilder } from '../../../cockpit/CockpitBuilder';
@@ -82,15 +84,17 @@ export function buildShell(b: CockpitBuilder): void {
     return me;
   };
 
-  // ---- skin: light-grey trimmed sidewalls and headliner with the window openings.
-  add(carvedSkin(X_AFT, X_FWD, { inset: SHELL_INSET, keep: 'solid', inward: true, dx: 0.02, segT: 300 }), 'interior', 'cockpit_skin');
+  // ---- skin with the window openings: light-grey headliner (top of the section) and dark charcoal sidewalls.
+  const [head, walls] = splitByTheta(carvedSkin(X_AFT, X_FWD, { inset: SHELL_INSET, keep: 'solid', inward: true, dx: 0.02, segT: 300 }), 0.95);
+  add(head, 'headliner', 'cockpit_headliner');
+  add(walls, 'interior', 'cockpit_skin');
 
-  // ---- window frames (tubes along the true boundaries hide the loft's cell steps)
+  // ---- window frames (tubes along the true boundaries hide the loft's cell steps): dark trim like the sidewalls.
   const fl = frameLines(SHELL_INSET + 0.012);
-  const frameMat = m.get('headliner');
-  for (const p of fl.pillars) add(tube(p, 0.034, 24, 10), frameMat, 'a_pillar');
+  const frameMat = m.get('interior');
+  for (const p of fl.pillars) add(tube(p, 0.048, 24, 10), frameMat, 'a_pillar');
   for (const p of fl.post) add(tube(p, 0.018, 16, 8), 'panelDark', 'centre_post');
-  for (const p of fl.edges) add(tube(p, 0.02, Math.max(16, p.length * 2), 8), frameMat, 'window_frame');
+  for (const p of fl.edges) add(tube(p, 0.03, Math.max(16, p.length * 2), 8), frameMat, 'window_frame');
 
   // ---- floor (carpet) from the bulkhead to the pedal wells
   const fw = 2 * halfWidth(12.4, FLOOR_Z, SHELL_INSET);
@@ -111,15 +115,14 @@ export function buildShell(b: CockpitBuilder): void {
   const brow = new THREE.CylinderGeometry(0.014, 0.014, 2 * hw, 16, 1);
   brow.rotateZ(Math.PI / 2);
   add(brow, 'glareshield', 'glareshield_brow', [GLARE_HOOD.browX + 0.04, 0, GLARE_HOOD.topZ + 0.012]);
-  // Face backing either side of the GP / SFD strip, out to the walls (the face panel covers the middle).
+  // Glareshield face either side of the pod, out to the walls, set 40 mm forward so only the pod projects; a light
+  // stitch line along the brow (G600 BL7C0704: stitched leather-like covering).
   const face = GLARE_FACE;
-  for (const side of [-1, 1]) {
-    const w = hw - face.width / 2 + 0.01;
-    if (w <= 0.005) continue;
-    const g = trimBoxGeometry(w, face.height + 0.02, 0.02, 0.004);
-    const me = add(g, 'glareshield', 'glareshield_face_end', [face.center_m[0] + 0.012, side * (face.width / 2 + w / 2 - 0.005), face.center_m[2]]);
-    me.rotation.x = THREE.MathUtils.degToRad(face.tiltDeg);
-  }
+  // (No flat face either side of the pod: the hood brow and the soffit close the glareshield there.)
+  void face;
+  const stitch = new THREE.CylinderGeometry(0.0012, 0.0012, 2 * hw - 0.04, 6, 1);
+  stitch.rotateZ(Math.PI / 2);
+  add(stitch, m.custom('paint', '#6a6a66', 0.8), 'glareshield_stitch', [GLARE_HOOD.browX + 0.028, 0, GLARE_HOOD.topZ - 0.001], false);
   // Soffit under the guidance panel back to the top of the display band (dark).
   const soffitLen = 0.2;
   const soffit = trimBoxGeometry(2 * hw, 0.01, soffitLen, 0.003);
@@ -143,10 +146,20 @@ export function buildShell(b: CockpitBuilder): void {
   add(pedestalGeometry(P.width, topLen, FLOOR_Z - P.topAft[1] - 0.004, FLOOR_Z - P.topFwd[1] - 0.004, 0.012), 'panelDark', 'pedestal', [(P.topFwd[0] + P.topAft[0]) / 2, 0, FLOOR_Z]);
   const fwdLen = P.fwdTop[0] - P.fwdBottom[0];
   add(pedestalGeometry(P.width, fwdLen + 0.02, FLOOR_Z - P.fwdBottom[1] - 0.004, FLOOR_Z - P.fwdTop[1] - 0.004, 0.008), 'panelDark', 'pedestal_fwd', [(P.fwdTop[0] + P.fwdBottom[0]) / 2 + 0.005, 0, FLOOR_Z]);
-  // Cup holders in the aft end of the pedestal (BJT500).
+  // Aft pedestal (G500 BL7C0670 c_ped): two deep cupholders across the end, a storage bin aft-right, a brushed
+  // aluminium bumper with a vent grille wrapping the aft face.
   for (const side of [-1, 1]) {
-    const cup = new THREE.CylinderGeometry(0.038, 0.034, 0.012, 24, 1, true);
-    add(cup, 'plasticBlack', 'cup_holder', [P.topAft[0] + 0.07, side * 0.1, P.topAft[1] - 0.004], false);
+    const cup = new THREE.CylinderGeometry(0.038, 0.034, 0.05, 24, 1, true);
+    add(cup, 'plasticBlack', 'cup_holder', [P.topAft[0] + 0.07, side * 0.1, P.topAft[1] + 0.021], false);
+    const floor = new THREE.CircleGeometry(0.034, 24).rotateX(-Math.PI / 2);
+    add(floor, 'plasticBlack', 'cup_holder_floor', [P.topAft[0] + 0.07, side * 0.1, P.topAft[1] + 0.045], false);
+  }
+  add(shellBin(0.1, 0.13, 0.06), 'plasticBlack', 'pedestal_bin', [12.5, 0.15, 0.024], false);
+  const bumper = trimBoxGeometry(P.width + 0.02, 0.07, 0.025, 0.01);
+  add(bumper, 'aluminium', 'pedestal_bumper', [P.topAft[0] - 0.006, 0, P.topAft[1] + 0.06]);
+  for (let i = -8; i <= 8; i++) {
+    const slat = new THREE.BoxGeometry(0.004, 0.045, 0.012);
+    add(slat, 'plasticBlack', 'pedestal_grille', [P.topAft[0] - 0.02, i * 0.022, P.topAft[1] + 0.06], false);
   }
 
   // ---- side consoles (armrest ledges) from the floor to the console top, out to the sidewall
@@ -160,8 +173,52 @@ export function buildShell(b: CockpitBuilder): void {
     add(trimBoxGeometry(w - 0.01, 0.006, len - 0.01, 0.003), 'panelDark', 'side_console_top', [(CONSOLE.xFwd + CONSOLE.xAft) / 2, side * (CONSOLE.yIn + w / 2), CONSOLE.topZ - 0.001]);
   }
 
-  // ---- crew seats
+  // ---- crew seats (black leather: palette seat colour, index.ts)
   b.seat('bizjet', SEAT_L);
   b.seat('bizjet', SEAT_R);
   void bl;
+}
+
+/** Open-top box (storage bin) standing on its base, cockpit-local frame (y up). */
+function shellBin(w: number, l: number, h: number): THREE.BufferGeometry {
+  const g = new THREE.BoxGeometry(w, h, l, 1, 1, 1);
+  // Drop the top face (BoxGeometry groups: +x, -x, +y, -y, +z, -z; +y = top).
+  const idx = g.getIndex()!;
+  const keep: number[] = [];
+  for (const gr of g.groups) if (gr.materialIndex !== 2) for (let i = gr.start; i < gr.start + gr.count; i++) keep.push(idx.getX(i));
+  g.setIndex(keep);
+  g.clearGroups();
+  g.translate(0, -h / 2, 0);
+  return g;
+}
+
+/**
+ * Splits the carved skin into the headliner (section angle |theta| < thetaMax, theta = 0 at the crown; uv.y holds
+ * theta) and the sidewalls, by triangle centroid.
+ */
+function splitByTheta(g: THREE.BufferGeometry, thetaMax: number): [THREE.BufferGeometry, THREE.BufferGeometry] {
+  const src = g.index ? g.toNonIndexed() : g;
+  const names = Object.keys(src.attributes);
+  const uv = src.getAttribute('uv');
+  const n = uv.count;
+  const out = [new Map<string, number[]>(), new Map<string, number[]>()];
+  for (const o of out) for (const k of names) o.set(k, []);
+  for (let i = 0; i < n; i += 3) {
+    const th = (uv.getY(i) + uv.getY(i + 1) + uv.getY(i + 2)) / 3;
+    const o = out[Math.abs(th) < thetaMax ? 0 : 1];
+    for (const k of names) {
+      const at = src.getAttribute(k);
+      const arr = o.get(k)!;
+      for (let j = i; j < i + 3; j++) for (let c = 0; c < at.itemSize; c++) arr.push(at.array[j * at.itemSize + c]);
+    }
+  }
+  const make = (m: Map<string, number[]>) => {
+    const r = new THREE.BufferGeometry();
+    for (const k of names) r.setAttribute(k, new THREE.Float32BufferAttribute(m.get(k)!, src.getAttribute(k).itemSize));
+    return r;
+  };
+  const res: [THREE.BufferGeometry, THREE.BufferGeometry] = [make(out[0]), make(out[1])];
+  g.dispose();
+  if (src !== g) src.dispose();
+  return res;
 }

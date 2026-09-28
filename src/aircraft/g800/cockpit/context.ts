@@ -5,24 +5,18 @@
  * Extension contract (loaded by cockpit/index.ts with import.meta.glob, so
  * the main cockpit builds whether or not these folders exist yet):
  *   - `cockpit/overhead/index.ts` exports `buildOverhead(c: G800CockpitContext): void`.
- *     Mount on `MOUNTS.overhead` (layout.ts): parent to `c.mounts.overhead` or create a
- *     panel with `c.b.panel({ name, ...MOUNTS.overhead, ... })`. It holds the three OHPTS
- *     (`addOhpts`), FIRE TEST, the RAT T-handle and the other physical items of dossier §9.7.
- *     The main cockpit already builds the ENGINE / APU FIRE handle strip at the very forward
- *     edge of the overhead (layout.ts FIRE_STRIP, x ~12.86-12.94): start the overhead aft of it.
+ *     It builds the whole overhead console from the windshield header aft (overhead/layout.ts):
+ *     forward strip, OHPTS 1-3, ELECTRICAL POWER CONTROL, DOORS / ENGINE CONTROL / BLEED AIR /
+ *     CABIN PRESSURE CONTROL, gaspers and the two CB panels (overhead/breakers.ts).
  *   - `cockpit/side/index.ts` exports `buildSideConsoles(c: G800CockpitContext): void`
- *     (`MOUNTS.sideLeft` / `MOUNTS.sideRight`: the console tops aft of the sidestick pods).
- *     It holds the tiller (left only), the oxygen mask boxes and regulators (dossier §9.4).
- *     The main cockpit already builds, on the forward part of each console (layout.ts STICK_POD):
- *     the sidesticks with their grip switches and the NOSEWHEEL STEERING switch (left pod,
- *     BJT500 "pedal steering switchlight and tiller ... on the left side ledge, aft of the
- *     sidestick"), plus the console bodies (structure). The CCDs are on the aft pedestal
- *     (BJT500: "the cursor control devices now live in the center pedestal"), built by the
- *     main cockpit with the Epic `addCcd` helper (ids `epic.ccd1.*`, `epic.ccd2.*`): do not
- *     build them again.
+ *     (`MOUNTS.sideLeft` / `MOUNTS.sideRight`: the console tops aft of the sidestick pods; the
+ *     observer station on the right aft bulkhead). It holds the tiller (left only) and the oxygen
+ *     mask boxes and regulators (dossier §9.4). The main cockpit builds, on the forward part of each
+ *     console (layout.ts STICK_POD): the sidesticks, armrests, the NOSEWHEEL STEERING switch and the
+ *     PEDAL STEER switchlight (left pod). The CCDs are on the pedestal wings (pedestal.ts).
  *   Control ids must be unique across the build: the main cockpit uses the prefixes
- *   'g800.gs.', 'g800.mp.', 'g800.kp.', 'g800.ped.', 'g800.fc.', 'g800.fire.' and the Epic
- *   helper ids 'epic.gp.*', 'epic.ccd{1,2}.*', 'epic.cas.scroll'.
+ *   'g800.gs.', 'g800.kp.', 'g800.ped.', 'g800.fc.', 'g800.fire.', 'g800.hud.', 'g800.fit.' and the
+ *   Epic ids 'epic.gp.*', 'epic.ccd{1,2}.*'; the overhead 'g800.oh.' / 'g800.cb.'; the side 'g800.side.'.
  */
 import type * as THREE from 'three';
 import type { CockpitBuilder } from '../../../cockpit/CockpitBuilder';

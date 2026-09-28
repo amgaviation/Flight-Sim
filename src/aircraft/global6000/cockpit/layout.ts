@@ -68,30 +68,75 @@ export const EYE_L: [number, number, number] = [10.9, -0.49, -1.02];
 export const EYE_R: [number, number, number] = [10.9, 0.49, -1.02];
 
 /**
- * Main instrument panel: one plane tilted 12 deg back (dossier §10), 1.8 m wide,
- * from the glareshield soffit down to the pedestal. Panel coordinates (u right,
- * v up) from its centre.
+ * Main instrument panel plane: tilted 12 deg (top edge forward, facing up toward the eye), centred at
+ * `center_m`. Panel coordinates (u right, v up) from that centre. Global Vision layout (photo N835GL, fix round 1):
+ * the upper row AFD 1 | IESI + TAWS + placards | AFD 2 | GEAR AND BRAKES | AFD 4 on the centre band, the outboard
+ * wings (STALL PUSHER, gasper, EMS CDU) angled toward each pilot, and AFD 3 on the steep forward face of the
+ * pedestal below (PED_FACE).
  */
 export const MAIN_PANEL = {
   center_m: [11.654, 0, -0.5] as BodyVec,
   tiltDeg: 12,
-  width: 1.8,
-  height: 0.52,
+  /** Centre band (between the wings): u -0.605 .. 0.605, v -0.035 .. 0.255. */
+  band: { u0: -0.605, u1: 0.605, v0: -0.035, v1: 0.255 },
+  /** Outboard wings: 0.325 m wide from |u| 0.605, v -0.05 .. 0.255, turned 14 deg toward the pilot (EST from the photo). */
+  wing: { w: 0.325, v0: -0.05, v1: 0.255, yawDeg: 14 },
+  // Legacy extents (shell backing box).
+  width: 1.86,
+  height: 0.41,
 };
-/** AFD centres on the main panel (u, v): upper row 0.40 m below the eye (27 deg), AFD 3 directly below AFD 2. */
+
+/** Body point of main-panel coordinates (u, v) (the panel's own tilt: +v goes up and forward). */
+export function mainPoint(u: number, v: number, n = 0): BodyVec {
+  const t = (MAIN_PANEL.tiltDeg * Math.PI) / 180;
+  const c = MAIN_PANEL.center_m;
+  // Panel basis in body axes: u = +y, v = (sin t, 0, -cos t), n (toward the viewer) = (-cos t, 0, -sin t).
+  return [c[0] + v * Math.sin(t) - n * Math.cos(t), c[1] + u, c[2] - v * Math.cos(t) - n * Math.sin(t)];
+}
+
+/**
+ * AFD centres on the main-panel plane (u, v). AFD 1 / 2 / 4 in the upper row, their bezels separated only by the
+ * ~95 mm IESI / TAWS column (left) and GEAR AND BRAKES column (right): centres u -/+0.43 (photo N835GL).
+ * AFD_POS[2] (AFD 3) is not on this plane: it is on the pedestal forward face (PED_FACE.afd).
+ */
 export const AFD_POS: readonly [number, number][] = [
-  [-0.47, 0.123],
+  [-0.43, 0.123],
   [0, 0.123],
   [0, -0.123],
-  [0.47, 0.123],
+  [0.43, 0.123],
 ];
-/** IESI left of AFD 3 and the landing-gear panel right of it (dossier §10). */
-export const IESI_POS: [number, number] = [-0.235, -0.12];
-export const GEAR_PANEL = { u: 0.265, v: -0.125, w: 0.15, h: 0.24 };
+/** Top of the upper-row AFD bezels (v). */
+export const AFD_TOP_V = 0.123 + 0.096 + 0.014;
+/** IESI at the top of the left centre column, level with the top of the PFD (photo c_centre). */
+export const IESI_POS: [number, number] = [-0.215, AFD_TOP_V - 0.0475];
+/** TAWS panel (G/S, FLAPS, TERRAIN) under the IESI, then the airspeed-limits placard (photo c_centre). */
+export const TAWS_PANEL = { u: -0.215, v: 0.097, w: 0.085, h: 0.07 };
+/** GEAR AND BRAKES column between AFD 2 and AFD 4 (u, v = centre; photo c_centre). */
+export const GEAR_PANEL = { u: 0.215, v: (AFD_TOP_V + MAIN_PANEL.band.v0) / 2, w: 0.09, h: AFD_TOP_V - MAIN_PANEL.band.v0 };
 
-/** Glareshield front face (FCP centre, CTP 1 / 2 outboard, MASTER WARNING / CAUTION at the ends). */
+/**
+ * Pedestal forward face carrying AFD 3 (photos N835GL / EB190582): from the main band's lower edge it drops
+ * steeply (EST 40 deg back from vertical) to the pedestal top; the AFD 3 bezel top is ~0.10 m below the upper
+ * row's bezels.
+ */
+export const PED_FACE = (() => {
+  const top = mainPoint(0, MAIN_PANEL.band.v0);
+  const back = (40 * Math.PI) / 180;
+  const len = 0.34;
+  return {
+    top: [top[0], top[2]] as [number, number],
+    bottom: [top[0] - len * Math.sin(back), top[2] + len * Math.cos(back)] as [number, number],
+    /** Tilt from vertical (deg) and length (m) along the face. */
+    backDeg: 40,
+    len,
+    /** AFD 3 centre distance down the face from its top edge. */
+    afdS: 0.08 + 0.114,
+  };
+})();
+
+/** Glareshield front face (FCP centre, CTP 1 / 2, MASTER WARNING/CAUTION, ROLL SPLRS, HUD / EVS knobs outboard). */
 export const GLARE_FACE = {
-  center_m: [11.565, 0, -0.787] as BodyVec,
+  center_m: [11.553, 0, -0.787] as BodyVec,
   tiltDeg: 30,
   width: 1.66,
   height: 0.08,
@@ -104,8 +149,8 @@ export const WINDSHIELD = {
   baseX: 12.02,
   headerX: 11.1,
   halfAngle: 0.8,
-  /** Centre post half-width (rad): EST 0.05 m post. */
-  postHalf: 0.02,
+  /** Centre post half-width (rad): a dark, fairly wide post from the seat (photo N835GL): EST 0.08 m. */
+  postHalf: 0.031,
 };
 /** Side windows (two per side, dossier §10): x ranges and the angular band on the section (rad from the top). */
 export const SIDE_WINDOWS = {
@@ -118,20 +163,32 @@ export const SIDE_WINDOWS = {
 export const A_PILLAR = 0.07;
 
 /**
- * Centre pedestal (dossier §10 / §12.4): forward section (MKPs) rising gently to the lower edge of the main
- * panel under AFD 3, then the flat top, 0.41 m above the floor.
+ * Centre pedestal (photos N835GL / EB190582): 0.54 m wide between tan-leather side rails, wide enough for
+ * MKP | quadrant | MKP side by side. Forward end: the steep AFD 3 face (PED_FACE); top 0.41 m above the floor from
+ * the foot of that face aft. Rows on the top (distance aft of its forward edge): MKP 1 / 2 (u -/+0.17) beside the
+ * narrow throttle quadrant (FLIGHT SPOILER slot + two thrust levers, ~0.14 m centre channel); CCP 1 / 2 palm rests
+ * aft of the MKPs, ENGINE RUN at the aft end of the quadrant; the ACP row; the reversion / display-dimmer panel
+ * (left), PARK/EMER BRAKE gate and SLAT/FLAP lever (centre) and COCKPIT LIGHTS panel (right); then the aft section
+ * (trims, GLD, IRS) that the photographs do not show (EST).
  */
 export const PEDESTAL = {
-  width: 0.42,
-  fwdTop: [11.6, -0.245] as [number, number], // [x, z]
-  fwdBottom: [11.44, -0.206] as [number, number],
-  topFwd: [11.44, -0.206] as [number, number],
+  width: 0.54,
+  fwdTop: PED_FACE.top,
+  fwdBottom: PED_FACE.bottom,
+  topFwd: PED_FACE.bottom,
   topAft: [10.3, -0.21] as [number, number],
+  /** Row stations on the top panel (m aft of the forward edge). */
+  row: { mkp: 0.075, ccp: 0.23, acp: 0.39, mid: 0.54, aft: 0.72, aft2: 0.88 },
+  /** Lateral centres (u from the centreline). */
+  mkpU: 0.17,
 };
 
-/** Control wheels (dossier §10: 0.45 m ahead of each eye; hub 0.47 m below it so the wheel clears the PFD). */
-export const YOKE_HUB_L: [number, number, number] = [11.36, -0.49, -0.51];
-export const YOKE_HUB_R: [number, number, number] = [11.36, 0.49, -0.51];
+/**
+ * Control wheels: hub at about the lower third of AFD 1 / 4, directly in front of each pilot, the horns reaching
+ * above the PFD's mid-height (photo N835GL, c_lwing): 0.50 m ahead of and 0.37 m below the eye (EST: seen from the design eye the hub then overlays the lower third of the PFD, as in the photo).
+ */
+export const YOKE_HUB_L: [number, number, number] = [11.4, -0.49, -0.655];
+export const YOKE_HUB_R: [number, number, number] = [11.4, 0.49, -0.655];
 /** Rudder pedals (hanging, pivot under the panel). */
 export const PEDALS_L: [number, number, number] = [11.78, -0.49, -0.12];
 export const PEDALS_R: [number, number, number] = [11.78, 0.49, -0.12];
@@ -139,8 +196,12 @@ export const PEDALS_R: [number, number, number] = [11.78, 0.49, -0.12];
 export const SEAT_L: [number, number, number] = [11.05, -0.5, FLOOR_Z];
 export const SEAT_R: [number, number, number] = [11.05, 0.5, FLOOR_Z];
 
-/** NOSE STEER handwheel on the pilot's side console (dossier §12.5), forward end. */
-export const TILLER = { center_m: [11.2, -0.93, -0.33] as BodyVec };
+/**
+ * NOSE STEER tiller: a black D-loop crank handle on a round hub set flush into the top of the pilot's tan-leather
+ * side console, forward end, with a cup holder just aft (photo EB190582 e_tiller). z = the console top
+ * (MOUNTS.sideLeft), so the hub sits flush.
+ */
+export const TILLER = { center_m: [11.16, -0.955, -0.303] as BodyVec };
 
 /**
  * Mount frames for the builders owned by other agents (contract in context.ts).
@@ -152,7 +213,9 @@ export const TILLER = { center_m: [11.2, -0.93, -0.33] as BodyVec };
  * end of the left console.
  */
 export const MOUNTS = {
-  overhead: { center_m: [10.8, 0, -1.29] as BodyVec, facing: 'down' as const, tiltDeg: -8, width: 0.78, height: 0.55 },
+  // Shifted 0.055 m aft of the GX position so the Vision forward fitting strip (compass, reading lights) clears the
+  // windshield header (EST).
+  overhead: { center_m: [10.745, 0, -1.29] as BodyVec, facing: 'down' as const, tiltDeg: -8, width: 0.78, height: 0.55 },
   sideLeft: { center_m: [10.85, -1.02, -0.3] as BodyVec, facing: 'up' as const, tiltDeg: 0, width: 0.28, height: 0.62 },
   sideRight: { center_m: [10.85, 1.02, -0.3] as BodyVec, facing: 'up' as const, tiltDeg: 0, width: 0.28, height: 0.62 },
 };

@@ -97,7 +97,7 @@ describe('Global 6000 fidelity probes', () => {
     expect(v.get(V.engBleedCmd('l')) + v.get(V.engBleedCmd('r'))).toBe(2);
   });
 
-  it('INTEGRAL lighting MASTER at OFF still lights the panels at full knob value', () => {
+  it('MASTER INTEG OFF / AUTO / ON gates the integral lighting (AUTO: photocell, GX PTG 15-11)', () => {
     const r = makeRig('cruise', cruise);
     const v = r.vars;
     v.set(V.ltIntegral('ovhd'), 0.8);
@@ -106,9 +106,19 @@ describe('Global 6000 fidelity probes', () => {
     const off = v.get('ac.light.panel_ovhd');
     v.set(V.ltMaster, 2);
     r.run(1);
-    const brt = v.get('ac.light.panel_ovhd');
-    console.log('[probe] integral OVHD with MASTER OFF', off, 'BRT', brt);
-    expect(off).toBeGreaterThan(0.5);
+    const on = v.get('ac.light.panel_ovhd');
+    v.set(V.ltMaster, 1);
+    v.set('env.ambient_light', 1);
+    r.run(1);
+    const autoDay = v.get('ac.light.panel_ovhd');
+    v.set('env.ambient_light', 0.05);
+    r.run(1);
+    const autoNight = v.get('ac.light.panel_ovhd');
+    console.log('[probe] integral OVHD MASTER OFF', off, 'ON', on, 'AUTO day / night', autoDay, autoNight);
+    expect(off).toBeLessThan(0.05);
+    expect(on).toBeGreaterThan(0.5);
+    expect(autoDay).toBeLessThan(0.05);
+    expect(autoNight).toBeGreaterThan(0.5);
   });
 
   it('APU fire in flight shuts the APU down automatically at once', () => {

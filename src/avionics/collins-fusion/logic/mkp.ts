@@ -39,6 +39,16 @@ export const MKP_KEYS: readonly string[] = [
   'CAS_DN',
   'MEM',
   'STO',
+  // (Appended by global6000.) Global Vision MKP keys.
+  'CNCL',
+  'CAS',
+  'UP',
+  'DOWN',
+  'LEFT',
+  'RIGHT',
+  'CNS',
+  'CHARTWIN',
+  'MAPWIN',
 ];
 
 export interface MkpHost {
@@ -89,6 +99,35 @@ export class MkpLogic {
         return;
       case 'FMS':
         h.showWindow(side, Win.Fms);
+        return;
+      // (Appended by global6000.) Global Vision MKP keys (visionHardware.ts; EST functions): CNCL clears the
+      // scratchpad, CAS / UP / DOWN scroll the CAS, LEFT / RIGHT page the FMS window, CNS opens the FMS radio (TUNE)
+      // page, CHARTWIN / MAPWIN bring up the side's chart / map window.
+      case 'CNCL':
+        h.fmsWin[side - 1].key('CLR');
+        return;
+      case 'CAS':
+      case 'UP':
+        h.cas.scrollBy(-1);
+        return;
+      case 'DOWN':
+        h.cas.scrollBy(1);
+        return;
+      case 'LEFT':
+        h.fmsWin[side - 1].key('PREV');
+        return;
+      case 'RIGHT':
+        h.fmsWin[side - 1].key('NEXT');
+        return;
+      case 'CNS':
+        h.showWindow(side, Win.Fms);
+        h.fmsWin[side - 1].key('TUNE');
+        return;
+      case 'CHARTWIN':
+        h.showWindow(side, Win.Chart);
+        return;
+      case 'MAPWIN':
+        h.showWindow(side, Win.Map);
         return;
     }
     const fm = h.fmsWin[side - 1];

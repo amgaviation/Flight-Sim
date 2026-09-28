@@ -174,6 +174,52 @@ export const G800_VARS = {
   fccFault: `${P}fcc_fault`,
   epr: (i: number) => `ac.eng${i}.epr`, // EPR (P50/P20) for the Epic engine window (read by the suite)
   avionicsPowered: `${P}avn_powered`,
+  // =============================================================== FIX ROUND 1 (layout audit): hardware on the Symmetry panels
+  // Forward overhead strip (G600 BL7C0705 p_strip0-2; code450 G700/G800 electrical / powerplant / fire study sheets)
+  // EMERGENCY POWER ON / ARM / OFF: three clear-guarded switchlights selecting emerPwr (0 OFF, 1 ARM, 2 ON = E-batts forced on).
+  fcsBattEbha: `${P}fcs_batt_ebha`, // BATTERIES FCS EBHA: 1 ON (clear guard); amber ON lamp when it powers the EBHA bus (no AC)
+  fcsBattUps: `${P}fcs_batt_ups`, // BATTERIES FCS UPS: 1 ON (clear guard); amber ON lamp when it powers the FCC UPS bus (no AC)
+  engStartBtn: `${P}eng_start_btn`, // ENGINE START push-button (round, momentary 1): AutoStart of every engine whose FUEL CONTROL is at RUN
+  fireApuDisch: `${P}fire_apu_disch`, // APU FIRE EXT (red-hatched guard, momentary 1): discharges the LEFT bottle into the APU (Disch 2)
+  // ELECTRICAL POWER CONTROL
+  ratGen: `${P}rat_gen`, // RAT GEN (clear guard): 1 AUTO (RAT generator may take the EMER AC bus), 0 OFF
+  elecReset: `${P}elec_reset`, // AC / DC RESET, momentary 1: one reset of tripped generator control units per flight
+  busTieL: `${P}bus_tie_l`, // L BUS TIE: 1 AUTO, 0 OPEN (blue AUTO legend); both AUTO = busTie AUTO
+  busTieR: `${P}bus_tie_r`,
+  // DOORS
+  doorOpenCmd: `${P}door_open_cmd`, // DOORS OPEN (clear guard, alternate action): 1 open the main airstair door, 0 close
+  doorSafety: `${P}door_safety`, // DOORS SAFETY: 1 ON (amber) = door actuation locked out
+  // ENGINE CONTROL
+  engAlt: (i: 1 | 2) => `${P}eng_alt${i}`, // L / R ENG: 1 = FADEC alternate (LP / N1) control selected (blue CAS "Engine ALT Control")
+  // CABIN PRESSURE CONTROL: FAULT/MANUAL writes pressMode 0 AUTO / 2 MANUAL; CABIN ALT rotary writes pressManual (-1/0/+1, spring to HOLD)
+  // Glareshield pod ends
+  warnInhibit: `${P}warn_inhibit`, // WARN INHIBIT (L or R): 1 = nuisance CAS cautions held back during the takeoff roll (EST)
+  // GS INHIBIT (L / R): event 'taws.gs_cancel'
+  // Pedestal
+  altTrimA: `${P}alt_trim_a`, // PITCH TRIM split switch, left half: +1 NOSE UP, -1 NOSE DN, spring to 0
+  altTrimB: `${P}alt_trim_b`, // right half (both halves must move for trim)
+  altTrimCmd: `${P}alt_trim_cmd`, // derived: both halves agree (to the FBW trim input)
+  // Left side ledge
+  pedalSteer: `${P}pedal_steer`, // PEDAL STEER switchlight: 1 ON, 0 OFF (amber OFF); pedals +/-7 deg only
+  pedalSteerCmd: `${P}pedal_steer_cmd`, // derived: pedal input to the steering (0 when PEDAL STEER is OFF)
+  // HUD (left headliner HUD control panel and combiner, pilot side)
+  hudStow: `${P}hud_deploy`, // combiner: 1 deployed, 0 stowed
+  hudBrt: `${P}hud_brt`, // HUD BRT knob 0..1 (MAN)
+  hudAuto: `${P}hud_auto`, // MAN / AUTO: 1 AUTO (brightness follows ambient light)
+  hudContr: `${P}hud_contr`, // CONTR knob 0..1 (symbology contrast against the video)
+  hudVideoBrt: `${P}hud_video_brt`, // VIDEO BRT knob 0..1 (EVS / CVS video)
+  hudOn: `${P}hud_on`, // derived: HUD powered and combiner deployed
+  hudLum: `${P}hud_lum`, // derived: symbology luminance 0..1
+  hudVideo: `${P}hud_video`, // derived: video luminance 0..1 (0 when no EVS/CVS selected)
+  // Cabin / flight deck (state only)
+  visor: (s: 1 | 2) => `${P}visor${s}`, // sun visor: 0 stowed, 1 down (SCOPE: no glare model)
+  table: (s: 1 | 2) => `${P}table${s}`, // pull-out meal / desk table: 0 stowed, 1 out (SCOPE: state and animation only)
+  armTilt: (s: 1 | 2) => `${P}arm_tilt${s}`, // sidestick armrest TILT ADJ 0..1 (SCOPE: state only)
+  pedalAdj: (s: 1 | 2) => `${P}pedal_adj${s}`, // rudder-pedal adjust crank 0 (aft) .. 1 (fwd) (SCOPE: reach state only)
+  /** Positions of the slow furniture actuators (systems/furnishings.ts): `${var}_pos` 0..1. */
+  sfdMenuEvent: (s: 1 | 2) => `g800.sfd.menu${s}`, // SFD bezel MENU button event (systems/sfdMenu.ts opens the SFD baro menu)
+  obsMask: `${P}oxy_mask3`, // observer (jump seat) quick-donning mask: 0 stowed, 1 donned (G500 BL7C0670 right aft bulkhead)
+  obsMaskMode: `${P}oxy_mode3`, // observer mask regulator: 0 NORMAL, 1 100 %, 2 EMERGENCY
 } as const;
 
 /** Autobrake selector values. */

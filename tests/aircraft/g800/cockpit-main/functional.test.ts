@@ -140,7 +140,7 @@ describe('G800 cockpit: controls drive the systems', () => {
     r.vars.set(V.genL, 0); // "L Generator Off" caution
     step(4);
     expect(r.vars.get('alert.master_caution')).toBe(1);
-    click(ctl('g800.gs.mcaut_r'));
+    click(ctl('g800.gs.mwarn_r')); // MASTER WARN: press = ack warning, release = ack caution
     step(0.3);
     expect(r.vars.get('alert.master_caution')).toBe(0);
   });

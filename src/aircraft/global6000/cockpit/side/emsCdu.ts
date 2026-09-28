@@ -32,6 +32,7 @@
  * linked (each keeps its own page, both show "M"); LOCKED (maintenance)
  * breakers are not modelled. Screen colours and fonts are EST.
  */
+import * as THREE from 'three';
 import type { SimVars } from '../../../../core/SimVars';
 import type { EventBus } from '../../../../core/EventBus';
 import { CanvasDisplay, type DisplayCanvas } from '../../../../avionics/common/CanvasDisplay';
@@ -490,8 +491,14 @@ export class EmsCduScreen extends CanvasDisplay {
   }
 }
 
-/** EMS CDU size (EST from photographs: ~5.75 x 4.6 in unit, 3.6 x 2.9 in screen). */
-export const EMS_UNIT = { w: 0.146, h: 0.118, sw: 0.09, sh: 0.072, sy: 0.009 };
+/**
+ * EMS CDU (Global Vision): a landscape unit in the outboard wing of the main panel (photo N835GL, crops c_lwing /
+ * c_rwing): screen in the middle with six line select keys on the left and six activation keys on the right (each
+ * with an engraved line to its screen row), bottom row STAT, SYS, BUS ("CIRCUIT BREAKER"), PREV PAGE, NEXT PAGE,
+ * CNTL, TEST ("SYSTEM"), and at the right the red-bordered EMER CNTL key ("BUS") and BRT up / down keys.
+ * Size EST from the photo against the 15.1 in AFD: ~0.27 x 0.15 m, screen 0.105 x 0.084 m (the 320 x 256 page).
+ */
+export const EMS_UNIT = { w: 0.27, h: 0.15, sw: 0.105, sh: 0.084, sy: 0.014 };
 
 /**
  * EMS CDU unit on a panel (top-left origin convention), top-left corner at (x, y).
@@ -499,11 +506,15 @@ export const EMS_UNIT = { w: 0.146, h: 0.118, sw: 0.09, sh: 0.072, sy: 0.009 };
  */
 export function addEmsCduUnit(env: CockpitEnv, p: Panel, n: 1 | 2, x: number, y: number, unit: EmsCduUnit, canvas: 'dom' | 'offscreen' | DisplayCanvas | null | undefined, vars: SimVars): void {
   const U = EMS_UNIT;
-  const sub = p.subPanel({ name: `g6k.ems${n}`, x: x + U.w / 2, y: y + U.h / 2, width: U.w, height: U.h, origin: 'top-left', material: 'panelDark', thickness: 0.008, screws: { kind: 'dzus', diameter: 0.005, inset: 0.005 } });
+  const zone = n === 1 ? 'panel_l' : 'panel_r';
+  const sub = p.subPanel({ name: `g6k.ems${n}`, x: x + U.w / 2, y: y + U.h / 2, width: U.w, height: U.h, origin: 'top-left', material: 'panelDark', thickness: 0.008, screws: { kind: 'hex', diameter: 0.004, inset: 0.006, pitch: 0.075 } });
+  const sx0 = U.w / 2 - U.sw / 2;
   if (canvas !== null) sub.display(new EmsCduScreen(unit, vars, canvas ?? undefined), U.w / 2, U.sy + U.sh / 2, U.sw, U.sh, { bezel: false });
   const pitch = (32 / H) * U.sh;
-  const keyH = 0.0052;
-  const top = U.sy + ((EMS_ROW_Y(0)) / H) * U.sh - keyH / 2;
+  const keyH = 0.0058;
+  const keyW = 0.011;
+  const top = U.sy + (EMS_ROW_Y(0) / H) * U.sh - keyH / 2;
+  const kx = { L: sx0 - 0.036, R: sx0 + U.sw + 0.036 - keyW };
   for (const side of ['L', 'R'] as const) {
     const kp = new KeyPad(env, {
       id: `g6k.side.ems${n}_${side.toLowerCase()}`,
@@ -511,26 +522,69 @@ export function addEmsCduUnit(env: CockpitEnv, p: Panel, n: 1 | 2, x: number, y:
       rows: [1, 2, 3, 4, 5, 6].map((r) => [{ id: `${side}${r}`, label: '' }]),
       singleEvent: EMS_SIDE_EVENTS.key(n),
       eventPrefix: `g6k.ems${n}.k.`,
-      keyWidth: 0.0085,
+      keyWidth: keyW,
       keyHeight: keyH,
       gap: pitch - keyH,
+      zone,
     });
-    sub.add(kp, side === 'L' ? 0.0045 : U.w - 0.0045 - kp.width, top);
+    sub.add(kp, kx[side], top);
+    // Engraved lines from each key to its screen row (photo).
+    for (let r = 0; r < 6; r++) {
+      const ly = U.sy + (EMS_ROW_Y(r) / H) * U.sh;
+      if (side === 'L') sub.line(kx.L + keyW + 0.003, ly, sx0 - 0.003, ly, 0.0007, zone);
+      else sub.line(sx0 + U.sw + 0.003, ly, kx.R - 0.003, ly, 0.0007, zone);
+    }
   }
+  // Bottom row: CIRCUIT BREAKER (STAT, SYS, BUS), PREV / NEXT PAGE, SYSTEM (CNTL, TEST).
+  const by = U.sy + U.sh + 0.02;
   const fk = new KeyPad(env, {
     id: `g6k.side.ems${n}_fn`,
     label: `EMS CDU ${n} page keys`,
-    rows: [
-      [{ id: 'STAT' }, { id: 'SYS' }, { id: 'BUS' }, { id: 'CNTL' }, { id: 'TEST' }],
-      [{ id: 'PREV', label: 'PREV\nPAGE' }, { id: 'NEXT', label: 'NEXT\nPAGE' }, { id: 'EMER', label: 'EMER\nCNTL' }, { id: 'BRT-', label: 'BRT -' }, { id: 'BRT+', label: 'BRT +' }],
-    ],
+    rows: [[{ id: 'STAT' }, { id: 'SYS' }, { id: 'BUS' }, { id: 'PREV', label: 'PREV\nPAGE' }, { id: 'NEXT', label: 'NEXT\nPAGE' }, { id: 'CNTL' }, { id: 'TEST' }]],
     singleEvent: EMS_SIDE_EVENTS.key(n),
     eventPrefix: `g6k.ems${n}.k.`,
     keyWidth: 0.02,
-    keyHeight: 0.0095,
+    keyHeight: 0.011,
     gap: 0.0045,
-    legendHeight: 0.0019,
+    legendHeight: 0.0021,
+    zone,
   });
-  sub.add(fk, U.w / 2 - fk.width / 2, U.sy + U.sh + 0.006);
-  sub.label(`EMS ${n}`, 0.012, U.h - 0.006, { height: 0.0019, zone: n === 1 ? 'panel_l' : 'panel_r' });
+  const fx = 0.016;
+  const kstep = 0.0245;
+  sub.add(fk, fx, by);
+  sub.label('CIRCUIT BREAKER', fx + kstep + 0.01, by - 0.0048, { height: 0.0021, zone });
+  sub.label('SYSTEM', fx + kstep * 5.5 + 0.01, by - 0.0048, { height: 0.0021, zone });
+  // EMER CNTL (red border, "BUS" caption) and BRT up / down (right).
+  const ex = fx + kstep * 7 + 0.008;
+  const red = new THREE.Mesh(env.geometry.get('g6k.ems.emer_border', () => new THREE.PlaneGeometry(0.029, 0.018)), env.materials.get('paintRed'));
+  red.userData.cockpitStatic = true;
+  sub.addObject(red, ex + 0.011, by + 0.0055, { z: 0.0004 });
+  const ek = new KeyPad(env, {
+    id: `g6k.side.ems${n}_emer`,
+    label: `EMS CDU ${n} EMER CNTL`,
+    rows: [[{ id: 'EMER', label: 'EMER\nCNTL' }]],
+    singleEvent: EMS_SIDE_EVENTS.key(n),
+    eventPrefix: `g6k.ems${n}.k.`,
+    keyWidth: 0.022,
+    keyHeight: 0.011,
+    legendHeight: 0.0021,
+    zone,
+  });
+  sub.add(ek, ex, by);
+  sub.label('BUS', ex + 0.011, by - 0.0048, { height: 0.0021, zone });
+  const bk = new KeyPad(env, {
+    id: `g6k.side.ems${n}_brt`,
+    label: `EMS CDU ${n} BRT`,
+    rows: [[{ id: 'BRT+', label: '▲' }], [{ id: 'BRT-', label: '▼' }]],
+    singleEvent: EMS_SIDE_EVENTS.key(n),
+    eventPrefix: `g6k.ems${n}.k.`,
+    keyWidth: 0.011,
+    keyHeight: 0.008,
+    gap: 0.002,
+    legendHeight: 0.0024,
+    zone,
+  });
+  sub.add(bk, U.w - 0.021, by - 0.013);
+  sub.label('BRT', U.w - 0.03, by - 0.009, { height: 0.0021, zone });
+  sub.label(`EMS ${n}`, 0.016, U.h - 0.006, { height: 0.0019, zone });
 }

@@ -147,19 +147,19 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): ElectricalNetwo
       { id: 'idg1_out', type: 'ac' }, { id: 'idg2_out', type: 'ac' }, { id: 'apu_out', type: 'ac' }, { id: 'gpu_out', type: 'ac' }, { id: 'rat_out', type: 'ac' },
       { id: 'l_main_ac', type: 'ac' }, { id: 'r_main_ac', type: 'ac' }, { id: 'l_ess_ac', type: 'ac' }, { id: 'r_ess_ac', type: 'ac' }, { id: 'emer_ac', type: 'ac' },
       { id: 'l_main_dc' }, { id: 'r_main_dc' }, { id: 'l_ess_dc' }, { id: 'r_ess_dc' }, { id: 'emer_dc' },
-      { id: 'batt_l_bus' }, { id: 'batt_r_bus' }, { id: 'ups' }, { id: 'ebatt_bus' },
+      { id: 'batt_l_bus' }, { id: 'batt_r_bus' }, { id: 'ups' }, { id: 'ups_batt_bus' }, { id: 'ebatt_bus' },
     ],
     batteries: [
       { id: 'batt_l', bus: 'batt_l_bus', ...BATTERY_G650_NICD, ambientC: 'fdm.sat_c' },
       { id: 'batt_r', bus: 'batt_r_bus', ...BATTERY_G650_NICD, ambientC: 'fdm.sat_c' },
       // SCQ: UPS single 24 V 10.5 Ah lithium (7 Li-ion cells EST), internal resistance EST 30 mOhm.
-      { id: 'ups_batt', bus: 'ups', chemistry: 'li-ion', cells: 7, capacityAh: G800_LIMITS.upsBattAh, internalResistanceOhm: 0.03, ambientC: 20 },
+      { id: 'ups_batt', bus: 'ups_batt_bus', chemistry: 'li-ion', cells: 7, capacityAh: G800_LIMITS.upsBattAh, internalResistanceOhm: 0.03, ambientC: 20 },
       // SCQ: four 24 V 9 Ah emergency batteries (two pairs) -> modelled as one 24 V 18 Ah NiCd string (EST chemistry).
       { id: 'ebatt', bus: 'ebatt_bus', chemistry: 'nicd', cells: 20, capacityAh: 18, internalResistanceOhm: 0.03, ambientC: 20 },
     ],
     acGenerators: [
-      { id: 'idg1', bus: 'idg1_out', ratedKva: G800_LIMITS.idgKva, frequency: 400, drive: ENG.n2(1), minDrive: 50, switch: genSw(V.genL), reset: `${V.genL} == 0` },
-      { id: 'idg2', bus: 'idg2_out', ratedKva: G800_LIMITS.idgKva, frequency: 400, drive: ENG.n2(2), minDrive: 50, switch: genSw(V.genR), reset: `${V.genR} == 0` },
+      { id: 'idg1', bus: 'idg1_out', ratedKva: G800_LIMITS.idgKva, frequency: 400, drive: ENG.n2(1), minDrive: 50, switch: genSw(V.genL), reset: `${V.genL} == 0 || ac.g800.elec_reset_pulse` },
+      { id: 'idg2', bus: 'idg2_out', ratedKva: G800_LIMITS.idgKva, frequency: 400, drive: ENG.n2(2), minDrive: 50, switch: genSw(V.genR), reset: `${V.genR} == 0 || ac.g800.elec_reset_pulse` },
       // SCQ: APU generator on line at 99 % speed; 40 kVA to 45,000 ft (GVI).
       { id: 'apu_gen', bus: 'apu_out', ratedKva: G800_LIMITS.apuGenKva, frequency: 400, drive: 'apu.gen_drive', minDrive: 99, switch: genSw(V.apuGen) },
       // SCQ: RAT 30 kVA, min 160 KCAS; drive = deployed x IAS (logic.ts).
@@ -192,7 +192,7 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): ElectricalNetwo
       { id: 'l_ess_ac_rat', a: 'emer_ac', b: 'l_ess_ac', closed: 'ac.g800.rat_mode' },
       { id: 'r_ess_ac_rat', a: 'emer_ac', b: 'r_ess_ac', closed: 'ac.g800.rat_mode' },
       // ---- DC
-      { id: 'dc_tie', a: 'l_main_dc', b: 'r_main_dc', closed: `${V.busTie} == 1 && (!elec.l_main_tru_online != !elec.r_main_tru_online)` },
+      { id: 'dc_tie', a: 'l_main_dc', b: 'r_main_dc', closed: `ac.g800.bus_tie_auto == 1 && (!elec.l_main_tru_online != !elec.r_main_tru_online)` },
       { id: 'l_main_ess', a: 'l_main_dc', b: 'l_ess_dc', kind: 'diode' },
       { id: 'r_main_ess', a: 'r_main_dc', b: 'r_ess_dc', kind: 'diode' },
       { id: 'batt_l_ctc', a: 'batt_l_bus', b: 'l_ess_dc', closed: `${V.battL} == 1`, coil },
@@ -200,6 +200,8 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): ElectricalNetwo
       { id: 'l_ess_emer', a: 'l_ess_dc', b: 'emer_dc', kind: 'diode' },
       { id: 'r_ess_emer', a: 'r_ess_dc', b: 'emer_dc', kind: 'diode' },
       { id: 'emer_ups', a: 'emer_dc', b: 'ups', kind: 'diode' },
+      // BATTERIES FCS UPS switchlight (code450 G700/G800 electrical): connects the UPS battery to the FCC UPS bus.
+      { id: 'ups_batt_ctc', a: 'ups_batt_bus', b: 'ups', closed: `${V.fcsBattUps} == 1` },
       { id: 'ebatt_l', a: 'ebatt_bus', b: 'l_ess_dc', kind: 'diode', closed: V.ebattOn },
       { id: 'ebatt_r', a: 'ebatt_bus', b: 'r_ess_dc', kind: 'diode', closed: V.ebattOn },
       // E-batts are kept charged from the L ESS DC bus through a charging diode (EST).

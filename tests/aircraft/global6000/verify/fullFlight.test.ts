@@ -225,10 +225,11 @@ describe('Global 6000 check ride KTEB -> KPIT (full normal procedure)', () => {
       log(r, 'before start');
 
       // ================================================================ 3. ENGINE START: right, then left
+      // Global Vision: START selector AUTO, thrust levers IDLE, ENGINE RUN ON -> FADEC auto start (GX PTG 17-42).
+      expect(v.get(V.engStartSel)).toBe(0);
       for (const side of [2, 1] as const) {
         v.set(V.engRun(side), 1);
         r.run(0.5);
-        press(r, V.engStart(side));
         let peak = 0;
         let idleT = NaN;
         const t0 = r.t;

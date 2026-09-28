@@ -131,7 +131,8 @@ export function createEngines(ctx: SimContext): G800Engines {
     engines: [1, 2],
     style: 'bizjet',
     leverVar: (e) => V.tla(e),
-    power: 'elec.afcs_powered',
+    // EST: autothrottle unavailable with either engine in FADEC alternate (LP) control (ENGINE CONTROL L / R ENG).
+    power: `elec.afcs_powered && !${V.engAlt(1)} && !${V.engAlt(2)}`,
     servoRate: 0.12,
     retardRate: 0.1,
     thrHoldKt: 60,

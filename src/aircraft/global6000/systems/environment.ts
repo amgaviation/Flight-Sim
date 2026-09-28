@@ -58,11 +58,17 @@ export function createPneumatics(ctx: Pick<SimContext, 'vars'>): PneumaticSystem
       { id: 'wai_r', duct: 'r_duct', demandKgs: `0.2 * ${V.waiCmd('r')}`, minPsi: 22 },
       { id: 'cai_l', engine: 1, demandKgs: `0.07 * ${V.caiCmd('l')}`, minPsi: 10 },
       { id: 'cai_r', engine: 2, demandKgs: `0.07 * ${V.caiCmd('r')}`, minPsi: 10 },
+      // AUX PRESS (GX PTG 13-24 "AUXILIARY PRESSURIZATION ... alternate pressurization source for the cabin in the event
+      // of the loss of both cooling packs ... The ACSC commands the HASOVs to mid position and the trim valves to full
+      // open to use trim air for pressurization"). EST 0.2 kg/s of hot trim air from the left duct (HASOVs at mid
+      // travel: about half of one pack's flow); needs the ACSCs (BMC power) and TRIM AIR not selected OFF.
+      { id: 'aux_press', duct: 'l_duct', demandKgs: `0.2 * (${V.auxPress} == 1 && ${V.trimAir} == 1 && (elec.bmc1_powered || elec.bmc2_powered))`, minPsi: 18 },
     ],
     packs: [
       // EST 0.4 kg/s per pack; the MAN TEMP knob overrides the outlet temperature demand (logic.ts biases the zones).
-      { id: 'pack_l', duct: 'l_duct', on: V.packCmd('l'), flowKgs: 0.4, minPsi: 18, minOutletC: 2, maxOutletC: 70 },
-      { id: 'pack_r', duct: 'r_duct', on: V.packCmd('r'), flowKgs: 0.4, minPsi: 18, minOutletC: 2, maxOutletC: 70 },
+      // PACK CONTROL LO / NORM / HIGH / MAN scales the flow (vision.ts V.packFlowFactor, PTG 13-21 schedule).
+      { id: 'pack_l', duct: 'l_duct', on: V.packCmd('l'), flowKgs: `0.4 * ${V.packFlowFactor}`, minPsi: 18, minOutletC: 2, maxOutletC: 70 },
+      { id: 'pack_r', duct: 'r_duct', on: V.packCmd('r'), flowKgs: `0.4 * ${V.packFlowFactor}`, minPsi: 18, minOutletC: 2, maxOutletC: 70 },
     ],
     zones: [
       // Zone ids zone1..3 = the Fusion AIR COND page CKPT / FWD CABIN / AFT CABIN (readouts pneu.zone{n}_temp_c).
@@ -85,8 +91,13 @@ export function createPneumatics(ctx: Pick<SimContext, 'vars'>): PneumaticSystem
  */
 function zoneTarget(z: 1 | 2 | 3, pack: 'l' | 'r'): string {
   const man = V.packManTemp(pack);
-  // FCOM 01-10-41: PACK CONTROL NORM / MAN switch; in MAN the L / R MAN TEMP knobs (COLD .. HOT) set the pack outlet.
-  return `${V.packCtlMan} == 1 ? 2 + ${man} * 68 : (${V.trimAir} == 1 ? ${V.zoneTemp(z)} : 18)`;
+  // PACK CONTROL at MAN (V.packCtlMan, vision.ts): the L / R MAN TEMP HOT / COLD toggles set the pack outlet demand.
+  // Cockpit zone: EST -0.4 degC per fully open gasper (the gaspers blow conditioned air at the crew stations and the
+  // cockpit temperature sensor; no published figure). AUX PRESS ON: hot trim air only (EST 30 degC supply) when both
+  // packs are off.
+  const base = `${V.packCtlMan} == 1 ? 2 + ${man} * 68 : (${V.trimAir} == 1 ? ${V.zoneTemp(z)} : 18)`;
+  const aux = `${V.auxPress} == 1 && !${V.packCmd('l')} && !${V.packCmd('r')}`;
+  return `(${aux} ? 30 : (${base}))${z === 1 ? ` - 0.4 * ${V.gasperFlow}` : ''}`;
 }
 
 /** Cabin schedule (AOPA 4,500 ft at FL450; 5,680 ft at FL510 EST, PRESS_GLOBAL6000). */
@@ -112,7 +123,7 @@ export function createPressurization(ctx: Pick<SimContext, 'vars' | 'nav'>): Pre
     // GX_01_018 placard: differential <= 0.1 psi during taxi, <= 1.0 psi at initial landing. EST 0.1 psi pre-pressurisation
     // on the take-off roll.
     groundPrepress: { active: `${V.toThrust} && gear.air_ground && ${V.pressAutoMan} == 0`, psi: G6K_LIMITS.taxiDiffPsi },
-    inflowKgs: 'pneu.pack_flow_kgs',
+    inflowKgs: 'pneu.pack_flow_kgs + pneu.aux_press_flow_kgs', // packs + AUX PRESS trim air
     // AUTO 0 / MAN 2 (MAN ALT toggle on the outflow valves); both OUTFLOW VALVE CLOSED or DITCHING -> manual, closing.
     mode: `(${closed}) ? 2 : ${V.pressAutoMan}`,
     manualCommand: `(${closed}) ? -1 : ${V.pressManAlt} * (0.3 + 0.7 * ${V.pressManRate})`,

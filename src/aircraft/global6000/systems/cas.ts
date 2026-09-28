@@ -178,6 +178,7 @@ export const G6K_CAS: CasMessageDef[] = [
   { id: 'xbleed_open', text: 'XBLEED OPEN', level: 'advisory', when: `pneu.iso_open && ${V.xbleed} != 2` }, // EST text
 
   // ================================================================ WHITE (status)
+  { id: 'aux_press_on', text: 'AUX PRESS ON', level: 'status', when: `${V.auxPress} == 1` }, // GX PTG 13 status list
   { id: 'ext_ac_avail', text: 'EXT AC PWR AVAIL', level: 'status', when: `elec.ext_ac_avail && ${V.extAc} == 0` },
   { id: 'ext_ac_on', text: 'EXT AC PWR ON', level: 'status', when: `elec.ext_ac_online` },
   { id: 'ext_dc_avail', text: 'EXT DC PWR AVAIL', level: 'status', when: `elec.ext_dc_avail && ${V.extDc} == 0` },
@@ -197,7 +198,12 @@ export const G6K_CAS: CasMessageDef[] = [
     { id: `${x.s}_aux_pump_off`, text: `${x.S} AUX PUMP OFF`, level: 'status', when: `${V.auxPump(x.s)} == 0` },
     { id: `${x.s}_eng_sov_clsd`, text: `${x.S} ENG SOV CLSD`, level: 'status', when: V.fireHandle(x.s) },
     { id: `${x.s}_eng_bleed_off`, text: `${x.S} ENG BLEED OFF`, level: 'status', when: `${V.engBleed(x.s)} == 0 || ${V.fireHandle(x.s)}` },
-    { id: `${x.s}_pack_off`, text: `${x.S} PACK OFF`, level: 'status', when: `${V.pack(x.s)} == 0` }, // EST text
+    { id: `${x.s}_pack_off`, text: `${x.S} PACK OFF`, level: 'status', when: `${V.pack(x.s)} == 0` }, // GX PTG 13 status list
+    // GX PTG 13 status list (PACK CONTROL, V.packFlowSel 0 LO / 2 HIGH / 3 MAN; the single-pack automatic high schedule
+    // is not a selection and posts nothing, EST).
+    { id: `${x.s}_pack_high_flow`, text: `${x.S} PACK HIGH FLOW`, level: 'status', when: `${V.pack(x.s)} == 1 && ${V.packFlowSel} == 2` },
+    { id: `${x.s}_pack_low_flow`, text: `${x.S} PACK LOW FLOW`, level: 'status', when: `${V.pack(x.s)} == 1 && ${V.packFlowSel} == 0` },
+    { id: `${x.s}_pack_man_temp`, text: `${x.S} PACK MAN TEMP`, level: 'status', when: `${V.pack(x.s)} == 1 && ${V.packFlowSel} == 3` },
     { id: `${x.s}_eng_n1_mode`, text: `${x.S} ENG N1 MODE`, level: 'status', when: `${V.engN1Mode(x.i)} == 1` }, // EST text
   ]),
   { id: 'aft_fuel_xfer_off', text: 'AFT FUEL XFER OFF', level: 'status', when: `${V.aftXfer} == 0` },

@@ -22,6 +22,7 @@ import { AnnunciatorLight } from '../../../../src/cockpit/controls';
 import { applyG800State } from '../../../../src/aircraft/g800/states';
 import type { Rig } from '../helpers';
 import { cockpitRig } from './rig';
+import { EPIC_VARS } from '../../../../src/avionics/honeywell-epic/vars';
 
 /** Records every var name read through vars.get / has while `fn` runs. */
 function recordReads(vars: SimVars, fn: () => void): Set<string> {
@@ -145,7 +146,6 @@ describe('G800 cockpit: control coverage', () => {
       'g800.kp.gear': () => r.vars.set('gear.handle_lock', 0), // down-lock solenoid released (airborne)
       'g800.fire.l': () => r.vars.set('ac.g800.fire_l_unlock', 1), // fire warning releases the handle lock
       'g800.fire.r': () => r.vars.set('ac.g800.fire_r_unlock', 1),
-      'g800.fire.apu': () => r.vars.set('ac.g800.fire_apu_unlock', 1),
       'g800.ped.rev1': () => r.vars.set('ac.g800.tla1', 0), // reverse levers only from IDLE
       'g800.ped.rev2': () => r.vars.set('ac.g800.tla2', 0),
     };
@@ -161,9 +161,13 @@ describe('G800 cockpit: control coverage', () => {
     };
     // Indicators (no actuation): their lamp vars must be written by the systems.
     const INDICATORS: Record<string, string[]> = {
-      'g800.kp.gear_lt_nose': ['gear.green0', 'gear.red0'],
-      'g800.kp.gear_lt_left': ['gear.green1', 'gear.red1'],
-      'g800.kp.gear_lt_right': ['gear.green2', 'gear.red2'],
+      'g800.kp.gear_lt_nose': ['gear.green0'],
+      'g800.kp.gear_lt_left': ['gear.green1'],
+      'g800.kp.gear_lt_right': ['gear.green2'],
+      'g800.ped.fire_lt_l': ['fire.eng1_warn'],
+      'g800.ped.fire_lt_r': ['fire.eng2_warn'],
+      'g800.gs.cpl_l': [EPIC_VARS.coupleSide],
+      'g800.gs.cpl_r': [EPIC_VARS.coupleSide],
     };
     for (const c of build.controls) {
       if (c instanceof AnnunciatorLight) {

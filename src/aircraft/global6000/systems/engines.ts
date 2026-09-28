@@ -119,12 +119,18 @@ export function createEngines(ctx: SimContext): G6kEngines {
     },
     ratings,
   );
+  const crankOf = (i: 1 | 2) => `(${V.engCrank(i)} == 1 || ${V.engStartSel} == ${i === 1 ? -1 : 1})`;
   const starts = ([1, 2] as const).map((i) => {
     const s = i === 1 ? 'l' : 'r';
     return new EngineStartController(ctx, {
       engine: i,
-      startSwitch: `${V.engStart(i)} == 1 || ${V.engCrank(i)} == 1`,
-      manual: `${V.engCrank(i)} == 1`, // CRANK: starter follows the latched switch, fuel follows the RUN switch (dry motoring at OFF)
+      // GX PTG 17-42 "AUTO START - GROUND: ... ENGINE START switch selected to AUTO, IGNITION ... Normal, thrust levers
+      // IDLE and the engine RUN switch to ON": the rising edge of ENGINE RUN ON with START at AUTO requests the FADEC
+      // auto start (air start: RUN cycled OFF -> ON). START L CRANK / R CRANK (PTG 17-48 dry / wet cranking, manual
+      // start): the EEC motors the engine while the selector is held there; fuel follows the RUN switch (manual mode).
+      // V.engStart / V.engCrank are the legacy scripted inputs (no cockpit control).
+      startSwitch: `(${V.engStartSel} == 0 && ${V.engRun(i)} == 1) || ${V.engStart(i)} == 1 || ${crankOf(i)}`,
+      manual: crankOf(i),
       runLever: `${V.engRun(i)} == 1 && !${V.fireHandle(s)}`,
       fuelOnN2Pct: 18, // EST (light-off at 15 % N2, fdm.ts)
       starterCutoutN2Pct: 50, // EST

@@ -54,6 +54,14 @@ export const OVHD = {
  * SIGNS) and the narrower aft module (x 232 .. 412 pt, y 650 .. 520 pt: fire
  * handles, AURAL WARNING, TEMPERATURE, RECIRC / TRIM AIR / RAM AIR).
  */
+/** Body position (x, 0, z) of the overhead's forward fitting strip edge (drawing y 316 pt), for the compass / sign. */
+export function OVHD_FWD_EDGE(): [number, number, number] {
+  const t = (OVHD.tiltDeg * Math.PI) / 180;
+  // Panel frame: y (drawing down) runs forward; tilt -5 deg: the forward end is lower (body z larger).
+  const d = py(316) - OVHD.height / 2;
+  return [OVHD.center_m[0] + d * Math.cos(t), 0, OVHD.center_m[2] - d * Math.sin(t)];
+}
+
 export const MODULES = {
   fwd: { x0: 132, x1: 517, y0: 520, y1: 352 },
   aft: { x0: 232, x1: 412, y0: 650, y1: 520 },

@@ -19,7 +19,8 @@
  *    Overload", "Speed Brake Auto Retract", "Stabilizer Failed").
  *  - [EST] no public G800 text: composed in the same Gulfstream style.
  * Levels follow the sources (red = warning, amber = caution, blue = advisory).
- * Conditions are this simulation's system states; inhibits: takeoff/landing
+ * WARN INHIBIT (glareshield) holds a few nuisance cautions back on the takeoff roll (`ac.g800.warn_inh_active`,
+ * logic.ts; EST function). Conditions are this simulation's system states; inhibits: takeoff/landing
  * phase inhibits (CasManager FlightPhase, 777-style defaults, EST) for
  * nuisance cautions.
  */
@@ -45,15 +46,15 @@ export const G800_CAS: CasMessageDef[] = [
 
   // =============================================================== CAUTIONS (amber)
   // ---- electrical
-  ...sides.map((x): CasMessageDef => ({ id: `gen_off_${x.l}`, text: `${x.s} Generator Off`, level: 'caution', when: `eng${x.i}.running && !elec.${x.idg}_online`, delayS: 3 })), // [EST]
-  ...sides.map((x): CasMessageDef => ({ id: `main_ac_fail_${x.l}`, text: `${x.s} Main AC Bus Fail`, level: 'caution', when: `(eng1.running || eng2.running || apu.avail) && !elec.${x.l}_main_ac_powered`, delayS: 2 })), // [EST] style of C450 "Essential AC-Bus Fail"
+  ...sides.map((x): CasMessageDef => ({ id: `gen_off_${x.l}`, text: `${x.s} Generator Off`, level: 'caution', when: `eng${x.i}.running && !elec.${x.idg}_online && !ac.g800.warn_inh_active`, delayS: 3 })), // [EST]
+  ...sides.map((x): CasMessageDef => ({ id: `main_ac_fail_${x.l}`, text: `${x.s} Main AC Bus Fail`, level: 'caution', when: `(eng1.running || eng2.running || apu.avail) && !elec.${x.l}_main_ac_powered && !ac.g800.warn_inh_active`, delayS: 2 })), // [EST] style of C450 "Essential AC-Bus Fail"
   { id: 'ess_ac_fail', text: 'Essential AC-Bus Fail', level: 'caution', when: '(eng1.running || eng2.running || apu.avail) && (!elec.l_ess_ac_powered || !elec.r_ess_ac_powered)', delayS: 2 }, // [C450]
   ...sides.map((x): CasMessageDef => ({ id: `main_tru_fail_${x.l}`, text: `${x.s} Main TRU Fail`, level: 'caution', when: `elec.${x.l}_main_ac_powered && !elec.${x.l}_main_tru_online`, delayS: 2 })), // [EST]
   ...sides.map((x): CasMessageDef => ({ id: `ess_dc_fail_${x.l}`, text: `${x.s} Ess DC Bus Fail`, level: 'caution', when: `(${x.l === 'l' ? V.battL : V.battR} == 1 || eng${x.i}.running) && !elec.${x.l}_ess_dc_powered`, delayS: 1 })), // [EST]
   ...sides.map((x): CasMessageDef => ({ id: `batt_disch_${x.l}`, text: `${x.s} Main Batt Discharge`, level: 'caution', when: `elec.${x.batt}_amps < -8`, delayS: 10 })), // [SCQ] main battery amber when powering the ESS buses alone; text EST
   { id: 'emer_pwr_on', text: 'Emergency Power On', level: 'caution', when: V.ebattOn }, // [EST]
   // ---- hydraulics
-  ...sides.map((x): CasMessageDef => ({ id: `hyd_low_${x.l}`, text: `${x.s} Hydraulic Pressure Low`, level: 'caution', when: `eng${x.i}.running && hyd.${x.hyd}_lowpress`, delayS: 2 })), // [EST]
+  ...sides.map((x): CasMessageDef => ({ id: `hyd_low_${x.l}`, text: `${x.s} Hydraulic Pressure Low`, level: 'caution', when: `eng${x.i}.running && hyd.${x.hyd}_lowpress && !ac.g800.warn_inh_active`, delayS: 2 })), // [EST]
   ...sides.map((x): CasMessageDef => ({ id: `hyd_qty_${x.l}`, text: `${x.s} Hydraulic Quantity Low`, level: 'caution', when: `hyd.${x.hyd}_lowqty` })), // [EST]
   { id: 'ptu_fail', text: 'PTU Hydraulic Fail', level: 'caution', when: `${V.ptuOn} && hyd.right_psi > 2200 && hyd.left_psi < ${G800_LIMITS.ptuFailPsi}`, delayS: 5 }, // [SCQ]
   { id: 'aux_hyd_overload', text: 'Aux Hydraulic Pump Overload', level: 'caution', when: 'hyd.aux_overheat' }, // [SCQ]
@@ -67,10 +68,10 @@ export const G800_CAS: CasMessageDef[] = [
   // ---- engines
   ...sides.map((x): CasMessageDef => ({ id: `oil_press_${x.l}`, text: `${x.s} Engine Oil Pressure Low`, level: 'caution', when: `eng${x.i}.running && eng${x.i}.oil_press_psi < ${G800_LIMITS.oilPressMinPsi}`, delayS: 2 })), // [C450] "Oil Pressure Low" (25 psid, E135)
   ...sides.map((x): CasMessageDef => ({ id: `autostart_abort_${x.l}`, text: `${x.s} Autostart Abort`, level: 'caution', when: `fadec.eng${x.i}.abort` })), // [C450]
-  ...sides.map((x): CasMessageDef => ({ id: `eng_alt_ctl_${x.l}`, text: `${x.s} Engine ALT Control`, level: 'advisory', when: `fail.fadec.eng${x.i}` })), // [C450] blue
+  ...sides.map((x): CasMessageDef => ({ id: `eng_alt_ctl_${x.l}`, text: `${x.s} Engine ALT Control`, level: 'advisory', when: `fail.fadec.eng${x.i} || ${V.engAlt(x.i)}` })), // [C450] blue (failure, or ENGINE CONTROL L / R ENG selected)
   ...sides.map((x): CasMessageDef => ({ id: `eng_fail_${x.l}`, text: `${x.s} Engine Flameout`, level: 'caution', when: `gear.air_ground == 0 && fadec.eng${x.i}.fuel_cmd && eng${x.i}.n2_pct < 50 && !eng${x.i}.running`, delayS: 1 })), // [EST]
   // ---- bleed / ECS / pressurization
-  ...sides.map((x): CasMessageDef => ({ id: `bleed_low_${x.l}`, text: `${x.s} Bleed Pressure Low`, level: 'caution', when: `eng${x.i}.running && pneu.bleed_${x.l}_valve_open && pneu.${x.l}_man_psi < 12`, delayS: 5, inhibit: ['GROUND'] })), // [C450]
+  ...sides.map((x): CasMessageDef => ({ id: `bleed_low_${x.l}`, text: `${x.s} Bleed Pressure Low`, level: 'caution', when: `eng${x.i}.running && pneu.bleed_${x.l}_valve_open && pneu.${x.l}_man_psi < 12 && !ac.g800.warn_inh_active`, delayS: 5, inhibit: ['GROUND'] })), // [C450]
   ...sides.map((x): CasMessageDef => ({ id: `bleed_hot_${x.l}`, text: `${x.s} Bleed Air Hot`, level: 'caution', when: `pneu.bleed_${x.l}_trip` })), // [C450]
   { id: 'cabin_press_manual', text: 'Cabin Pressure Manual', level: 'caution', when: `${V.pressMode} == 2` }, // [C450]
   { id: 'cpcs_fail', text: 'CPCS Fail—Select Manual', level: 'caution', when: 'press.auto_fail && press.altn_fail' }, // [C450]
@@ -105,11 +106,16 @@ export const G800_CAS: CasMessageDef[] = [
   { id: 'isolation_valve_open', text: 'Isolation Valve Open', level: 'advisory', when: `pneu.iso_open && ${V.startMaster} == 0` }, // [EPIC]
   { id: 'gnd_spoiler_unarm', text: 'Ground Spoiler Unarm', level: 'advisory', when: `${V.gndSplrArm} == 0 && gear.air_ground && (eng1.running || eng2.running)` }, // [EPIC]
   { id: 'stuck_mic', text: 'Stuck Mic', level: 'advisory', when: V.stuckMic }, // [EST] Honeywell-style stuck-microphone message (systems/audio.ts)
-  { id: 'pedal_steering_off', text: 'Pedal Steering Off', level: 'advisory', when: `${V.nwsSw} == 0` }, // [EPIC]
+  { id: 'pedal_steering_off', text: 'Pedal Steering Off', level: 'advisory', when: `${V.nwsSw} == 0 || ${V.pedalSteer} == 0` }, // [EPIC] PEDAL STEER switchlight OFF (or steering off)
   { id: 'parking_brake_on', text: 'Parking Brake On', level: 'advisory', when: 'brakes.parking_set' }, // [EPIC]
   { id: 'main_door', text: 'Main Door', level: 'advisory', when: 'ac.door.main > 0.02' }, // [EPIC]
   { id: 'irs_aligning', text: 'IRS 1-2-3 Aligning', level: 'advisory', when: 'ahrs1.aligning || ahrs2.aligning || ahrs3.aligning' }, // [EPIC]
   { id: 'rat_deployed', text: 'RAT Deployed', level: 'advisory', when: V.ratDeployed }, // [EST]
+  { id: 'rat_gen_on', text: 'RAT Generator On', level: 'advisory', when: 'ac.g800.rat_mode' }, // code450 G700/G800 electrical (blue)
+  { id: 'fcs_batt_ebha_on', text: 'EBHA Battery On', level: 'advisory', when: `${V.fcsBattEbha} && !elec.emer_ac_powered && elec.emer_dc_powered` }, // [EST] text
+  { id: 'fwd_emer_batt_on', text: 'Fwd Emer Battery On', level: 'advisory', when: V.ebattOn }, // code450 G700/G800 electrical
+  { id: 'aft_emer_batt_on', text: 'Aft Emer Battery On', level: 'advisory', when: V.ebattOn },
+  { id: 'door_safety', text: 'Main Door Safety On', level: 'advisory', when: `${V.doorSafety} && gear.air_ground` }, // [EST]
   { id: 'ice_detected', text: 'Ice Detected', level: 'advisory', when: 'ice.detected' }, // [EST]
   { id: 'hfr_on', text: 'Heated Fuel Return On', level: 'advisory', when: V.hfrActive }, // [EST]
   { id: 'pax_oxy_on', text: 'Passenger Oxygen On', level: 'advisory', when: 'oxy.pax_on' }, // [EST]

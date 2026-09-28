@@ -29,7 +29,14 @@ export const CtpPage = { Radio: 0, Pfd: 1, Hsi: 2 } as const;
 export type CtpPage = (typeof CtpPage)[keyof typeof CtpPage];
 
 /** CTP function keys. */
-export const CTP_KEYS = ['COM', 'NAV', 'ADF', 'ATC', 'PFD', 'HSI', 'IDENT', 'NAVSRC', 'BRG1', 'BRG2', 'DME'] as const;
+export const CTP_KEYS = ['COM', 'NAV', 'ADF', 'ATC', 'PFD', 'HSI', 'IDENT', 'NAVSRC', 'BRG1', 'BRG2', 'DME', 'SRC_NAV', 'SRC_FMS', 'MAP', 'PFD_FMT', 'RNG+', 'RNG-', 'MENU', 'SIDE'] as const;
+/**
+ * (Appended by global6000, Global Vision CTP layout, photo N835GL.) Keys of the Vision CTP: NAV SRC [NAV] (FMS ->
+ * on-side VOR/LOC, then on-side <-> cross-side) and [FMS]; PFD [MAP] (HSI ARC <-> ROSE map format); TUNE/MENU
+ * ('MENU': radio page <-> PFD page), 1/2 ('SIDE': radio line tuned by the TUNE knob steps to the next radio
+ * line); PFD [FULL/HALF] ('PFD_FMT') and RANGE [-] [+] ('RNG-' / 'RNG+') are handled by the suite (display
+ * layout, map range).
+ */
 export type CtpKey = (typeof CTP_KEYS)[number];
 
 /** Radio line of the RADIO page (line select key 1..6 -> line). */
@@ -99,6 +106,8 @@ export function stepSquawk(code: number, clicks: number, inner: boolean): number
 export interface CtpOptions {
   sensors: FusionSensors;
   powered?: (side: 1 | 2) => boolean;
+  /** (Appended by global6000.) TUNE knob sets the selected course on the PFD page (Global Vision CTP). */
+  courseOnPfdPage?: boolean;
 }
 
 export class CtpLogic {
@@ -218,6 +227,30 @@ export class CtpLogic {
       case 'BRG2':
         this.cycleBearing(s, 2);
         return;
+      case 'SRC_NAV': {
+        const on = s === 1 ? NavSrc.Nav1 : NavSrc.Nav2;
+        const cur = v.get(FUSION_VARS.navSource(s));
+        if (cur === NavSrc.Fms || cur === on) this.cycleNavSource(s);
+        else {
+          // Cross-side -> back to the on-side receiver.
+          v.set(FUSION_VARS.navSource(s), NavSrc.Fms);
+          this.cycleNavSource(s);
+        }
+        return;
+      }
+      case 'SRC_FMS':
+        v.set(FUSION_VARS.navSource(s), NavSrc.Fms);
+        return;
+      case 'MAP':
+        v.set(FUSION_VARS.hsiRose(s), v.get(FUSION_VARS.hsiRose(s)) ? 0 : 1);
+        return;
+      case 'MENU':
+        v.set(FUSION_VARS.ctpPage(s), this.page(s) === CtpPage.Radio ? CtpPage.Pfd : CtpPage.Radio);
+        return;
+      case 'SIDE':
+        v.set(FUSION_VARS.ctpPage(s), CtpPage.Radio);
+        v.set(FUSION_VARS.ctpSel(s), (v.get(FUSION_VARS.ctpSel(s)) + 1) % RADIO_LINES.length);
+        return;
     }
   }
 
@@ -310,6 +343,12 @@ export class CtpLogic {
   tune(s: 1 | 2, clicks: number, inner: boolean): void {
     if (!this.powered(s)) return;
     const v = this.vars;
+    if (this.opts.courseOnPfdPage && this.page(s) === CtpPage.Pfd) {
+      // Global Vision: selected course, 1 deg per click (inner) / 10 deg (outer), EST steps.
+      const c = v.get(AP.selCourse(s), 360) + clicks * (inner ? 1 : 10);
+      v.set(AP.selCourse(s), ((((Math.round(c) - 1) % 360) + 360) % 360) + 1);
+      return;
+    }
     if (this.page(s) !== CtpPage.Radio) v.set(FUSION_VARS.ctpPage(s), CtpPage.Radio);
     const line = this.selectedLine(s);
     const nav = this.opts.sensors.nav[s - 1];

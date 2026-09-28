@@ -6,6 +6,7 @@ export * from './vars';
 export * from './config';
 export { createFusionSuite, FusionSuite, type FusionSuiteHost } from './suite';
 export * from './cockpit';
+export * from './visionHardware';
 export { LayoutManager, AFD_W, AFD_H, SLOT_RECTS, allowedIn, defaultLayout, MENU_CONTENTS, type ShownWindow, type AfdSelection } from './logic/layout';
 export { CursorLogic, CCP_GAIN, CURSOR_IDLE_S, AFD_ORIGINS, REACHABLE, type CursorRouter } from './logic/cursor';
 export { FcpLogic, FCP_BUTTONS, FCP_KNOBS, FCP_LIGHTS, MAX_SEL_ALT_FT, EDM_ALT_FT, type ApproachInfo } from './logic/fcp';
