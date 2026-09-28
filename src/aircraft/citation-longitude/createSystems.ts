@@ -44,8 +44,10 @@ import { createPneumatics, createPressurization, createIce, createApu, createFir
 import { createEngines } from './systems/engines';
 import { LongitudeLogic, LongitudePostLogic, TLA } from './systems/logic';
 import { LongitudeCockpitInputs } from './systems/cockpitInputs';
+import { LongitudeAtHold, LongitudeAtProtection } from './systems/afcsExtras';
+import type { EisConfig } from '../../avionics/garmin-g3000/config';
 import { LongitudePitchRollDisconnect } from './systems/pitchRollDisconnect';
-import { LONGITUDE_CAS } from './systems/cas';
+import { LONGITUDE_CAS, LON_BRAKE_FAIL } from './systems/cas';
 import { createLighting } from './systems/lighting';
 import { LONGITUDE_TOLD } from './performance';
 import { LONGITUDE_CHECKLISTS } from './checklists';
@@ -123,6 +125,27 @@ export const STAB_RANGE: [number, number] = [-9, 1.5];
 export const STAB_NEUTRAL = -3.5;
 export const STAB_TO_BAND: [number, number] = [-7.5, -0.5];
 
+/**
+ * Longitude EIS as flown: the shared LONGITUDE_EIS preset with two corrections from the function audit.
+ *  - SPOILERS (OG 15-5: speedbrake and ground-spoiler deflection): the Spoilers block in 'spoilers' mode drives the
+ *    panels (spoilers.sb_ext / surf.spoiler_*) and leaves surf.speedbrake at 0, so the indicator reads
+ *    `V.spoilerInd` = max(speedbrake extension, ground-spoiler extension) (logic.ts post logic; roll spoilers excluded).
+ *  - Stab trim (OG 15-2: the green band is the takeoff range; trim outside it gives NO TAKEOFF): the scale is the
+ *    stabilizer incidence in degrees (trim.pitch_units, STAB_RANGE; nose up = more negative, drawn at the top) and the
+ *    green band is STAB_TO_BAND, the same band the NO TAKEOFF test uses.
+ */
+export const LONGITUDE_EIS_SIM: EisConfig = {
+  ...LONGITUDE_EIS,
+  sections: LONGITUDE_EIS.sections.map((sec) => {
+    if (sec.kind === 'flaps') return { ...sec, speedbrakeVar: V.spoilerInd };
+    if (sec.kind === 'trim' && sec.pitch) {
+      // EIS scale f = (value - min) / (max - min), top = 1: min = nose-down stop, max = nose-up stop.
+      return { ...sec, pitch: { ...sec.pitch, var: 'trim.pitch_units', min: STAB_RANGE[1], max: STAB_RANGE[0], takeoffBand: [STAB_TO_BAND[1], STAB_TO_BAND[0]] as [number, number] } };
+    }
+    return sec;
+  }),
+};
+
 export function createLongitudeSystems(ctx: SimContext, opts: LongitudeSystemsOptions = {}): LongitudeSystems {
   const failures = new FailureManager(ctx.vars, { events: ctx.events, seed: 700 });
   const logic = new LongitudeLogic(ctx.vars);
@@ -142,7 +165,9 @@ export function createLongitudeSystems(ctx: SimContext, opts: LongitudeSystemsOp
   const adc = [
     new AirDataComputer(ctx, { index: 1, power: 'elec.adc1_powered', pitotProbe: 1, staticPort: 1 }),
     new AirDataComputer(ctx, { index: 2, power: 'elec.adc2_powered', pitotProbe: 2, staticPort: 2 }),
-    new AirDataComputer(ctx, { index: 3, power: 'elec.stby_inst_powered', pitotProbe: 1, staticPort: 1 }),
+    // Standby: its own pitot / static source (probe 3, heated from the emergency bus; EST, standard Part 25 practice,
+    // no Longitude-specific source), so a probe-1 blockage does not take out the standby display.
+    new AirDataComputer(ctx, { index: 3, power: 'elec.stby_inst_powered', pitotProbe: 3, staticPort: 3 }),
   ];
   const ahrs = [
     new Ahrs(ctx, { index: 1, power: 'elec.ahrs1_powered', alignS: 60 }), // EST: LCR-100 gyrocompassing align ~1 min on the ground
@@ -187,7 +212,7 @@ export function createLongitudeSystems(ctx: SimContext, opts: LongitudeSystemsOp
         },
         gmcPower: 'elec.gmc_powered',
         radioPower: { nav1: 'elec.gia1_powered', nav2: 'elec.gia2_powered', gps: 'elec.gia1_powered || elec.gia2_powered', marker: 'elec.gia1_powered' },
-        eis: LONGITUDE_EIS,
+        eis: LONGITUDE_EIS_SIM,
         weights: { basicOperatingLb: LON_LIMITS.bowLb, maxRampLb: LON_LIMITS.maxRampLb, maxTakeoffLb: LON_LIMITS.mtowLb, maxLandingLb: LON_LIMITS.mlwLb, maxZeroFuelLb: LON_LIMITS.mzfwLb, paxLb: 200, maxPax: 12 },
         performance: LONGITUDE_TOLD,
         trafficSource: tcas,
@@ -277,7 +302,11 @@ export function createLongitudeSystems(ctx: SimContext, opts: LongitudeSystemsOp
     electric: {
       // STABILIZER PRIMARY TRIM CHANNEL SELECT (pedestal, Textron photograph): EST, channel 1 on the L emergency bus,
       // channel 2 on the R emergency bus; the secondary channel (SECONDARY TRIM engaged) runs from either.
-      power: `(${V.stabSecArm} != 0 && (elec.emer_l_powered || elec.emer_r_powered)) || (${V.stabSecArm} == 0 && (${V.stabChan} == 2 ? elec.emer_r_powered && !fail.trim.stab_ch2 : elec.emer_l_powered && !fail.trim.stab_ch1))`,
+      // Breakers STAB TRIM PRI 1 (L EMER), PRI 2 and SEC (R EMER) (electrical.ts, EST bus split).
+      power: `(${V.stabSecArm} != 0 && elec.stab_trim_sec_powered) || (${V.stabSecArm} == 0 && (${V.stabChan} == 2 ? elec.stab_trim_pri2_powered && !fail.trim.stab_ch2 : elec.stab_trim_pri1_powered && !fail.trim.stab_ch1))`,
+      // DGAC PRIMARY PITCH TRIM RUNAWAY: "MASTER DISCONNECT Button - Push and Hold" interrupts the primary channel; the
+      // runaway (a primary-channel fault, EST) also stops once SECONDARY TRIM disengages the primary channel.
+      runawayEnable: `!${V.discHeld} && !${V.stabSecArm}`,
       // Primary (wheel switches + keyboard/hardware, merged and gated by AP/TRIM DISC and SECONDARY TRIM in
       // cockpitInputs.ts) and the secondary rocker (only while SECONDARY TRIM is engaged).
       switchVars: [V.yokeTrimCmd, V.stabSecCmd],
@@ -291,14 +320,14 @@ export function createLongitudeSystems(ctx: SimContext, opts: LongitudeSystemsOp
   const ailTrim = new TrimAxis(ctx, {
     axis: 'roll',
     range: [-1, 1],
-    electric: { power: 'elec.emer_l_powered', switchVars: [V.ailTrimSw], rate: 0.12 },
+    electric: { power: 'elec.ail_trim_powered', switchVars: [V.ailTrimSw], rate: 0.12 },
     manual: { enable: 0 },
     takeoffBand: [-0.15, 0.15],
   });
   const rudTrim = new TrimAxis(ctx, {
     axis: 'yaw',
     range: [-1, 1],
-    electric: { power: 'elec.emer_r_powered', switchVars: [V.rudTrimSw], rate: 0.12 },
+    electric: { power: 'elec.rud_trim_powered', switchVars: [V.rudTrimSw], rate: 0.12 },
     manual: { enable: 0 },
     takeoffBand: [-0.15, 0.15],
   });
@@ -345,7 +374,13 @@ export function createLongitudeSystems(ctx: SimContext, opts: LongitudeSystemsOp
     maxPsi: 3000,
     minSourcePsi: 1000,
     accumulator: { chargeFrom: 'max(hyd.a_psi, hyd.b_psi)', prechargePsi: 1000, maxPsi: 3000, applications: 6 },
-    parking: { var: V.parkBrake, kind: 'hydraulic' },
+    // Toe brakes through the brake-by-wire controller (logic.ts gates the pedal demand with its power).
+    pedals: { left: V.brakePedalL, right: V.brakePedalR },
+    // EMER/PARK BRAKE (OG 14-2/14-3, DGAC "apply smoothly until stopped, then SET"): the handle meters emergency
+    // pressure from the accumulator to all four assemblies through dedicated lines (not removed by a normal-path
+    // BRAKE FAIL: fail.brakes.left/right are the brake-by-wire channels here); full travel latches PARK.
+    parking: { var: V.parkSet, kind: 'hydraulic' },
+    emergency: { var: V.parkBrake, pressurePsi: 'brakes.accum_psi', bypassFailures: true },
     antiskid: { enabled: 'elec.brake_ctl_powered' },
     temperature: { heatCapacityJPerK: 60000 }, // EST carbon heat-sink per side
   });
@@ -364,7 +399,18 @@ export function createLongitudeSystems(ctx: SimContext, opts: LongitudeSystemsOp
     power: 'elec.emer_l_powered || elec.emer_r_powered',
     lampTest: V.lampTest, // overhead ANNUN TEST (same var as the library default, bound explicitly)
     // OG 3-3/3-4: TOPI from 85 kt until 400 ft / 30 s airborne; LOPI below 400 ft RA until 50 kt.
-    phase: { takeoffInhibit: { fromKt: 85, toFt: 400, maxAfterLiftoffS: 30 }, landingInhibit: { belowFt: 400, untilKt: 50 } },
+    // OG 3-3/3-4 event-latched TOPI / LOPI: TOPI set by lift-off, IAS through 85 kt, or IAS > 30 kt with a brake
+    // failure; cancelled > 30 s airborne, > 400 ft, IAS < 50 kt (< 30 kt with a brake failure), 90 s, or the throttles
+    // out of T/O. LOPI set by touchdown or RA through 400 ft; cancelled 30 s on the ground, RA > 500 ft, IAS < 50 kt, 90 s.
+    phase: {
+      takeoffInhibit: {
+        fromKt: 85,
+        toFt: 400,
+        maxAfterLiftoffS: 30,
+        latch: { brakeFail: LON_BRAKE_FAIL, brakeFailKt: 30, cancelBelowKt: 50, cancelBelowKtBrakeFail: 30, maxActiveS: 90, cancelWhen: `!${V.toThrust}` },
+      },
+      landingInhibit: { belowFt: 400, untilKt: 50, latch: { cancelAboveFt: 500, maxGroundS: 30, maxActiveS: 90 } },
+    },
     sinks: suite ? [suite.casModel] : [],
   });
   const disc = new DisconnectAlerts(ctx, { apToneMaxS: 2 });
@@ -376,6 +422,8 @@ export function createLongitudeSystems(ctx: SimContext, opts: LongitudeSystemsOp
   const gcu = suite ? new GcuController(suite.system, [1, 2]) : null;
   const gmcAlt = new LongitudeGmcAltKnob(ctx.vars, ctx.events);
   const lights = createLighting(ctx);
+  const atHold = new LongitudeAtHold(ctx.vars, eng.at);
+  const atProt = new LongitudeAtProtection(ctx.vars, eng.at, afcs);
 
   const list: Subsystem[] = [
     failures,
@@ -399,7 +447,9 @@ export function createLongitudeSystems(ctx: SimContext, opts: LongitudeSystemsOp
     gmcAlt,
     eng.ratings,
     afcs,
+    atHold,
     eng.at,
+    atProt,
     eng.fadec,
     crew,
     ...eng.starts,
@@ -446,6 +496,8 @@ export function createLongitudeSystems(ctx: SimContext, opts: LongitudeSystemsOp
     { id: 'trim.stab_ch2', name: 'Stab trim primary channel 2', category: 'flight controls' },
     // Normal yaw-damper channel of the rudder control unit (STANDBY YAW DAMP restores damping; EST).
     { id: 'yd.normal', name: 'Yaw damper normal channel', category: 'flight controls' },
+    // Air-cycle machine fault: the pack switches automatically to heat-exchanger-only (OG 10-3).
+    { id: 'ecs.acm', name: 'Air cycle machine', category: 'air conditioning' },
   ]);
 
   return {

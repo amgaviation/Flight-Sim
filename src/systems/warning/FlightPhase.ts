@@ -37,8 +37,34 @@ export interface FlightPhaseConfig {
   climbFt?: number;
   approachFt?: number;
   taxiKt?: number;
-  takeoffInhibit?: { fromKt: number; toFt: number; maxAfterLiftoffS: number };
-  landingInhibit?: { belowFt: number; untilKt: number };
+  takeoffInhibit?: { fromKt: number; toFt: number; maxAfterLiftoffS: number; latch?: TakeoffInhibitLatch };
+  landingInhibit?: { belowFt: number; untilKt: number; latch?: LandingInhibitLatch };
+}
+
+/**
+ * (Appended by citation-longitude.) Event-latched TOPI (Longitude OG 3-3/3-4): set by lift-off, by the IAS
+ * crossing `fromKt` upward on the ground, or by IAS > `brakeFailKt` with `brakeFail` true; cancelled by
+ * airborne > `maxAfterLiftoffS`, RA > `toFt`, IAS < `cancelBelowKt` (< `cancelBelowKtBrakeFail` with a brake
+ * failure), active > `maxActiveS`, or `cancelWhen` (e.g. throttles out of T/O).
+ */
+export interface TakeoffInhibitLatch {
+  brakeFail?: Binding;
+  brakeFailKt?: number;
+  cancelBelowKt: number;
+  cancelBelowKtBrakeFail?: number;
+  maxActiveS: number;
+  cancelWhen?: Binding;
+}
+
+/**
+ * (Appended by citation-longitude.) Event-latched LOPI (OG 3-4): set by touchdown or the RA crossing `belowFt`
+ * downward; cancelled after `maxGroundS` on the ground, RA > `cancelAboveFt`, IAS < `untilKt`, or active >
+ * `maxActiveS`.
+ */
+export interface LandingInhibitLatch {
+  cancelAboveFt: number;
+  maxGroundS: number;
+  maxActiveS: number;
 }
 
 export class FlightPhase {
@@ -55,8 +81,18 @@ export class FlightPhase {
   private airborneT = 0;
   private landed = false;
   private wasGround = true;
-  private readonly ti: { fromKt: number; toFt: number; maxAfterLiftoffS: number };
-  private readonly li: { belowFt: number; untilKt: number };
+  private readonly ti: { fromKt: number; toFt: number; maxAfterLiftoffS: number; latch?: TakeoffInhibitLatch };
+  private readonly li: { belowFt: number; untilKt: number; latch?: LandingInhibitLatch };
+  // Latched TOPI / LOPI state (only with the `latch` options).
+  private readonly tiBrakeFail: () => boolean;
+  private readonly tiCancel: () => boolean;
+  private toLatched = false;
+  private toActiveT = 0;
+  private ldgLatched = false;
+  private ldgActiveT = 0;
+  private groundT = 0;
+  private prevIas = 0;
+  private prevRa = 99999;
 
   constructor(env: BlockEnv, cfg: FlightPhaseConfig = {}) {
     this.vars = env.vars;
@@ -68,6 +104,8 @@ export class FlightPhase {
     this.vsVar = cfg.vsVar ?? ADC.vs(1);
     this.ti = cfg.takeoffInhibit ?? { fromKt: 80, toFt: 400, maxAfterLiftoffS: 30 };
     this.li = cfg.landingInhibit ?? { belowFt: 200, untilKt: 75 };
+    this.tiBrakeFail = compileCondition(env.vars, this.ti.latch?.brakeFail, false);
+    this.tiCancel = compileCondition(env.vars, this.ti.latch?.cancelWhen, false);
   }
 
   update(dt: number): void {
@@ -104,9 +142,44 @@ export class FlightPhase {
     this.phase = p;
 
     const ti = this.ti;
-    this.takeoffInhibit = (ground && !this.landed && ias >= ti.fromKt) || (!ground && this.airborneT < ti.maxAfterLiftoffS && ra < ti.toFt && p === 'TAKEOFF');
+    const tl = ti.latch;
+    if (tl) {
+      const bf = this.tiBrakeFail();
+      const liftoff = !ground && this.airborneT <= dt + 1e-9;
+      const crossed = ground && !this.landed && this.prevIas < ti.fromKt && ias >= ti.fromKt;
+      if (!this.toLatched && (liftoff || crossed || (ground && bf && ias > (tl.brakeFailKt ?? 30)))) {
+        this.toLatched = true;
+        this.toActiveT = 0;
+      }
+      if (this.toLatched) {
+        this.toActiveT += dt;
+        const slow = ias < (bf ? tl.cancelBelowKtBrakeFail ?? 30 : tl.cancelBelowKt);
+        if ((!ground && this.airborneT > ti.maxAfterLiftoffS) || (!ground && ra > ti.toFt) || slow || this.toActiveT > tl.maxActiveS || this.tiCancel()) this.toLatched = false;
+      }
+      this.takeoffInhibit = this.toLatched;
+    } else {
+      this.takeoffInhibit = (ground && !this.landed && ias >= ti.fromKt) || (!ground && this.airborneT < ti.maxAfterLiftoffS && ra < ti.toFt && p === 'TAKEOFF');
+    }
     const li = this.li;
-    this.landingInhibit = (!ground && p === 'LANDING' && ra < li.belowFt) || (ground && this.landed && ias > li.untilKt);
+    const ll = li.latch;
+    if (ll) {
+      this.groundT = ground ? this.groundT + dt : 0;
+      const touchdown = ground && this.landed && this.groundT <= dt + 1e-9;
+      const crossedDown = !ground && this.prevRa >= li.belowFt && ra < li.belowFt;
+      if (!this.ldgLatched && (touchdown || crossedDown)) {
+        this.ldgLatched = true;
+        this.ldgActiveT = 0;
+      }
+      if (this.ldgLatched) {
+        this.ldgActiveT += dt;
+        if ((ground && this.groundT > ll.maxGroundS) || (!ground && ra > ll.cancelAboveFt) || ias < li.untilKt || this.ldgActiveT > ll.maxActiveS) this.ldgLatched = false;
+      }
+      this.landingInhibit = this.ldgLatched;
+    } else {
+      this.landingInhibit = (!ground && p === 'LANDING' && ra < li.belowFt) || (ground && this.landed && ias > li.untilKt);
+    }
+    this.prevIas = ias;
+    this.prevRa = ra;
 
     v.setString('cas.phase', p);
     v.set('cas.phase_code', FLIGHT_PHASES.indexOf(p));

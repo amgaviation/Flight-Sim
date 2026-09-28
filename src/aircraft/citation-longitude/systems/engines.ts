@@ -77,11 +77,14 @@ export function createEngines(ctx: SimContext): LongitudeEngines {
       },
       // EST: HTF7000-class ground idle ~22 % N1; flight idle rising with altitude for bleed/relight margin;
       // approach idle with the gear down or flaps FULL (spool-up for go-around).
+      // Wing anti-ice selected in flight raises the idle too (OG 12-3: "engines will spool slightly for 4 seconds
+      // before the wing anti-ice bleed valves are opened"; EST: the approach-idle schedule, extended above 15,000 ft
+      // so that it is never below flight idle).
       idle: {
         ground: 22,
         flight: { x: [0, 15000, 30000, 45000], y: [26, 31, 38, 46] },
-        approach: { x: [0, 15000], y: [32, 36] },
-        approachWhen: 'gear.down_locked || surf.flaps_deg > 16',
+        approach: { x: [0, 15000, 30000, 45000], y: [32, 36, 41, 48] },
+        approachWhen: `gear.down_locked || surf.flaps_deg > 16 || ${V.aiWing}`,
       },
       reverse: { maxN1: 78, deployS: 1.5, stowS: 2.0, power: 'clamp01(max(hyd.a_psi, hyd.b_psi) / 2600)' },
       // Dual-channel FADEC powered by its engine alternator when the engine turns, aircraft bus otherwise (OG 7-2).
@@ -107,6 +110,10 @@ export function createEngines(ctx: SimContext): LongitudeEngines {
       lightOffTimeoutS: 12,
       hungWindowS: 12,
       maxStarterS: 120,
+      // OG 7-5: the FADEC runs the start and aborts faulty starts; no N2 rotation within 10 s of starter engagement
+      // (e.g. no starter air, < 32 psi, OG 1-3) aborts (EST thresholds), posting ENG START ABORT (cas.ts).
+      noRotationS: 10,
+      noRotationN2Pct: 5,
       clearingMotorS: 15,
       starterAvailable: 1, // air turbine starter: strength from duct pressure (pneumatic starter block)
       ignitionPower: `elec.emer_${i === 1 ? 'l' : 'r'}_powered`,
@@ -126,7 +133,8 @@ export function createEngines(ctx: SimContext): LongitudeEngines {
     retardFt: 40, // OG 7-5: RETARD below 40 ft AGL
     retardFlapsDeg: 30,
     discWarnS: 5,
-    // OG 7-5 FMA: TO, HOLD, CLIMB, DESC, SPD, RETARD (MAX SPD / MIN SPD: see docs, SCOPE)
+    // OG 7-5 FMA: TO, HOLD, CLIMB, DESC, SPD, RETARD (MAX SPD / MIN SPD protection and the manual-advance HOLD:
+    // systems/afcsExtras.ts)
     labels: { THR: 'CLIMB', IDLE: 'DESC', SPD: 'SPD', SPD_FMS: 'SPD', MACH: 'SPD', HOLD: 'HOLD', TO: 'TO', GA: 'TO', RETARD: 'RETARD' },
     vmoKt: LON_LIMITS.vmoKt,
     mmo: LON_LIMITS.mmo,

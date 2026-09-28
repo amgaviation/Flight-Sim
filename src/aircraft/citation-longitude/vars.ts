@@ -228,6 +228,35 @@ export const LON_VARS = {
   ltStby: `${P}lt.stby`, // standby display brightness knob (right of the standby unit, c_top21; EST function) 0..1
   altFine: `${P}gmc.alt_fine`, // GMC ALT knob PUSH FINE state: 1 = 100 ft steps, 0 = 1000 ft steps (EST)
   stabSecCmd: `${P}trim.stab_sec_cmd`, // derived: secondary stab trim rocker command while SECONDARY TRIM is engaged
+
+  // ---------------- Function fix round 1 (DGAC card / OG function audit)
+  micSelL: `${P}audio.mic_sel_l`, // MIC SEL (side console, beside the mask cup; EST position): 0 BOOM, 1 MASK (DGAC CABIN ALTITUDE step 2)
+  micSelR: `${P}audio.mic_sel_r`,
+  micInphL: `${P}audio.mic_inph_l`, // MIC/INPH switch (control wheel): 0 inboard (MIC, PTT), 1 outboard (INPH: hot intercom) (DGAC step 3)
+  micInphR: `${P}audio.mic_inph_r`,
+  maskMicLiveL: `${P}audio.mask_mic_l`, // derived: crew mask microphone live (MASK selected and the mask in use)
+  maskMicLiveR: `${P}audio.mask_mic_r`,
+  intercomHotL: `${P}audio.intercom_hot_l`, // derived: hot intercom on (MIC/INPH outboard, the selected mic live)
+  intercomHotR: `${P}audio.intercom_hot_r`,
+  parkSet: `${P}park_set`, // derived: EMER/PARK BRAKE handle at the PARK latch (full travel), the parking brake is set
+  brakePedalL: `${P}brake_pedal_l`, // derived: toe-brake demand through the brake-by-wire controller (0 when it is unpowered)
+  brakePedalR: `${P}brake_pedal_r`,
+  busTieOverride: `${P}elec.bus_tie_override`, // derived: in-air crew BUS TIE selection masking the automation
+  g5000Up: `${P}g5000_up`, // derived: G5000 powered (either PFD or the MFD) - NAV / beacon power-up defaults
+  ecsAutoHx: `${P}ecs.auto_hx`, // derived: pack automatically switched to heat-exchanger-only (ACM fault, OG 10-3)
+  ecsMinOutletC: `${P}ecs.min_outlet_c`, // derived: pack outlet limits for the ECS mode (OG 10-3)
+  ecsMaxOutletC: `${P}ecs.max_outlet_c`,
+  ecsPackFlowKgs: `${P}ecs.pack_flow_kgs`, // derived: pack flow demand (FLOW NORM/HIGH; APU-only 60 % in NORM, OG 10-4; ACM ONLY EST)
+  genLoadPct: (g: 'l' | 'r' | 'apu') => `${P}elec.gen_${g}_load_pct`, // derived: load vs the air/ground rating (OG 5-3)
+  waiValvesOpen: `${P}ai.wing_valves_open`, // derived: wing A/I valves open 4 s after the selection (OG 12-3)
+  engExceed: (i: number) => `${P}eng${i}_exceed`, // derived: ENG EXCEEDANCE latch (cleared by maintenance / state reset, OG 3-5)
+  scavengeOn: (i: number) => `${P}fuel.scavenge${i}_on`, // derived: scavenge ejector running (low fuel or cold fuel, OG 6-2)
+  highAltLatched: `${P}press.high_alt_latched`, // derived: high-altitude airport mode (departure or destination > 8,000 ft, OG 11-3)
+  edmActive: `${P}afcs.edm_active`, // derived: Emergency Descent Mode in progress (BCA 2021)
+  atProt: `${P}at.protection`, // derived: A/T protection 0 none, 1 MIN SPD, 2 MAX SPD (OG 7-5)
+  startFail: (i: number) => `${P}eng${i}_start_fail`, // derived: FADEC start abort latched (fadec.eng{i}.abort)
+  fadecFault: (i: number) => `${P}eng${i}_fadec_fault`, // derived: FADEC channel fault (ENG CONTROL FAULT, EST)
+  spoilerInd: `${P}spoiler_ind`, // derived: EIS SPOILERS indication 0..1 = max(speedbrake, ground-spoiler) panel extension (OG 15-5)
 } as const;
 
 /** Every cockpit control var (inputs), for the "every control is consumed" audit test. */
@@ -257,6 +286,7 @@ export const LON_CONTROL_VARS: string[] = [
   LON_VARS.stbyYd, LON_VARS.flapReset, LON_VARS.controlLock, LON_VARS.cvrTest, LON_VARS.cvrErase, LON_VARS.eventMarker,
   LON_VARS.pttL, LON_VARS.pttR, LON_VARS.yokeIcsL, LON_VARS.yokeIcsR, LON_VARS.gasperL, LON_VARS.gasperR,
   LON_VARS.ltPaxSafety, LON_VARS.ltSeatBelts, LON_VARS.visorL, LON_VARS.visorR, LON_VARS.ltStby,
+  LON_VARS.micSelL, LON_VARS.micSelR, LON_VARS.micInphL, LON_VARS.micInphR,
 ];
 
 /** Events emitted by cockpit buttons (momentary commands). */

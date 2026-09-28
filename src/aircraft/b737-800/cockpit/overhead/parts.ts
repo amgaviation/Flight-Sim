@@ -24,6 +24,7 @@ import {
   type ToggleSwitchOptions,
 } from '../../../../cockpit/controls';
 import type { CockpitEnv } from '../../../../cockpit/env';
+import * as THREE from 'three';
 
 /** Lighting zone of the overhead legends (index.ts defines it on ac.light.panel_ovhd). */
 export const OZ = 'ovhd';
@@ -31,8 +32,11 @@ export const OZ = 'ovhd';
 /** Standard Boeing overhead module width (5.75 in). */
 export const MOD_W = 0.146;
 
-/** Legend size factor over the nominal heights used in the layout tables (EST: NG engraving ~2.5-3 mm caps). */
-export const TXT = 1.35;
+/**
+ * Legend size factor over the nominal heights used in the layout tables: SCBG 1:1 overhead drawing, position
+ * legends ~2.5 mm and titles ~3-3.5 mm cap height (nominal 0.0017-0.0022 x 1.45).
+ */
+export const TXT = 1.45;
 
 /**
  * A Boeing overhead module plate on `parent` (top-left convention of the parent), centred at (x, y),
@@ -54,13 +58,26 @@ export function module(parent: Panel, name: string, x: number, y: number, w: num
 }
 
 export class Ovhd {
+  /**
+   * `origin`: the module's top-left corner in the parent overhead's coordinates. Every method then takes
+   * coordinates in the parent (overhead-absolute) frame, as measured on the SCBG drawing; `X` / `Y` convert.
+   */
   constructor(
     readonly env: CockpitEnv,
     readonly p: Panel,
+    readonly origin: readonly [number, number] = [0, 0],
   ) {}
 
+  X(x: number): number {
+    return x - this.origin[0];
+  }
+
+  Y(y: number): number {
+    return y - this.origin[1];
+  }
+
   label(text: string, x: number, y: number, h = 0.0021, weight = 800): void {
-    this.p.label(text, x, y, { height: h * TXT, zone: OZ, weight });
+    this.p.label(text, this.X(x), this.Y(y), { height: h * TXT, zone: OZ, weight });
   }
 
   /** Multi-line label (lines stacked downwards, first line at y). */
@@ -70,22 +87,22 @@ export class Ovhd {
 
   /** Group bracket (title centred, ticks down) in the overhead zone. */
   bracket(title: string, x: number, y: number, w: number, h = 0.0021): void {
-    this.p.bracket(title, x, y, w, { height: h * TXT, zone: OZ });
+    this.p.bracket(title, this.X(x), this.Y(y), w, { height: h * TXT, zone: OZ });
   }
 
   line(x0: number, y0: number, x1: number, y1: number, w = 0.0005): void {
-    this.p.line(x0, y0, x1, y1, w, OZ);
+    this.p.line(this.X(x0), this.Y(y0), this.X(x1), this.Y(y1), w, OZ);
   }
 
   annun(id: string, label: string, segments: LegendSegment[], x: number, y: number, w = 0.022, h = 0.012): AnnunciatorLight {
-    return this.p.add(new AnnunciatorLight(this.env, { id, label, width: w, height: h, segments, layout: 'stack' }), x, y);
+    return this.p.add(new AnnunciatorLight(this.env, { id, label, width: w, height: h, segments, layout: 'stack' }), this.X(x), this.Y(y));
   }
 
   toggle(o: ToggleSwitchOptions & { id: string }, x: number, y: number, name?: string | false, scale = 0.8): ToggleSwitch {
     return this.p.add(
       new ToggleSwitch(this.env, { scale, ...o, labels: { name: name === false ? undefined : (name ?? o.label ?? true), positions: true, height: 0.0017 * TXT, zone: OZ } }),
-      x,
-      y,
+      this.X(x),
+      this.Y(y),
     );
   }
 
@@ -94,17 +111,18 @@ export class Ovhd {
       new GuardedSwitch(this.env, {
         scale,
         ...o,
-        // Boeing red spring guard (EST ~15 x 30 x 16 mm).
-        guard: { width: 0.0165 * scale, length: 0.032 * scale, height: 0.019 * scale, ...o.guard },
+        // Boeing spring-loaded flip-cover guard: a low-profile hinged cover (EST ~16 x 32 x 9 mm; b737.org.uk
+        // overhead photographs), not a tall box.
+        guard: { width: 0.0165 * scale, length: 0.032 * scale, height: 0.009 * scale, ...o.guard },
         labels: { name: name === false ? undefined : (name ?? o.label ?? true), positions: true, height: 0.0017 * TXT, zone: OZ },
       }),
-      x,
-      y,
+      this.X(x),
+      this.Y(y),
     );
   }
 
   button(o: PushButtonOptions & { id: string }, x: number, y: number): PushButton {
-    return this.p.add(new PushButton(this.env, { style: 'round', width: 0.009, zone: OZ, ...o }), x, y);
+    return this.p.add(new PushButton(this.env, { style: 'round', width: 0.009, zone: OZ, ...o }), this.X(x), this.Y(y));
   }
 
   selector(
@@ -131,8 +149,8 @@ export class Ovhd {
         labelZone: OZ,
         zone: OZ,
       }),
-      x,
-      y,
+      this.X(x),
+      this.Y(y),
     );
   }
 
@@ -156,8 +174,8 @@ export class Ovhd {
           format: o.format ?? ((x) => (x < 0.02 ? 'OFF' : `${Math.round(x * 100)} %`)),
         },
       }),
-      x,
-      y,
+      this.X(x),
+      this.Y(y),
     );
   }
 }
@@ -171,3 +189,28 @@ export const SPRING_OFF_ON: Pick<ToggleSwitchOptions, 'positions' | 'values' | '
 };
 
 export const OFF_ON: Pick<ToggleSwitchOptions, 'positions' | 'values' | 'initial'> = { positions: ['OFF', 'ON'], values: [0, 1], initial: 0 };
+
+/**
+ * Overhead module on `parent` spanning (x0, y0)-(x1, y1) in the parent's top-left frame; the returned Ovhd takes
+ * parent-frame coordinates (SCBG drawing measurements).
+ */
+export function moduleAbs(env: CockpitEnv, parent: Panel, name: string, x0: number, y0: number, x1: number, y1: number): Ovhd {
+  const w = x1 - x0;
+  const h = y1 - y0;
+  return new Ovhd(env, module(parent, name, x0 + w / 2, y0 + h / 2, w, h), [x0, y0]);
+}
+
+/**
+ * Quarter-turn "INDEX TO LOCK" panel latch (SCBG overhead drawing: one at each lower corner of the forward and aft
+ * overheads): black plate with a chrome turn bar and the engraved legend. Static geometry only (not a control).
+ */
+export function indexLock(env: CockpitEnv, parent: Panel, x: number, y: number): void {
+  const pl = parent.subPanel({ name: `${parent.name}.index_lock_${x.toFixed(3)}`, x, y, width: 0.026, height: 0.03, origin: 'top-left', material: 'plasticBlack', radius: 0.003, screws: false });
+  const bar = new THREE.Mesh(env.geometry.get('b738.index_lock_bar', () => new THREE.BoxGeometry(0.004, 0.022, 0.004)), env.materials.get('chrome'));
+  bar.userData.cockpitStatic = true;
+  pl.addObject(bar, 0.013, 0.015, { z: 0.002 });
+  const knob = new THREE.Mesh(env.geometry.get('b738.index_lock_knob', () => new THREE.CylinderGeometry(0.0045, 0.0045, 0.004, 16).rotateX(Math.PI / 2)), env.materials.get('chrome'));
+  knob.userData.cockpitStatic = true;
+  pl.addObject(knob, 0.013, 0.015, { z: 0.003 });
+  pl.label('INDEX TO LOCK', 0.004, 0.015, { height: 0.0016, zone: OZ });
+}

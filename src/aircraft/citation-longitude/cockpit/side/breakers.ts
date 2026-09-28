@@ -51,6 +51,9 @@ export const LEFT_CB_GROUPS: CbGroup[] = [
       ['ra', 'RAD ALT'],
       ['ext_lt_nav', 'NAV LTS'],
       ['ign_l', 'IGN L'],
+      ['stab_trim_pri1', 'STAB TRIM PRI 1'],
+      ['ail_trim', 'AIL TRIM'],
+      ['pitot_stby', 'P/S HT STBY'],
     ],
   },
   {
@@ -99,6 +102,9 @@ export const RIGHT_CB_GROUPS: CbGroup[] = [
       ['gear_ctl', 'GEAR CTL'],
       ['brake_ctl', 'BRAKE CTL'],
       ['rudder_ctl', 'RUDDER CTL'],
+      ['stab_trim_pri2', 'STAB TRIM PRI 2'],
+      ['stab_trim_sec', 'STAB TRIM SEC'],
+      ['rud_trim', 'RUD TRIM'],
     ],
   },
   {

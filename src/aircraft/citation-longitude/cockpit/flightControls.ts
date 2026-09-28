@@ -67,6 +67,22 @@ export function buildFlightControls(c: LonCockpitContext): void {
             },
           },
           {
+            // MIC/INPH (DGAC CABIN ALTITUDE / EMERGENCY DESCENT step 3 "MIC/INPH Switches (both) - Outboard, as required
+            // to enable intercom"): inboard = MIC (transmit on PTT), outboard = INPH (hot intercom). EST position on
+            // the inboard grip face. SCOPE: sets the intercom state (systems/logic.ts), no audio model.
+            anchor: `${side < 0 ? 'right' : 'left'}Front`,
+            offset: [0, 0.02, 0],
+            kind: 'rocker',
+            options: {
+              id: `lon.fc.mic_inph_${lower}`,
+              label: `MIC/INPH (${s})`,
+              var: side < 0 ? V.micInphL : V.micInphR,
+              positions: ['MIC', 'INPH'],
+              values: [0, 1],
+              initial: 0,
+            },
+          },
+          {
             anchor: `${outboard}Back`,
             kind: 'button',
             // SCOPE: PTT keys the selected COM (V.transmitting, systems/crewControls.ts); no radio-transmission model.

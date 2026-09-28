@@ -678,7 +678,7 @@ export class B737Fmc implements Subsystem, FmcDisplayData {
       v.set(B737_VARS.fmcExecLight, 0);
       v.set(B737_VARS.cduMsgLight(1), 0);
       v.set(B737_VARS.cduMsgLight(2), 0);
-      v.set(B737_VARS.fmcAlertLight, v.get(B737_VARS.discLightTest) !== 0 ? 2 : 0);
+      v.set(B737_VARS.fmcAlertLight, (v.get(B737_VARS.discLightTest) !== 0 || v.get(B737_VARS.discLightTest2, 0) !== 0) ? 2 : 0);
       return;
     }
     const ground = this.ground;
@@ -1041,7 +1041,7 @@ export class B737Fmc implements Subsystem, FmcDisplayData {
     v.set(B737_VARS.cduMsgLight(1), any ? 1 : 0);
     v.set(B737_VARS.cduMsgLight(2), any ? 1 : 0);
     // FMC alert light (amber) on the autoflight status annunciator; the TEST switch lights it too.
-    v.set(B737_VARS.fmcAlertLight, (alert && !this.alertAcked) || v.get(B737_VARS.discLightTest) !== 0 ? 2 : 0);
+    v.set(B737_VARS.fmcAlertLight, (alert && !this.alertAcked) || (v.get(B737_VARS.discLightTest) !== 0 || v.get(B737_VARS.discLightTest2, 0) !== 0) ? 2 : 0);
   }
 
   /** Current RNP (nm): manual entry, else the phase default. */

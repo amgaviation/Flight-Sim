@@ -23,9 +23,12 @@ const gnd = 'gear.air_ground != 0';
 const bothRun = '(eng1.running && eng2.running)';
 const primL = '(elec.gen_l_online || elec.apu_gen_online || elec.gpu_online)';
 const primR = '(elec.gen_r_online || elec.ptcu_gen_online)';
-const brakeFail = '(fail.brakes.left || fail.brakes.right || (hyd.a_psi < 1000 && hyd.b_psi < 1000 && brakes.accum_psi < 1000) || !elec.brake_ctl_powered)';
+/** OG CAS BRAKE FAIL: the normal (brake-by-wire) braking is lost; "only emergency/parking brakes will be available". */
+export const LON_BRAKE_FAIL = '(fail.brakes.left || fail.brakes.right || (hyd.a_psi < 1000 && hyd.b_psi < 1000 && brakes.accum_psi < 1000) || !elec.brake_ctl_powered)';
+const brakeFail = LON_BRAKE_FAIL;
 const allAi = `(${V.aiEngL} && ${V.aiEngR} && ${V.aiWing} && ${V.aiStab})`;
-const highAlt = `(press.ldg_elev_ft > 8000)`;
+/** OG 11-3 high-altitude mode: departure (latched at lift-off) or destination field above 8,000 ft (logic.ts). */
+const highAlt = `(${V.highAltLatched} != 0)`;
 /** OG CAS GENS OFF: generators are available but every available one is selected OFF. */
 const gensOff = `((elec.gen_l_avail || elec.gen_r_avail || elec.apu_gen_avail) && !(elec.gen_l_avail && ${V.genL} == 1) && !(elec.gen_r_avail && ${V.genR} == 1) && !(elec.apu_gen_avail && ${V.genApu} == 1))`;
 
@@ -44,16 +47,10 @@ export const LONGITUDE_CAS: CasMessageDef[] = [
   ...perSide((x) => [
     { id: `eng_fire_${x.l}`, text: `ENG FIRE ${x.s}`, level: 'warning', when: `fire.eng${x.i}_warn`, aural: { callout: `Engine fire ${x.s === 'L' ? 'left' : 'right'}`, priority: 8, repeatS: 8 } },
     { id: `batt_otemp_w_${x.l}`, text: `BATTERY O'TEMP ${x.s}`, level: 'warning', when: `elec.batt_${x.l}_temp_c > ${LON_LIMITS.battOtempWarnC}`, inhibit: TL },
-    {
-      id: `eng_exceed_${x.l}`,
-      text: `ENG EXCEEDANCE ${x.s}`,
-      level: 'warning',
-      // OG 1-3 limits: N1 96.79 %, N2 99.90 % transient, ITT 955 degC (650 degC during the start).
-      when: `eng${x.i}.n1_pct > ${LON_LIMITS.n1TakeoffPct + 0.1} || eng${x.i}.n2_pct > ${LON_LIMITS.n2TransientPct} || eng${x.i}.itt_c > ${LON_LIMITS.ittTakeoffC} || (fadec.eng${x.i}.start_state >= 2 && fadec.eng${x.i}.start_state <= 3 && eng${x.i}.itt_c > ${LON_LIMITS.ittStartC})`,
-      delayS: 1,
-      latch: true,
-      inhibit: TL,
-    },
+    // OG 1-3 limits (N1 96.79 %, N2 99.90 % transient, ITT 955 degC, 650 degC in the start) exceeded > 1 s. OG 3-5: the
+    // exceedance must be logged for maintenance, so the message stays until the maintenance reset (logic.ts latch,
+    // cleared by the state reset), not until MASTER WARNING is acknowledged.
+    { id: `eng_exceed_${x.l}`, text: `ENG EXCEEDANCE ${x.s}`, level: 'warning', when: V.engExceed(x.i), inhibit: TL },
     { id: `engine_fail_${x.l}`, text: `ENGINE FAIL ${x.s}`, level: 'warning', when: V.engFail(x.i), aural: { callout: 'Engine fail', priority: 8, repeatS: 10 } },
     { id: `hyd_otemp_${x.h}`, text: `HYD O'TEMP ${x.ab}`, level: 'warning', when: `${V.hydTempC(x.h)} > ${LON_LIMITS.hydOtempC}`, inhibit: TL },
   ]),
@@ -72,6 +69,8 @@ export const LONGITUDE_CAS: CasMessageDef[] = [
   },
   { id: 'no_takeoff_w', text: 'NO TAKEOFF', level: 'warning', when: `${V.noTakeoff} && ${V.toThrust}`, aural: { callout: 'No takeoff', priority: 7, repeatS: 3 } },
   { id: 'ps_button_w', text: 'P/S BUTTON ON', level: 'warning', when: `${V.pitotStatic} && ${gnd}`, delayS: 120, inhibit: TL }, // OG 1-1: prohibited beyond 2 min on the ground
+  // EST (OG CAS list has no FADEC message; HTF7000 FADEC faults annunciate on the CAS): a FADEC channel fault.
+  ...perSide((x) => [{ id: `eng_ctl_fault_${x.l}`, text: `ENG CONTROL FAULT ${x.s}`, level: 'caution' as const, when: V.fadecFault(x.i), delayS: 1, inhibit: TL }]),
 
   // =============================================================== AMBER CAUTIONS
   ...perSide((x) => [
@@ -90,7 +89,8 @@ export const LONGITUDE_CAS: CasMessageDef[] = [
     { id: `fuel_inlet_cold_${x.l}`, text: `FUEL INLET COLD ${x.s}`, level: 'caution', when: `${V.fuelInletC(x.i)} < 3 && eng${x.i}.running`, delayS: 10, inhibit: TL },
     { id: `fuel_low_${x.l}`, text: `FUEL LEVEL LOW ${x.s}`, level: 'caution', when: `fuel.tank${x.i - 1}_kg < ${FUEL_LOW_KG.toFixed(1)}`, delayS: 5, inhibit: TL },
     { id: `fuel_tank_cold_${x.l}`, text: `FUEL TANK COLD ${x.s}`, level: 'caution', when: `fuel.${x.tank}_temp_c < -35`, delayS: 10, inhibit: TL },
-    { id: `gen_load_${x.l}`, text: `GEN LOAD ${x.s}`, level: 'caution', when: `elec.gen_${x.l}_load_pct > 75`, delayS: 5, inhibit: TL },
+    // OG 5-3: 75 % of the available capacity (400 A on the ground, 500 A in flight; logic.ts).
+    { id: `gen_load_${x.l}`, text: `GEN LOAD ${x.s}`, level: 'caution', when: `${V.genLoadPct(x.l)} > 75`, delayS: 5, inhibit: TL },
     { id: `gen_off_${x.l}`, text: `GEN OFF ${x.s}`, level: 'caution', when: `elec.gen_${x.l}_avail && ${x.l === 'l' ? V.genL : V.genR} != 1 && !(${gensOff} && (eng1.running || eng2.running))`, delayS: 1, inhibit: TL },
     // Not in the OG list (it only covers GEN OFF = available but deselected): a generator that trips or fails
     // with its engine running and the switch ON posts GEN FAIL (EST, Citation-family CAS convention).
@@ -118,7 +118,10 @@ export const LONGITUDE_CAS: CasMessageDef[] = [
   { id: 'bleed_iso_xflow_c', text: 'BLEED ISOLATE XFLOW', level: 'caution', when: `${V.bleedIsolate} && ((${gnd} && ${V.toThrust}) || (pneu.eng1_valve_open && pneu.eng2_valve_open && ac.lon.bleed.xflow_5min))`, inhibit: TL },
   { id: 'brake_fail_c', text: 'BRAKE FAIL', level: 'caution', when: `${brakeFail} && ${air} && !(ra1.valid && ra1.alt_ft < 400)`, inhibit: TL },
   { id: 'bus_tie_c', text: 'BUS TIE CLOSED', level: 'caution', when: `elec.bus_tie_closed && ${primL} && ${primR}`, delayS: 300, inhibit: TL },
-  { id: 'cabin_alt_c', text: 'CABIN ALTITUDE', level: 'caution', when: `(!${highAlt} && press.cabin_alt_ft > ${LON_LIMITS.cabinAltCautionFt} && press.cabin_alt_ft <= ${LON_LIMITS.cabinAltWarnFt}) || (${highAlt} && press.cabin_alt_ft > 9800 && press.cabin_alt_ft <= 14800)`, delayS: 1, inhibit: TL },
+  { id: 'cabin_alt_c', text: 'CABIN ALTITUDE', level: 'caution', when: `!${highAlt} && press.cabin_alt_ft > ${LON_LIMITS.cabinAltCautionFt} && press.cabin_alt_ft <= ${LON_LIMITS.cabinAltWarnFt}`, delayS: 1, inhibit: TL },
+  // High-altitude mode: amber after the cabin has been above 9,800 ft for 10 min (OG 3 CAS list; OG 11-3 says 30 min,
+  // the CAS list is followed). Above 14,800 ft it is the red CABIN ALTITUDE (OG 3; OG 11-3 says amber).
+  { id: 'cabin_alt_c_high', text: 'CABIN ALTITUDE', level: 'caution', when: `${highAlt} && press.cabin_alt_ft > 9800 && press.cabin_alt_ft <= 14800`, delayS: 600, inhibit: TL },
   { id: 'fuel_imbalance', text: 'FUEL IMBALANCE', level: 'caution', when: `abs(fuel.imbalance_kg) > ${(LON_LIMITS.maxFuelImbalanceLb * LB).toFixed(1)}`, delayS: 10, inhibit: TL },
   { id: 'fuel_temp_miscomp', text: 'FUEL TEMP MISCOMPARE', level: 'caution', when: 'abs(fuel.left_temp_c - fuel.right_temp_c) > 5', delayS: 30, inhibit: TL },
   { id: 'fuel_xfer_fail', text: 'FUEL TRANSFER FAIL', level: 'caution', when: `${V.fuelTransfer} != 0 && fuel.boost_l_on && fuel.boost_r_on`, delayS: 5, inhibit: TL },
@@ -132,12 +135,15 @@ export const LONGITUDE_CAS: CasMessageDef[] = [
     inhibit: TL,
   },
   { id: 'fuel_xfer_on_10', text: 'FUEL TRANSFER ON', level: 'caution', when: `${V.fuelTransfer} != 0`, delayS: 600, inhibit: TL },
-  { id: 'gen_load_apu', text: 'GEN LOAD APU', level: 'caution', when: 'elec.apu_gen_load_pct > 75', delayS: 5, inhibit: TL },
+  { id: 'gen_load_apu', text: 'GEN LOAD APU', level: 'caution', when: `${V.genLoadPct('apu')} > 75`, delayS: 5, inhibit: TL }, // 500 A ground / 400 A flight
   { id: 'gen_load_hyd', text: 'GEN LOAD HYD', level: 'caution', when: 'elec.ptcu_gen_load_pct > 75', delayS: 5, inhibit: TL },
-  { id: 'gen_off_apu', text: 'GEN OFF APU', level: 'caution', when: `elec.apu_gen_avail && ${V.genApu} != 1 && !elec.gen_l_online && !elec.gen_r_online`, delayS: 1, inhibit: TL },
+  // OG 3-8 / 5-5: "the generator is operational and available but selected OFF" (GENS OFF covers all-off).
+  { id: 'gen_off_apu', text: 'GEN OFF APU', level: 'caution', when: `elec.apu_gen_avail && ${V.genApu} != 1 && !(${gensOff} && ${bothRun})`, delayS: 1, inhibit: TL },
   { id: 'gnd_splr_fail', text: 'GND SPOILER FAIL', level: 'caution', when: 'ac.lon.gs_accum_ok <= 2', delayS: 2, inhibit: TL },
   { id: 'grd_splr_accum', text: 'GRD SPOILER ACCUM', level: 'caution', when: `ac.lon.gs_accum_ok == 3 && ${bothRun}`, delayS: 2, inhibit: TO },
-  { id: 'heat_exchg_only_c', text: 'HEAT EXCHG ONLY', level: 'caution', when: `${V.ecsMode} == 2 && ${gnd}`, inhibit: TL },
+  // OG 10-3: yellow on the ground, or when the system has automatically switched to heat-exchanger mode (ACM fault,
+  // logic.ts) and the knob is not in that position.
+  { id: 'heat_exchg_only_c', text: 'HEAT EXCHG ONLY', level: 'caution', when: `(${V.ecsMode} == 2 && ${gnd}) || ${V.ecsAutoHx}`, inhibit: TL },
   { id: 'acm_only_c', text: 'ACM ONLY', level: 'caution', when: `${V.ecsMode} == 1 && ${gnd}`, inhibit: TL },
   { id: 'hyd_gen_on_c', text: 'HYD GEN ON', level: 'caution', when: `hyd.ptcu_gen_cmd && (elec.gen_l_online || elec.gen_r_online || elec.apu_gen_online || elec.gpu_online)`, inhibit: TL },
   { id: 'icing', text: 'ICING', level: 'caution', when: `ice.detected && !${allAi}`, inhibit: TL },
@@ -153,7 +159,17 @@ export const LONGITUDE_CAS: CasMessageDef[] = [
   { id: 'yd_fail', text: 'YAW DAMPER FAIL A/B', level: 'caution', when: `${air} && (hyd.a_psi < 1500 && hyd.rss_psi < 1500 || fail.yd || (fail.yd.normal && !(${V.stbyYd} && elec.emer_r_powered))) && ${bothRun}`, delayS: 2, inhibit: TL },
   // EST text (the OG CAS list has no flap message): latched flap fault, cleared by FLAP RESET (logic.ts).
   { id: 'flap_fail', text: 'FLAP FAIL', level: 'caution', when: V.flapFault, delayS: 1, inhibit: TL },
-  { id: 'ps_button_c', text: 'P/S BUTTON ON', level: 'caution', when: `${V.pitotStatic} && ${gnd}`, inhibit: TL },
+  { id: 'ps_button_c', text: 'P/S BUTTON ON', level: 'caution', when: `${V.pitotStatic} && ${gnd} && !cas.ps_button_w`, inhibit: TL },
+  // EST texts (no public Longitude CAS source): PITCH/ROLL DISCONNECT handle pulled, pitch-trim failure.
+  { id: 'pitch_roll_disc', text: 'PITCH/ROLL DISC', level: 'caution', when: `${V.pitchRollDisc} != 0`, delayS: 1, inhibit: TL },
+  {
+    id: 'pitch_trim_fail',
+    text: 'PITCH TRIM FAIL',
+    level: 'caution',
+    when: `fail.trim.pitch.runaway || fail.trim.pitch.jam || (${V.stabSecArm} == 0 && (${V.stabChan} == 2 ? fail.trim.stab_ch2 : fail.trim.stab_ch1))`,
+    delayS: 1,
+    inhibit: TL,
+  },
 
   // =============================================================== WHITE (advisory)
   ...perSide((x) => [
@@ -184,5 +200,8 @@ export const LONGITUDE_CAS: CasMessageDef[] = [
   { id: 'pitot_static_on', text: 'PITOT STATIC ON', level: 'advisory', when: `${V.pitotStatic} && ${air}`, inhibit: TL },
   { id: 'ptcu_off', text: 'PTCU OFF', level: 'advisory', when: `${V.ptcu} == 0`, inhibit: TL },
   { id: 'stab_deice_on', text: 'STAB DE-ICE ON', level: 'advisory', when: `${V.aiStab} && !${allAi}`, inhibit: TL },
+  // EST texts: Emergency Descent Mode in progress (BCA 2021; systems/afcsExtras.ts) and a FADEC start abort.
+  { id: 'edm', text: 'EMERGENCY DESCENT', level: 'advisory', when: V.edmActive },
+  ...perSide((x) => [{ id: `start_fail_${x.l}`, text: `ENG START ABORT ${x.s}`, level: 'advisory' as const, when: V.startFail(x.i), inhibit: TL }]),
 ];
 

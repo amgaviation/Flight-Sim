@@ -25,11 +25,11 @@ export function dimmer(env: CockpitEnv, p: Panel, id: string, label: string, v: 
     x,
     y,
   );
-  if (caption) p.label(caption, x, y + diameter / 2 + 0.006, { height: 0.0022 });
+  if (caption) p.label(caption, x, y + diameter / 2 + 0.006, { height: 0.0026 });
   return k;
 }
 
 /** Boeing toggle with position legends and a name. */
 export function toggle(env: CockpitEnv, p: Panel, o: ToggleSwitchOptions & { id: string }, x: number, y: number, name?: string): ToggleSwitch {
-  return p.add(new ToggleSwitch(env, { labels: { name: name ?? true, positions: true, height: 0.0021 }, ...o }), x, y);
+  return p.add(new ToggleSwitch(env, { labels: { name: name ?? true, positions: true, height: 0.0025 }, ...o }), x, y);
 }

@@ -194,7 +194,9 @@ describe('Global 6000 climb and cruise', () => {
     r.sys.afcs.engage();
     r.sys.afcs.press('HDG');
     r.sys.afcs.press('FLC');
-    r.sys.at.pressEngage();
+    // The A/T engaged itself on the take-off thrust advance (Global Vision, systems/vision.ts); engage it only if not.
+    if (v.get('ap.at_engaged') === 0) r.sys.at.pressEngage();
+    expect(v.get('ap.at_engaged')).toBe(1);
     v.set('ap.sel_spd_kt', 250);
     let tClimb = NaN;
     let vsAt40 = NaN;

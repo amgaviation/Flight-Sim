@@ -16,8 +16,9 @@
  * cockpit, TILLER in layout.ts); this builder stops the console top short of it.
  *
  * Audio: the G5000 audio panel is the GTC "Audio & Radios" page (OG 4), so
- * the consoles carry no audio control panel. SCOPE: no headset / hand-mic
- * jacks or PTT (no radio-transmit model).
+ * the consoles carry no audio control panel; each carries the MIC SEL
+ * (MASK / BOOM) switchlight the DGAC CABIN ALTITUDE procedure calls for (EST
+ * position). SCOPE: no headset / hand-mic jacks (no radio-transmit model).
  * Cockpit door: SCOPE, no door-lock control (the OG and FPG describe none).
  */
 import * as THREE from 'three';
@@ -128,6 +129,28 @@ function buildConsole(c: LonCockpitContext, side: 'left' | 'right'): void {
     0.062,
     vCtl,
   );
+
+  // MIC SEL (DGAC CABIN ALTITUDE / EMERGENCY DESCENT step 2 "MIC SEL Buttons (both) - Mask"): selects the crew
+  // mask microphone instead of the headset boom mic. EST position (no public photograph of the control): aft of the
+  // regulator row beside the mask cup. SCOPE: no audio model; the state gates the mask-mic / intercom flags
+  // (systems/logic.ts) and is shown on the switchlight (MASK green / BOOM white).
+  const vMic = vCtl - 0.036;
+  p.add(
+    new PushButton(env, {
+      id: `lon.sc.mic_sel_${s}`,
+      label: `${who} MIC SEL`,
+      var: side === 'left' ? V.micSelL : V.micSelR,
+      mode: 'toggle',
+      stateNames: ['BOOM', 'MASK'],
+      style: 'korry',
+      width: 0.018,
+      height: 0.014,
+      segments: [seg.eq('MASK', 'green', side === 'left' ? V.micSelL : V.micSelR, 1), seg.eq('BOOM', 'white', side === 'left' ? V.micSelL : V.micSelR, 0)],
+    }),
+    0,
+    vMic,
+  );
+  p.label('MIC SEL', 0, vMic + 0.013, { height: 0.0022 });
 
   // ---- circuit breakers: forward sidewall grid panel turned toward the pilot (L51), in a black trim housing.
   const C = CB_PANEL;

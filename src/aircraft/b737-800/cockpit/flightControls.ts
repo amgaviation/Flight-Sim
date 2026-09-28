@@ -18,6 +18,7 @@
  * (`surf.elevator` / `surf.aileron`): the 737 columns are back-driven by the
  * autopilot actuators.
  */
+import * as THREE from 'three';
 import { RotaryKnob, RudderPedals, Yoke } from '../../../cockpit/controls';
 import { SURF } from '../../../core/vars';
 import { B738 } from '../vars';
@@ -87,20 +88,45 @@ export function buildFlightControls(c: B738CockpitContext): void {
   }
   // Captain tiller (left sidewall shelf).
   const mount = b.panel({ name: 'b738.tiller_mount', center_m: TILLER.center_m, facing: 'up', width: 0.12, height: 0.14, material: 'panelDark', screws: false, radius: 0.012 });
-  mount.add(
+  // 737NG tiller: a ~0.11 m handwheel with a perpendicular crank grip (b737.org.uk flight deck photographs). The
+  // knob's flat hub disc is the hit target; the rim, spokes and grip ride on its rotating group.
+  const tiller = mount.add(
     new RotaryKnob(env, {
       id: 'b738.fc.tiller',
       label: 'NOSE WHEEL STEERING TILLER',
-      cap: 'skirted',
-      diameter: 0.075,
-      height: 0.022,
-      pointer: 'line',
+      cap: 'smooth',
+      diameter: 0.11,
+      height: 0.004,
+      pointer: 'none',
+      material: 'panelDark',
       dragPxPerClick: 6,
       outer: { var: B738.tiller3d, min: -1, max: 1, step: 0.05, angleRange: [-95, 95], label: 'TILLER', format: (v) => `${Math.round(v * 78)}°` },
     }),
     0,
     0,
   );
+  {
+    const g = tiller.outer.group;
+    const knobMat = env.materials.get('knob');
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.0065, 10, 40), knobMat);
+    rim.position.z = 0.02;
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.016, 0.02, 20).rotateX(Math.PI / 2), knobMat);
+    hub.position.z = 0.012;
+    g.add(rim, hub);
+    for (let k = 0; k < 3; k++) {
+      const a = (k * 2 * Math.PI) / 3 + Math.PI / 2;
+      const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.046, 0.007, 0.005), knobMat);
+      spoke.position.set(Math.cos(a) * 0.028, Math.sin(a) * 0.028, 0.019);
+      spoke.rotation.z = a;
+      g.add(spoke);
+      b.trackGeometry(spoke.geometry);
+    }
+    // Crank grip standing up from the rim at the 12 o'clock position.
+    const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.04, 16).rotateX(Math.PI / 2), env.materials.get('knobWhite'));
+    grip.position.set(0, 0.05, 0.043);
+    g.add(grip);
+    b.trackGeometry(rim.geometry, hub.geometry, grip.geometry);
+  }
   mount.label('NOSE WHEEL STEERING', 0, 0.058, { height: 0.0024 });
   mount.label('L', -0.05, 0.035, { height: 0.003 });
   mount.label('R', 0.05, 0.035, { height: 0.003 });

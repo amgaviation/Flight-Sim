@@ -20,9 +20,12 @@
  * Sizes (EST from flight deck photographs against the known DU size unless
  * noted): 737NG DUs are 8 x 8 in square flat panels (b737.org.uk "Flight
  * Instruments - NG": "six 8 x 8 inch LCD display units") -> 0.170 m square
- * active area inside a 0.203 m bezel; MCP 0.60 x 0.09 m; EFIS control panel
- * 0.165 x 0.09 m; CDU 5.75 x 9 in (0.146 x 0.229 m, ARINC 739 size) with a
- * 0.098 x 0.084 m screen.
+ * active area inside a 0.203 m bezel; MCP 0.463 x 0.072 m and EFIS control
+ * panel 0.117 x 0.072 m, measured on the Simulation Cockpit Builder Group
+ * (SCBG) 1:1 737NG main panel drawing (cm ruler, ~2,840 px/m at full
+ * resolution; the MCP and EFIS control positions below are measured on it
+ * too); CDU 5.75 x 9 in (0.146 x 0.229 m, ARINC 739 size) with a 0.098 x
+ * 0.084 m screen.
  */
 import type * as THREE from 'three';
 import type { CockpitControl } from '../../cockpit/types';
@@ -37,25 +40,28 @@ import type { B737Suite } from './suite';
 /** Physical sizes (m). */
 export const B737_HW = {
   du: { w: 0.17, h: 0.17, border: 0.017 },
-  mcp: { w: 0.6, h: 0.09 },
-  mcpWindowH: 0.014,
-  efis: { w: 0.165, h: 0.09 },
+  // SCBG 1:1 drawing: MCP 0.463 x 0.072 m, EFIS control panels 0.117 x 0.072 m (see header).
+  mcp: { w: 0.463, h: 0.072 },
+  mcpWindowH: 0.012,
+  efis: { w: 0.117, h: 0.072 },
   cdu: { w: 0.146, h: 0.229 },
   cduScreen: { w: 0.098, h: 0.084 },
 } as const;
 
 /**
  * DU positions on the main instrument panel (m, centre-origin panel, from
- * the aircraft centreline; EST from photographs: DUs ~0.215 m apart
- * horizontally, the lower centre DU below the upper one).
+ * the aircraft centreline), measured on the SCBG 1:1 737NG panel drawing:
+ * DU centres -0.504 / -0.292 / +0.02 / +0.291 / +0.503 m (0.21 m pitch), the
+ * lower DU on the forward electronic panel P9 between the two CDUs (its
+ * v here is only nominal: aircraft place it on their own P9 panel).
  */
 export const B737_DU_LAYOUT: Readonly<Record<DuId, readonly [number, number]>> = {
-  capt_out: [-0.62, 0],
-  capt_in: [-0.405, 0],
-  upper: [0, 0.02],
-  lower: [0, -0.2],
-  fo_in: [0.405, 0],
-  fo_out: [0.62, 0],
+  capt_out: [-0.504, 0],
+  capt_in: [-0.292, 0],
+  upper: [0.02, 0],
+  lower: [0, -0.23],
+  fo_in: [0.291, 0],
+  fo_out: [0.503, 0],
 };
 
 // ---------------------------------------------------------------- displays
@@ -73,24 +79,35 @@ export function addDisplayUnits(panel: Panel, suite: B737Suite, at?: readonly (r
 
 // ---------------------------------------------------------------- MCP
 
-/** Mode selector buttons (FCOM 4.10 MCP): id, legend, x (m from the MCP left edge), y. */
+/**
+ * Mode selector buttons (FCOM 4.10 MCP): id, legend, x (m from the MCP left edge), y (m down from the top edge).
+ * Positions measured on the SCBG 1:1 drawing (0.463 m MCP): N1 and SPEED side by side in the bottom row left
+ * of the IAS/MACH knob, C/O beside the IAS knob, VNAV / LVL CHG, HDG SEL, LNAV / VOR LOC / APP, ALT HLD, V/S,
+ * CMD A / B and CWS A / B.
+ */
 const MCP_BUTTON_LAYOUT: readonly [McpButton, string, number, number][] = [
-  ['n1', 'N1', 0.113, 0.035],
-  ['speed', 'SPEED', 0.113, 0.066],
-  ['co', 'C/O', 0.14, 0.072],
-  ['vnav', 'VNAV', 0.21, 0.035],
-  ['lvlchg', 'LVL CHG', 0.21, 0.066],
-  ['hdgsel', 'HDG SEL', 0.27, 0.074],
-  ['lnav', 'LNAV', 0.318, 0.028],
-  ['vorloc', 'VOR LOC', 0.318, 0.052],
-  ['app', 'APP', 0.318, 0.076],
-  ['althld', 'ALT HLD', 0.372, 0.074],
-  ['vs', 'V/S', 0.43, 0.074],
-  ['cmd_a', 'CMD A', 0.475, 0.028],
-  ['cmd_b', 'CMD B', 0.51, 0.028],
-  ['cws_a', 'CWS A', 0.475, 0.052],
-  ['cws_b', 'CWS B', 0.51, 0.052],
+  ['n1', 'N1', 0.071, 0.059],
+  ['speed', 'SPEED', 0.097, 0.059],
+  ['co', 'C/O', 0.106, 0.038],
+  ['vnav', 'VNAV', 0.159, 0.016],
+  ['lvlchg', 'LVL CHG', 0.159, 0.059],
+  ['hdgsel', 'HDG SEL', 0.189, 0.059],
+  ['lnav', 'LNAV', 0.221, 0.016],
+  ['vorloc', 'VOR LOC', 0.221, 0.036],
+  ['app', 'APP', 0.221, 0.059],
+  ['althld', 'ALT HLD', 0.256, 0.059],
+  ['vs', 'V/S', 0.281, 0.059],
+  ['cmd_a', 'CMD A', 0.348, 0.013],
+  ['cmd_b', 'CMD B', 0.374, 0.013],
+  ['cws_a', 'CWS A', 0.348, 0.033],
+  ['cws_b', 'CWS B', 0.374, 0.033],
 ];
+
+/** Options of the cockpit helpers (all optional; defaults keep the previous look). */
+export interface B737HwOptions {
+  /** Plate material (default 'panelDark'; the 737NG modules are painted in the panel grey). */
+  material?: 'panel' | 'panelDark';
+}
 
 /**
  * Mode Control Panel: six data windows, CRS / IAS-MACH / HDG (with the bank
@@ -99,35 +116,37 @@ const MCP_BUTTON_LAYOUT: readonly [McpButton, string, number, number][] = [
  * (magnetically held: the autothrottle releases it by writing the var),
  * CMD / CWS buttons and the A/P DISENGAGE bar.
  */
-export function addMcp(b: CockpitBuilder, parent: Panel, x: number, y: number, suite: B737Suite): Panel {
+export function addMcp(b: CockpitBuilder, parent: Panel, x: number, y: number, suite: B737Suite, o: B737HwOptions = {}): Panel {
   const env = b.env;
   const W = B737_HW.mcp.w;
-  const p = parent.subPanel({ name: 'b737.mcp', width: W, height: B737_HW.mcp.h, x, y, origin: 'top-left', material: 'panelDark', thickness: 0.008 });
+  const p = parent.subPanel({ name: 'b737.mcp', width: W, height: B737_HW.mcp.h, x, y, origin: 'top-left', material: o.material ?? 'panelDark', thickness: 0.008 });
   const winH = B737_HW.mcpWindowH;
-  // Windows: centre x per kind (CRS L, IAS/MACH, HDG, ALT, V/S, CRS R).
-  const winX = [0.032, 0.155, 0.27, 0.372, 0.43, 0.568];
+  // Windows: centre x per kind (CRS L, IAS/MACH, HDG, ALT, V/S, CRS R), SCBG drawing.
+  const winX = [0.04, 0.126, 0.188, 0.256, 0.302, 0.414];
   const titles = ['COURSE', 'IAS/MACH', 'HEADING', 'ALTITUDE', 'VERT SPEED', 'COURSE'];
   for (let i = 0; i < suite.mcpWindows.length; i++) {
     const d = suite.mcpWindows[i];
-    p.display(d, winX[i], 0.018, winH * d.aspect, winH, { bezel: false });
-    p.label(titles[i], winX[i], 0.006, { height: 0.0026 });
+    p.display(d, winX[i], 0.014, winH * d.aspect, winH, { bezel: false });
+    p.label(titles[i], winX[i], 0.0045, { height: 0.0025 });
   }
   const knob = (id: string, label: string, kx: number, ky: number, inc: string, dec: string, push?: { event: string; label: string }): CockpitControl =>
-    p.add(new RotaryKnob(env, { id: `b737.mcp.${id}`, label, cap: 'fluted', diameter: 0.018, outer: { incEvent: inc, decEvent: dec, label }, push: push ? { event: push.event, label: push.label } : undefined }), kx, ky);
+    p.add(new RotaryKnob(env, { id: `b737.mcp.${id}`, label, cap: 'fluted', diameter: 0.017, outer: { incEvent: inc, decEvent: dec, label }, push: push ? { event: push.event, label: push.label } : undefined }), kx, ky);
   // COURSE knobs.
-  knob('crs1', 'COURSE L', 0.032, 0.05, B737_EVENTS.mcpCrsInc(1), B737_EVENTS.mcpCrsDec(1));
-  knob('crs2', 'COURSE R', 0.568, 0.05, B737_EVENTS.mcpCrsInc(2), B737_EVENTS.mcpCrsDec(2));
-  // F/D switches with the MA lights (FCOM 4.10: "MA" illuminates on the master F/D side).
+  knob('crs1', 'COURSE L', 0.038, 0.043, B737_EVENTS.mcpCrsInc(1), B737_EVENTS.mcpCrsDec(1));
+  knob('crs2', 'COURSE R', 0.414, 0.035, B737_EVENTS.mcpCrsInc(2), B737_EVENTS.mcpCrsDec(2));
+  // F/D switches (bottom row) with the MA lights above them (FCOM 4.10: "MA" illuminates on the master F/D side).
   for (const s of [1, 2] as Side[]) {
-    const fx = s === 1 ? 0.062 : 0.536;
-    p.add(new ToggleSwitch(env, { id: `b737.mcp.fd${s}`, label: s === 1 ? 'F/D L' : 'F/D R', var: `ap.fd${s}_on`, positions: ['OFF', 'ON'], labels: { name: 'F/D', positions: true, height: 0.0022 } }), fx, 0.058);
-    p.add(new AnnunciatorLight(env, { id: `b737.mcp.ma${s}`, label: `MA ${s}`, width: 0.009, height: 0.006, segments: [{ text: 'MA', color: 'green', var: B737_VARS.mcpMaLight(s) }] }), fx, 0.03);
+    const fx = s === 1 ? 0.057 : 0.397;
+    p.add(new ToggleSwitch(env, { id: `b737.mcp.fd${s}`, label: s === 1 ? 'F/D L' : 'F/D R', var: `ap.fd${s}_on`, positions: ['OFF', 'ON'], scale: 0.8, labels: { name: 'F/D', positions: true, height: 0.0022 } }), fx, 0.06);
+    p.add(new AnnunciatorLight(env, { id: `b737.mcp.ma${s}`, label: `MA ${s}`, width: 0.008, height: 0.006, segments: [{ text: 'MA', color: 'green', var: B737_VARS.mcpMaLight(s) }] }), s === 1 ? 0.058 : 0.397, s === 1 ? 0.043 : 0.038);
   }
-  // A/T ARM (solenoid held; the A/T disconnect releases it) and its light.
-  p.add(new ToggleSwitch(env, { id: 'b737.mcp.at_arm', label: 'A/T ARM', var: 'ac.at_arm', positions: ['OFF', 'ARM'], labels: { name: 'A/T', positions: true, height: 0.0022 } }), 0.088, 0.058);
-  p.add(new AnnunciatorLight(env, { id: 'b737.mcp.at_arm_lt', label: 'A/T ARM light', width: 0.009, height: 0.006, segments: [{ text: 'ARM', color: 'green', var: B737_VARS.mcpLight('at_arm') }] }), 0.088, 0.03);
+  // A/T ARM (solenoid held; the A/T disconnect releases it) in the upper row with its ARM light above it.
+  p.add(new ToggleSwitch(env, { id: 'b737.mcp.at_arm', label: 'A/T ARM', var: 'ac.at_arm', positions: ['OFF', 'ARM'], scale: 0.8, labels: { name: false, positions: false, height: 0.0022 } }), 0.082, 0.036);
+  p.label('A/T', 0.082, 0.0045, { height: 0.0025 });
+  p.add(new AnnunciatorLight(env, { id: 'b737.mcp.at_arm_lt', label: 'A/T ARM light', width: 0.009, height: 0.005, segments: [{ text: 'ARM', color: 'green', var: B737_VARS.mcpLight('at_arm') }] }), 0.082, 0.015);
+  p.label('OFF', 0.082, 0.051, { height: 0.0019 });
   // IAS/MACH knob: push = SPD INTV (NG MCP).
-  knob('spd', 'IAS/MACH', 0.17, 0.05, B737_EVENTS.mcpSpdInc, B737_EVENTS.mcpSpdDec, { event: B737_EVENTS.mcpSpdIntv, label: 'SPD INTV' });
+  knob('spd', 'IAS/MACH', 0.126, 0.046, B737_EVENTS.mcpSpdInc, B737_EVENTS.mcpSpdDec, { event: B737_EVENTS.mcpSpdIntv, label: 'SPD INTV' });
   // HEADING: inner heading encoder, outer bank angle selector 10..30 deg.
   p.add(
     new RotaryKnob(env, {
@@ -135,78 +154,101 @@ export function addMcp(b: CockpitBuilder, parent: Panel, x: number, y: number, s
       label: 'HEADING',
       cap: 'ring',
       innerCap: 'fluted',
-      diameter: 0.026,
+      diameter: 0.022,
       outer: { var: AFCS_VARS.bankSelect, positions: BANK_POSITIONS.map((d) => ({ value: d, label: String(d) })), angles: [-60, -30, 0, 30, 60], label: 'BANK ANGLE', initial: 25 },
       inner: { incEvent: B737_EVENTS.mcpHdgInc, decEvent: B737_EVENTS.mcpHdgDec, label: 'HDG' },
     }),
-    0.27,
-    0.045,
+    0.189,
+    0.035,
   );
-  p.label('BANK', 0.248, 0.03, { height: 0.0022 });
+  p.label('BANK', 0.172, 0.026, { height: 0.0019 });
   // ALTITUDE knob: push = ALT INTV.
-  knob('alt', 'ALTITUDE', 0.372, 0.045, B737_EVENTS.mcpAltInc, B737_EVENTS.mcpAltDec, { event: B737_EVENTS.mcpAltIntv, label: 'ALT INTV' });
+  knob('alt', 'ALTITUDE', 0.256, 0.034, B737_EVENTS.mcpAltInc, B737_EVENTS.mcpAltDec, { event: B737_EVENTS.mcpAltIntv, label: 'ALT INTV' });
   // V/S thumbwheel (rolling up = DN, as engraved on the MCP).
-  p.add(new Thumbwheel(env, { id: 'b737.mcp.vs_wheel', label: 'VERT SPEED wheel', channel: { incEvent: B737_EVENTS.mcpVsUp, decEvent: B737_EVENTS.mcpVsDn, label: 'V/S' }, diameter: 0.022, width: 0.009, orientation: 'vertical' }), 0.43, 0.045);
-  p.label('DN', 0.442, 0.035, { height: 0.0022 });
-  p.label('UP', 0.442, 0.057, { height: 0.0022 });
+  p.add(new Thumbwheel(env, { id: 'b737.mcp.vs_wheel', label: 'VERT SPEED wheel', channel: { incEvent: B737_EVENTS.mcpVsUp, decEvent: B737_EVENTS.mcpVsDn, label: 'V/S' }, diameter: 0.02, width: 0.008, orientation: 'vertical' }), 0.311, 0.045);
+  p.label('DN', 0.322, 0.03, { height: 0.0022 });
+  p.label('UP', 0.322, 0.064, { height: 0.0022 });
+  p.label('A/P ENGAGE', 0.361, 0.0045, { height: 0.0025 });
   // Mode selector buttons with light bars. EST: green light bars (NG MCP photographs).
   for (const [id, legend, bx, by] of MCP_BUTTON_LAYOUT) {
     const light = id === 'co' ? undefined : { var: B737_VARS.mcpLight(id), color: 'green' as const };
-    p.add(new PushButton(env, { id: `b737.mcp.${id}`, label: legend, style: 'mcp', mode: 'momentary', event: B737_EVENTS.mcpButton(id), engraved: legend, engravedHeight: 0.0022, lightBar: light }), bx, by);
+    const round = id === 'co';
+    p.add(
+      new PushButton(env, {
+        id: `b737.mcp.${id}`,
+        label: legend,
+        style: round ? 'round' : 'mcp',
+        width: round ? 0.008 : 0.015,
+        height: round ? 0.008 : 0.01,
+        mode: 'momentary',
+        event: B737_EVENTS.mcpButton(id),
+        engraved: round ? undefined : legend,
+        engravedHeight: 0.0021,
+        lightBar: light,
+      }),
+      bx,
+      by,
+    );
+    if (round) p.label('C/O', bx - 0.007, by - 0.008, { height: 0.0021 });
   }
   // DISENGAGE bar (pull down = A/P disengaged and engagement inhibited).
-  p.add(new ToggleSwitch(env, { id: 'b737.mcp.disengage', label: 'A/P DISENGAGE bar', var: B737_VARS.mcpDisengageBar, positions: ['DISENGAGE', 'UP'], values: [1, 0], initial: 1, handle: 'paddle', labels: { name: 'DISENGAGE', positions: false, height: 0.0022 } }), 0.4925, 0.076);
+  p.add(new ToggleSwitch(env, { id: 'b737.mcp.disengage', label: 'A/P DISENGAGE bar', var: B737_VARS.mcpDisengageBar, positions: ['DISENGAGE', 'UP'], values: [1, 0], initial: 1, handle: 'paddle', labels: { name: 'DISENGAGE', positions: false, height: 0.0022 } }), 0.362, 0.058);
   return p;
 }
 
 // ---------------------------------------------------------------- EFIS control panel
 
-/** EFIS control panel of `side` (FCOM 10.10): MINS, FPV, MTRS, BARO, VOR/ADF, mode, range, map buttons. */
-export function addEfisPanel(b: CockpitBuilder, parent: Panel, x: number, y: number, side: Side): Panel {
+/**
+ * EFIS control panel of `side` (FCOM 10.10): MINS, FPV, MTRS, BARO, VOR/ADF, mode, range, map buttons.
+ * Layout measured on the SCBG 1:1 drawing (0.117 x 0.072 m panel).
+ */
+export function addEfisPanel(b: CockpitBuilder, parent: Panel, x: number, y: number, side: Side, o: B737HwOptions = {}): Panel {
   const env = b.env;
   const W = B737_HW.efis.w;
   const s = side;
   const pfx = `b737.efis${s}`;
-  const p = parent.subPanel({ name: pfx, width: W, height: B737_HW.efis.h, x, y, origin: 'top-left', material: 'panelDark', thickness: 0.008 });
+  const p = parent.subPanel({ name: pfx, width: W, height: B737_HW.efis.h, x, y, origin: 'top-left', material: o.material ?? 'panelDark', thickness: 0.008 });
   // MINS: outer RADIO/BARO, inner set, push RST.
   p.add(
     new RotaryKnob(env, {
       id: `${pfx}.mins`,
       label: 'MINS',
       cap: 'ring',
-      diameter: 0.022,
+      diameter: 0.018,
       outer: { var: B737_VARS.efisMinsRef(s), positions: [{ value: 0, label: 'RADIO' }, { value: 1, label: 'BARO' }], angles: [-30, 30], label: 'MINS REF' },
       inner: { incEvent: B737_EVENTS.efisMinsInc(s), decEvent: B737_EVENTS.efisMinsDec(s), label: 'MINS' },
       push: { event: B737_EVENTS.efisMinsRst(s), label: 'RST' },
     }),
-    0.025,
-    0.024,
+    0.022,
+    0.02,
   );
-  p.label('RADIO', 0.012, 0.006, { height: 0.0021 });
-  p.label('BARO', 0.04, 0.006, { height: 0.0021 });
-  p.label('MINS', 0.025, 0.043, { height: 0.0022 });
-  p.add(new PushButton(env, { id: `${pfx}.fpv`, label: 'FPV', style: 'round', mode: 'momentary', event: B737_EVENTS.efisFpv(s), engraved: 'FPV', engravedHeight: 0.002 }), 0.066, 0.02);
-  p.add(new PushButton(env, { id: `${pfx}.mtrs`, label: 'MTRS', style: 'round', mode: 'momentary', event: B737_EVENTS.efisMtrs(s), engraved: 'MTRS', engravedHeight: 0.002 }), 0.098, 0.02);
+  p.label('RADIO', 0.008, 0.009, { height: 0.0019 });
+  p.label('BARO', 0.034, 0.006, { height: 0.0019 });
+  p.label('MINS', 0.022, 0.0035, { height: 0.0021 });
+  p.add(new PushButton(env, { id: `${pfx}.fpv`, label: 'FPV', style: 'round', width: 0.0085, height: 0.0085, mode: 'momentary', event: B737_EVENTS.efisFpv(s) }), 0.049, 0.015);
+  p.label('FPV', 0.049, 0.006, { height: 0.0019 });
+  p.add(new PushButton(env, { id: `${pfx}.mtrs`, label: 'MTRS', style: 'round', width: 0.0085, height: 0.0085, mode: 'momentary', event: B737_EVENTS.efisMtrs(s) }), 0.066, 0.015);
+  p.label('MTRS', 0.066, 0.006, { height: 0.0019 });
   // BARO: outer IN/HPA, inner set, push STD.
   p.add(
     new RotaryKnob(env, {
       id: `${pfx}.baro`,
       label: 'BARO',
       cap: 'ring',
-      diameter: 0.022,
+      diameter: 0.018,
       outer: { var: B737_VARS.efisBaroHpa(s), positions: [{ value: 0, label: 'IN' }, { value: 1, label: 'HPA' }], angles: [-30, 30], label: 'BARO UNITS' },
       inner: { incEvent: B737_EVENTS.efisBaroInc(s), decEvent: B737_EVENTS.efisBaroDec(s), label: 'BARO' },
       push: { event: B737_EVENTS.efisBaroStd(s), label: 'STD' },
     }),
-    0.14,
-    0.024,
+    0.095,
+    0.02,
   );
-  p.label('IN', 0.127, 0.006, { height: 0.0021 });
-  p.label('HPA', 0.153, 0.006, { height: 0.0021 });
-  p.label('BARO', 0.14, 0.043, { height: 0.0022 });
+  p.label('IN', 0.084, 0.006, { height: 0.0019 });
+  p.label('HPA', 0.108, 0.009, { height: 0.0019 });
+  p.label('BARO', 0.095, 0.0035, { height: 0.0021 });
   // VOR/ADF switches.
   for (const n of [1, 2] as const) {
-    p.add(new ToggleSwitch(env, { id: `${pfx}.vor_adf${n}`, label: `VOR/ADF ${n}`, var: B737_VARS.efisVorAdf(s, n), positions: ['ADF', 'OFF', 'VOR'], values: [-1, 0, 1], initial: 1, labels: { name: String(n), positions: true, height: 0.0019 } }), n === 1 ? 0.014 : 0.151, 0.06);
+    p.add(new ToggleSwitch(env, { id: `${pfx}.vor_adf${n}`, label: `VOR/ADF ${n}`, var: B737_VARS.efisVorAdf(s, n), positions: ['ADF', 'OFF', 'VOR'], values: [-1, 0, 1], initial: 1, scale: 0.65, labels: { name: String(n), positions: true, height: 0.0017 } }), n === 1 ? 0.011 : 0.106, 0.043);
   }
   // Mode selector (push = CTR) and range selector (push = TFC).
   p.add(
@@ -221,12 +263,12 @@ export function addEfisPanel(b: CockpitBuilder, parent: Panel, x: number, y: num
         { value: NdMode.Pln, label: 'PLN' },
       ],
       initial: 2,
-      diameter: 0.017,
-      labelHeight: 0.0019,
+      diameter: 0.014,
+      labelHeight: 0.0017,
       push: { event: B737_EVENTS.efisCtr(s), label: 'CTR' },
     }),
-    0.058,
-    0.062,
+    0.042,
+    0.044,
   );
   p.add(
     new SelectorKnob(env, {
@@ -235,28 +277,32 @@ export function addEfisPanel(b: CockpitBuilder, parent: Panel, x: number, y: num
       var: B737_VARS.efisRange(s),
       positions: ND_RANGES_NM.map((r, i) => ({ value: i, label: String(r), angle: -105 + i * 30 })),
       initial: 2,
-      diameter: 0.017,
-      labelHeight: 0.0017,
+      diameter: 0.014,
+      labelHeight: 0.0015,
       push: { event: B737_EVENTS.efisTfc(s), label: 'TFC' },
     }),
-    0.107,
-    0.062,
+    0.075,
+    0.044,
   );
-  // Map option buttons along the bottom edge.
+  // Map option buttons along the bottom edge (15.8 mm pitch, SCBG drawing).
   const legends: Record<string, string> = { wxr: 'WXR', sta: 'STA', wpt: 'WPT', arpt: 'ARPT', data: 'DATA', pos: 'POS', terr: 'TERR' };
   EFIS_MAP_BUTTONS.forEach((bt, i) => {
-    p.add(new PushButton(env, { id: `${pfx}.${bt}`, label: legends[bt], style: 'round', mode: 'momentary', event: B737_EVENTS.efisMapButton(s, bt), engraved: legends[bt], engravedHeight: 0.0017, width: 0.009, height: 0.009 }), 0.02 + i * 0.021, 0.083);
+    p.add(new PushButton(env, { id: `${pfx}.${bt}`, label: legends[bt], style: 'mcp', mode: 'momentary', event: B737_EVENTS.efisMapButton(s, bt), engraved: legends[bt], engravedHeight: 0.0019, width: 0.0125, height: 0.0085 }), 0.011 + i * 0.0158, 0.064);
   });
   return p;
 }
 
 // ---------------------------------------------------------------- disengage lights
 
-/** A/P, A/T and FMC P/RST lights with the disengage light TEST switch (FCOM 4.10 "Autoflight Status Annunciator"). */
-export function addDisengageLights(b: CockpitBuilder, parent: Panel, x: number, y: number, side: Side): Panel {
+/**
+ * A/P, A/T and FMC P/RST lights with the disengage light TEST switch (FCOM 4.10 "Autoflight Status
+ * Annunciator"). Both pilots' panels have a TEST switch (SCBG P1 / P3 drawing); the F/O switch writes
+ * `discLightTest2`, which the AFDS / FMC combine with the Captain's (SCOPE: either switch tests every light).
+ */
+export function addDisengageLights(b: CockpitBuilder, parent: Panel, x: number, y: number, side: Side, o: B737HwOptions = {}): Panel {
   const env = b.env;
   const pfx = `b737.asa${side}`;
-  const p = parent.subPanel({ name: pfx, width: 0.08, height: 0.028, x, y, origin: 'top-left', material: 'panelDark', thickness: 0.004 });
+  const p = parent.subPanel({ name: pfx, width: 0.085, height: 0.03, x, y, origin: 'top-left', material: o.material ?? 'panelDark', thickness: 0.004 });
   const light = (id: string, label: string, v: string, ev: string, lx: number): void => {
     // SCOPE: one lens shows red (upper legend) or amber (lower legend) instead of the whole lens changing colour.
     p.add(
@@ -274,11 +320,11 @@ export function addDisengageLights(b: CockpitBuilder, parent: Panel, x: number, 
         ],
       }),
       lx,
-      0.014,
+      0.015,
     );
   };
   light('ap', 'A/P', B737_VARS.apDiscLight, B737_EVENTS.apLightPush, 0.012);
-  light('at', 'A/T', B737_VARS.atDiscLight, B737_EVENTS.atLightPush, 0.032);
+  light('at', 'A/T', B737_VARS.atDiscLight, B737_EVENTS.atLightPush, 0.031);
   // FMC light: amber only.
   p.add(
     new PushButton(env, {
@@ -291,20 +337,26 @@ export function addDisengageLights(b: CockpitBuilder, parent: Panel, x: number, 
       event: B737_EVENTS.fmcLightPush,
       segments: [{ text: ['FMC', 'P/RST'], color: 'amber', var: B737_VARS.fmcAlertLight, test: (x) => x !== 0, style: 'field' }],
     }),
-    0.052,
-    0.014,
+    0.05,
+    0.015,
   );
-  if (side === 1) p.add(new ToggleSwitch(env, { id: `${pfx}.test`, label: 'DISENGAGE LIGHT TEST', var: B737_VARS.discLightTest, positions: ['1', 'OFF', '2'], values: [-1, 0, 1], initial: 1, springs: { 0: 1, 2: 1 }, scale: 0.7, labels: { name: 'TEST', positions: true, height: 0.0018 } }), 0.071, 0.014);
+  const tv = side === 1 ? B737_VARS.discLightTest : B737_VARS.discLightTest2;
+  p.add(new ToggleSwitch(env, { id: `${pfx}.test`, label: 'DISENGAGE LIGHT TEST', var: tv, positions: ['1', 'OFF', '2'], values: [-1, 0, 1], initial: 1, springs: { 0: 1, 2: 1 }, scale: 0.6, labels: { name: false, positions: true, height: 0.0018 } }), 0.071, 0.013);
+  p.label('TEST', 0.071, 0.027, { height: 0.0018 });
   return p;
 }
 
 // ---------------------------------------------------------------- display select panel
 
 /** MAIN PANEL DUs and LOWER DU selectors plus the outboard / inboard DU brightness knobs of `side`. */
-export function addDisplaySelect(b: CockpitBuilder, parent: Panel, x: number, y: number, side: Side): Panel {
+export function addDisplaySelect(b: CockpitBuilder, parent: Panel, x: number, y: number, side: Side, o: B737HwOptions & { mirror?: boolean } = {}): Panel {
   const env = b.env;
   const pfx = `b737.dsp${side}`;
-  const p = parent.subPanel({ name: pfx, width: 0.11, height: 0.05, x, y, origin: 'top-left', material: 'panelDark', thickness: 0.004 });
+  const W = o.mirror !== undefined ? 0.123 : 0.11;
+  const p = parent.subPanel({ name: pfx, width: W, height: 0.05, x, y, origin: 'top-left', material: o.material ?? 'panelDark', thickness: 0.004 });
+  // SCBG drawing: Captain MAIN PANEL DUs outboard (left), LOWER DU inboard; the F/O panel is mirrored (`mirror`).
+  const xMain = o.mirror ? W - 0.035 : 0.03;
+  const xLower = o.mirror ? 0.035 : o.mirror === false ? W - 0.035 : 0.08;
   p.add(
     new SelectorKnob(env, {
       id: `${pfx}.main`,
@@ -319,11 +371,11 @@ export function addDisplaySelect(b: CockpitBuilder, parent: Panel, x: number, y:
       ],
       initial: 1,
       diameter: 0.014,
-      labelHeight: 0.0016,
+      labelHeight: o.mirror !== undefined ? 0.002 : 0.0016,
       title: 'MAIN PANEL DUs',
     }),
-    0.03,
-    0.026,
+    xMain,
+    0.028,
   );
   p.add(
     new SelectorKnob(env, {
@@ -337,11 +389,11 @@ export function addDisplaySelect(b: CockpitBuilder, parent: Panel, x: number, y:
       ],
       initial: 1,
       diameter: 0.014,
-      labelHeight: 0.0016,
+      labelHeight: o.mirror !== undefined ? 0.002 : 0.0016,
       title: 'LOWER DU',
     }),
-    0.08,
-    0.026,
+    xLower,
+    0.028,
   );
   return p;
 }
@@ -372,16 +424,22 @@ export function addDuBrightness(b: CockpitBuilder, panel: Panel, x: number, y: n
  * BOTH / 1 / 2, inner set), SPD REF (outer AUTO / V1 / VR / WT / VREF / B /
  * SET, inner set) and the FUEL FLOW switch (RESET spring / RATE / USED).
  */
-export function addCentreControls(b: CockpitBuilder, parent: Panel, x: number, y: number): Panel {
+export function addCentreControls(b: CockpitBuilder, parent: Panel, x: number, y: number, o: B737HwOptions & { layout?: 'row' | 'stack' } = {}): Panel {
   const env = b.env;
-  const p = parent.subPanel({ name: 'b737.ctr', width: 0.2, height: 0.05, x, y, origin: 'top-left', material: 'panelDark', thickness: 0.004 });
+  // 'stack' (SCBG P2 drawing): N1 SET and SPD REF knobs in the top row, FUEL FLOW switch and the MFD buttons
+  // under them. 'row' (default): everything in one row.
+  const stack = o.layout === 'stack';
+  const p = parent.subPanel({ name: 'b737.ctr', width: stack ? 0.105 : 0.2, height: stack ? 0.075 : 0.05, x, y, origin: 'top-left', material: o.material ?? 'panelDark', thickness: 0.004 });
+  const P = stack
+    ? { mfdY: 0.058, mfdX: [0.045, 0.063, 0.081], mfdLbl: [0.063, 0.046], n1: [0.02, 0.022], spd: [0.062, 0.022], ff: [0.018, 0.058] }
+    : { mfdY: 0.018, mfdX: [0.015, 0.032, 0.049], mfdLbl: [0.03, 0.006], n1: [0.09, 0.025], spd: [0.14, 0.025], ff: [0.182, 0.025] };
   const btn = (id: string, legend: string, ev: string, bx: number): void => {
-    p.add(new PushButton(env, { id: `b737.mfd.${id}`, label: `MFD ${legend}`, style: 'korry', width: 0.013, height: 0.011, mode: 'momentary', event: ev, engraved: legend, engravedHeight: 0.0022 }), bx, 0.018);
+    p.add(new PushButton(env, { id: `b737.mfd.${id}`, label: `MFD ${legend}`, style: 'korry', width: 0.013, height: 0.011, mode: 'momentary', event: ev, engraved: legend, engravedHeight: 0.0022 }), bx, P.mfdY);
   };
-  p.label('MFD', 0.03, 0.006, { height: 0.0022 });
-  btn('eng', 'ENG', B737_EVENTS.mfdEng, 0.015);
-  btn('sys', 'SYS', B737_EVENTS.mfdSys, 0.032);
-  btn('cr', 'C/R', B737_EVENTS.mfdCr, 0.049);
+  p.label('MFD', P.mfdLbl[0], P.mfdLbl[1], { height: 0.0022 });
+  btn('eng', 'ENG', B737_EVENTS.mfdEng, P.mfdX[0]);
+  btn('sys', 'SYS', B737_EVENTS.mfdSys, P.mfdX[1]);
+  btn('cr', 'C/R', B737_EVENTS.mfdCr, P.mfdX[2]);
   p.add(
     new RotaryKnob(env, {
       id: 'b737.n1set',
@@ -391,10 +449,10 @@ export function addCentreControls(b: CockpitBuilder, parent: Panel, x: number, y
       outer: { var: B737_VARS.n1SetSel, positions: [{ value: 2, label: '1' }, { value: 0, label: 'AUTO' }, { value: 1, label: 'BOTH' }, { value: 3, label: '2' }], angles: [-60, -20, 20, 60], label: 'N1 SET' },
       inner: { incEvent: B737_EVENTS.n1SetInc, decEvent: B737_EVENTS.n1SetDec, label: 'N1' },
     }),
-    0.09,
-    0.025,
+    P.n1[0],
+    P.n1[1],
   );
-  p.label('N1 SET', 0.09, 0.046, { height: 0.0022 });
+  p.label('N1 SET', P.n1[0], P.n1[1] - 0.016, { height: 0.0022 });
   p.add(
     new RotaryKnob(env, {
       id: 'b737.spdref',
@@ -409,11 +467,11 @@ export function addCentreControls(b: CockpitBuilder, parent: Panel, x: number, y
       },
       inner: { incEvent: B737_EVENTS.spdRefInc, decEvent: B737_EVENTS.spdRefDec, label: 'SPD' },
     }),
-    0.14,
-    0.025,
+    P.spd[0],
+    P.spd[1],
   );
-  p.label('SPD REF', 0.14, 0.046, { height: 0.0022 });
-  p.add(new ToggleSwitch(env, { id: 'b737.ffsw', label: 'FUEL FLOW', var: B737_VARS.ffSwitch, positions: ['RESET', 'RATE', 'USED'], values: [-1, 0, 1], initial: 1, springs: { 0: 1 }, scale: 0.8, labels: { name: 'FUEL FLOW', positions: true, height: 0.0018 } }), 0.182, 0.025);
+  p.label('SPD REF', P.spd[0], P.spd[1] - 0.016, { height: 0.0022 });
+  p.add(new ToggleSwitch(env, { id: 'b737.ffsw', label: 'FUEL FLOW', var: B737_VARS.ffSwitch, positions: ['RESET', 'RATE', 'USED'], values: [-1, 0, 1], initial: 1, springs: { 0: 1 }, scale: 0.8, labels: { name: 'FUEL FLOW', positions: true, height: 0.0018 } }), P.ff[0], P.ff[1]);
   return p;
 }
 

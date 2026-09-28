@@ -166,7 +166,7 @@ export function addFcpVision(b: CockpitBuilder, parent: Panel, x: number, y: num
   // Readout windows.
   const win = (w: FcpWindow, wx: number) => {
     if (o.canvas === null) return;
-    p.display(new FcpReadout(env.vars, w, fcpWindowId(suite.cfg.idPrefix, w), o.canvas ?? undefined), wx, 0.013, 0.046, 0.0127, { bezel: { border: 0.0025, material: 'bezel' } });
+    p.display(new FcpReadout(env.vars, w, fcpWindowId(suite.cfg.idPrefix, w), o.canvas ?? undefined), wx, 0.013, 0.046, 0.0127, { bezel: false });
   };
   win('ias', 0.082);
   win('hdg', 0.205);
@@ -379,7 +379,7 @@ export function addMkpVision(b: CockpitBuilder, parent: Panel, x: number, y: num
   const pfx = `${suite.cfg.idPrefix}.mkp${side}`;
   const W = VISION_HW.mkp;
   const p = parent.subPanel({ name: pfx, width: W.w, height: W.h, x, y, origin: 'top-left', material: 'panelDark', thickness: 0.008, screws: { kind: 'dzus', diameter: 0.005, inset: 0.005 } });
-  if (o.canvas !== null) p.display(new MkpScratchpad(env.vars, side, mkpScratchId(suite.cfg.idPrefix, side), o.canvas ?? undefined), W.w / 2 + 0.01, 0.008, 0.09, 0.0078, { bezel: { border: 0.002, material: 'bezel' } });
+  if (o.canvas !== null) p.display(new MkpScratchpad(env.vars, side, mkpScratchId(suite.cfg.idPrefix, side), o.canvas ?? undefined), W.w / 2 + 0.01, 0.008, 0.09, 0.0078, { bezel: false });
   p.add(
     new KeyPad(env, {
       id: `${pfx}.keys`,

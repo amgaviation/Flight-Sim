@@ -1,7 +1,8 @@
 /**
- * Citation Longitude normal checklists (OG Section 17 "Normal Procedures"),
- * with automatic checks against the cockpit/system vars where the item is
- * observable.
+ * Citation Longitude normal checklists (OG Section 17 "Normal Procedures")
+ * and the emergency / abnormal items of the DGAC Chile C700 card (2021), with
+ * automatic checks against the cockpit/system vars where the item is
+ * observable. Items marked EST are not on the card (Citation-family practice).
  */
 import type { Checklist } from '../types';
 import { LON_VARS as V } from './vars';
@@ -246,8 +247,106 @@ export const LONGITUDE_CHECKLISTS: Checklist[] = [
       { challenge: 'Throttle (affected side)', response: 'IDLE' },
       { challenge: 'ENGINE RUN/STOP (affected side)', response: 'STOP' },
       { challenge: 'ENGINE STARTER (affected side)', response: 'Push and hold' },
-      { challenge: 'ENGINE STARTER', response: 'Release at 19 % N2 or 15 s' },
+      { challenge: 'ENGINE STARTER', response: 'Release at 20 % N2 or 15 s' }, // OG 7-6
       { challenge: 'Next start attempt', response: 'When ENG DRY MTR PROC clears', check: (v) => v.get(V.dryMotorReq(1)) === 0 && v.get(V.dryMotorReq(2)) === 0 },
+    ],
+  },
+  // ================================================================ DGAC C700 card: emergency / abnormal
+  {
+    title: 'CABIN ALTITUDE',
+    phase: 'Emergency',
+    items: [
+      { challenge: 'Oxygen mask', response: 'Don and 100 %', check: (v) => v.get(V.oxyMaskL) !== 0 && v.get(V.oxyMode) >= 1 },
+      { challenge: 'MIC SEL buttons (both)', response: 'MASK', check: (v) => v.get(V.micSelL) !== 0 && v.get(V.micSelR) !== 0 },
+      { challenge: 'MIC/INPH switches (both)', response: 'Outboard, as required to enable intercom' },
+      { challenge: 'Descent', response: 'Initiate max rate descent to a safe altitude' },
+    ],
+  },
+  {
+    title: 'EMERGENCY DESCENT and EDM',
+    phase: 'Emergency',
+    items: [
+      { challenge: 'Oxygen mask', response: 'Don and 100 %', check: (v) => v.get(V.oxyMaskL) !== 0 && v.get(V.oxyMode) >= 1 },
+      { challenge: 'MIC SEL buttons (both)', response: 'MASK', check: (v) => v.get(V.micSelL) !== 0 && v.get(V.micSelR) !== 0 },
+      { challenge: 'MIC/INPH switches (both)', response: 'Outboard, as required to enable intercom' },
+      { challenge: 'Descent', response: 'Initiate max rate descent to a safe altitude (EDM: AP turns 90 deg left, descends to 15,000 ft)' },
+    ],
+  },
+  {
+    title: 'WINDSHEAR',
+    phase: 'Emergency',
+    items: [
+      { challenge: 'Autothrottle', response: 'Disengage', check: off('ap.at_engaged') },
+      { challenge: 'Autopilot', response: 'Disengage', check: off('ap.engaged') },
+      { challenge: 'Throttles', response: 'TO' },
+      { challenge: 'Pitch attitude', response: '7.5 deg nose up initially' },
+      { challenge: 'MANUAL POWER RESERVE button', response: 'ON', check: on(V.aprManual) },
+    ],
+  },
+  {
+    title: 'BRAKE FAIL / WHEEL BRAKE FAILURE',
+    phase: 'Emergency',
+    items: [
+      { challenge: 'In flight', response: 'Climb to a safe altitude' },
+      { challenge: 'On the ground: EMER/PARK BRAKE handle', response: 'Apply smoothly until stopped, then SET', check: on('brakes.parking_set') },
+    ],
+  },
+  {
+    title: 'PRIMARY PITCH TRIM RUNAWAY',
+    phase: 'Emergency',
+    items: [
+      { challenge: 'MASTER DISCONNECT button', response: 'Push and hold' },
+      // EST continuation (not on the card): disengage the primary channel and retrim with the secondary trim.
+      { challenge: 'SECONDARY TRIM (EST)', response: 'ENGAGED', check: on(V.stabSecArm) },
+      { challenge: 'Secondary trim rocker (EST)', response: 'Retrim as required' },
+    ],
+  },
+  {
+    title: 'JAMMED PITCH OR ROLL CONTROL SYSTEM',
+    phase: 'Emergency',
+    items: [
+      { challenge: 'Control wheel', response: 'Relax pressure' },
+      { challenge: 'PITCH/ROLL DISCONNECT handle', response: 'Pull until latched', check: (v) => v.get(V.pitchRollDisc) !== 0 },
+      { challenge: 'Operative control wheel', response: 'Identify, recover airplane attitude' },
+    ],
+  },
+  {
+    title: 'NOSEWHEEL STEERING MALFUNCTION',
+    phase: 'Emergency',
+    items: [{ challenge: 'MASTER DISCONNECT button', response: 'Push and hold' }],
+  },
+  {
+    title: 'INADVERTENT STALL / PUSH',
+    phase: 'Emergency',
+    items: [
+      { challenge: 'Pitch attitude', response: '0 to 5 deg nose down initially' },
+      { challenge: 'Roll attitude', response: 'Wings level' },
+      { challenge: 'Autothrottle', response: 'Disengage', check: off('ap.at_engaged') },
+      { challenge: 'Throttles', response: 'TO' },
+    ],
+  },
+  {
+    title: 'AT HOLD FAIL',
+    phase: 'Abnormal',
+    items: [
+      { challenge: 'Below V1', response: 'Takeoff - abort' },
+      { challenge: 'Above V1: throttles', response: 'TO' },
+    ],
+  },
+  {
+    title: "BATTERY O'TEMP L or R",
+    phase: 'Emergency',
+    items: [{ challenge: 'BATT button (affected side)', response: 'OFF' }],
+  },
+  {
+    // DGAC UNCOMMANDED ENGINE THRUST / UNRESPONSIVE OR JAMMED THROTTLE (the card's ground item), with the FADEC
+    // ENG CONTROL FAULT CAS (EST text) as the trigger.
+    title: 'ENG CONTROL FAULT / UNCOMMANDED THRUST',
+    phase: 'Abnormal',
+    items: [
+      { challenge: 'On the ground: engine fire button (affected side)', response: 'Push' },
+      { challenge: 'In flight: throttle (affected side)', response: 'As required' },
+      { challenge: 'If thrust is uncontrollable: ENGINE RUN/STOP (affected side)', response: 'STOP' },
     ],
   },
 ];

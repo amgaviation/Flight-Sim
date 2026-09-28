@@ -22,12 +22,13 @@
  */
 import * as THREE from 'three';
 import { CockpitBuilder, type CockpitBuildEx } from '../../../cockpit/CockpitBuilder';
+import { PALETTES, type PaletteDef } from '../../../cockpit/materials';
 import { placePanel } from '../../../cockpit/frame';
 import type { SimContext } from '../../../core/SimContext';
 import type { B738Systems } from '../createSystems';
 import { B738 } from '../vars';
 import { CK, type B738CockpitContext } from './context';
-import { EYE_L, EYE_R, MOUNTS } from './layout';
+import { EYE_L, EYE_R, GLARE, MOUNTS } from './layout';
 import { buildShell } from './shell';
 import { buildMainPanel } from './mainPanel';
 import { buildGlareshield } from './glareshield';
@@ -55,11 +56,26 @@ export interface B738Cockpit {
 
 /** Derived flood var: the brighter of the glareshield flood and background knobs. */
 const FLOOD_VAR = 'ac.b738.ck.flood';
+
+/**
+ * 737NG flight-deck finish: medium Boeing grey panels (b737.org.uk NG flight deck photographs and the SCBG drawing
+ * tone; the library 'boeing' palette's FS 36440 Light Gull Gray rendered near-white, sRGB ~215 in daylight).
+ * EST albedo #50524e renders ~sRGB 120-130 in the daylight pilot view (#646662 measured 157); the MCP / EFIS / module plates use the
+ * same panel grey ('panel'), gaps and backings a darker grey. Legends: incandescent backlighting ~2700 K (EST
+ * #ffc27f), glowing warm on the dark panel at night.
+ */
+const B738_PALETTE: PaletteDef = {
+  ...PALETTES.boeing,
+  name: 'Boeing 737NG (medium Boeing grey)',
+  panel: '#50524e',
+  panelDark: '#303335',
+  backlight: '#ffc27f',
+};
 const ANNUN_BRT = 'ac.b738.ck.annun_brt';
 
 export function buildB738Cockpit(ctx: SimContext, sys: B738Systems, o: B738CockpitOptions = {}): B738Cockpit {
   const b = new CockpitBuilder(ctx, {
-    palette: 'boeing',
+    palette: B738_PALETTE,
     name: 'b737-800',
     eyePosition_m: EYE_L,
     views: [
@@ -71,8 +87,8 @@ export function buildB738Cockpit(ctx: SimContext, sys: B738Systems, o: B738Cockp
       { name: 'Aft pedestal (radios / fire)', position_m: [13.2, -0.26, -0.3], yawDeg: 25, pitchDeg: -72, fovDeg: 58 },
       { name: 'Overhead', position_m: [13.42, -0.08, -0.42], yawDeg: 4, pitchDeg: 66, fovDeg: 72 },
       // Overhead / side-console agent views (cockpit/overhead, cockpit/side).
-      { name: 'Overhead left (FLT CONTROL / FUEL / ELEC)', position_m: [13.5, -0.3, -0.44], yawDeg: -4, pitchDeg: 68, fovDeg: 44 },
-      { name: 'Overhead right (AIR COND / BLEED / PRESS)', position_m: [13.5, 0.3, -0.44], yawDeg: 4, pitchDeg: 68, fovDeg: 44 },
+      { name: 'Overhead left (FLT CONTROL / FUEL / ELEC)', position_m: [13.5, -0.2, -0.44], yawDeg: -4, pitchDeg: 68, fovDeg: 44 },
+      { name: 'Overhead right (AIR COND / BLEED / PRESS)', position_m: [13.5, 0.2, -0.44], yawDeg: 4, pitchDeg: 68, fovDeg: 44 },
       { name: 'Aft overhead (IRS / doors)', position_m: [13.22, -0.05, -0.45], yawDeg: 0, pitchDeg: 89, fovDeg: 80 },
       { name: 'Captain side console / P18 breakers', position_m: [13.45, -0.5, -0.4], yawDeg: -118, pitchDeg: -14, fovDeg: 72 },
       { name: 'F/O side console / P6 breakers', position_m: [13.45, 0.5, -0.4], yawDeg: 118, pitchDeg: -14, fovDeg: 72 },
@@ -103,16 +119,18 @@ export function buildB738Cockpit(ctx: SimContext, sys: B738Systems, o: B738Cockp
   };
 
   // ---- lighting zones and real lights
-  b.zone({ id: 'panel', intensityVar: CK.panelLight, gain: 1.1 });
+  // Legend backlight gain raised so the incandescent legends read clearly over the (dimmer) flood wash at night
+  // (b737.org.uk NG night flight-deck photographs: warm legends on a dark panel, floods only a dim wash).
+  b.zone({ id: 'panel', intensityVar: CK.panelLight, gain: 2.4 });
   b.zone({ id: 'flood', intensityVar: FLOOD_VAR, color: 0xffe2b8 });
   b.zone({ id: 'afds', intensityVar: 'ac.light.flood_afds', color: 0xffe2b8 });
   b.zone({ id: 'ped_flood', intensityVar: 'ac.light.flood_pedestal', color: 0xffe2b8 });
   b.zone({ id: 'dome', intensityVar: 'ac.light.dome', color: 0xfff0dc });
   env.lighting.setAnnunciatorDimming(ANNUN_BRT, 0.4);
   env.lighting.lampTestVar = CK.lampTest;
-  // Glareshield floods under the brow, aimed at each pilot's DUs (EST 3 cd incandescent floods).
-  env.lighting.addFloodLight('flood.l', 'flood', [14.36, -0.55, -0.236], [14.56, -0.55, 0.0], b.root, 3, 60);
-  env.lighting.addFloodLight('flood.r', 'flood', [14.36, 0.55, -0.236], [14.56, 0.55, 0.0], b.root, 3, 60);
+  // Glareshield floods under the brow, aimed at each pilot's DUs (EST 1.5 cd incandescent floods: a dim wash).
+  env.lighting.addFloodLight('flood.l', 'flood', [14.45, -0.55, -0.26], [14.6, -0.55, 0.0], b.root, 1.5, 60);
+  env.lighting.addFloodLight('flood.r', 'flood', [14.45, 0.55, -0.26], [14.6, 0.55, 0.0], b.root, 1.5, 60);
   // Pedestal flood in the overhead aft of the glareshield (EST 4 cd).
   env.lighting.addFloodLight('flood.ped', 'ped_flood', [13.75, 0, -0.95], [13.8, 0, 0.35], b.root, 4, 45);
   // Dome light in the headliner (EST 6 cd).
@@ -123,7 +141,7 @@ export function buildB738Cockpit(ctx: SimContext, sys: B738Systems, o: B738Cockp
   const strip = new THREE.MeshStandardMaterial({ color: 0x151515, emissive: 0xffe2b8, emissiveIntensity: 0, roughness: 0.6 });
   env.materials.track(strip);
   env.lighting.registerBacklight(strip, 'afds', 1.4);
-  b.structureMesh(new THREE.BoxGeometry(0.62, 0.004, 0.008), strip, [14.33, 0, -0.343], undefined, false).name = 'afds_flood_strip';
+  b.structureMesh(new THREE.BoxGeometry(0.48, 0.004, 0.008), strip, [GLARE.face.center_m[0] - 0.008, 0, -0.343], undefined, false).name = 'afds_flood_strip';
 
   buildMainPanel(c);
   buildGlareshield(c);

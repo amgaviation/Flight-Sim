@@ -12,8 +12,9 @@
  *    sensors), powered from the DC standby / hot battery bus (electrical.ts
  *    'isfd'). ATT RST re-aligns the attitude (~90 s, ATT flag + countdown).
  *    Layout EST from ISFD photographs; tape scales EST.
- *  - `ClockDisplay`: Captain / F/O clock (FCOM 10.10 "Clock"): UTC time,
- *    ET (elapsed time) and CHR (chronograph) with the sweep second hand.
+ *  - `ClockDisplay`: Captain / F/O clock (FCOM 10.10 "Clock"): UTC / MAN time
+ *    and date (TIME/DATE), ET (elapsed time, RUN / HLD) and CHR
+ *    (chronograph) with the sweep second hand; SET flashes the field set.
  *  - `DialDisplay`: electromechanical-look dial gauges on a canvas (flap
  *    position indicator with L / R needles, hydraulic brake pressure,
  *    rudder trim indicator).
@@ -345,6 +346,7 @@ export class IsfdDisplay extends CanvasDisplay {
 export class ClockDisplay extends CanvasDisplay {
   private readonly v: SimVars;
   private readonly side: 1 | 2;
+  private blink = 0;
 
   constructor(vars: SimVars, id: string, side: 1 | 2, canvas?: CanvasOpt) {
     super({ id, width: 256, height: 256, vars, powerVar: 'elec.clock_powered', refreshHz: 10, canvas });
@@ -352,6 +354,10 @@ export class ClockDisplay extends CanvasDisplay {
     this.side = side;
     this.watch(B738.lt.clockChrS(side), 0.5);
     this.watch(B738.lt.clockEtS(side), 30);
+    this.watch(B738.lt.clockMode(side), 0);
+    this.watch(B738.lt.clockSetField(side), 0);
+    this.watch(B738.lt.clockManOffsetH(side), 0);
+    this.watch(B738.lt.clockEtRun(side), 0);
     this.watch('env.time_utc_h', 1 / 60);
   }
 
@@ -361,43 +367,73 @@ export class ClockDisplay extends CanvasDisplay {
     ctx.fillRect(0, 0, 256, 256);
     const cx = 128;
     const cy = 128;
-    // Seconds dial (white marks every second, numerals every 5 s: 5 .. 60).
+    // Seconds dial (white marks every second, numerals every 10 s: 10 .. 60, SCBG clock face).
     ctx.strokeStyle = '#e8e8e8';
     ctx.fillStyle = '#e8e8e8';
     for (let s = 0; s < 60; s++) {
       const a = (s / 60) * Math.PI * 2;
-      const r0 = s % 5 === 0 ? 100 : 108;
+      const r0 = s % 5 === 0 ? 104 : 111;
       ctx.lineWidth = s % 5 === 0 ? 3 : 1.5;
       ctx.beginPath();
       ctx.moveTo(cx + Math.sin(a) * r0, cy - Math.cos(a) * r0);
-      ctx.lineTo(cx + Math.sin(a) * 118, cy - Math.cos(a) * 118);
+      ctx.lineTo(cx + Math.sin(a) * 120, cy - Math.cos(a) * 120);
       ctx.stroke();
     }
-    ctx.font = fontString(15, SANS, 'bold');
+    ctx.font = fontString(17, SANS, 'bold');
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    for (let s = 5; s <= 60; s += 5) {
+    for (let s = 10; s <= 60; s += 10) {
       const a = (s / 60) * Math.PI * 2;
-      ctx.fillText(String(s), cx + Math.sin(a) * 86, cy - Math.cos(a) * 86);
+      ctx.fillText(String(s), cx + Math.sin(a) * 91, cy - Math.cos(a) * 91);
     }
-    // LCD windows: CHR (top), TIME (centre), ET (bottom). EST layout of the Smiths NG clock.
+    // LCD windows (Smiths NG clock, SCBG drawing): upper TIME / DATE window with the MAN / UTC flag, lower ET / CHR
+    // window with the RUN / HLD flag. SET: the field being set flashes.
+    this.blink = (this.blink + 1) % 10;
+    const flashOff = this.blink < 4;
     const lcd = (text: string, y: number, label: string) => {
       ctx.fillStyle = '#9fa98f';
-      ctx.fillRect(cx - 44, y - 14, 88, 28);
+      ctx.fillRect(cx - 50, y - 16, 100, 32);
       ctx.fillStyle = '#111';
-      ctx.font = fontString(22, FONT_STACKS.lcd, 'bold');
+      ctx.font = fontString(25, FONT_STACKS.lcd, 'bold');
       ctx.fillText(text, cx, y + 1);
       ctx.fillStyle = '#e8e8e8';
-      ctx.font = fontString(10, SANS, 'bold');
-      ctx.fillText(label, cx, y + 21);
+      ctx.font = fontString(11, SANS, 'bold');
+      ctx.fillText(label, cx, y - 25);
     };
-    const chr = v.get(B738.lt.clockChrS(this.side));
-    const et = v.get(B738.lt.clockEtS(this.side));
-    const utc = ((v.get('env.time_utc_h', 12) % 24) + 24) % 24;
+    const s = this.side;
+    const chr = v.get(B738.lt.clockChrS(s));
+    const et = v.get(B738.lt.clockEtS(s));
+    const mode = v.get(B738.lt.clockMode(s));
+    const field = v.get(B738.lt.clockSetField(s));
+    const man = mode >= 2;
+    const hours = v.get('env.time_utc_h', 12) + (man ? v.get(B738.lt.clockManOffsetH(s)) : 0);
+    const utc = ((hours % 24) + 24) % 24;
+    const dayShift = Math.floor(hours / 24);
     const two = (n: number) => (n < 10 ? `0${n}` : String(n));
-    lcd(two(Math.floor(chr / 60) % 100), 62, 'CHR');
-    lcd(`${two(Math.floor(utc))}:${two(Math.floor((utc * 60) % 60))}`, 128, 'UTC');
-    lcd(`${two(Math.floor(et / 3600) % 100)}:${two(Math.floor(et / 60) % 60)}`, 186, 'ET');
+    const blank = (t: string, on: boolean) => (on && flashOff ? t.replace(/[0-9]/g, ' ') : t);
+    if (mode === 1 || mode === 3) {
+      // DATE: day.month (EST 365-day calendar from env.day_of_year).
+      const doy = ((Math.round(v.get('env.day_of_year', 1)) - 1 + dayShift) % 365 + 365) % 365;
+      const ml = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+      let m = 0;
+      let d = doy;
+      while (d >= ml[m]) {
+        d -= ml[m];
+        m++;
+      }
+      lcd(`${blank(two(d + 1), field === 1)}.${two(m + 1)}`, 100, 'DAY  MO YR');
+    } else {
+      lcd(`${blank(two(Math.floor(utc)), field === 1)}:${blank(two(Math.floor((utc * 60) % 60)), field === 2)}`, 100, 'TIME');
+    }
+    ctx.fillStyle = '#e8e8e8';
+    ctx.font = fontString(12, SANS, 'bold');
+    ctx.fillText(man ? 'MAN' : 'UTC', cx + 70, 72);
+    // Lower window: CHR minutes while the chronograph runs / holds a time, else ET hours:minutes.
+    if (chr > 0) lcd(`${two(Math.floor(chr / 60) % 100)}:${two(Math.floor(chr % 60))}`, 170, 'ET  CHR');
+    else lcd(`${two(Math.floor(et / 3600) % 100)}:${two(Math.floor(et / 60) % 60)}`, 170, 'ET  CHR');
+    ctx.fillStyle = '#e8e8e8';
+    ctx.font = fontString(12, SANS, 'bold');
+    ctx.fillText(v.get(B738.lt.clockEtRun(s)) !== 0 ? 'RUN' : 'HLD', cx - 72, 196);
     // Chronograph sweep second hand.
     if (chr > 0) {
       const a = ((chr % 60) / 60) * Math.PI * 2;
@@ -405,7 +441,7 @@ export class ClockDisplay extends CanvasDisplay {
       ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.moveTo(cx, cy);
-      ctx.lineTo(cx + Math.sin(a) * 112, cy - Math.cos(a) * 112);
+      ctx.lineTo(cx + Math.sin(a) * 114, cy - Math.cos(a) * 114);
       ctx.stroke();
     }
   }
@@ -520,6 +556,8 @@ export interface LcdField {
   /** Text of the field (called at <= refresh rate; may allocate a short string). */
   text: () => string;
   x: number;
+  /** Baseline centre y (px; default the middle of a single-row window). */
+  y?: number;
   size?: number;
   color?: string;
   align?: 'left' | 'center' | 'right';
@@ -528,8 +566,8 @@ export interface LcdField {
 export class LcdDisplay extends CanvasDisplay {
   private readonly fields: LcdField[];
 
-  constructor(vars: SimVars, id: string, powerVar: string, watchVars: string[], fields: LcdField[], width = 320, canvas?: CanvasOpt) {
-    super({ id, width, height: 64, vars, powerVar, refreshHz: 10, canvas, background: '#050505' });
+  constructor(vars: SimVars, id: string, powerVar: string, watchVars: string[], fields: LcdField[], width = 320, canvas?: CanvasOpt, height = 64) {
+    super({ id, width, height, vars, powerVar, refreshHz: 10, canvas, background: '#050505' });
     this.fields = fields;
     for (const w of watchVars) this.watch(w, 0.001);
   }
@@ -540,7 +578,7 @@ export class LcdDisplay extends CanvasDisplay {
       ctx.fillStyle = f.color ?? '#ffb02e';
       ctx.font = fontString(f.size ?? 40, FONT_STACKS.lcd, 'bold');
       ctx.textAlign = f.align ?? 'center';
-      ctx.fillText(f.text(), f.x, 34);
+      ctx.fillText(f.text(), f.x, f.y ?? 34);
     }
   }
 }

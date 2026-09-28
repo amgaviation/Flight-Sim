@@ -70,6 +70,14 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): ElectricalNetwo
     load('ra', 'emer_l', 0.8, {}, 3),
     load('ext_lt_nav', 'emer_l', 2, { enabled: V.ltNav, model: 'resistive' }, 5),
     load('ign_l', 'emer_l', '6 * eng1.ignition', {}, 7.5),
+    // Trim actuators (EST currents / bus split; breakers let the crew isolate a channel). STAB TRIM PRI 1 on L EMER,
+    // PRI 2 and SEC on R EMER (primary trim channel select, systems/cockpitInputs.ts).
+    load('stab_trim_pri1', 'emer_l', `0.2 + 3 * trim.pitch_in_motion * (${V.stabSecArm} == 0 && ${V.stabChan} != 2)`, {}, 5),
+    load('stab_trim_pri2', 'emer_r', `0.2 + 3 * trim.pitch_in_motion * (${V.stabSecArm} == 0 && ${V.stabChan} == 2)`, {}, 5),
+    load('stab_trim_sec', 'emer_r', `0.2 + 3 * trim.pitch_in_motion * (${V.stabSecArm} != 0)`, {}, 5),
+    load('ail_trim', 'emer_l', '0.1 + 1 * trim.roll_in_motion', {}, 3),
+    load('rud_trim', 'emer_r', '0.1 + 1 * trim.yaw_in_motion', {}, 3),
+    load('pitot_stby', 'emer_l', `4 * ${V.pitotHeatOn}`, { model: 'resistive' }, 7.5), // standby pitot/static heater (EST)
     load('apu_starter', 'emer_l', 'apu.starter_amps', {}, 500), // APU start (OG 5-5: bus tie closes for the APU start)
     // ---- EMER R: copilot-side
     load('pfd2', 'emer_r', 6.5, {}, 10),

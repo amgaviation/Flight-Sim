@@ -68,7 +68,10 @@ export const LON_LIMITS = {
   va: { weightsLb: [22400, 39500], groundKt: [156, 222], fl250Kt: [164, 241], fl450Kt: [178, 264] },
   // --- altitudes
   maxAltFt: 45000, // OG 1-2
-  maxTakeoffLandingAltFt: 14000, // OG 1-1
+  // OG 1-1: 14,000 ft. CONFLICT: the DGAC Chile C700 CC-DRA limitations card (2021) gives "Maximum Altitude Limit
+  // (takeoff and landing) 10,000 feet" (likely an early-serial AFM or operator limitation; the OG value is kept as
+  // the certified limit). TOLD flags fields above it (performance.ts fieldCheck).
+  maxTakeoffLandingAltFt: 14000,
   maxTailwindKt: 10, // OG 1-1
   // --- load factors (OG 1-4)
   nzMaxClean: 2.6,

@@ -26,8 +26,9 @@ export const FLOOR_Z = EYE_CAPT[2] + 1.12;
 export const X_AFT = 12.6;
 
 /**
- * Main instrument panel (P1 / P2 / P3) as one flat panel, face tilted 15 deg
- * back (dossier §10.0). Origin 'center': u right, v up in the panel plane.
+ * Main instrument panel (P1 / P2 / P3) frame, face tilted 15 deg back (dossier §10.0). Origin 'center': u
+ * right, v up in the panel plane. The plate itself is the stepped P1 / P2 / P3 outline drawn in mainPanel.ts
+ * (MIP_OUTLINE); this frame only fixes the plane.
  */
 export const MIP: PanelPlacement & { width: number; height: number } = {
   // Top edge stays under the glareshield soffit (x 14.611, z -0.243); the panel extends 0.11 m lower than
@@ -35,7 +36,8 @@ export const MIP: PanelPlacement & { width: number; height: number } = {
   center_m: [14.5407, 0, 0.0181] as BodyVec,
   facing: 'aft',
   tiltDeg: 15,
-  width: 1.64,
+  // SCBG 1:1 main panel drawing (cm ruler): P1 + P2 + P3 overall width ~1.48 m.
+  width: 1.48,
   height: 0.54,
 };
 /**
@@ -46,31 +48,56 @@ export const MIP: PanelPlacement & { width: number; height: number } = {
  * glareshield soffit edge at z -0.24).
  */
 export const DU_ROW_V = 0.083;
-/** DU centres (panel u, m). Captain PFD / ND ~0.11 m either side of the eye line; mirrored for the F/O. */
-export const DU_U = { capt_out: -0.64, capt_in: -0.425, upper: 0, lower: 0, fo_in: 0.425, fo_out: 0.64 } as const;
-/** Lower DU centre (panel v): directly below the upper DU (avionics B737_DU_LAYOUT: 0.22 m lower). */
+/**
+ * DU centres (panel u, m), measured on the SCBG 1:1 main panel drawing: Capt outboard -0.504, Capt inboard
+ * -0.292, upper +0.02, F/O inboard +0.291, F/O outboard +0.503 (DU openings 0.173 m). With the Captain eye at
+ * y -0.53 the PFD is almost straight ahead of the pilot. The lower DU sits on P9 between the CDUs (P9 below).
+ */
+export const DU_U = { capt_out: -0.504, capt_in: -0.292, upper: 0.02, lower: 0, fo_in: 0.291, fo_out: 0.503 } as const;
+/**
+ * Offsets on the SCBG drawing are measured from the DU row centre (drawing v = -0.004 m); `mv(dv)` converts a
+ * drawing offset above / below the DU centre to MIP panel v.
+ */
+export const mv = (dv: number): number => DU_ROW_V + dv;
+/** MIP bottom edges (panel v): P1 / P3 lower strips end 0.196 m below the DU centre, P2 at the DU bezel (0.106 m). */
+export const MIP_BOTTOM_V = mv(-0.196);
+export const P2_BOTTOM_V = mv(-0.106);
+/** P2 half-width at its bottom edge (the lower strips P1-3 / P3-1 end there; P9 sits between them). */
+export const P2_HALF_W = 0.265;
+/** Legacy name: lower DU centre on the MIP (unused since the lower DU moved to P9). */
 export const LOWER_DU_V = DU_ROW_V - 0.222;
 
-/** Glareshield (P7): front face carrying the MCP / EFIS / master lights, and the hood above it. */
+/**
+ * Glareshield (P7): front face carrying the MCP / EFIS / master lights, and the hood above it. The face is the
+ * MCP height (0.072 m on the SCBG drawing, plus trim: 0.075 m) with its top at the hood (z -0.34) and sits 0.09 m
+ * further forward than the first estimate, so that from the design eye the MIP upper strip (display select,
+ * A/P-A/T-FMC lights, P2 controls, up to ~0.17 m above the DU centres) is visible under it, as in the aircraft
+ * (EST: sight line from EYE_CAPT past the face bottom edge; the hood top stays 0.075 m below the eye).
+ */
 export const GLARE = {
-  /** Front face centre (the MCP plane), tilted 8 deg (top leaning away). */
-  face: { center_m: [14.338, 0, -0.29] as BodyVec, facing: 'aft' as const, tiltDeg: 0, width: 1.46, height: 0.1 },
+  /** Front face centre (the MCP plane), vertical. */
+  face: { center_m: [14.43, 0, -0.3025] as BodyVec, facing: 'aft' as const, tiltDeg: 0, width: 1.46, height: 0.075 },
   /** Hood: brow (aft edge) at the lip, top height, forward edge at the windshield base. */
-  lipX: 14.365,
+  // The hood brow overhangs the MCP face by ~3.5 cm (brow bottom z -0.327 stays above the sight line to the MIP).
+  lipX: 14.4,
   topZ: -0.345,
   frontX: 14.56,
   frontZ: -0.33,
   /** Soffit (underside) height between the face and the main panel. */
-  soffitZ: -0.243,
+  soffitZ: -0.265,
 };
 
-/** Forward electronic panel (P9): the two CDUs side by side on the sloping face below P2. */
+/**
+ * Forward electronic panel (P9): the lower DU between the two CDUs (SCBG drawing: CDU centres +/-0.176 m, CDU
+ * tops level with the bottom of the P2 DU section), on a sloping face from the P2 bottom edge (x 14.535,
+ * z 0.040) down to the front of the control stand (x 14.235, z 0.40): 0.466 m long, 39.8 deg from vertical.
+ */
 export const P9: PanelPlacement & { width: number; height: number } = {
-  center_m: [14.33, 0, 0.3] as BodyVec,
+  center_m: [14.385, 0, 0.2202] as BodyVec,
   facing: 'aft',
-  tiltDeg: 48,
-  width: 0.34,
-  height: 0.27,
+  tiltDeg: 39.8,
+  width: 0.53,
+  height: 0.466,
 };
 
 /**
@@ -85,18 +112,21 @@ export const STAND = (() => {
   const xAft = 13.5;
   const fwdZ = 0.4;
   const aftZ = 0.22;
-  return { xFwd, xAft, fwdZ, aftZ, topZ: (fwdZ + aftZ) / 2, width: 0.32, tiltDeg: (Math.atan2(fwdZ - aftZ, xFwd - xAft) * 180) / Math.PI };
+  // Width: SCBG control stand drawing (top view, 2,830 px/m): stand top ~0.226 m wide, trim wheel centres +/-0.133 m.
+  return { xFwd, xAft, fwdZ, aftZ, topZ: (fwdZ + aftZ) / 2, width: 0.232, tiltDeg: (Math.atan2(fwdZ - aftZ, xFwd - xAft) * 180) / Math.PI };
 })();
 /** Height (body z) of the control stand top at body x. */
 export function standTopZ(x: number): number {
   return STAND.aftZ + ((STAND.fwdZ - STAND.aftZ) * (x - STAND.xAft)) / (STAND.xFwd - STAND.xAft);
 }
 /**
- * Aft electronic pedestal (P8): x range, top height (EST ~0.36 m wide, ~0.75 m long). The top sits just below the
+ * Aft electronic pedestal (P8): x range, top height. SCBG P8 drawing: three 146 mm module columns (~0.45 m
+ * with rails), fire panel plus six module rows ~0.55 m long (0.56 here). The top sits just below the
  * aft end of the control stand, about level with the crew seat cushions (seat pan top z ~0.23), with the inboard
  * armrests ~0.2 m higher (EST from NG photographs; the first estimate, z 0.37, put it 0.14 m below the cushions).
  */
-export const AFT_PED = { xFwd: 13.5, xAft: 12.78, topZ: 0.245, width: 0.36 };
+// Width: SCBG P8 drawing, three 146 mm module columns (0.44 m) plus rails.
+export const AFT_PED = { xFwd: 13.5, xAft: 12.94, topZ: 0.245, width: 0.45 };
 
 /** Control wheel hubs (dossier §10.0: ~0.45 m ahead, ~0.35 m below the eye, directly ahead of each pilot). */
 export const YOKE_HUB_L: [number, number, number] = [14.2, -0.53, -0.065];
@@ -118,13 +148,15 @@ export const COMPASS: BodyVec = [14.3, 0, -0.66];
 /**
  * Mount frames for the builders owned by other agents (see context.ts).
  * Forward overhead (P5 fwd): from ~0.35 m above / ahead of the eye sloping up
- * and aft to ~0.55 m above the eye (dossier §10.0), ~0.95 m wide. Aft
- * overhead: directly above the crew, ~0.40 m wide deep. Side consoles along
+ * and aft to ~0.55 m above the eye (dossier §10.0), 0.66 m wide. Aft
+ * overhead: directly above the crew, 0.35 m deep. Side consoles along
  * each sidewall behind the tiller shelf.
  */
 export const MOUNTS = {
-  overheadFwd: { center_m: [13.8, 0, -0.87] as BodyVec, facing: 'down' as const, tiltDeg: -18, width: 0.95, height: 0.64 },
-  overheadAft: { center_m: [13.28, 0, -0.99] as BodyVec, facing: 'down' as const, tiltDeg: -4, width: 0.9, height: 0.42 },
+  // SCBG 1:1 overhead drawing: forward overhead 0.66 x 0.66 m (four 146 mm columns + a 74 mm centre column and the
+  // bottom row), aft overhead 0.66 x 0.35 m.
+  overheadFwd: { center_m: [13.8, 0, -0.87] as BodyVec, facing: 'down' as const, tiltDeg: -18, width: 0.66, height: 0.66 },
+  overheadAft: { center_m: [13.31, 0, -0.99] as BodyVec, facing: 'down' as const, tiltDeg: -4, width: 0.66, height: 0.35 },
   sideLeft: { center_m: [13.35, -0.98, 0.12] as BodyVec, facing: 'up' as const, tiltDeg: 0, width: 0.3, height: 0.9 },
   sideRight: { center_m: [13.35, 0.98, 0.12] as BodyVec, facing: 'up' as const, tiltDeg: 0, width: 0.3, height: 0.9 },
 };

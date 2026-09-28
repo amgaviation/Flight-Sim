@@ -13,14 +13,17 @@
  *  - Flight deck door handle on the aft bulkhead: opens / closes the door
  *    (`ac.b738.door_flt_deck`, FLT DECK door light on the aft overhead).
  *
+ *  - Sidewall furnishings: CHART light rheostat and lamp, No. 2 window
+ *    crank (state only), headset / mic jack panel and the stowed sun visors.
+ *
  * SCOPE: the door leaf and the sliding No. 2 windows do not move (the door
- * is part of the static bulkhead); the window cranks are not built (no
- * system uses an open window). The map lights are emissive lamps (the
- * cockpit keeps its 4 real lights, docs/modules/cockpit.md §14).
+ * is part of the static bulkhead; the crank publishes the window state
+ * only). The map / chart lights are emissive lamps (the cockpit keeps its 4
+ * real lights, docs/modules/cockpit.md §14).
  * Geometry EST from NG photographs (layout.ts MOUNTS).
  */
 import * as THREE from 'three';
-import { AnnunciatorLight, CircuitBreaker, PushButton, SelectorKnob, TBarHandle, ToggleSwitch } from '../../../../cockpit/controls';
+import { AnnunciatorLight, CircuitBreaker, PushButton, RotaryKnob, SelectorKnob, TBarHandle, ToggleSwitch } from '../../../../cockpit/controls';
 import type { Panel } from '../../../../cockpit/CockpitBuilder';
 import { trimBoxGeometry } from '../../../../cockpit/geometry/structure';
 import type { CockpitEnv } from '../../../../cockpit/env';
@@ -115,6 +118,71 @@ export function buildSideConsoles(c: B738CockpitContext): void {
     // Lamp above the No. 2 window, aimed at the console / chart holder (cockpit-local axes: y up).
     b.addStructure(lamp, [13.72, sg * 1.06, -0.74], { occluder: false, static: false });
     lamp.rotation.z = -sg * 0.5;
+
+    // ---- chart light rheostat and lamp, No. 2 window crank, headset / mic jack panel, sun visor (737NG sidewall
+    // furnishings, b737.org.uk flight deck photographs; positions EST).
+    p.add(
+      new RotaryKnob(env, {
+        id: `${pfx}.chart_lt`,
+        label: s === 1 ? 'CAPT CHART LIGHT' : 'F/O CHART LIGHT',
+        cap: 'dimmer',
+        diameter: 0.013,
+        outer: { var: B738.chartLt(s), min: 0, max: 1, step: 0.05, angleRange: [-140, 140], label: 'CHART', format: (x) => (x < 0.02 ? 'OFF' : `${Math.round(x * 100)} %`) },
+      }),
+      out(0.08),
+      0.2,
+    );
+    p.label('CHART', out(0.08), 0.183, { height: 0.0024 });
+    {
+      const chartMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, emissive: 0xfff0d6, emissiveIntensity: 0, roughness: 0.4 });
+      env.materials.track(chartMat);
+      c.b.zone({ id: s === 1 ? 'chart_capt' : 'chart_fo', intensityVar: s === 1 ? 'ac.light.chart_capt' : 'ac.light.chart_fo', color: 0xfff0d6 });
+      env.lighting.registerBacklight(chartMat, s === 1 ? 'chart_capt' : 'chart_fo', 3);
+      const g = new THREE.Group();
+      const hs = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.02, 0.03), env.materials.get('plasticBlack'));
+      const ln = new THREE.Mesh(new THREE.PlaneGeometry(0.04, 0.022), chartMat);
+      ln.rotation.x = Math.PI / 2;
+      ln.position.y = -0.0101;
+      g.add(hs, ln);
+      b.trackGeometry(hs.geometry, ln.geometry);
+      // Under the sidewall above the console, aimed at the chart holder (cockpit-local y up).
+      b.addStructure(g, [13.5, sg * 1.02, -0.2], { occluder: false });
+    }
+    // Window crank: turn to open the No. 2 sliding window (SCOPE in vars.ts windowCrank).
+    p.add(
+      new RotaryKnob(env, {
+        id: `${pfx}.window_crank`,
+        label: s === 1 ? 'CAPT NO. 2 WINDOW CRANK' : 'F/O NO. 2 WINDOW CRANK',
+        cap: 'chicken-head',
+        diameter: 0.05,
+        outer: { var: B738.windowCrank(s), min: 0, max: 1, step: 0.1, angleRange: [-170, 170], label: 'WINDOW', format: (x) => (x < 0.02 ? 'CLOSED' : `${Math.round(x * 100)} % OPEN`) },
+      }),
+      out(0.05),
+      0.34,
+    );
+    p.label('WINDOW', out(0.05), 0.305, { height: 0.0024 });
+    // Headset / microphone jack panel (static: SCOPE, the ACPs model the audio selection).
+    {
+      const jp = p.subPanel({ name: `${pfx}.jacks`, x: out(0.2), y: 0.2, width: 0.06, height: 0.05, origin: 'top-left', material: 'plasticBlack', screws: false });
+      const jack = env.geometry.get('b738.jack', () => new THREE.CylinderGeometry(0.0045, 0.0045, 0.004, 16).rotateX(Math.PI / 2));
+      for (const [x, lbl] of [
+        [0.015, 'HEADSET'],
+        [0.045, 'MIC'],
+      ] as const) {
+        const m = new THREE.Mesh(jack, env.materials.get('chrome'));
+        m.userData.cockpitStatic = true;
+        jp.addObject(m, x, 0.03, { z: 0.002 });
+        jp.label(lbl, x, 0.014, { height: 0.0022, zone: null, color: '#e8e8e2' });
+      }
+    }
+    // Sun visor stowed at the top of the No. 1 / No. 2 window post (static; SCOPE: no visor interaction).
+    {
+      const visor = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.13, 0.26), env.materials.custom('plastic', 0x2e3a30, 0.4));
+      b.trackGeometry(visor.geometry);
+      visor.name = 'sun_visor';
+      b.addStructure(visor, [14.05, sg * 0.86, -0.64]);
+      visor.rotation.set(0, 0, sg * 0.5);
+    }
 
     // ---- circuit breaker panel on the aft sidewall (P18 Captain, P6 F/O).
     buildCbPanel(c, s, s === 1 ? B738_P18 : B738_P6, ratings);

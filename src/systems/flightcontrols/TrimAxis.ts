@@ -67,6 +67,11 @@ export interface TrimAxisConfig {
     limitsFlapsExtended?: [number, number];
     /** Column cutout: electric trim opposing a column deflection beyond `threshold` stops (pitch only). */
     columnCutout?: { inputVar?: string; threshold: number };
+    /**
+     * (Appended by citation-longitude.) The runaway failure drives the motor only while this is true (the
+     * failed channel is engaged and not interrupted, e.g. MASTER DISCONNECT not held). Default true.
+     */
+    runawayEnable?: Binding;
   };
   autopilot?: {
     /** Command var (-1..1). Default ap.trim_cmd for pitch. */
@@ -118,6 +123,7 @@ export class TrimAxis implements Subsystem {
   private readonly columnVar: string;
   private readonly fJam: string;
   private readonly fRunaway: string;
+  private readonly runawayEnable: () => boolean;
   private manualDelta = 0;
   private lastWritten = NaN;
   private readonly offs: (() => void)[] = [];
@@ -146,6 +152,7 @@ export class TrimAxis implements Subsystem {
     this.columnVar = cfg.electric?.columnCutout?.inputVar ?? INPUT.pitch;
     this.fJam = failVar(`trim.${cfg.axis}.jam`);
     this.fRunaway = failVar(`trim.${cfg.axis}.runaway`);
+    this.runawayEnable = compileCondition(v, cfg.electric?.runawayEnable, true);
     this.o = {
       motion: FCS_VARS.trimMotion(cfg.axis),
       inMotion: FCS_VARS.trimInMotion(cfg.axis),
@@ -218,7 +225,7 @@ export class TrimAxis implements Subsystem {
         if (Math.abs(s) > Math.abs(pilotSw)) pilotSw = s;
       }
       if (e && elecAvail) {
-        const runaway = v.get(this.fRunaway) !== 0;
+        const runaway = v.get(this.fRunaway) !== 0 && this.runawayEnable();
         let dir = runaway ? (cfg.runawayDirection ?? -1) : pilotSw;
         if (!runaway && e.columnCutout && dir !== 0) {
           const col = v.get(this.columnVar);

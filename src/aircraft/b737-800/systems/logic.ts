@@ -45,6 +45,11 @@ export class B738Logic implements Subsystem {
     ident: new EdgeDetector(),
     air: new EdgeDetector(),
     clockChr: [new EdgeDetector(), new EdgeDetector()],
+    clockTd: [new EdgeDetector(), new EdgeDetector()],
+    clockSet: [new EdgeDetector(), new EdgeDetector()],
+    clockPlus: [new EdgeDetector(), new EdgeDetector()],
+    clockMinus: [new EdgeDetector(), new EdgeDetector()],
+    selcal: [new EdgeDetector(), new EdgeDetector(), new EdgeDetector(), new EdgeDetector(), new EdgeDetector()],
     isfdStd: new EdgeDetector(),
     isfdRst: new EdgeDetector(),
     grdCall: new EdgeDetector(),
@@ -65,6 +70,11 @@ export class B738Logic implements Subsystem {
   private chrRun: [boolean, boolean] = [false, false];
   private chrS = [0, 0];
   private etS = [0, 0];
+  /** Clock TIME/DATE mode (0 UTC time, 1 UTC date, 2 MAN time, 3 MAN date), SET field, MAN offset (h). */
+  private clkMode = [0, 0];
+  private clkField = [0, 0];
+  private clkManH = [0, 0];
+  private selcalLit = [0, 0, 0, 0, 0];
   private fdrHrs = 0;
   private apuStartReq = false;
   /** Seconds since the APU ECU lost power (ride-through, see update). */
@@ -75,7 +85,14 @@ export class B738Logic implements Subsystem {
    */
   pendingApEngage = false;
 
-  constructor(private readonly ctx: Pick<SimContext, 'vars' | 'events'>) {}
+  constructor(private readonly ctx: Pick<SimContext, 'vars' | 'events'>) {
+    // SELCAL call received on channel k (0 VHF 1 .. 4 HF 2): lights the SELCAL light until it is pushed.
+    // SCOPE: no ground-station model emits calls; scenarios / instructors can emit the event.
+    ctx.events.on('b738.selcal.call', (k) => {
+      const i = Number(k);
+      if (i >= 0 && i < 5) this.selcalLit[i] = 1;
+    });
+  }
 
   update(dt: number): void {
     const v = this.ctx.vars;
@@ -224,10 +241,44 @@ export class B738Logic implements Subsystem {
       }
       if (this.chrRun[i]) this.chrS[i] += dt;
       const et = v.get(B738.clockEt(s));
-      if (et >= 0.5) this.etS[i] = 0;
+      if (et >= 0.5 || v.get(B738.clockReset(s)) !== 0) this.etS[i] = 0;
       else if (et > -0.5) this.etS[i] += dt;
       v.set(B738.lt.clockChrS(s), this.chrS[i]);
       v.set(B738.lt.clockEtS(s), this.etS[i]);
+      v.set(B738.lt.clockEtRun(s), et > -0.5 ? 1 : 0);
+      // TIME/DATE cycles UTC time / UTC date / MAN time / MAN date (and ends a SET sequence); SET steps the MAN
+      // field (hours, minutes on the time page; day on the date page); + / - adjust it (flightdeck737.be clock page).
+      if (this.e.clockTd[i].rising(v.get(B738.clockTimeDate(s)) !== 0)) {
+        this.clkMode[i] = (this.clkMode[i] + 1) % 4;
+        this.clkField[i] = 0;
+      }
+      if (this.e.clockSet[i].rising(v.get(B738.clockSet(s)) !== 0) && this.clkMode[i] >= 2) {
+        const nFields = this.clkMode[i] === 2 ? 2 : 1;
+        this.clkField[i] = (this.clkField[i] + 1) % (nFields + 1);
+      }
+      const step = this.clkField[i] === 0 ? 0 : this.clkMode[i] === 3 ? 24 : this.clkField[i] === 1 ? 1 : 1 / 60;
+      if (this.e.clockPlus[i].rising(v.get(B738.clockPlus(s)) !== 0)) this.clkManH[i] += step;
+      if (this.e.clockMinus[i].rising(v.get(B738.clockMinus(s)) !== 0)) this.clkManH[i] -= step;
+      v.set(B738.lt.clockMode(s), this.clkMode[i]);
+      v.set(B738.lt.clockSetField(s), this.clkField[i]);
+      v.set(B738.lt.clockManOffsetH(s), this.clkManH[i]);
+      // No. 2 window crank: the window only opens on the ground (SCOPE: the pane does not move; in flight the
+      // cabin differential pressure holds it closed).
+      v.set(`ac.b738.side_window_open${s}`, !air ? v.get(B738.windowCrank(s)) : 0);
+      // FOOT AIR / WINDSHIELD AIR: share of the pilot's conditioned-air outlet diverted (SCOPE, EST 0.5 each).
+      v.set(`ac.b738.fd_air_foot${s}`, v.get(B738.footAir(s)) !== 0 ? 0.5 : 0);
+      v.set(`ac.b738.fd_air_ws${s}`, v.get(B738.windshieldAir(s)) !== 0 ? 0.5 : 0);
+      // HF 1 / 2: receiver powered (mode not OFF, AC transfer bus powered); SCOPE: no propagation.
+      const hfMode = v.get(B738.hfMode(s));
+      const hfOn = hfMode > 0 && v.get(s === 1 ? 'elec.xfr1_powered' : 'elec.xfr2_powered', 1) !== 0;
+      v.set(`ac.b738.hf${s}.powered`, hfOn ? 1 : 0);
+      v.set(`ac.b738.hf${s}.active_mhz`, hfOn ? v.get(B738.hfFreqKhz(s), 2000) / 1000 : 0);
+      v.set(`ac.b738.hf${s}.squelch`, hfOn ? 1 - v.get(B738.hfSens(s), 1) : 1);
+    }
+    // ---- SELCAL: each light is reset by pushing it (SCOPE: no ground-station SELCAL calls are generated).
+    for (let k = 0; k < 5; k++) {
+      if (this.e.selcal[k].rising(v.get(B738.selcalReset(k as 0 | 1 | 2 | 3 | 4)) !== 0)) this.selcalLit[k] = 0;
+      v.set(B738.lt.selcal(k as 0 | 1 | 2 | 3 | 4), this.selcalLit[k]);
     }
     if (v.get('eng1.running') !== 0 || v.get('eng2.running') !== 0) this.fdrHrs += dt / 3600;
     v.set('ac.b738.fdr_hours', this.fdrHrs);

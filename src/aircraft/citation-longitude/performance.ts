@@ -43,6 +43,15 @@ function windFactor(runwayHdg: number, windDir: number, windKt: number, perKt: n
   return comp >= 0 ? 1 - 0.5 * comp * perKt : 1 - 1.5 * comp * perKt;
 }
 
+/**
+ * Runway check note: the takeoff / landing field-elevation limit comes first (LON_LIMITS.maxTakeoffLandingAltFt,
+ * OG 1-1 14,000 ft; the DGAC 2021 card gives 10,000 ft, see data.ts), then the field length.
+ */
+export function fieldCheck(elevFt: number, distFt: number, runwayFt: number): string {
+  if (elevFt > LON_LIMITS.maxTakeoffLandingAltFt) return 'FIELD ELEV > LIMIT';
+  return distFt > runwayFt ? 'RWY TOO SHORT' : 'RWY OK';
+}
+
 export const LONGITUDE_TOLD: PerformanceProvider = {
   takeoffFlaps: ['2', '1'],
   landingFlaps: ['FULL'],
@@ -63,7 +72,7 @@ export const LONGITUDE_TOLD: PerformanceProvider = {
       vspeeds: { V1: s.v1, VR: s.vr, V2: s.v2, VENR: s.v2 + 50 },
       fieldLengthFt: Math.round(fl / 10) * 10,
       n1Pct: takeoffN1(i.runwayElevFt, i.qnhInHg, i.oatC),
-      notes: [`FLAPS ${flaps}`, `TOFL ${Math.round(fl).toLocaleString('en-US')} FT`, fl > i.runwayLengthFt ? 'RWY TOO SHORT' : 'RWY OK'],
+      notes: [`FLAPS ${flaps}`, `TOFL ${Math.round(fl).toLocaleString('en-US')} FT`, fieldCheck(i.runwayElevFt, fl, i.runwayLengthFt)],
     };
   },
   landing(i: LandingInput): LandingResult | null {
@@ -80,7 +89,7 @@ export const LONGITUDE_TOLD: PerformanceProvider = {
     return {
       vspeeds: { VREF: vr, VAPP: Math.round(vr + add) },
       fieldLengthFt: Math.round(ld / 10) * 10,
-      notes: ['FLAPS FULL', `LDG DIST ${Math.round(ld).toLocaleString('en-US')} FT`, ld > i.runwayLengthFt ? 'RWY TOO SHORT' : 'RWY OK'],
+      notes: ['FLAPS FULL', `LDG DIST ${Math.round(ld).toLocaleString('en-US')} FT`, fieldCheck(i.runwayElevFt, ld, i.runwayLengthFt)],
     };
   },
 };

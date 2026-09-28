@@ -210,7 +210,8 @@ describe('737-800 overhead flows', () => {
     start2.turnBy(-1); // OFF -> GRD
     step(1);
     expect(v.get(B738.engStart(2))).toBe(ENG_START.grd);
-    expect(lit('b738.ovhd.start.valve2')).toBe('START VALVE OPEN');
+    // START VALVE OPEN: shown on the upper DU engine display on the NG (no overhead light, SCBG drawing).
+    expect(v.get(B738.lt.engStartValve(2))).toBe(1);
     run(90, () => {
       if (v.get('eng2.n2_pct') >= 25) v.set(B738.startLever(2), 1);
       return v.get('eng2.running') === 1 && v.get('eng2.n2_pct') > 58;
@@ -220,7 +221,7 @@ describe('737-800 overhead flows', () => {
     // The GRD solenoid released at starter cut-out: the knob follows back to OFF.
     expect(v.get(B738.engStart(2))).toBe(ENG_START.off);
     expect(start2.outer.logic.value).toBe(ENG_START.off);
-    expect(lit('b738.ovhd.start.valve2')).toBe('');
+    expect(v.get(B738.lt.engStartValve(2))).toBe(0);
     // IDG 2 available but not on the bus: GEN OFF BUS 2 (blue).
     expect(lit('b738.ovhd.elec.gen_off_bus2')).toBe('GEN OFF BUS');
     // ---- GEN 2 ON: transfer bus 2 on its own generator.
@@ -245,9 +246,9 @@ describe('737-800 overhead flows', () => {
     v.set(B738.lightsTest, 0);
     step(0.3);
     expect(lit('b738.ovhd.fuel.filter_bypass1')).toBe('');
-    // WINDOW HEAT TEST OVHT: OVERHEAT lights on the heated windows.
+    // WINDOW HEAT TEST OVHT (up, SCBG drawing: OVHT above, PWR TEST below): OVERHEAT lights on the heated windows.
     const wht = ctl('b738.ovhd.winheat.test');
-    wht.onWheel?.(-1, P(wht.hitTargets[0]));
+    wht.onWheel?.(1, P(wht.hitTargets[0]));
     step(0.1);
     expect(v.get(B738.windowHeatTest)).toBe(-1);
     expect(lit('b738.ovhd.winheat.ovht_l_fwd')).toBe('OVERHEAT');
@@ -308,12 +309,12 @@ describe('737-800 overhead flows', () => {
     expect(lit('b738.aovhd.elt.lt')).toBe('');
     const elt = ctl<GuardedSwitch>('b738.aovhd.elt.sw');
     openGuard(elt);
-    wheel(elt, 1);
+    wheel(elt, -1); // ON is the lower position (SCBG drawing: ARM above, ON below)
     step(0.5);
     expect(v.get(B738.eltSw)).toBe(1);
     expect(v.get('ac.b738.elt_transmitting')).toBe(1);
     expect(lit('b738.aovhd.elt.lt')).toBe('ELT');
-    wheel(elt, -1);
+    wheel(elt, 1);
     click(elt, 0); // close the guard at ARM
     step(0.5);
     expect(v.get(B738.eltSw)).toBe(0);

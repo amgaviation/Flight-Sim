@@ -222,10 +222,19 @@ export function buildShell(b: CockpitBuilder): void {
   // ---- glareshield hood, soffit, face backing
   add(glareshieldHood(), 'glareshield', 'glareshield');
   const gw = GLARE.face.width;
-  add(trimBoxGeometry(gw + 0.2, 0.012, MIP.center_m[0] - GLARE.lipX + 0.05, 0.006), 'panelDark', 'glareshield_soffit', [(GLARE.lipX + MIP.center_m[0]) / 2 + 0.02, 0, GLARE.soffitZ]);
+  // Soffit from the face back to the MIP top edge (v 0.3 in the MIP frame).
+  const xMipTop = MIP.center_m[0] + 0.3 * Math.sin(((MIP.tiltDeg ?? 15) * Math.PI) / 180);
+  const xFace = GLARE.face.center_m[0];
+  add(trimBoxGeometry(gw + 0.2, 0.012, xMipTop - xFace + 0.02, 0.006), 'panelDark', 'glareshield_soffit', [(xFace + xMipTop) / 2, 0, GLARE.soffitZ]);
+  // Underside of the brow overhang between the rolled lip and the P7 face (the hood is a single surface).
+  const browW = 2 * (F.halfWidth(GLARE.lipX, GLARE.topZ, INSET) - 0.01);
+  add(trimBoxGeometry(browW, 0.014, xFace - GLARE.lipX + 0.012, 0.003), 'glareshield', 'glareshield_brow_under', [(GLARE.lipX + xFace) / 2 - 0.004, 0, GLARE.topZ + 0.011]);
   // Glareshield face backing (full width behind the P7 sub-panels, crackle black).
-  add(trimBoxGeometry(2 * (F.halfWidth(GLARE.lipX, -0.29, INSET) - 0.01), 0.1, 0.02, 0.004), 'glareshield', 'glareshield_face', [GLARE.face.center_m[0] + 0.012, 0, -0.293]);
+  add(trimBoxGeometry(2 * (F.halfWidth(GLARE.lipX, GLARE.face.center_m[2], INSET) - 0.01), GLARE.face.height, 0.02, 0.004), 'glareshield', 'glareshield_face', [GLARE.face.center_m[0] + 0.012, 0, GLARE.face.center_m[2]]);
 
+  // ---- MIP backing (dark, behind the stepped P1 / P2 / P3 outline so the gaps above the lower outboard
+  // sections and between the plates show the structure, not the forward lining).
+  b.structureMesh(new THREE.BoxGeometry(MIP.width + 0.02, MIP.height, 0.01), 'panelDark', [MIP.center_m[0] + 0.03, 0, MIP.center_m[2]], new THREE.Euler((-(MIP.tiltDeg ?? 15) * Math.PI) / 180, 0, 0)).name = 'mip_backing';
   // ---- MIP side fillers between the panel ends and the sidewalls.
   for (const s of [-1, 1]) {
     const yIn = MIP.width / 2;
@@ -233,20 +242,23 @@ export function buildShell(b: CockpitBuilder): void {
     if (yOut > yIn + 0.01) add(new THREE.BoxGeometry(yOut - yIn, MIP.height + 0.02, 0.03), 'panel', 'mip_side', [MIP.center_m[0] + 0.02, s * (yIn + yOut) / 2, MIP.center_m[2]]);
   }
 
-  // ---- knee panels and foot wells under P1 / P3 (dark grey), forward wall.
+  // ---- knee areas and foot wells under P1 / P3 (dark grey), forward wall. SCBG drawing: the MIP lower strips
+  // end flush (no knee bolster bars); a flush dark skirt closes the underside from the strip bottom edge
+  // (z ~0.127) forward to the foot-well wall.
   for (const s of [-1, 1]) {
     const w = MIP.width / 2 - P9.width / 2;
-    const yc = s * (P9.width / 2 + w / 2);
-    add(trimBoxGeometry(w - 0.1, 0.035, 0.05, 0.008), 'panelDark', 'knee_bolster', [14.47, yc, 0.2]);
-    add(new THREE.PlaneGeometry(w + 0.25, FLOOR_Z - 0.22).rotateY(0), 'panelDark', 'footwell', [14.86, s * (P9.width / 2 + (w + 0.25) / 2), (FLOOR_Z + 0.22) / 2]);
+    const zSkirt = 0.135;
+    add(new THREE.BoxGeometry(14.86 - 14.51, 0.006, w + 0.02).rotateY(Math.PI / 2), 'panelDark', 'knee_skirt', [(14.86 + 14.51) / 2, s * (P9.width / 2 + w / 2), zSkirt]);
+    add(new THREE.PlaneGeometry(w + 0.25, FLOOR_Z - zSkirt).rotateY(0), 'panelDark', 'footwell', [14.86, s * (P9.width / 2 + (w + 0.25) / 2), (FLOOR_Z + zSkirt) / 2]);
   }
 
   // ---- pedestal bodies (dark grey): P9 forward electronic panel box, control stand, aft electronic panel.
   const pedMat = 'panelDark';
   {
-    const xF = 14.52;
-    const xA = 14.2;
-    add(pedestalGeometry(P9.width, xF - xA, FLOOR_Z - 0.4, FLOOR_Z - 0.2, 0.01), pedMat, 'p9_body', [(xF + xA) / 2, 0, FLOOR_Z]);
+    // P9 body: wedge under the sloping P9 face (top from x 14.535 z 0.04 down to the stand front x 14.24 z 0.40).
+    const xF = 14.545;
+    const xA = 14.23;
+    add(pedestalGeometry(P9.width, xF - xA, FLOOR_Z - 0.405, FLOOR_Z - 0.047, 0.01), pedMat, 'p9_body', [(xF + xA) / 2, 0, FLOOR_Z]);
   }
   add(pedestalGeometry(STAND.width, STAND.xFwd - STAND.xAft, FLOOR_Z - STAND.aftZ - 0.004, FLOOR_Z - STAND.fwdZ - 0.004, 0.012), pedMat, 'control_stand', [(STAND.xFwd + STAND.xAft) / 2, 0, FLOOR_Z]);
   add(pedestalGeometry(AFT_PED.width, AFT_PED.xFwd - AFT_PED.xAft, FLOOR_Z - AFT_PED.topZ - 0.004, FLOOR_Z - AFT_PED.topZ - 0.004, 0.012), pedMat, 'aft_pedestal', [(AFT_PED.xFwd + AFT_PED.xAft) / 2, 0, FLOOR_Z]);

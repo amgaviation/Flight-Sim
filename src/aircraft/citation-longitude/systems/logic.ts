@@ -17,8 +17,10 @@
  */
 import type { Subsystem } from '../../types';
 import type { SimVars } from '../../../core/SimVars';
-import { ENG } from '../../../core/vars';
+import { ENG, INPUT, SURF } from '../../../core/vars';
+import { LON_LIMITS } from '../data';
 import { LON_VARS as V } from '../vars';
+import { FUEL_LOW_KG } from './fuel';
 
 /** Var names precomputed once (the systems step must not allocate strings). Index 0 unused, 1 = left, 2 = right. */
 const N = {
@@ -38,6 +40,8 @@ const N = {
   lastShutdown: ['', V.lastShutdown(1), V.lastShutdown(2)],
   gsAccFail: ['fail.hyd.gs_accum1', 'fail.hyd.gs_accum2', 'fail.hyd.gs_accum3', 'fail.hyd.gs_accum4'],
   n1: ['', ENG.n1(1), ENG.n1(2)],
+  genLoad: [V.genLoadPct('l'), V.genLoadPct('r'), V.genLoadPct('apu')],
+  scavenge: ['', V.scavengeOn(1), V.scavengeOn(2)],
   engFail: ['', V.engFail(1), V.engFail(2)],
   hydTempA: V.hydTempC('a'),
   hydTempB: V.hydTempC('b'),
@@ -60,12 +64,15 @@ export class LongitudeLogic implements Subsystem {
   private readonly v: SimVars;
   // bus tie
   private tieManual = false;
+  private tieOverride = false;
+  private prevAutoTie = false;
   private prevTieBtn = 0;
   private singleBattLatch = false;
   private prevBattCount = 0;
   // PTCU
   private ptcuPrev = 2;
-  private ptcuAwayT = 0;
+  /** Time (s) since the knob last left HYD GEN; sentinel 1e9 when it has not left it since power-up. */
+  private ptcuAwayT = 1e9;
   private genSrcB = true;
   private powerUpT = -1;
   // speedbrake
@@ -85,6 +92,12 @@ export class LongitudeLogic implements Subsystem {
   private aprAutoLatch = false;
   private flapFault = false;
   private prevFlapReset = false;
+  // G5000 power-up defaults (NAV lights ON, beacon NORM: OG 16-3)
+  private prevG5000 = false;
+  // wing A/I valve delay (OG 12-3), high-altitude airport mode latch (OG 11-3)
+  private waiT = 0;
+  private depElevFt = 0;
+  private wasAir = false;
 
   constructor(vars: SimVars) {
     this.v = vars;
@@ -145,13 +158,82 @@ export class LongitudeLogic implements Subsystem {
     this.prevBattCount = battCount;
     const apuStarting = v.get('apu.starting') !== 0 || (v.get(V.apuKnob) === 2);
     const btn = v.get(V.busTieBtn);
-    if (!ground && btn !== this.prevTieBtn) this.tieManual = btn !== 0;
-    if (ground) this.tieManual = false;
-    this.prevTieBtn = btn;
     const oneSided = primL !== primR;
-    const tie = oneSided || this.singleBattLatch || apuStarting || this.tieManual;
+    const autoTie = oneSided || this.singleBattLatch || apuStarting;
+    // OG 5-5/5-6: on the ground the button does nothing (fully automatic); in the air "pressing the button toggles
+    // between the two available states". A press makes the crew selection authoritative (it masks the automatic
+    // terms) until the next automatic trigger (a new one-sided / single-battery / APU-start event) or landing.
+    if (autoTie && !this.prevAutoTie) this.tieOverride = false;
+    this.prevAutoTie = autoTie;
+    if (!ground && btn !== this.prevTieBtn) {
+      this.tieManual = v.get(V.busTieCmd) === 0;
+      this.tieOverride = true;
+    }
+    if (ground) {
+      this.tieManual = false;
+      this.tieOverride = false;
+    }
+    this.prevTieBtn = btn;
+    const tie = this.tieOverride ? this.tieManual : autoTie;
+    v.set(V.busTieOverride, this.tieOverride ? 1 : 0);
     v.set(V.busTieCmd, tie && v.get('fail.elec.bus_tie') === 0 ? 1 : 0);
     v.set(V.busTieClosed, v.get('elec.bus_tie_closed'));
+
+    // ---------------- G5000 power-up defaults (OG 16-3): "Navigation lights are automatically selected on when the
+    // Garmin G5000 is powered up"; the beacon "default power on is the Normal mode". Rising edge of GDU power only,
+    // so the GTC Exterior Lights toggles keep working afterwards.
+    const g5000 = v.get('elec.pfd1_powered') !== 0 || v.get('elec.mfd_powered') !== 0 || v.get('elec.pfd2_powered') !== 0;
+    if (g5000 && !this.prevG5000) {
+      v.set(V.ltNav, 1);
+      v.set(V.ltBeaconMode, 1);
+    }
+    this.prevG5000 = g5000;
+    v.set(V.g5000Up, g5000 ? 1 : 0);
+
+    // ---------------- generator load vs the air / ground rating (OG 5-3: engine gens 400 A ground / 500 A in flight,
+    // APU gen 500 A ground / 400 A in flight; GEN LOAD at 75 % of the available capacity). Previous-step amps.
+    v.set(N.genLoad[0], (100 * v.get('elec.gen_l_amps')) / (ground ? LON_LIMITS.genGroundA : LON_LIMITS.genFlightA));
+    v.set(N.genLoad[1], (100 * v.get('elec.gen_r_amps')) / (ground ? LON_LIMITS.genGroundA : LON_LIMITS.genFlightA));
+    v.set(N.genLoad[2], (100 * v.get('elec.apu_gen_amps')) / (ground ? LON_LIMITS.apuGenGroundA : LON_LIMITS.apuGenFlightA));
+
+    // ---------------- brakes (OG 14-2/14-3, DGAC card): the toe brakes are brake-by-wire (no demand without the
+    // brake control unit); the EMER/PARK BRAKE handle meters the emergency pressure from the accumulator through its
+    // own lines (createSystems.ts Brakes `emergency`), and sets the parking brake at full travel (PARK latch).
+    const bbw = v.get('elec.brake_ctl_powered') !== 0;
+    v.set(V.brakePedalL, bbw ? v.get(INPUT.brakeLeft) : 0);
+    v.set(V.brakePedalR, bbw ? v.get(INPUT.brakeRight) : 0);
+    v.set(V.parkSet, v.get(V.parkBrake) >= 0.95 ? 1 : 0);
+
+    // ---------------- high-altitude airport mode (OG 11-3): departure OR destination field above 8,000 ft. The
+    // departure elevation is latched at lift-off (baro altitude), cleared at touchdown.
+    if (!ground && !this.wasAir) this.depElevFt = v.get('adc1.alt_ft') - Math.max(0, v.get('ra1.alt_ft'));
+    if (ground) this.depElevFt = 0;
+    this.wasAir = !ground;
+    v.set(V.highAltLatched, this.depElevFt > 8000 || v.get('press.ldg_elev_ft') > 8000 ? 1 : 0);
+
+    // ---------------- wing anti-ice valve delay (OG 12-3): "engines will spool slightly for 4 seconds before the wing
+    // anti-ice bleed valves are opened"; the idle bump is the FADEC approach-idle schedule (engines.ts approachWhen).
+    this.waiT = v.get(V.aiWing) !== 0 ? this.waiT + dt : 0;
+    v.set(V.waiValvesOpen, this.waiT >= 4 ? 1 : 0);
+
+    // ---------------- ECS pack mode (OG 10-3/10-4). ACM ONLY: heat exchangers bypassed; HEAT EXCHG ONLY (or the
+    // automatic switch after an ACM fault, `fail.ecs.acm`): ACM bypassed, the pack cannot cool below the RAT.
+    // APU-only bleed: 60 % of the ACS capacity in FLOW NORM, 100 % in HIGH (OG 10-4).
+    const ecs = v.get(V.ecsMode);
+    const acmFail = v.get('fail.ecs.acm') !== 0;
+    const hx = ecs === 2 || (acmFail && ecs !== 1);
+    v.set(V.ecsAutoHx, acmFail && ecs !== 2 ? 1 : 0);
+    const rat = v.get('fdm.tat_c');
+    // EST: ACM ONLY without the primary/secondary heat-exchanger pre-cooling: coldest outlet 10 degC, hottest 40 degC.
+    v.set(V.ecsMinOutletC, hx ? Math.max(2, rat) : ecs === 1 ? 10 : 2);
+    v.set(V.ecsMaxOutletC, ecs === 1 ? 40 : 70);
+    const engBleed = v.get('pneu.eng1_valve_open') !== 0 || v.get('pneu.eng2_valve_open') !== 0;
+    const apuOnly = !engBleed && v.get('pneu.apu_valve_open') !== 0;
+    // Pack flow (EST NORM 0.42 kg/s, HIGH 0.55 kg/s = full ACS capacity): APU-only bleed gives 60 % of the capacity in
+    // NORM and 100 % in HIGH (OG 10-4); ACM ONLY x 0.8 (EST: reduced performance, OG 10-3).
+    const high = v.get(V.flow) !== 0;
+    const flow = (high ? 0.55 : apuOnly ? 0.6 * 0.55 : 0.42) * (ecs === 1 ? 0.8 : 1);
+    v.set(V.ecsPackFlowKgs, flow);
 
     // ---------------- windshield heat (automatic, needs generator power: BCA) and pitot/static heat (OG 12-4)
     v.set(V.wshldHeatOn, (genL || genR || apuG || gpu) && v.get('fail.ice.wshld_ctl') === 0 ? 1 : 0);
@@ -164,12 +246,25 @@ export class LongitudeLogic implements Subsystem {
     const aPsi = v.get('hyd.a_psi');
     const bPsi = v.get('hyd.b_psi');
     const motorPwr = v.get('elec.mission_l_v') > 18;
+    // OG 13-4: HYD GEN "normally sources from System B, but may be switched to sourcing from System A if the switch
+    // is moved away from HYD GEN for 1 second, then returned" (OG 5-7 states the reverse order; the Section 13 system
+    // description is followed, see the dossier). The timer starts only on the exit edge from HYD GEN; a return
+    // within 1..30 s toggles the source (EST 30 s window for a deliberate toggle), a later selection starts again
+    // from the System B default. Every power-up resets the source to B.
     if (ptcu !== 4 && this.ptcuPrev === 4) this.ptcuAwayT = 0;
-    if (ptcu !== 4) this.ptcuAwayT += dt;
-    if (ptcu === 4 && this.ptcuPrev !== 4 && this.ptcuAwayT >= 1 && this.ptcuAwayT < 30) this.genSrcB = !this.genSrcB; // OG: away >= 1 s and back toggles the source
+    else if (ptcu !== 4 && this.ptcuAwayT < 1e9) this.ptcuAwayT += dt;
+    if (ptcu === 4 && this.ptcuPrev !== 4) {
+      if (this.ptcuAwayT >= 1 && this.ptcuAwayT < 30) this.genSrcB = !this.genSrcB;
+      else if (this.ptcuAwayT >= 30) this.genSrcB = true;
+      this.ptcuAwayT = 1e9;
+    }
     this.ptcuPrev = ptcu;
     // Power-up accumulator charge: B then A, EST 15 s each, once per power-up with engines stopped.
-    if (motorPwr && this.powerUpT < 0) this.powerUpT = 0;
+    if (motorPwr && this.powerUpT < 0) {
+      this.powerUpT = 0;
+      this.genSrcB = true;
+      this.ptcuAwayT = 1e9;
+    }
     if (!motorPwr) this.powerUpT = -1;
     else this.powerUpT += dt;
     const enginesOff = v.get(N.running[1]) === 0 && v.get(N.running[2]) === 0;
@@ -229,7 +324,8 @@ export class LongitudeLogic implements Subsystem {
     const flaps = v.get('surf.flaps_deg');
     const shaker = v.get('alert.stick_shaker') !== 0;
     if (lever < 0.02) this.sbStowed = false;
-    else if (!ground && (tla1 > TLA.sbStow || tla2 > TLA.sbStow || shaker)) this.sbStowed = true;
+    // BCA: with the A/T MIN SPD protection active "if the speedbrakes are deployed, they will automatically stow".
+    else if (!ground && (tla1 > TLA.sbStow || tla2 > TLA.sbStow || shaker || v.get(V.atProt) === 1)) this.sbStowed = true;
     v.set(V.sbAutoStow, this.sbStowed ? 1 : 0);
     const limit = flaps > 16 ? 0.5 : 1;
     v.set(V.sbCmd, this.sbStowed ? 0 : Math.min(1, lever) * limit);
@@ -284,8 +380,14 @@ export class LongitudeLogic implements Subsystem {
     for (let i = 1; i <= 2; i++) {
       const tankKg = v.get(N.tankKg[i]);
       const boostOn = v.get(N.boostOn[i]) !== 0;
-      const on = v.get(V.fuelRecirc) !== 0 && !boostOn && tankKg > 227 && v.get(N.missionPowered[i]) !== 0 && v.get(N.recircFail[i]) === 0;
+      // OG 6-2: "Recirc pumps are always on during normal operations unless the on-side fuel pump is also running or
+      // the fuel level is too low" (EST threshold: the 500 lb FUEL LEVEL LOW level).
+      const on = v.get(V.fuelRecirc) !== 0 && !boostOn && tankKg > FUEL_LOW_KG && v.get(N.missionPowered[i]) !== 0 && v.get(N.recircFail[i]) === 0;
       v.set(N.recircOn[i], on ? 1 : 0);
+      // OG 6-2 scavenge ejectors: "primarily run when fuel quantity is low ... may also run when the fuel temperature
+      // is very low" (EST: FUEL LEVEL LOW level, or tank fuel below -30 degC); motive flow needs the engine running.
+      const tankC0 = v.get(N.tankTemp[i]);
+      v.set(N.scavenge[i], v.get(N.running[i]) !== 0 && (tankKg < FUEL_LOW_KG || tankC0 < -30) ? 1 : 0);
       // Inlet temperature: tank fuel warmed by the engine fuel/oil heat exchanger return (EST +12 degC running).
       const tankC = v.get(N.tankTemp[i]);
       v.set(N.inletC[i], tankC + (v.get(N.running[i]) !== 0 ? 12 : 0));
@@ -323,6 +425,14 @@ export class LongitudeLogic implements Subsystem {
   reset(): void {
     const v = this.v;
     this.sbStowed = false;
+    this.prevG5000 = v.get('elec.pfd1_powered') !== 0 || v.get('elec.mfd_powered') !== 0 || v.get('elec.pfd2_powered') !== 0;
+    this.tieOverride = false;
+    this.prevAutoTie = false;
+    this.ptcuAwayT = 1e9;
+    this.genSrcB = true;
+    this.waiT = v.get(V.aiWing) !== 0 ? 10 : 0;
+    this.wasAir = v.get('gear.air_ground') === 0;
+    this.depElevFt = 0;
     this.aprAutoLatch = false;
     this.flapFault = false;
     this.prevFlapReset = v.get(V.flapReset) !== 0;
@@ -352,6 +462,17 @@ export class LongitudePostLogic implements Subsystem {
   private readonly wasRunning = [false, false];
   private readonly failed = [false, false];
   private readonly failVars = [V.engFail(1), V.engFail(2)];
+  // ENG EXCEEDANCE latch (OG 3-5: noted for maintenance; cleared only by the state reset)
+  private readonly exceedT = new Float64Array([0, 0]);
+  private readonly exceeded = [false, false];
+  private readonly exceedVars = [V.engExceed(1), V.engExceed(2)];
+  private readonly n1Vars = [ENG.n1(1), ENG.n1(2)];
+  private readonly ittVars = [ENG.itt(1), ENG.itt(2)];
+  private readonly startStateVars = ['fadec.eng1.start_state', 'fadec.eng2.start_state'];
+  private readonly abortVars = ['fadec.eng1.abort', 'fadec.eng2.abort'];
+  private readonly startFailVars = [V.startFail(1), V.startFail(2)];
+  private readonly fadecFailVars = ['fail.fadec.eng1', 'fail.fadec.eng2'];
+  private readonly fadecFaultVars = [V.fadecFault(1), V.fadecFault(2)];
   constructor(vars: SimVars) {
     this.v = vars;
   }
@@ -381,19 +502,48 @@ export class LongitudePostLogic implements Subsystem {
       if (!running) this.shutdownT[i] += dt;
       const motoring = v.get(N.starterCmd[i + 1]) !== 0 && v.get(i === 0 ? V.runL : V.runR) === 0;
       this.motorT[i] = motoring ? this.motorT[i] + dt : 0;
-      if (this.motorT[i] >= 15 || (motoring && v.get(N.n2[i + 1]) >= 19)) this.dryMotored[i] = this.shutdownT[i] + 1e-3;
+      if (this.motorT[i] >= 15 || (motoring && v.get(N.n2[i + 1]) >= 20)) this.dryMotored[i] = this.shutdownT[i] + 1e-3; // OG 7-6: 15 s or 20 % N2
+      // ENG EXCEEDANCE (OG 1-3 limits, OG 3-5: logged for maintenance): > 1 s beyond a limit latches until reset.
+      const ss = v.get(this.startStateVars[i]);
+      const over =
+        v.get(this.n1Vars[i]) > LON_LIMITS.n1TakeoffPct + 0.1 ||
+        v.get(N.n2[i + 1]) > LON_LIMITS.n2TransientPct ||
+        v.get(this.ittVars[i]) > LON_LIMITS.ittTakeoffC ||
+        (ss >= 2 && ss <= 3 && v.get(this.ittVars[i]) > LON_LIMITS.ittStartC);
+      this.exceedT[i] = over ? this.exceedT[i] + dt : 0;
+      if (this.exceedT[i] >= 1) this.exceeded[i] = true;
+      v.set(this.exceedVars[i], this.exceeded[i] ? 1 : 0);
+      // FADEC start abort (hot / hung / no light / no rotation) and FADEC channel fault, for the CAS.
+      v.set(this.startFailVars[i], v.get(this.abortVars[i]));
+      v.set(this.fadecFaultVars[i], v.get(this.fadecFailVars[i]) !== 0 ? 1 : 0);
       const minutes = this.shutdownT[i] / 60;
       // After a dry motor the message clears 3 minutes later (OG 7-6).
       const clearedByMotor = this.dryMotored[i] > 0 && this.shutdownT[i] - this.dryMotored[i] >= 180;
       v.set(N.dryMotorReq[i + 1], !running && minutes >= 15 && minutes <= 180 && !clearedByMotor ? 1 : 0);
       v.set(N.lastShutdown[i + 1], this.shutdownT[i]);
     }
-    // Standby power LEDs (OG 5-5): amber = ON and not charging; green = TEST held with a good battery.
+    // Standby power LEDs (OG 5-5): amber = ON and not charging; green = TEST held with a good battery. The standby
+    // battery charges from the L MISSION bus (OG 5-3) when a primary source (generator, APU generator, external
+    // power, or the right side through the bus tie) powers it; on the batteries alone it is not being charged.
     const sw = v.get(V.stbyPwr);
-    const charging = v.get('elec.mission_l_v') > v.get('elec.stby_batt_v') + 0.2;
+    const primL = v.get('elec.gen_l_online') !== 0 || v.get('elec.apu_gen_online') !== 0 || v.get('elec.gpu_online') !== 0;
+    const primR = v.get('elec.gen_r_online') !== 0 || v.get('elec.ptcu_gen_online') !== 0;
+    const charging = v.get('elec.mission_l_powered') !== 0 && (primL || (primR && v.get('elec.bus_tie_closed') !== 0));
     const soc = v.get('elec.stby_batt_soc');
     v.set(V.stbyBattLed, sw === 2 ? (soc > 0.5 ? 2 : 0) : sw === 1 && !charging ? 1 : 0);
     v.set(V.stbyPowered, v.get('elec.stby_powered'));
+    // EIS SPOILERS indication (OG 15-5): speedbrake and ground-spoiler panel extension, not the roll spoilers.
+    v.set(V.spoilerInd, Math.max(v.get('spoilers.sb_ext'), v.get(SURF.groundSpoilers)));
+    // Crew audio (DGAC CABIN ALTITUDE / EMERGENCY DESCENT steps 2-3). SCOPE: no audio model; the MIC SEL and MIC/INPH
+    // states gate the crew-mask microphone and the hot intercom flags (shown on the side-console MIC SEL legend).
+    const mL = v.get(V.micSelL) !== 0 && v.get(V.oxyMaskL) !== 0;
+    const mR = v.get(V.micSelR) !== 0 && v.get(V.oxyMaskR) !== 0;
+    v.set(V.maskMicLiveL, mL ? 1 : 0);
+    v.set(V.maskMicLiveR, mR ? 1 : 0);
+    const micL = v.get(V.micSelL) !== 0 ? mL : v.get(V.oxyMaskL) === 0; // boom mic unusable with the mask on
+    const micR = v.get(V.micSelR) !== 0 ? mR : v.get(V.oxyMaskR) === 0;
+    v.set(V.intercomHotL, v.get(V.micInphL) !== 0 && micL && v.get('elec.emer_l_powered') !== 0 ? 1 : 0);
+    v.set(V.intercomHotR, v.get(V.micInphR) !== 0 && micR && v.get('elec.emer_r_powered') !== 0 ? 1 : 0);
   }
   reset(): void {
     const v = this.v;
@@ -403,6 +553,8 @@ export class LongitudePostLogic implements Subsystem {
       this.shutdownT[i] = 1e6;
       this.motorT[i] = 0;
       this.dryMotored[i] = 0;
+      this.exceedT[i] = 0;
+      this.exceeded[i] = false;
     }
   }
 }

@@ -215,6 +215,8 @@ export const B737_VARS = {
   fmcAlertLight: 'ac.afds.fmc_light',
   /** Disengage light TEST switch: -1 position 1 (amber), 0 off, 1 position 2 (red). */
   discLightTest: 'ac.afds.light_test',
+  /** F/O disengage light TEST switch (same convention; the AFDS / FMC combine it with `discLightTest`). */
+  discLightTest2: 'ac.afds.light_test2',
   /** STAB OUT OF TRIM light (A/P engaged, mistrim). */
   stabOutOfTrim: 'ac.afds.stab_out_of_trim',
 

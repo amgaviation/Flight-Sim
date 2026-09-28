@@ -764,7 +764,7 @@ export class B737Afds implements Subsystem {
     v.set(B737_VARS.mcpMaLight(2), powered && ma === 2 && (fd[1] || !!a?.engaged) ? 1 : 0);
 
     // ---------------------------------------------------------------- disengage lights (0 off, 1 red, 2 amber)
-    const test = v.get(B737_VARS.discLightTest);
+    const test = v.get(B737_VARS.discLightTest) || v.get(B737_VARS.discLightTest2, 0);
     let apL = v.get(AFCS_VARS.discWarn) !== 0 && flashOn ? 1 : 0;
     let atL = v.get('at.disc_warn') !== 0 ? (flashOn ? 1 : 0) : v.get('at.spd_warn') !== 0 && flashOn ? 2 : 0;
     if (test < 0) {

@@ -21,7 +21,16 @@ export interface BleedSourceDef {
   /** Rising edge clears an overheat/overpressure trip (TRIP RESET). */
   reset?: Binding;
   /** HP port: when the LP port pressure is below `belowPsi` the HP valve opens and pressure × `ratio` is available (EST idle descent). */
-  hp?: { belowPsi: number; ratio: number };
+  hp?: {
+    belowPsi: number;
+    ratio: number;
+    /**
+     * (Appended by citation-longitude.) HP PRSOV regulation point (psi): the HP valve opens when the LP port is below
+     * it (replacing `belowPsi`) and the HP supply is capped at it (Longitude OG 9-2: 31.5 psig, 52 psig with wing
+     * anti-ice requested). Default: none (`belowPsi`, uncapped HP supply).
+     */
+    regulation?: Binding;
+  };
   /** Valve travel time (s), default 1.5 (EST). */
   travelS?: number;
 }
@@ -66,6 +75,12 @@ export interface PackDef {
   /** Coldest / hottest outlet (°C). Defaults 2 / 70 (EST: water separator anti-ice limit / duct overheat margin). */
   minOutletC?: number;
   maxOutletC?: number;
+  /**
+   * (Appended by citation-longitude.) Outlet limits as bindings (°C), overriding minOutletC / maxOutletC while
+   * given: pack modes that bypass the air-cycle machine or the heat exchangers change the reachable range.
+   */
+  minOutletCBinding?: Binding;
+  maxOutletCBinding?: Binding;
 }
 
 export interface ZoneDef {

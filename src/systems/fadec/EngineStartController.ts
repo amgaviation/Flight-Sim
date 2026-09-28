@@ -99,6 +99,13 @@ export interface EngineStartConfig {
    */
   hotStartPredictS?: number;
   /**
+   * (Appended by citation-longitude.) No-rotation abort: with the starter engaged, an N2 still below
+   * `noRotationN2Pct` after `noRotationS` seconds of motoring aborts the start ('NO ROTATION', e.g. no starter
+   * air). Default off.
+   */
+  noRotationS?: number;
+  noRotationN2Pct?: number;
+  /**
    * Starter can be engaged (bleed/DC available). Default true. Evaluated every
    * update; false drops the starter at once. For a DC starter bind it to the
    * starter bus voltage above the start relay's drop-out (e.g.
@@ -256,6 +263,7 @@ export class EngineStartController implements Subsystem {
           ign = true;
           fuel = false;
           if (held && !sw) this.enter(StartState.Off);
+          else if (cfg.noRotationS !== undefined && this.stateT > cfg.noRotationS && n2 < (cfg.noRotationN2Pct ?? 5)) this.abort('NO ROTATION');
           else if (runLever && n2 >= cfg.fuelOnN2Pct) {
             this.fuelIttRef = itt;
             this.hungRefN2 = n2;

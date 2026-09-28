@@ -307,6 +307,8 @@ export function createLighting(ctx: Pick<SimContext, 'vars'>): LightingSystem {
       { id: 'cb', knob: B738.cbPanelLt, power: `${P}panel_lts_powered` },
       { id: 'map_capt', knob: B738.mapLt(1), power: `${P}flood_lts_powered` },
       { id: 'map_fo', knob: B738.mapLt(2), power: `${P}flood_lts_powered` },
+      { id: 'chart_capt', knob: B738.chartLt(1), power: `${P}flood_lts_powered` },
+      { id: 'chart_fo', knob: B738.chartLt(2), power: `${P}flood_lts_powered` },
       // Annunciators: LIGHTS switch DIM (-1) = ~40 % (EST), TEST (1) = all lamps on.
       { id: 'annun', knob: `${B738.lightsTest} <= -0.5 ? 0.4 : 1`, power: `${P}annun_lts_powered`, test: `${B738.lightsTest} >= 0.5` },
     ],

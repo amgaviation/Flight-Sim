@@ -193,6 +193,8 @@ export function setLongitudeSwitches(ctx: Pick<SimContext, 'vars'>, sys: Longitu
   v.set(V.altFine, 0);
   v.set(V.ltSeatBelts, moving ? 1 : 0);
   v.set(V.ltPaxSafety, moving ? 1 : 0);
+  // ---- function fix round 1: crew audio (BOOM mic, MIC/INPH inboard)
+  for (const k of [V.micSelL, V.micSelR, V.micInphL, V.micInphR]) v.set(k, 0);
 }
 
 /**

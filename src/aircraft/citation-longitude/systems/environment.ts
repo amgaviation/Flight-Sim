@@ -53,7 +53,11 @@ import { LON_VARS as V } from '../vars';
 const starting = (i: number): string => `(fadec.eng${i}.starter_cmd != 0 || (fadec.eng${i}.start_state >= 1 && fadec.eng${i}.start_state <= 3))`;
 
 export function createPneumatics(ctx: Pick<SimContext, 'vars'>): PneumaticSystem {
-  const hp = { belowPsi: 31.5, ratio: 1.6 }; // OG 9-2: HP PRSOV opens when LP < 31.5 psig
+  // OG 9-2: the HP PRSOV opens when the LP bleed falls below the HP regulation point, "normally 31.5 +/- 2.5 PSIG,
+  // however it will shift to 52 +/- 6 PSIG" with wing anti-ice; the HP supply is regulated to that point. At ground
+  // idle the manifold therefore sits near 31.5 psig, under the 32 psi start minimum (OG 1-3) once the starter draws:
+  // OG 17-11/17-12 cross-bleed start "Throttle (running engine) ... IDLE + 25 % N1 Minimum". HP/LP ratio EST 1.6.
+  const hp = { belowPsi: 31.5, ratio: 1.6, regulation: `${V.aiWing} ? 52 : 31.5` };
   return new PneumaticSystem(ctx.vars, {
     ducts: ['l_man', 'r_man', 'ecs'],
     sources: [
@@ -71,18 +75,33 @@ export function createPneumatics(ctx: Pick<SimContext, 'vars'>): PneumaticSystem
     ],
     consumers: [
       // Wing anti-ice piccolo tubes (EST 0.12 kg/s per side); XFLOW wing valve lets one side feed both (logic.ts).
-      { id: 'wai_l', duct: 'l_man', demandKgs: `${V.aiWing} * (0.12 + 0.12 * (${V.wingXflowOpen} && !eng2.running))`, minPsi: 30 },
-      { id: 'wai_r', duct: 'r_man', demandKgs: `${V.aiWing} * (0.12 + 0.12 * (${V.wingXflowOpen} && !eng1.running))`, minPsi: 30 },
+      // OG 12-3: the wing valves open 4 s after WING is selected (engines spool first; logic.ts V.waiValvesOpen).
+      { id: 'wai_l', duct: 'l_man', demandKgs: `${V.waiValvesOpen} * (0.12 + 0.12 * (${V.wingXflowOpen} && !eng2.running))`, minPsi: 30 },
+      { id: 'wai_r', duct: 'r_man', demandKgs: `${V.waiValvesOpen} * (0.12 + 0.12 * (${V.wingXflowOpen} && !eng1.running))`, minPsi: 30 },
       // Nacelle anti-ice from the engine's own port (EST 0.05 kg/s).
       { id: 'eai_l', engine: 1, demandKgs: `${V.aiEngL} * 0.05`, minPsi: 15 },
       { id: 'eai_r', engine: 2, demandKgs: `${V.aiEngR} * 0.05`, minPsi: 15 },
     ],
     packs: [
       // Single ACRP. NORM flow EST 0.42 kg/s, HIGH 0.55 kg/s (~14 cabin air changes/h... BCA: full exchange every 2.5 min).
-      { id: 'pack', duct: 'ecs', on: `elec.mission_l_powered || elec.mission_r_powered`, flowKgs: `${V.flow} ? 0.55 : 0.42`, minPsi: 18, minOutletC: 2, maxOutletC: 70 },
+      // ECS knob / APU source (OG 10-3/10-4, logic.ts): flow fraction (APU-only 60 % in NORM, 100 % in HIGH) and the
+      // outlet limits (HEAT EXCHG ONLY cannot cool below the RAT; ACM ONLY EST range).
+      {
+        id: 'pack',
+        duct: 'ecs',
+        on: `elec.mission_l_powered || elec.mission_r_powered`,
+        flowKgs: V.ecsPackFlowKgs,
+        minPsi: 18,
+        minOutletC: 2,
+        maxOutletC: 70,
+        minOutletCBinding: V.ecsMinOutletC,
+        maxOutletCBinding: V.ecsMaxOutletC,
+      },
     ],
     zones: [
-      { id: 'cabin', packs: ['pack'], target: `${V.cabinTempKnob} > 0.02 ? 5 + 25 * ${V.cabinTempKnob} : ${V.cabinSetC}`, volumeM3: 21.4, heatLoadW: 1500, initialC: 20 },
+      // Recirculation fan (GTC Temperature page AUTO / LOW / HIGH, OG 10-4): its motor power (the ecs_fans load, 3 A /
+      // 6 A at 28 V, electrical.ts) ends up as heat in the cabin air (EST).
+      { id: 'cabin', packs: ['pack'], target: `${V.cabinTempKnob} > 0.02 ? 5 + 25 * ${V.cabinTempKnob} : ${V.cabinSetC}`, volumeM3: 21.4, heatLoadW: `1500 + elec.mission_l_powered * (${V.recircFan} == 2 ? 168 : 84)`, initialC: 20 },
       { id: 'ckpt', packs: ['pack'], target: `${V.ckptTempKnob} > 0.02 ? 5 + 25 * ${V.ckptTempKnob} : ${V.ckptSetC}`, volumeM3: 5, heatLoadW: 900, initialC: 20 },
     ],
     starters: [
@@ -141,6 +160,9 @@ export function createIce(ctx: Pick<SimContext, 'vars'>): IceProtection {
       { id: 'pitot2', output: ICE.pitot(2), ratePerMin: 0.5, speedExp: 0.5, protection: { kind: 'electric', active: `${V.pitotHeatOn} * elec.pitot_r_powered` } },
       { id: 'static1', output: ICE.static(1), ratePerMin: 0.2, speedExp: 0.5, protection: { kind: 'electric', active: `${V.pitotHeatOn} * elec.pitot_l_powered` } },
       { id: 'static2', output: ICE.static(2), ratePerMin: 0.2, speedExp: 0.5, protection: { kind: 'electric', active: `${V.pitotHeatOn} * elec.pitot_r_powered` } },
+      // Standby pitot / static (ADC 3), heated from the L emergency bus (EST).
+      { id: 'pitot3', output: ICE.pitot(3), ratePerMin: 0.5, speedExp: 0.5, protection: { kind: 'electric', active: `${V.pitotHeatOn} * elec.pitot_stby_powered` } },
+      { id: 'static3', output: ICE.static(3), ratePerMin: 0.2, speedExp: 0.5, protection: { kind: 'electric', active: `${V.pitotHeatOn} * elec.pitot_stby_powered` } },
       { id: 'wshld1', output: ICE.windshield(1), ratePerMin: 0.2, protection: { kind: 'electric', active: `${V.wshldHeatOn} * elec.wshld_l_powered` } },
       { id: 'wshld2', output: ICE.windshield(2), ratePerMin: 0.2, protection: { kind: 'electric', active: `${V.wshldHeatOn} * elec.wshld_r_powered` } },
     ],
@@ -152,7 +174,9 @@ export function createApu(ctx: Pick<SimContext, 'vars'>): Apu {
   return new Apu(ctx.vars, {
     // APU FIRE switchlight pushed: APU shutdown (EST, Citation-family APU fire switch function).
     master: `${V.apuKnob} >= 1 && !${V.fireApu} && (elec.emer_l_powered || elec.emer_r_powered)`,
-    start: `${V.apuKnob} == 2`,
+    // OG 8-2 start envelope: ground starts to 13,500 ft, in-flight starts to FL310 (LON_LIMITS); above it the start
+    // command is inhibited (EST behaviour: no start attempt; the APU ON caution covers operation above FL350).
+    start: `${V.apuKnob} == 2 && (gear.air_ground ? adc1.press_alt_ft < ${LON_LIMITS.apuMaxGroundStartFt} : adc1.press_alt_ft < ${LON_LIMITS.apuMaxAirStartFt})`,
     starterVolts: 'elec.emer_l_v',
     starterNominalV: 26,
     starterPeakA: 450, // EST: 36-150 starter-generator class inrush

@@ -33,9 +33,9 @@ export function buildOverhead(c: B738CockpitContext): void {
   // Gain EST: incandescent 5 V edge-lit overhead plates read brighter than the thin engraving suggests.
   b.zone({ id: 'ovhd', intensityVar: 'ac.light.panel_ovhd', gain: 2.2 });
 
-  const fwd = b.panel({ ...MOUNTS.overheadFwd, name: 'b738.ovhd', width: FWD.w, height: FWD.h, origin: 'top-left', material: 'panelDark', screws: false });
+  const fwd = b.panel({ ...MOUNTS.overheadFwd, name: 'b738.ovhd', width: FWD.w, height: FWD.h, origin: 'top-left', material: 'panel', screws: false });
   buildForwardOverhead(c, fwd);
-  const aft = b.panel({ ...MOUNTS.overheadAft, name: 'b738.aovhd', width: AFT.w, height: AFT.h, origin: 'top-left', material: 'panelDark', screws: false });
+  const aft = b.panel({ ...MOUNTS.overheadAft, name: 'b738.aovhd', width: AFT.w, height: AFT.h, origin: 'top-left', material: 'panel', screws: false });
   buildAftOverhead(c, aft);
 
   const lining = b.env.materials.custom('paint', 0xb9bab5, 0.75);

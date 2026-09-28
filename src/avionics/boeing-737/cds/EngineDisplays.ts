@@ -278,9 +278,11 @@ export class EngPrimary implements CdsFormatRenderer {
 
   protected drawN1(ctx: Ctx2D): void {
     const d = this.d;
-    const xs = [113, 312];
-    const cy = 150;
-    const r = 70;
+    // Dial size: b737.org.uk NG centre-panel photo (panelcentreinst): the N1 / EGT pairs fill the upper-left
+    // ~55 % x 45 % of the upper DU, each dial ~0.2 of the DU width across (r ~80 px on 800 px).
+    const xs = [116, 318];
+    const cy = 156;
+    const r = 80;
     for (let i = 0; i < 2; i++) {
       const cx = xs[i];
       const n1 = d.n1[i];
@@ -333,15 +335,15 @@ export class EngPrimary implements CdsFormatRenderer {
       const rv = d.rev[i];
       if (rv > 0.02) text(ctx, 'REV', cx + 48, cy - r - 30, 24, rv >= 0.9 ? CDS.green : CDS.amber, 'center');
     }
-    text(ctx, 'N', 213, 205, 22, CDS.cyan, 'center');
-    text(ctx, '1', 222, 212, 14, CDS.cyan, 'left');
+    text(ctx, 'N', 215, 215, 22, CDS.cyan, 'center');
+    text(ctx, '1', 224, 222, 14, CDS.cyan, 'left');
   }
 
   protected drawEgt(ctx: Ctx2D): void {
     const d = this.d;
-    const xs = [113, 312];
-    const cy = 300;
-    const r = 72;
+    const xs = [116, 318];
+    const cy = 326;
+    const r = 78;
     for (let i = 0; i < 2; i++) {
       const cx = xs[i];
       const egt = d.egt[i];
@@ -350,7 +352,7 @@ export class EngPrimary implements CdsFormatRenderer {
       const col = exceedColor(egt, this.startLimitShown[i] ? NaN : CFM56_EGT.amber, red);
       drawDial(ctx, cx, cy, r, egt, valid, EGT_A0, EGT_K, 350, red, this.startLimitShown[i] ? NaN : CFM56_EGT.amber, fmtInt(Math.round(egt)), col, { x: cx - 18, y: cy - r - 4, w: 80, h: 40 });
     }
-    text(ctx, 'EGT', 216, 352, 22, CDS.cyan, 'center');
+    text(ctx, 'EGT', 217, 384, 22, CDS.cyan, 'center');
   }
 
   protected drawAlerts(ctx: Ctx2D): void {

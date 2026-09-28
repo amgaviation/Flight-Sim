@@ -247,9 +247,27 @@ export const B738 = {
   nwsSw: `${P}nws_sw`,
   /** BELOW G/S P-INHIBIT push lights (Capt / F/O, momentary). */
   belowGs: (s: Side) => `${P}below_gs${s}`,
-  /** Clock CHR push (momentary) and ET selector HLD (-1) / RUN (0) / RESET (1, spring). */
+  /** Clock CHR push (momentary) and ET switch HLD (-1) / RUN (0) (a value >= 0.5 still resets ET, kept for the RESET push). */
   clockChr: (s: Side) => `${P}clock_chr${s}`,
   clockEt: (s: Side) => `${P}clock_et${s}`,
+  /**
+   * Clock bezel controls (Smiths 737NG clock, SCBG P1/P3 drawing: CHR top-left, TIME/DATE top-right, ET RUN/HLD
+   * bottom-left, RESET bottom, SET with + / - bottom-right; functions per flightdeck737.be "The Clock / Chrono"):
+   * RESET (ET to zero), TIME/DATE (cycles UTC time, UTC date, MAN time, MAN date), SET (steps the MAN field
+   * being set: none, hours, minutes / day, month, year) and + / - (adjust the flashing field). All momentary.
+   */
+  clockReset: (s: Side) => `${P}clock_reset${s}`,
+  clockTimeDate: (s: Side) => `${P}clock_timedate${s}`,
+  clockSet: (s: Side) => `${P}clock_set${s}`,
+  clockPlus: (s: Side) => `${P}clock_plus${s}`,
+  clockMinus: (s: Side) => `${P}clock_minus${s}`,
+  /**
+   * FOOT AIR / WINDSHIELD AIR push-pull knobs (Capt P1-1 / F/O P3-3 lower strips, SCBG drawing): IN (0) / PULLED
+   * (1). SCOPE: diverts part of the flight-deck conditioned air to the pilot's feet / windshield; modelled as the
+   * outlet split only (the logic publishes `ac.b738.fd_air_foot{s}` / `fd_air_ws{s}`), no local temperature field.
+   */
+  footAir: (s: Side) => `${P}foot_air${s}`,
+  windshieldAir: (s: Side) => `${P}windshield_air${s}`,
   /** Main panel light rheostats 0..1: Capt / F/O PANEL, background, AFDS flood, glareshield flood. */
   panelLt: (s: Side) => `${P}panel_lt${s}`,
   backgroundLt: `${P}background_lt`,
@@ -257,6 +275,14 @@ export const B738 = {
   glareshieldFlood: `${P}gs_flood`,
   /** Map light rheostats (Capt / F/O). */
   mapLt: (s: Side) => `${P}map_lt${s}`,
+  /** Chart light rheostats on the side consoles (Capt / F/O), 0..1 (LightingSystem dimmers chart_capt / chart_fo). */
+  chartLt: (s: Side) => `${P}chart_lt${s}`,
+  /**
+   * No. 2 (sliding) window crank (Capt / F/O): 0 closed .. 1 fully open. SCOPE: the window cannot open with the
+   * cabin pressurized or in flight; the logic publishes `ac.b738.side_window_open{s}` (state only, the pane does
+   * not move).
+   */
+  windowCrank: (s: Side) => `${P}window_crank${s}`,
   /** GPWS panel (F/O panel): FLAP INHIBIT / GEAR INHIBIT / TERR INHIBIT: NORMAL (0) / INHIBIT (1), guarded. */
   gpwsFlapInh: `${P}gpws_flap_inh`,
   gpwsGearInh: `${P}gpws_gear_inh`,
@@ -371,6 +397,16 @@ export const B738 = {
   wxrGain: `${P}wxr_gain`,
   wxrTilt: `${P}wxr_tilt_deg`,
   wxrPower: `${P}wxr_on`,
+  /**
+   * HF 1 / 2 control panels (P8, SCBG drawing: frequency window, RF SENS, OFF / USB / AM mode selector; Collins
+   * HFS-900 style; fitted per operator). Mode OFF (0) / USB (1) / AM (2); frequency kHz 2,000..29,999 in 1 kHz
+   * steps; RF SENS 0..1. SCOPE: no HF propagation model: the logic publishes power / receive state only.
+   */
+  hfMode: (r: Side) => `${P}hf${r}_mode`,
+  hfFreqKhz: (r: Side) => `${P}hf${r}_khz`,
+  hfSens: (r: Side) => `${P}hf${r}_sens`,
+  /** SELCAL panel (P8): push-to-reset lights VHF 1 / VHF 2 / VHF 3 / HF 1 / HF 2 (momentary pushes, index 0..4). */
+  selcalReset: (ch: 0 | 1 | 2 | 3 | 4) => `${P}selcal_reset${ch}`,
   /** Pedestal lights rheostats: PANEL, FLOOD (0..1). */
   pedestalPanelLt: `${P}pedestal_panel_lt`,
   pedestalFlood: `${P}pedestal_flood`,
@@ -510,6 +546,13 @@ export const B738 = {
     zoneTempC: `${P}zone_temp_c`,
     clockEtS: (s: Side) => `${P}clock_et_s${s}`,
     clockChrS: (s: Side) => `${P}clock_chr_s${s}`,
+    /** Clock display mode: 0 UTC time, 1 UTC date, 2 MAN time, 3 MAN date; set field (0 none, 1..3) and MAN offset (h). */
+    clockMode: (s: Side) => `${P}clock_mode${s}`,
+    clockSetField: (s: Side) => `${P}clock_set_field${s}`,
+    clockManOffsetH: (s: Side) => `${P}clock_man_offset_h${s}`,
+    clockEtRun: (s: Side) => `${P}clock_et_run${s}`,
+    /** SELCAL call lights (0..4: VHF 1, VHF 2, VHF 3, HF 1, HF 2). */
+    selcal: (ch: 0 | 1 | 2 | 3 | 4) => `${L}selcal${ch}`,
     isduText: (line: 'l' | 'r') => `${P}isdu_${line}`,
     yawDamperInd: `${P}yd_ind`,
     /** ELT transmitting light (aft overhead ELT panel). */
@@ -572,6 +615,7 @@ export function b738ControlVars(): string[] {
     acpFilter: [1, 2, 3],
     acpPtt: [1, 2, 3],
     acpMaskBoom: [1, 2, 3],
+    selcalReset: [0, 1, 2, 3, 4],
   };
   for (const [key, val] of Object.entries(B738)) {
     if (skip.has(key)) continue;

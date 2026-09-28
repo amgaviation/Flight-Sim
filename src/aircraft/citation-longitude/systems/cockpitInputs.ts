@@ -52,7 +52,10 @@ export class LongitudeCockpitInputs implements Subsystem {
     const sec = v.get(V.stabSecArm) !== 0;
     const primary = cmd !== 0 ? cmd : v.get(INPUT.pitchTrimRate);
     v.set(V.yokeTrimCmd, sec || held ? 0 : primary);
-    v.set(V.stabSecCmd, sec ? v.get(V.stabSecSw) : 0);
+    // Secondary channel: its own switch path (not interrupted by MASTER DISCONNECT, which is how the crew retrims
+    // after a primary runaway, DGAC card) at half the primary rate (EST). SCOPE: the same stabilizer actuator on a
+    // separate motor circuit (STAB TRIM SEC breaker, R EMER bus).
+    v.set(V.stabSecCmd, sec ? 0.5 * v.get(V.stabSecSw) : 0);
     // A wheel trim actuation (rising edge) disconnects an engaged autopilot.
     if (cmd !== 0 && this.prevTrim === 0 && v.get(AP.engaged) !== 0) this.events?.emit('ap.disc');
     this.prevTrim = cmd;

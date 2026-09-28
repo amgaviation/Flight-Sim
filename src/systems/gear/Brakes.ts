@@ -135,7 +135,12 @@ export interface BrakeConfig {
     antiskid?: boolean;
   };
   parking?: { var?: string; kind?: 'hydraulic' | 'mechanical' | 'trapped'; leakPerS?: number };
-  emergency?: { var: string; pressurePsi?: Binding };
+  /**
+   * Emergency brake handle (0..1 metered demand, bypasses anti-skid). `bypassFailures` (appended by
+   * citation-longitude, default false): the emergency path has its own lines to the brake assemblies, so the
+   * `brakes.left/right` failures (read as normal / brake-by-wire path failures) do not remove it.
+   */
+  emergency?: { var: string; pressurePsi?: Binding; bypassFailures?: boolean };
   antiskid?: {
     enabled: Binding;
     wheels?: { left: string[]; right: string[] };
@@ -364,8 +369,10 @@ export class Brakes implements Subsystem {
         } else s.asFactor = 1;
       } else s.asFactor = 1;
       // Emergency / pneumatic brake: bypasses anti-skid
-      if (emergency > 0) psi = Math.max(psi, Math.min(emergency * cfg.maxPsi, this.emergPsi()));
+      const bypass = cfg.emergency?.bypassFailures === true;
+      if (emergency > 0 && !bypass) psi = Math.max(psi, Math.min(emergency * cfg.maxPsi, this.emergPsi()));
       if (v.get(s.fail) !== 0) psi = 0;
+      if (emergency > 0 && bypass) psi = Math.max(psi, Math.min(emergency * cfg.maxPsi, this.emergPsi()));
       s.psi = psi;
       v.set(s.out, cfg.maxPsi > 0 ? psi / cfg.maxPsi : 0);
       v.set(s.oPsi, psi);

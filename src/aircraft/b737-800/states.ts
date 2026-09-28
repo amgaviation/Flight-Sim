@@ -106,8 +106,15 @@ export function setB738Switches(ctx: Pick<SimContext, 'vars'>, s: InitialState):
     v.set(B738.belowGs(i), 0);
     v.set(B738.clockChr(i), 0);
     v.set(B738.clockEt(i), 0);
+    for (const n of [B738.clockReset(i), B738.clockTimeDate(i), B738.clockSet(i), B738.clockPlus(i), B738.clockMinus(i), B738.footAir(i), B738.windshieldAir(i)]) v.set(n, 0);
+    // HF: USB on 8,891 kHz (Shanwick OCA primary, EST default), RF SENS full.
+    v.set(B738.hfMode(i), powered ? 1 : 0);
+    v.set(B738.hfFreqKhz(i), i === 1 ? 8891 : 5616);
+    v.set(B738.hfSens(i), 1);
     v.set(B738.panelLt(i), powered && night ? 0.7 : powered ? 0.3 : 0);
     v.set(B738.mapLt(i), 0);
+    v.set(B738.chartLt(i), 0);
+    v.set(B738.windowCrank(i), 0);
     v.set(B738.wiper(i), 0);
     v.set(B738.landingRetract(i), s === 'takeoff' || s === 'approach' ? 2 : 0);
     v.set(B738.landingFixed(i), s === 'takeoff' || s === 'approach' ? 1 : 0);

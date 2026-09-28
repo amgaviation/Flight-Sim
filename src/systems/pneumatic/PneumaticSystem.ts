@@ -74,6 +74,8 @@ class Source {
   readonly o: Record<'psi' | 'valve_open' | 'valve_pos' | 'trip' | 'flow_kgs' | 'hp', string>;
   readonly failHot: string;
   readonly extractVar: string | null;
+  /** HP PRSOV regulation point (BleedSourceDef.hp.regulation), null when not configured. */
+  hpReg: Evaluator | null = null;
   constructor(
     readonly def: BleedSourceDef,
     readonly duct: number,
@@ -140,6 +142,9 @@ class Pack {
   readonly resetEdge = new EdgeDetector();
   readonly o: Record<'on' | 'flow_kgs' | 'outlet_c' | 'trip', string>;
   readonly failHot: string;
+  /** Optional outlet-limit bindings (PackDef.minOutletCBinding / maxOutletCBinding). */
+  loEv: Evaluator | null = null;
+  hiEv: Evaluator | null = null;
   constructor(
     readonly def: PackDef,
     readonly duct: number,
@@ -269,6 +274,7 @@ export class PneumaticSystem implements Subsystem {
       this.ids.add(d.id, 'source');
       if (!(d.maxFlowKgs > 0)) throw new Error(`PneumaticSystem: source '${d.id}' needs maxFlowKgs > 0`);
       const s = new Source(d, this.duct(d.duct, `source '${d.id}'`), compileBinding(vars, d.pressure), compileCondition(vars, d.valve, true), compileCondition(vars, d.reset, false), P);
+      if (d.hp?.regulation !== undefined) s.hpReg = compileBinding(vars, d.hp.regulation, d.hp.belowPsi);
       this.sources.push(s);
       if (d.engine !== undefined) s.slot = this.addEngine(d.engine, d.maxFlowKgs);
     }
@@ -290,7 +296,10 @@ export class PneumaticSystem implements Subsystem {
     }
     for (const d of cfg.packs ?? []) {
       this.ids.add(d.id, 'pack');
-      this.packs.push(new Pack(d, this.duct(d.duct, `pack '${d.id}'`), compileCondition(vars, d.on, false), compileBinding(vars, d.flowKgs), compileCondition(vars, d.reset, false), P));
+      const pack = new Pack(d, this.duct(d.duct, `pack '${d.id}'`), compileCondition(vars, d.on, false), compileBinding(vars, d.flowKgs), compileCondition(vars, d.reset, false), P);
+      if (d.minOutletCBinding !== undefined) pack.loEv = compileBinding(vars, d.minOutletCBinding, d.minOutletC ?? 2);
+      if (d.maxOutletCBinding !== undefined) pack.hiEv = compileBinding(vars, d.maxOutletCBinding, d.maxOutletC ?? 70);
+      this.packs.push(pack);
     }
     for (const d of cfg.zones ?? []) {
       this.ids.add(d.id, 'zone');
@@ -360,8 +369,9 @@ export class PneumaticSystem implements Subsystem {
     for (const s of this.sources) {
       let port = Math.max(0, s.pressure());
       const hp = s.def.hp;
-      s.hpOpen = hp !== undefined && port > 0 && port < hp.belowPsi;
-      if (s.hpOpen && hp) port *= hp.ratio;
+      const hpReg = s.hpReg ? s.hpReg() : NaN;
+      s.hpOpen = hp !== undefined && port > 0 && port < (s.hpReg ? hpReg : hp.belowPsi);
+      if (s.hpOpen && hp) port = s.hpReg ? Math.max(port, Math.min(port * hp.ratio, hpReg)) : port * hp.ratio;
       s.portPsi = port;
       const reg = s.def.regulatedPsi ?? 45;
       const pos = s.act.position;
@@ -474,8 +484,8 @@ export class PneumaticSystem implements Subsystem {
     }
     // Pack outlet: coldest demand among its zones (trim air heats the others).
     for (const p of this.packs) {
-      const lo = p.def.minOutletC ?? 2;
-      const hi = p.def.maxOutletC ?? 70;
+      const lo = p.loEv ? p.loEv() : p.def.minOutletC ?? 2;
+      const hi = p.hiEv ? p.hiEv() : p.def.maxOutletC ?? 70;
       let cmd = hi;
       for (const zi of p.zoneIdx) cmd = Math.min(cmd, this.zones[zi].cmdC);
       if (p.zoneIdx.length === 0) cmd = 15;
@@ -491,7 +501,7 @@ export class PneumaticSystem implements Subsystem {
         const share = p.flow / Math.max(1, p.zones);
         m += share;
         // Trim air raises the zone's supply above the pack outlet when this zone wants it warmer.
-        const hi = p.def.maxOutletC ?? 70;
+        const hi = p.hiEv ? p.hiEv() : p.def.maxOutletC ?? 70;
         const sup = Math.max(p.outletC, Math.min(z.cmdC, hi));
         mt += share * sup;
       }
