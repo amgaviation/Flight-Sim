@@ -18,6 +18,7 @@ import type { Turbofan } from '../../physics/engines/Turbofan';
 import { LON_VARS as V } from './vars';
 import { STAB_RANGE, type LongitudeSystems } from './createSystems';
 import { TLA } from './systems/logic';
+import { CITATION_LONGITUDE_FDM } from './fdm';
 
 /** Stabilizer position (deg) giving the normalized pitch-trim command `n` (bisection on TrimAxis.normalize). */
 export function stabUnitsFor(sys: LongitudeSystems, n: number): number {
@@ -30,6 +31,29 @@ export function stabUnitsFor(sys: LongitudeSystems, n: number): number {
     else hi = mid;
   }
   return (lo + hi) / 2;
+}
+
+/**
+ * OG 17-3 Cockpit Preparation takeoff stab-trim chart (read off the published graph): -6.45 deg at 24 % MAC,
+ * -5.15 at 28 %, -3.9 at 32 %, -2.5 at 36 % and flat to 40 %.
+ */
+export const TAKEOFF_STAB_CHART = { cgPctMac: [24, 28, 32, 36, 40], stabDeg: [-6.45, -5.15, -3.9, -2.5, -2.5] };
+
+export function takeoffStabDeg(cgPctMac: number): number {
+  const { cgPctMac: x, stabDeg: y } = TAKEOFF_STAB_CHART;
+  if (!(cgPctMac > x[0])) return y[0];
+  for (let i = 1; i < x.length; i++) if (cgPctMac <= x[i]) return y[i - 1] + ((y[i] - y[i - 1]) * (cgPctMac - x[i - 1])) / (x[i] - x[i - 1]);
+  return y[y.length - 1];
+}
+
+/** Loaded CG (% MAC) straight from the mass model (the fdm.* vars are published only on the next step). */
+function currentCgPctMac(ctx: Pick<SimContext, 'vars'> & Partial<Pick<SimContext, 'fdm'>>): number {
+  const fm = ctx.fdm as Partial<FlightModel> | undefined;
+  if (fm?.massModel) {
+    fm.massModel.update();
+    return fm.massModel.cgPercentMac(CITATION_LONGITUDE_FDM.aero.mac_m);
+  }
+  return ctx.vars.get(FDM.cgPctMac, 28);
 }
 
 /** Thrust-lever position giving N1 `n1` in the current conditions (bisection on the FADEC lever law). */
@@ -136,8 +160,8 @@ export function setLongitudeSwitches(ctx: Pick<SimContext, 'vars'>, sys: Longitu
   v.set(V.pitchRollDisc, 0); // PITCH/ROLL DISCONNECT stowed (columns connected)
   sys.ailTrim.setPosition(0);
   sys.rudTrim.setPosition(0);
-  // OG 17-3 chart: ~-4.5 deg for a mid CG (EST) -> inside the takeoff band.
-  sys.stab.setPosition(-4.5);
+  // OG 17-3 "Trims - Check/Set for Takeoff" chart: stabilizer for the loaded CG (in-air states are retrimmed below).
+  sys.stab.setPosition(takeoffStabDeg(currentCgPctMac(ctx)));
   // ---- gear / brakes
   const gearDown = s !== 'cruise';
   v.set(V.gearHandle, gearDown ? 1 : 0);

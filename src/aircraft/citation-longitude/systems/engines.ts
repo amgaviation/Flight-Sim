@@ -141,6 +141,9 @@ export function createEngines(ctx: SimContext): LongitudeEngines {
     // SPD knob FMS / MAN (OG 7-4): the G5000 copies the FMS speed into the selected speed in FMS mode, so the A/T
     // always holds the selected speed; MAN overrides the FMS speed also in VNAV.
     vnavSpeedFromSelected: true,
+    // OG 7-5 DESC: "targeting an idle thrust for descent" - the A/T stays in DESC at the idle stop (no HOLD in flight;
+    // OG: "HOLD will only activate when on the ground").
+    holdAfterDescentIdle: false,
   });
   return { ratings, fadec, starts, at };
 }

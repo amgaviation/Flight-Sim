@@ -329,6 +329,11 @@ export interface EpicAirframe {
   flapPlacardKt: readonly number[];
   /** Landing gear extended / operating speed (kt). */
   vleKt: number;
+  /**
+   * (Appended by the g800 aircraft.) Draw the flap / gear placard limit (amber tick, SpeedTape `flapLimitKt`) on the
+   * PFD speed tape: `flapPlacardKt` of the current flap position, and `vleKt` while the gear is not up. Default false.
+   */
+  showPlacardLimit?: boolean;
   /** Pitch trim display: var, range [nose down, nose up] units, takeoff green band. */
   pitchTrim: { var: string; min: number; max: number; greenLo: number; greenHi: number };
   aileronTrimVar: string;

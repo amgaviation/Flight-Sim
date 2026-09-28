@@ -44,6 +44,16 @@ export function presetFieldElevationFt(ctx: Pick<SimContext, 'vars' | 'nav' | 'w
   return Number.isFinite(m) ? Math.max(0, m / 0.3048) : 0;
 }
 
+/**
+ * Transition altitude (ft) for an in-air preset: the nearest airport's published value (the nav database gives
+ * 18,000 ft for US airports, 14 CFR 91.121 / AIM 7-2-2), else 18,000 ft.
+ */
+export function presetTransitionAltitudeFt(ctx: Pick<SimContext, 'vars' | 'nav'>): number {
+  const near = typeof ctx.nav?.airportsNear === 'function' ? ctx.nav.airportsNear(ctx.vars.get(FDM.lat), ctx.vars.get(FDM.lon), 100, 1) : [];
+  const ta = near[0]?.transitionAltitudeFt;
+  return typeof ta === 'number' && Number.isFinite(ta) && ta > 0 ? ta : 18000;
+}
+
 /** Writes the cockpit switch / lever vars for `s` (no system snapping). */
 export function setM2Switches(ctx: Pick<SimContext, 'vars'>, s: InitialState): void {
   const v = ctx.vars;
@@ -158,6 +168,7 @@ export function applyM2State(ctx: SimContext, sys: M2Systems, s: InitialState): 
   sys.rudderTrim.setPosition(0);
 
   sys.logic.reset();
+  sys.procedures.reset();
   // Departure / landing field elevations for the pressurization controller. In the air there is no ground latch:
   // take the nearest airport (the approach preset's destination), else the terrain under the start point.
   if (inAir) {
@@ -207,18 +218,27 @@ export function applyM2State(ctx: SimContext, sys: M2Systems, s: InitialState): 
         const need = (fm.mass * 9.80665 * -fm.cg.y) / (fm.qbar * a.wingArea_m2 * a.span_m * (a.Cl_trim ?? 0.004));
         sys.aileronTrim.setPosition(Math.max(-1, Math.min(1, need)));
       }
-      const n1 = (fm.engines[0] as Turbofan).n1ForThrust(trim.thrustN / 2, fm.engineEnv);
-      sys.ratings.update(1 / 60);
-      const idle = sys.fadec.idleN1(v.get(FDM.pressAlt), false);
-      let lo = 0;
-      let hi = 1;
-      for (let i = 0; i < 30; i++) {
-        const mid = (lo + hi) / 2;
-        if (sys.fadec.forwardN1(mid, idle) < n1) lo = mid;
-        else hi = mid;
+      if (s === 'cruise') {
+        // Cruise: both throttles in the CRU detent. The FPG p.22 high-speed cruise table is flown at maximum cruise
+        // thrust (the CRU detent, S&D21 §8 IDLE / CRU / CLB / TO) and the cruise checklist calls "Throttles - CRU
+        // detent"; at FL370 / 396 KTAS the FDM holds the tabulated speed there (N1 ~99.6 %). The required-N1
+        // bisection below saturated at TO thrust in cruise (N1 104.4 %, red line 104.69 %, M2-PROC-06).
+        v.set(M2.tla(1), TLA.cru);
+        v.set(M2.tla(2), TLA.cru);
+      } else {
+        const n1 = (fm.engines[0] as Turbofan).n1ForThrust(trim.thrustN / 2, fm.engineEnv);
+        sys.ratings.update(1 / 60);
+        const idle = sys.fadec.idleN1(v.get(FDM.pressAlt), false);
+        let lo = 0;
+        let hi = 1;
+        for (let i = 0; i < 30; i++) {
+          const mid = (lo + hi) / 2;
+          if (sys.fadec.forwardN1(mid, idle) < n1) lo = mid;
+          else hi = mid;
+        }
+        v.set(M2.tla(1), Math.min(lo, TLA.clb));
+        v.set(M2.tla(2), Math.min(lo, TLA.clb));
       }
-      v.set(M2.tla(1), lo);
-      v.set(M2.tla(2), lo);
     }
     // AFCS references: hold the current heading and altitude.
     v.set(AP.selHeading, Math.round(v.get(FDM.headingMag)));
@@ -227,8 +247,14 @@ export function applyM2State(ctx: SimContext, sys: M2Systems, s: InitialState): 
     v.set(AP.selHeading, Math.round(v.get(FDM.headingMag)));
     v.set(AP.selAltitude, Math.round((v.get(FDM.altMsl) + 5000) / 1000) * 1000);
   }
-  // Baro set to the local QNH.
-  for (const i of [1, 2, 3]) v.set(ADC.baroSetting(i), v.get('env.qnh_inhg', 29.92));
+  // Baro set to the local QNH; above the transition altitude all three altimeters (PFD 1 / 2 and the ESI) on STD
+  // (525AFM-06 After Takeoff-Climb "Altimeters - SET to 29.92 at transition altitude and CROSSCHECK"; M2 flows
+  // "18K: ALTIMETERS 2992"; RVSM).
+  const std = inAir && v.get(FDM.altMsl) > presetTransitionAltitudeFt(ctx);
+  for (const i of [1, 2, 3]) {
+    v.set(ADC.baroSetting(i), v.get('env.qnh_inhg', 29.92));
+    v.set(ADC.baroStd(i), std ? 1 : 0);
+  }
 
   sys.logic.update(1 / 60);
   sys.ratings.update(1 / 60);

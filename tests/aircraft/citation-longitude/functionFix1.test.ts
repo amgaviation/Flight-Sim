@@ -7,9 +7,10 @@ import { makeRig, type Rig } from './helpers';
 import { SimVars } from '../../../src/core/SimVars';
 import { LON_VARS as V } from '../../../src/aircraft/citation-longitude/vars';
 import { LONGITUDE_EIS_SIM, STAB_TO_BAND, STAB_RANGE } from '../../../src/aircraft/citation-longitude/createSystems';
-import { LongitudePostLogic } from '../../../src/aircraft/citation-longitude/systems/logic';
+import { LongitudeLogic, LongitudePostLogic } from '../../../src/aircraft/citation-longitude/systems/logic';
 import { fieldCheck } from '../../../src/aircraft/citation-longitude/performance';
 import { FlightPhase } from '../../../src/systems/warning/FlightPhase';
+import { stabUnitsFor, takeoffStabDeg } from '../../../src/aircraft/citation-longitude/states';
 
 const posted = (r: Rig) => r.sys.cas.list.filter((e) => e.active).map((e) => `${e.level[0]}:${e.text}`);
 
@@ -141,18 +142,24 @@ describe('Autothrottle (LON-F-09, LON-F-16 / LON-PROC-21) and EDM (LON-F-15 / LO
     expect(minTla).toBeGreaterThan(0.95);
   });
 
-  it('MIN SPD: slowing toward the shaker with the throttles at idle engages the A/T and advances them; speedbrake stows (OG 7-5, BCA)', { timeout: 120_000 }, () => {
+  it('MIN SPD: slowing toward the shaker with the A/T engaged advances the throttles; speedbrake stows (OG 7-5, BCA)', { timeout: 120_000 }, () => {
     const r = makeRig('cruise', { weightLb: 32000, avionics: true, air: { altFtMsl: 15000, iasKt: 200 } });
     const v = r.vars;
     r.run(1);
+    if (v.get('ap.engaged')) r.events.emit('g3k.gmc.key_ap');
+    if (!v.get('ap.at_engaged')) r.events.emit('at.engage');
+    r.run(0.5);
+    expect(v.get('ap.at_engaged')).toBe(1);
+    // A very low selected speed: the SPD mode itself would let the airplane slow toward the shaker.
+    v.set('ap.sel_spd_kt', 90);
     v.set(V.tla(1), 0);
     v.set(V.tla(2), 0);
     v.set(V.speedbrake, 1);
     let seen = false;
     let maxTla = 0;
-    r.run(120, () => {
-      // Hold the nose up to bleed off speed (stick back, level-ish).
-      v.set('input.pitch', v.get('fdm.pitch_deg') < 8 ? 0.3 : 0);
+    r.run(150, () => {
+      // Raise the nose gently and hold it (about 12 deg) to bleed off the speed with the throttles at idle.
+      v.set('input.pitch', Math.max(0, Math.min(0.6, (12 - v.get('fdm.pitch_deg')) * 0.08)));
       if (v.get(V.atProt) === 1) seen = true;
       if (seen) maxTla = Math.max(maxTla, v.get(V.tla(1)));
       return seen && maxTla > 0.5;
@@ -167,7 +174,7 @@ describe('Autothrottle (LON-F-09, LON-F-16 / LON-PROC-21) and EDM (LON-F-15 / LO
     const r = makeRig('cruise', { weightLb: 32000, avionics: true, air: { altFtMsl: 41000, iasKt: 230 } });
     const v = r.vars;
     r.run(2);
-    r.events.emit('g3k.gmc.key_ap');
+    if (!v.get('ap.engaged')) r.events.emit('g3k.gmc.key_ap');
     r.run(2);
     expect(v.get('ap.engaged')).toBe(1);
     const hdg0 = v.get('ahrs1.hdg_mag_deg');
@@ -317,9 +324,18 @@ describe('Air conditioning (LON-F-12, LON-F-23, LON-F-34)', () => {
 describe('APU, engines, FADEC (LON-F-18, LON-F-30 / LON-PROC-29, LON-PROC-10, LON-PROC-18, LON-F-28, LON-F-33)', () => {
   it('APU start above FL310 is inhibited (OG 8-2)', { timeout: 120_000 }, () => {
     const r = makeRig('cruise', { weightLb: 32000, avionics: false, air: { altFtMsl: 41000, iasKt: 230 } });
+    r.vars.set(V.apuKnob, 1);
+    r.run(12);
     r.vars.set(V.apuKnob, 2);
     r.run(60);
     expect(r.vars.get('apu.avail')).toBe(0);
+    // Below FL310 the same sequence starts it.
+    const low = makeRig('cruise', { weightLb: 32000, avionics: false, air: { altFtMsl: 25000, iasKt: 250 } });
+    low.vars.set(V.apuKnob, 1);
+    low.run(12);
+    low.vars.set(V.apuKnob, 2);
+    low.run(60);
+    expect(low.vars.get('apu.avail')).toBe(1);
   });
 
   it('start with no starter air aborts after 10 s with ENG START ABORT (OG 7-5)', { timeout: 60_000 }, () => {
@@ -403,6 +419,7 @@ describe('CAS logic (LON-F-24, LON-F-25, LON-F-26, LON-F-27)', () => {
   it('GEN OFF APU with the engine generators online (OG 3-8)', { timeout: 60_000 }, () => {
     const r = makeRig('ready_to_taxi', { avionics: false });
     r.vars.set(V.apuKnob, 1);
+    r.run(12);
     r.vars.set(V.apuKnob, 2);
     r.run(60);
     r.vars.set(V.apuKnob, 1);
@@ -469,5 +486,93 @@ describe('Audio / oxygen (LON-F-17 / LON-PROC-20)', () => {
     r.run(0.5);
     expect(v.get(V.maskMicLiveL)).toBe(1);
     expect(v.get(V.intercomHotL)).toBe(1);
+  });
+});
+
+describe('Stab trim vs CG (LON-F-20 / LON-PROC-22)', () => {
+  it('V2 / flaps 2 trim follows the OG 17-3 chart; the takeoff state sets the chart stab for the loaded CG', { timeout: 120_000 }, () => {
+    const LBK = 0.45359237;
+    const res: { cg: number; stab: number }[] = [];
+    for (const aft of [false, true]) {
+      const r = makeRig('cruise', { weightLb: 33000, avionics: false, air: { altFtMsl: 2000, iasKt: 130 } });
+      r.fdm.setStationMass(2, aft ? 0 : 1000 * LBK);
+      r.fdm.setStationMass(3, 0);
+      r.fdm.setStationMass(5, 0);
+      r.fdm.setStationMass(6, aft ? 1000 * LBK : 0);
+      r.vars.set('surf.flaps_deg', 15);
+      for (const k of ['gear.pos0', 'gear.pos1', 'gear.pos2']) r.vars.set(k, 1);
+      r.fdm.step(1 / 120);
+      const t = r.fdm.computeTrim({ iasKt: 130 });
+      expect(t.converged).toBe(true);
+      res.push({ cg: r.vars.get('fdm.cg_pct_mac'), stab: stabUnitsFor(r.sys, t.pitchTrim) });
+    }
+    for (const x of res) expect(Math.abs(x.stab - takeoffStabDeg(x.cg))).toBeLessThan(0.35);
+    // Chart slope (~0.33 deg per % MAC), not the old ~0.12.
+    const slope = (res[1].stab - res[0].stab) / (res[1].cg - res[0].cg);
+    expect(slope).toBeGreaterThan(0.25);
+    const t = makeRig('takeoff', { weightLb: 34000, avionics: false });
+    t.run(0.5);
+    expect(t.vars.get('trim.pitch_units')).toBeCloseTo(takeoffStabDeg(t.vars.get('fdm.cg_pct_mac')), 1);
+    expect(t.vars.get(V.noTakeoff)).toBe(0);
+  });
+});
+
+describe('Logic units (LON-F-26, LON-F-32, LON-F-31)', () => {
+  it('high-altitude mode latches from the departure field (> 8,000 ft) at lift-off (OG 11-3)', () => {
+    const v = new SimVars();
+    const lg = new LongitudeLogic(v);
+    v.set('gear.air_ground', 1);
+    lg.reset();
+    lg.update(1 / 60);
+    expect(v.get(V.highAltLatched)).toBe(0);
+    v.set('gear.air_ground', 0);
+    v.set('adc1.alt_ft', 9050);
+    v.set('ra1.alt_ft', 20);
+    lg.update(1 / 60);
+    v.set('adc1.alt_ft', 25000);
+    lg.update(1 / 60);
+    expect(v.get(V.highAltLatched)).toBe(1);
+    v.set('gear.air_ground', 1);
+    lg.update(1 / 60);
+    expect(v.get(V.highAltLatched)).toBe(0);
+  });
+
+  it('scavenge ejector at low fuel with the engine running; recirc off at low fuel (OG 6-2)', () => {
+    const v = new SimVars();
+    const lg = new LongitudeLogic(v);
+    lg.reset();
+    v.set(V.fuelRecirc, 1);
+    v.set('elec.mission_l_powered', 1);
+    v.set('eng1.running', 1);
+    v.set('fuel.tank0_kg', 2000);
+    v.set('fuel.left_temp_c', 10);
+    lg.update(1 / 60);
+    expect(v.get(V.recircOn(1))).toBe(1);
+    expect(v.get(V.scavengeOn(1))).toBe(0);
+    v.set('fuel.tank0_kg', 150);
+    lg.update(1 / 60);
+    expect(v.get(V.recircOn(1))).toBe(0);
+    expect(v.get(V.scavengeOn(1))).toBe(1);
+    v.set('fuel.tank0_kg', 2000);
+    v.set('fuel.left_temp_c', -35);
+    lg.update(1 / 60);
+    expect(v.get(V.scavengeOn(1))).toBe(1);
+  });
+
+  it('dry motor completes at 20 % N2, not 19 % (OG 7-6)', () => {
+    const v = new SimVars();
+    const post = new LongitudePostLogic(v);
+    v.set('eng1.running', 1);
+    post.reset();
+    v.set('eng1.running', 0);
+    post.update(1 / 60); // shutdown
+    v.set(V.runL, 0);
+    v.set('fadec.eng1.starter_cmd', 1);
+    v.set('eng1.n2_pct', 19.5);
+    for (let i = 0; i < 60; i++) post.update(1 / 60);
+    // 15 min later the dry-motor window opens: motoring to 19.5 % for 1 s did not count.
+    v.set('fadec.eng1.starter_cmd', 0);
+    for (let i = 0; i < 16 * 60; i++) post.update(1);
+    expect(v.get(V.dryMotorReq(1))).toBe(1);
   });
 });

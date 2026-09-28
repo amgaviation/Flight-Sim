@@ -24,8 +24,8 @@
  * FL350 (logic.ts writes the effective on commands).
  * APU (TCDS §6): Honeywell RE220(GVI); GVI limits (EGT start 1,050 / running
  * 732 degC, 45,000 ft, 40 kVA generator); battery start; automatic fire shutdown (SCQ fire).
- * Fire (SCQ fire; GVI): two single-shot Halon bottles in the tail; SHOT 1 = RIGHT
- * bottle, SHOT 2 = LEFT bottle; the APU uses the LEFT bottle; dual continuous
+ * Fire (SCQ fire; GVI; code450): two single-shot Halon bottles in the tail; DISCH 1 (handle
+ * rotated outboard) = RIGHT bottle, DISCH 2 (inboard) = LEFT bottle; the APU uses the LEFT bottle; dual continuous
  * loops per engine; baggage smoke detector ("Aft Baggage Smoke", C450).
  * Oxygen (EST capacities): crew quick-donning masks on a crew bottle; passenger
  * masks from a separate gaseous bottle, auto-deployed at 14,000 ft cabin (EST).
@@ -136,7 +136,7 @@ export function createIce(ctx: Pick<SimContext, 'vars'>): IceProtection {
 export function createApu(ctx: Pick<SimContext, 'vars'>): Apu {
   return new Apu(ctx.vars, {
     master: `${V.apuMaster} == 1 && elec.apu_ecu_powered`,
-    start: V.apuStart,
+    start: V.apuStartCmd, // START latched until the inlet door is open (logic.ts)
     starterVolts: 'elec.l_ess_dc_v',
     starterNominalV: 24,
     starterPeakA: 600, // EST: RE220 DC starter inrush on a 53 Ah NiCd
@@ -160,12 +160,24 @@ export function createApu(ctx: Pick<SimContext, 'vars'>): Apu {
 }
 
 export function createFire(ctx: Pick<SimContext, 'vars'>): FireProtection {
-  const shot1 = (rot: string) => `${rot} < -0.5`; // rotate LEFT: SHOT 1 = right bottle
-  const shot2 = (rot: string) => `${rot} > 0.5`; // rotate RIGHT: SHOT 2 = left bottle
+  // code450 fire protection: "Rotating the fire handle outboard to the DISCH 1 position" fires the RIGHT bottle; "the fire
+  // handle may be rotated to the inboard DISCH 2 position" for the LEFT bottle. Outboard is LEFT (-1) for the L handle
+  // and RIGHT (+1) for the R handle (function fix round 1: both handles used to discharge DISCH 1 when rotated left).
+  const disch1 = (rot: string, side: 1 | 2) => (side === 1 ? `${rot} < -0.5` : `${rot} > 0.5`);
+  const disch2 = (rot: string, side: 1 | 2) => (side === 1 ? `${rot} > 0.5` : `${rot} < -0.5`);
+  const shot2 = (rot: string) => `${rot} > 0.5`; // legacy APU handle var: +1 = left bottle
+  const engDisch = (rot: string, side: 1 | 2) => [
+    { bottle: 'bottle_r', command: disch1(rot, side) },
+    { bottle: 'bottle_l', command: disch2(rot, side) },
+  ];
   return new FireProtection(ctx.vars, {
     zones: [
-      { id: 'eng1', loops: 2, handle: V.fireHandleL, discharge: [{ bottle: 'bottle_r', command: shot1(V.fireRotL) }, { bottle: 'bottle_l', command: shot2(V.fireRotL) }], power: 'elec.fire_det_powered' },
-      { id: 'eng2', loops: 2, handle: V.fireHandleR, discharge: [{ bottle: 'bottle_r', command: shot1(V.fireRotR) }, { bottle: 'bottle_l', command: shot2(V.fireRotR) }], power: 'elec.fire_det_powered' },
+      { id: 'eng1', loops: 2, handle: V.fireHandleL, discharge: engDisch(V.fireRotL, 1), power: 'elec.fire_det_powered' },
+      { id: 'eng2', loops: 2, handle: V.fireHandleR, discharge: engDisch(V.fireRotR, 2), power: 'elec.fire_det_powered' },
+      // Engine core compartment detection (GVII family: separate Engine Core Fire procedure, code450 fire p4 / p11 per
+      // the function audit; EST: single loop, extinguished through the same handle and bottles as the nacelle).
+      { id: 'core1', loops: 1, handle: V.fireHandleL, discharge: engDisch(V.fireRotL, 1), power: 'elec.fire_det_powered' },
+      { id: 'core2', loops: 1, handle: V.fireHandleR, discharge: engDisch(V.fireRotR, 2), power: 'elec.fire_det_powered' },
       // G700/G800 (code450 fire protection study sheets): no APU fire handle; the guarded APU FIRE EXT switchlight on the
       // forward overhead strip fires the LEFT bottle ("Disch 2") into the APU. APU Fire: "APU MASTER ... OFF; APU FIRE EXT ...
       // PRESS". Squibs armed with the APU MASTER off or the button pushed (EST); the ECU shuts the APU down on a fire (SCQ).

@@ -402,6 +402,14 @@ export class FlightPlan {
     const legs: PlanLeg[] = [];
     for (const l of tr?.legs ?? []) legs.push(legFromProcedure(l, 'approach', proc.ident));
     for (const l of proc.finalLegs) legs.push(legFromProcedure(l, 'approach', proc.ident));
+    // A transition that starts with a hold-in-lieu-of-procedure-turn (HF/HA) at the IAF: the aircraft first
+    // flies to the IAF (ARINC 424 transitions are entered with an IF at the hold fix; some sources omit it).
+    // Keep an IF leg into the IAF ahead of the hold so the route, the distance to destination and the TOD
+    // include the leg to the IAF, and removing the hold (straight-in) leaves the fix in place.
+    const first = legs[0];
+    if (first && (first.type === 'HF' || first.type === 'HA') && first.fix) {
+      legs.unshift(makeLeg({ type: 'IF', segment: 'approach', procedure: proc.ident, fix: first.fix, altitude: first.altitude, speed: first.speed, iaf: true, magVar: first.magVar }));
+    }
     const missed = proc.missedLegs.map((l) => legFromProcedure(l, 'missed', proc.ident));
     this.approach = { ident: proc.ident, enrouteTransition: tr?.name };
     this.approachProcedure = proc;

@@ -26,7 +26,8 @@ const cas = (r: Rig) =>
     .join(' | ');
 
 function audit(r: Rig, title: string): string {
-  const cl = M2_CHECKLISTS.find((c) => c.title === title)!;
+  const cl = M2_CHECKLISTS.find((c) => c.title === title);
+  if (!cl) return `(no list ${title} after fix round 1)`;
   return cl.items
     .map((it) => {
       if (!it.check) return `${it.challenge}=-`;
@@ -42,8 +43,8 @@ function audit(r: Rig, title: string): string {
 }
 
 function item(r: Rig, title: string, challenge: string): string {
-  const cl = M2_CHECKLISTS.find((c) => c.title === title)!;
-  const it = cl.items.find((i) => i.challenge === challenge)!;
+  const it = M2_CHECKLISTS.find((c) => c.title === title)?.items.find((i) => i.challenge === challenge);
+  if (!it) return 'missing';
   if (!it.check) return 'no-check';
   return it.check(r.vars) ? 'OK' : 'NO';
 }

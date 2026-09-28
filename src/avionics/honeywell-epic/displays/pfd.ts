@@ -393,6 +393,23 @@ export class PfdWindow extends EpicWindow {
     sp.maxKt = vmo > 0 ? vmo : Math.min(cfg.airframe.vmoKt, mmoKt);
     // Low speed: shaker speed from the normalized AoA (alpha ~ 1/V^2 at constant load), airborne only.
     sp.minKt = !onGround && aoaN > 0.05 && ias > 60 ? ias * Math.sqrt(aoaN / 0.85) : NaN;
+    // (Appended by the g800 aircraft.) Flap / gear placard marker: the placard of the detent the flaps are at or
+    // moving to (smallest detent >= current angle), and VLE while the gear is not up.
+    if (cfg.airframe.showPlacardLimit) {
+      const af = cfg.airframe;
+      const fl = v.get('surf.flaps_deg');
+      let lim = NaN;
+      if (fl > 0.5) {
+        for (let i = 1; i < af.flapDetents.length; i++) {
+          if (af.flapDetents[i] >= fl - 0.5 || i === af.flapDetents.length - 1) {
+            lim = af.flapPlacardKt[i];
+            break;
+          }
+        }
+      }
+      if (v.get('gear.up_locked', 1) === 0) lim = Number.isFinite(lim) ? Math.min(lim, af.vleKt) : af.vleKt;
+      sp.flapLimitKt = lim;
+    }
     const shown = v.get(EPIC_VARS.vspeedsShown, 1) !== 0;
     for (let i = 0; i < sp.bugs.length; i++) {
       const b = sp.bugs[i];

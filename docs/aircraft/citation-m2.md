@@ -549,53 +549,83 @@ Handles on a narrow lip under the LH tilt panel (no knee panel; photos pin1 / S&
 | ENGINE | L / R IGNITION | NORM 0 / ON 1 | `ac.m2.ign1_sw`, `ign2_sw` (SCOPE: page layout EST) |
 | SYSTEM TESTS | TEST (cycle), FIRE WARN, ANNU, TAWS | OFF 0 / FIRE WARN 1 / ANNU 2 / STALL 3 / O'SPEED 4 / LDG GEAR 5 / TAWS 6; returns to OFF after 10 s (EST) | `ac.m2.test_sel` |
 
-## 10. Normal procedures (abbreviated flow; `checklists.ts`)
-EST (CJ-family single-pilot flow; AFM Vol. 2 525NPD not public).
-1. **Preflight / cockpit preparation**: control lock off, parking brake set, throttles OFF, gear
-   DN, CBs in, emergency gear/brake stowed, oxygen checked, PASS OXY NORM (GTC), BATTERY DISCONNECT
-   BATT DISC → BATTERY BATT (no voltage) → BATTERY DISCONNECT NORM (≥ 24 V) (AFM cockpit inspection 6-8),
-   STBY FLT DISPLAY TEST/ON, EMER LIGHTS ARMED, system tests on the GTC (FIRE WARN, ANNU, STALL, O'SPEED,
-   TAWS); fuel quantity.
-2. **Before start**: doors closed, DISPATCH OFF / avionics up on the battery, GEN switches GEN, boost NORM,
-   ignition NORM (GTC ENGINE page), beacon ON, PASS SAFETY BELT & NO SMOKE, flight plan/TOLD on the GTC.
-3. **Engine start** (right first, EST): ENGINE START R → START R advisory, N2 rises on the starter;
-   at 8–10 % N2 throttle IDLE → FADEC light-off (ITT rise within 10 s), starter cut-out ~45 % N2,
-   stabilized idle ~52 % N2 / 25 % N1 (EST) in ~30 s; GEN OFF / OIL PRESS / FUEL LOW PRESS / HYD FLOW LOW R
-   extinguish (525AFM-06 p.3-88 step 6). Repeat left (generator-assisted; beacon flashes during START).
-   Abort: START DISENGAGE / throttle CUTOFF (FADEC auto-aborts HOT/HUNG/NO LIGHT).
-4. **Before taxi**: electric trim check (each half alone no trim, AP/TRIM DISC stops it, pilot overrides
-   copilot), GROUND FLAPS check (speed brakes deploy; > 85 % N2 retract + FLAPS >35; idle redeploy; T.O. & APPR
-   retract) (525AFM-06 p.3-89.1), flaps 15, trim T/O, AIR SOURCE SELECT BOTH, anti-skid ON (INOP out after the
-   self test), A/C as required, lights.
-5. **Taxi**: brakes, steering (pedals ±20°), instruments.
-6. **Before takeoff**: flaps 15 (or 0), speed brakes retracted, trims set, P/S heat ON, ice-protection check
-   if icing expected (WING/ENG and TAIL: COLD displayed then clear within 60 s), anti-ice as required
-   (≤ 10 °C in visible moisture), XPDR ALT, landing lights ON, anti-coll ALL, CAS clear.
-7. **Takeoff**: throttles TO, VR, pitch ~10°, positive rate gear UP, flaps UP at V2+10, CLB detent,
-   YD/AP as required.
-8. **Climb**: CLB detent, FLC 220 KIAS / M0.60 (EST schedule, see §5.1), pressurization check.
-9. **Cruise**: CRU detent, fuel balance, ice protection.
-10. **Descent**: landing elevation on the GTC, altimeters, approach/minimums/VREF, PASS SAFETY BELT.
-11. **Approach**: flaps 15 below 200, gear DN below 186, flaps 35 below 161, VREF + wind.
-12. **Landing**: AP off by DA/MDA (not an autoland system), throttles IDLE, ground flaps 60 (speed
-    brakes deploy), brakes/anti-skid.
-13. **After landing / shutdown**: flaps up, speed brakes retract, P/S heat off, lights;
-    throttles OFF, lights OFF, STBY FLT DISPLAY OFF, EMERGENCY LIGHTS OFF, BATTERY OFF, control lock ON.
+## 10. Normal procedures (`checklists.ts` M2_NORMAL)
+Sources: CJ-family AFM 525AFM-06 Section III normal procedures (pp.3-83..3-94) and the operator M2 flows
+("Geoffs M2 Flows", 525-962), adapted to the M2 hardware (no avionics master or ignition switches; ignition, system
+tests, fuel transfer and pressurization on the GTC; throttle cut-off labelled OFF; AIR SOURCE SELECT L / BOTH / R /
+EMER / FRESH AIR). Lists follow the AFM phases; items with live auto-checks read the systems vars (action sequences
+read the latches of `systems/procedures.ts`: GTC system tests run, CVR / mask test, electrical, trim and AP
+disconnect checks, all breakers in).
+1. **Preflight inspection**: battery connected, forward pressure gauges (oxygen, emergency brake bottle), covers,
+   exterior doors locked.
+2. **Cockpit preparation**: control lock, parking brake SET, throttles OFF, gear DN, circuit breakers IN (live),
+   emergency gear / blow down stowed, air source BOTH, ice protection OFF, oxygen pressure / PASS OXY NORM, crew mask
+   PRESS TO TEST and stowed, BATTERY DISCONNECT DISC → BATTERY BATT (no voltage) → DISCONNECT NORM (≥ 24 V),
+   external power as required, EMER LIGHTS ARMED, STBY FLT DISPLAY TEST/ON, BATTERY EMER (emergency bus items) →
+   BATT, GTC SYSTEM TESTS all items (FIRE WARN, ANNU, STALL WARN, O'SPEED, LDG GEAR, TAWS), CVR TEST, takeoff data
+   computed, fuel checked / balanced, ATIS / clearance, altitude select, FMS program.
+3. **Before starting engines**: parking brake, cabin door / emergency exit, passenger briefing, AIR CONDITIONING OFF,
+   engine instruments, fuel balanced, external power disconnected (battery start), DISPATCH OFF, BATTERY BATT
+   (avionics on), GEN switches GEN, boost NORM, engine-off CAS displayed, ignition NORM (GTC), beacon ON.
+4. **Starting engines**: either engine first (the downwind engine on a battery start in a crosswind); ENGINE START →
+   START annunciated; throttle IDLE at 8 % N2 minimum with N1 rotation; ITT rise within 10 s (abort if none or ITT
+   rapidly approaching 1,000 C; FADEC auto-aborts HOT / HUNG / NO LIGHT); second engine; fuel / oil / generator /
+   hydraulic annunciations extinguished (525AFM-06 p.3-88); oil pressure; DC amps and volts.
+5. **Electrical check** (M2 flows): L GEN OFF (GENERATOR OFF L, R amps increase), R GEN OFF (GEN OFF L-R, battery
+   24 V), L GEN ON, R GEN ON (amps within 20 A, 28-29 V), BATTERY OFF (systems remain on), BATTERY BATT.
+6. **Before taxi**: A/C fan or auto, PASS SAFETY, GROUND FLAPS / speed-brake check (525AFM-06 p.3-89.1), trim check
+   (each split-switch half alone gives no trim, AP/TRIM DISC stops trim) and 3 trims set, AP disconnect test, flight
+   controls, engine anti-ice, altimeters x3 set, transponder, pressurization DEST FIELD ELEV (GTC or FMS), air source
+   BOTH, anti-skid ON, GA button PUSH (FD TO), avionics / FMS, V-speeds / TOFL / weights confirmed, CAS.
+7. **Taxi**: parking brake RELEASE, exterior lights, brakes, nosewheel steering, flight instruments.
+8. **Before takeoff**: ice-protection check if icing expected (COLD displayed then clear within 60 s), passenger
+   seats, flaps 15 or 0 per TOLD, speed brakes retracted, 3 trims set, crew briefing, TCAS TA/RA, radar, anti-ice,
+   P/S heat ON, XPDR ALT, landing lights ON / anti-coll ALL, CAS (no warnings or cautions).
+9. **Takeoff**: throttles TO, engine instruments, brakes release, VR.
+10. **After takeoff / climb**: gear UP, flaps 0 (V2 + 10), throttles CLB, YD / pass safety / anti-ice as required,
+    landing lights OFF, pressurization, at 18,000 ft altimeters 29.92 x3 and oxygen masks checked.
+11. **Cruise**: CRU detent (FPG maximum cruise thrust), fuel balance, ice protection, systems / CAS.
+12. **Descent**: pressurization destination field elevation, windshield defog / ice protection as required,
+    altimeters QNH x3 at 18,000 ft, landing data (VREF posted), exterior lights.
+13. **Approach**: landing data, briefing, minimums, FUEL TRANSFER OFF, anti-skid ON, flaps 15, seats / belts,
+    PASS SAFETY, CAS.
+14. **Before landing**: gear DOWN 3 green, flaps 35, speed brakes retracted before 50 ft, pressurization zero
+    differential (< 0.5 psi by touchdown), airspeed VREF, AUTOPILOT AND YAW DAMPER OFF (CJ limitation), landing
+    lights ON (not PULSE).
+15. **Landing**: throttles IDLE, brakes, GROUND FLAPS (speed brakes deploy).
+16. **All engines go-around** (M2 flows): GA button (FD GA), throttles TO, pitch 7.5°, flaps 15, gear UP with
+    positive climb, flaps 0 at VAPP + 10, yaw damper ON, autopilot as desired.
+17. **After landing**: P/S heat OFF, flaps 0, speed brakes retracted, radar standby, landing lights OFF / strobes off.
+18. **Shutdown**: parking brake, all ice protection OFF, throttles OFF after ITT stabilized at minimum for 2 min
+    (525AFM-06 p.3-94), A/C and fan OFF, beacon OFF after N2 decays, exterior lights, PASS SAFETY, cabin lights,
+    EMER LIGHTS, STBY FLT DISPLAY, DISPATCH, BATTERY OFF (generator switches stay at GEN), control lock.
+19. **Quick turnaround** (EST abbreviation): parking brake, battery, fuel, oxygen, TOLD / FMS, then Before starting.
 
-### 10.1 Key abnormal procedures (EST, CJ family)
-- **Engine fire**: throttle OFF, ENG FIRE lift cover and push, BOTTLE (lit) push, FUEL BOOST (affected)
-  OFF then NORM; second bottle after 30 s if the warning persists; single-engine procedures (tested).
-- **Environmental smoke**: masks 100 %, AIR SOURCE SELECT L, R, then FRESH AIR (cabin depressurizes).
-- **Fuel transfer**: FUEL BOOST OFF on the receiving side (525FM-15 p.2-11), TRANSFER arrow toward the light tank
-  (GTC; R TANK moves fuel left → right, 525AFM-06 p.3-113).
-- **Generator failure**: GEN RESET then GEN; if off line: single-generator, loads shed (tested).
-- **Dual generator failure (GEN OFF L-R)**: GEN RESET; BATTERY EMER → emergency bus (PFD 1 reversionary on
-  ADC 2 / AHRS 2, GTC 1, COM/NAV 1, XPDR 1, audio, GMC, flood lights, ESI); autopilot inoperative (525AFM-06 p.3-26).
-- **Electric trim runaway**: AP/TRIM DISC press and hold, trim manually, PITCH TRIM CB pull.
-- **Hydraulic failure**: gear by emergency release + blow-down, flaps/speed brakes inoperative (tested).
-- **Emergency descent / CABIN ALTITUDE**: masks on 100 %, PASS OXY (auto drop at 14,500 ft; automatic EMER
-  pressurization at 14,500 ft), descend (tested).
-- **Anti-skid failure**: brake gently; emergency brake without anti-skid.
+### 10.1 Emergency and abnormal procedures (`checklists.ts` M2_EMERGENCY / M2_ABNORMAL)
+Emergency (phase "Emergency"; wording from 525AFM-06 Section III and the CJ1 (Model 525) memory items):
+- **ENG FIRE LH or RH** (p.3-9): throttle (affected) IDLE; if the light remains ENGINE FIRE button LIFT COVER and PUSH;
+  either illuminated BOTTLE ARMED PUSH (memory items); ignition NORM (GTC); throttle OFF; reduce electrical load
+  (300 A max); FUEL BOOST OFF then NORM; land as soon as possible; remaining bottle after 30 s if the light remains.
+- **Engine failure or fire or master warning during takeoff** (below V1: brakes, throttles IDLE, speed brakes EXTEND;
+  above V1: continue, V2, gear up, flaps up at 400 ft); **engine failure / precautionary shutdown**; **engine failure
+  during final approach**; **emergency restart** one and two engines (ignition ON, boost ON, throttles IDLE, 240 KIAS);
+  **OIL PRESS L or R** (EST).
+- **Electrical fire or smoke** (p.3-17: masks DON / EMER, PASS OXY MANUAL DROP, AIR SOURCE BOTH; unknown source flood
+  lights full bright, BATTERY EMER, GENs OFF); **environmental smoke or odor** (masks EMER, AIR SOURCE L, R, FRESH AIR);
+  **smoke removal** (p.3-21: A/C OFF, CABIN DUMP).
+- **CABIN ALT** (p.3-23: masks 100 %, emergency descent, passenger oxygen, XPDR 7700, AIR SOURCE EMER if not arrested
+  by 15,000 ft) and **emergency descent** (AP/TRIM DISC, throttles IDLE, speed brakes EXTEND, moderate bank, ~15° nose
+  down (CJ1 memory item; the CJ2 AFM gives 20°), MMO/VMO, 7700, PASS SAFETY, 15,000 ft or MSA).
+- **BATT O'TEMP** (p.3-24/25: BATTERY EMER, then OFF on decrease, BATT DISC if the relay is stuck); **GEN OFF L-R**
+  (RESET / GEN, then BATTERY EMER); **autopilot malfunction**; **electric elevator trim runaway** (AP/TRIM DISC,
+  manual trim, PITCH TRIM CB pull); **emergency evacuation** (parking brake, throttles OFF, both ENG FIRE, bottles,
+  battery OFF, ELT, exit).
+Abnormal (phase "Abnormal", EST CJ-family wording): fuel transfer (boost OFF on the receiving side, arrow toward the
+light tank), landing gear emergency extension (T-handle free fall, then blow down), hydraulic failure, ANTISKID INOP,
+single-engine approach and landing.
+`M2_CAS_CHECKLIST` maps the CAS messages (CABIN ALT, BATT O'TEMP, GEN OFF L-R, FUEL IMBALANCE, ANTISKID INOP,
+HYD PRESS LOW, GEAR UNSAFE, PITCH TRIM, AP FAIL) to their lists. The engine-failure, fire and evacuation paths are
+exercised end to end in `failures.test.ts` and `fixround1-procedures.test.ts`.
 
 ## 11. Simulation model summary and verification
 - FDM (`fdm.ts`): CL tables tuned to FPG stall speeds (±2 %), drag/lapse/TSFC to the FPG
@@ -743,7 +773,7 @@ PER -> FILUM -> ILS 17R KOKC at FL230, driven only through cockpit vars, GMC 710
 flight-plan / TOLD back end and the pilot's yoke / pedals / toe brakes (no autothrottle: a simple
 "hand on the levers" speed loop). Asserted at each step: cold & dark; SYSTEM TEST FIRE / ANNU lamps;
 battery starts R then L (peak ITT ~640 C, bus dip ~15 V, GEN OFF clears); AHRS / GPS valid; FMS route
-(the FILUM hold-in-lieu is removed for the straight-in, see below), W&F within 300 lb of the FDM,
+(the FILUM hold-in-lieu is removed on the GTC for the straight-in; FILUM stays in the route), W&F within 300 lb of the FDM,
 TOLD V1/VR/V2 96/100/107 and BFL 2,860 ft at 9,900 lb; taxi and line-up on the centre line; TO/GA
 -> FD TO/TO; TO detent N1 ~101.7 %, lift-off ~113 KIAS in ~1,970 ft (inside BFL/1.15); AP at > 450 ft
 (PIT/ROL, YD on), NAV -> FMS, flaps up at V2+10, CLB detent, FLC, VNAV armed (VPTH); FL230 in ~8 min
@@ -753,7 +783,7 @@ the engine flow; VPTH descent, baro STD / QNH at FL180; landing TOLD (VREF 107);
 LOC/GS armed, LOC then GS capture, gear down, flaps 35, VREF+5 stabilized at 1,000 ft within 0.5 dot;
 AP + YD off at the 200 ft DA; hand-flown flare, touchdown ~1,100 ft past the threshold; ground flaps
 60 deploy the speed brakes; stop inside the FPG landing distance; taxi clear; shutdown (throttles
-CUTOFF, no warnings, displays off, buses dead). Block ~39 min, ~510 lb fuel.
+OFF, no warnings, displays off, buses dead). Block ~39 min, ~510 lb fuel.
 
 **Spot checks** (`alerts.test.ts`): gear horn (< 130 KIAS, throttle idle, silenceable) and the
 non-silenceable flaps-35 horn; takeoff-configuration warning (flaps 35 / speed brakes / parking
@@ -770,11 +800,9 @@ speed brakes on the ground only, GROUND FLAPS caution in flight; night detection
 - `fdm.ts` header said the empty CG was FS 247.0; the code (and the rest of the dossier) uses FS 250.0.
 
 **Known gaps found (not fixed, outside this aircraft's files)**
-- Shared nav library: an approach transition that starts with a hold-in-lieu-of-PT (HF) leg is
-  appended without the TF leg into the IAF, and the HF geometry length excludes the inbound distance,
-  so `fms.dist_to_dest_nm` / TOD are short by that leg (88 nm instead of 140 nm on KICT-KOKC).
-  Deleting the HF leg on the GTC (the crew's "straight-in" action) also drops its fix; the test
-  re-inserts FILUM.
+- ~~Shared nav library: an approach transition that starts with a hold-in-lieu-of-PT (HF) leg lost the leg
+  into the IAF~~ — fixed in fix round 1 (procedures lens, §19): the loader keeps an IF/TF into the IAF ahead of the
+  hold, and removing the hold on the GTC leaves FILUM in the route.
 - Cockpit lighting (shared renderer): surfaces in shadow get almost no sky fill light, so white panel
   legends in the glareshield's shadow are hard to read in daylight (every aircraft shows it).
 - G3000 (shared): the MFD navigation map defaults to relative terrain, which paints the whole map red
@@ -810,7 +838,7 @@ speed brakes on the ground only, GROUND FLAPS caution in flight; night detection
 - Remaining ~565 draw calls are mostly moving parts: 63 breakers (cap + rating legend each), GMC 710 / softkeys. Instancing
   them needs a shared `CircuitBreaker` / `KeyPad` instancing path.
 - Panel legends in the glareshield's shadow remain dim by day (shared renderer fill light, §15).
-- The HF-leg nav-library gap in §15 is unchanged (the check ride still removes the hold-in-lieu).
+- The HF-leg nav-library gap in §15 was fixed in fix round 1 (§19).
 
 ## 17. Fix round 1 — layout lens (M2-L01 … L44, F26/F47/F52/F57/F60, PROC-05/11/12/15/16)
 - **Glareshield**: GCU 275 ×2 replace the 3-knob DCUs (MINS knob removed; minimums on the GTC PFD page);
@@ -875,3 +903,28 @@ Tests: `tests/aircraft/citation-m2/fixround1-function.test.ts` (37 cases, each f
   high-thrust switch position (EST just above CRU); W/S temperature, boot inflation, anti-ice warm-up, emergency
   brake bottle and anti-skid test timings; the yoke split switch halves are separate cockpit controls, so mouse
   trim from the yoke needs both halves (keyboard trim unaffected).
+
+## 19. Fix round 1 — procedures lens (M2-L42/L43, F27/F49/F61/F62/F63, PROC-01/06/07/08/17…25/32…34)
+Tests: `tests/aircraft/citation-m2/fixround1-procedures.test.ts` (12 cases, each fails without its fix); the check ride
+no longer works around the hold-in-lieu.
+- **Checklists** (§10 / §10.1): AFM phase structure (preflight, cockpit preparation, before start, start, electrical
+  check, before taxi, taxi, before takeoff, takeoff, after takeoff / climb, cruise, descent, approach, before landing,
+  landing, all-engines go-around, after landing, shutdown, quick turnaround); 18 emergency and 5 abnormal lists with
+  live checks; CAS → checklist map. New latches `ac.m2.sys_tests_done`, `cvr_tested`, `mask_tested`, `cb_all_in`,
+  `elec_check`, `trim_check`, `ap_disc_tested` (`systems/procedures.ts`, cleared by every preset).
+- **Presets**: cruise sets both throttles in the CRU detent (the required-N1 bisection saturated at TO, N1 104.4 %);
+  at FL370 / 396 KTAS the FDM holds 390-399 KTAS at N1 ~99.6 %. In-air presets put all three altimeters on STD above
+  the transition altitude (nearest airport's value, else 18,000 ft). In-air presets take the departure / landing
+  field elevation from the nearest airport (done in the function round; asserted again here).
+- **Approach preset** keeps the gear DOWN and YD ON (PROC-33, intended): it starts 10 nm out at 3,000 ft AGL, i.e.
+  at glideslope intercept (3° ≈ 318 ft/nm → ~9.4 nm), where the M2 flows put the gear down; the Before landing list
+  still has flaps 35, VREF, zero differential, AP / YD OFF and landing lights to fly.
+- **Shared-library change (additive)**: `src/nav/flightplan/FlightPlan.ts` `setApproach` inserts an IF leg (becomes
+  TF, flagged IAF, constraints copied) to the hold fix when an approach transition starts with an HF / HA leg; plans
+  without such a transition are unchanged (tests/nav pass). KICT-KOKC now 140 nm to destination (148.9 nm with the
+  hold, 132 nm straight-in) instead of 88 nm.
+- **Open / EST**: the G3000 electronic checklist (shared) lists every list with its phase but does not open a list
+  from a CAS message (`M2_CAS_CHECKLIST` is data only); abnormal wording for gear extension, hydraulic failure,
+  anti-skid, OIL PRESS and single-engine restart is CJ-family EST (525AFM-06 pages not reviewed); the "Microphone
+  select MIC OXY MASK" items have no switch in the sim (audio SCOPE); oxygen "pressure checked" uses the 400 psi LOW
+  threshold (dispatch minimum depends on the flight, AFM Section IV not public).

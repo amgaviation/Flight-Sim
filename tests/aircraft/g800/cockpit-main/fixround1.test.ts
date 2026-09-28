@@ -2,7 +2,7 @@
  * G800 fix round 1 (layout audit): the hardware added / moved to match the G500 / G600 / G700 / G800 flight deck drives
  * the systems. Each case fails without its fix:
  *  - DOORS OPEN / SAFETY move (or lock) the main door (L06);
- *  - ENGINE CONTROL L ENG selects FADEC alternate control (blue CAS, A/T unavailable) and ENGINE START runs the
+ *  - ENGINE CONTROL L ENG selects FADEC alternate control (amber CAS, A/T unavailable) and ENGINE START runs the
  *    AutoStart with the FUEL CONTROL at RUN (L07);
  *  - HUD combiner / HUD control panel feed the HUD computer (L12);
  *  - PITCH TRIM split switch trims only with both halves (L28);
@@ -79,19 +79,19 @@ describe('G800 fix round 1: new hardware drives the systems', () => {
     expect(r.vars.get('ac.door.main')).toBeLessThan(0.01);
   });
 
-  it('ENGINE CONTROL L ENG selects alternate control: blue CAS and the A/T cannot engage', { timeout: 120_000 }, async () => {
+  it('ENGINE CONTROL L ENG selects alternate control: amber CAS and the A/T cannot engage', { timeout: 120_000 }, async () => {
     const { r, ctl, step } = await setup('ready_to_taxi');
     step(0.5);
     click(ctl('g800.oh.eng_ctl_l'));
     step(1);
     expect(r.vars.get(V.engAlt(1))).toBe(1);
-    expect(casTexts(r, 'advisory')).toContain('L Engine ALT Control');
+    expect(casTexts(r, 'caution')).toContain('L Engine ALT Control'); // amber on the G700 / G800 (function fix round 1)
     r.events.emit('epic.gp.at');
     step(0.5);
     expect(r.vars.get('ap.athr')).toBe(0);
     click(ctl('g800.oh.eng_ctl_l'));
     step(1);
-    expect(casTexts(r, 'advisory')).not.toContain('L Engine ALT Control');
+    expect(casTexts(r)).not.toContain('L Engine ALT Control');
   });
 
   it('AutoStart: FUEL CONTROL RUN + ENGINE START starts the engine (no START MASTER)', { timeout: 240_000 }, async () => {

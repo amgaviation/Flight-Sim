@@ -10,8 +10,8 @@
  * backlighting zone 'panel' (`ac.light.panel`, PANEL dimmer), two flood
  * lights in the headliner ('flood', FLOOD dimmer), a dome light ('dome').
  * Annunciators (MASTER WARN, gear lamps, fire handles) are powered from the
- * essential DC buses; lamp test via `alert.annun_test` (no G800 hardware writes
- * it: the Symmetry lamp test is a touch function, SCOPE).
+ * essential DC buses; lamp test via `alert.annun_test`, written by the LAMP TEST key
+ * on the OHPTS TEST page (systems/tscApps.ts; the Symmetry lamp test is a touch function).
  */
 import * as THREE from 'three';
 import { CockpitBuilder, type CockpitBuildEx } from '../../../cockpit/CockpitBuilder';

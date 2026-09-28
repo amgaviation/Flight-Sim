@@ -62,6 +62,10 @@ const N = {
   hydTemp: ['', 'hyd.sys1_temp_c', 'hyd.sys2_temp_c', 'hyd.sys3_temp_c'],
 };
 
+/** Per-side fuel recirculation active (FCOC return to that wing tank), read by the fuel temperature bias (fuel.ts). */
+export const RECIRC_L = `${V.recircOn}_l`;
+export const RECIRC_R = `${V.recircOn}_r`;
+
 /** Wing tank capacity (kg, usable) for the FMQGC percentage logic. */
 const WING_CAP_KG = G6K_LIMITS.mainTankLb * LB;
 const WING_UNUSABLE_KG = GLOBAL6000_FDM.mass.tanks[0].unusable_kg;
@@ -72,6 +76,8 @@ const ACMPS = [
   { p: '2b' as const, sys: 2, primaryLow: 'hyd.pump2a_lowpress', cmd: V.acmpCmd('2b'), sw: V.hydPump('2b') },
   { p: '3b' as const, sys: 3, primaryLow: 'hyd.pump3a_lowpress', cmd: V.acmpCmd('3b'), sw: V.hydPump('3b') },
 ];
+/** ACMP indices (ACMPS 0..2 = 1B / 2B / 3B, 3 = 3A) in the APU-single-source priority order 3A, 3B, 2B, 1B (GX PTG 12-25). */
+const ACMP_PRIORITY = [3, 2, 1, 0] as const;
 
 export class G6kLogic implements Subsystem {
   readonly name = 'g6k.logic';
@@ -81,11 +87,13 @@ export class G6kLogic implements Subsystem {
   private ratLatched = false;
   // ACMP minimum run (GXHY: 5 min after a low-pressure start)
   private readonly acmpHoldT = [0, 0, 0];
+  private readonly acmpWant = [false, false, false, false];
   // fuel
   private readonly ctrOn = { l: false, r: false };
   private aftOn = false;
   private wingDir = 0; // 0 none, 1 L->R, -1 R->L
   private recirc = false;
+  private readonly auxBackup = { l: false, r: false };
   // GLD
   private gldArmLatch = false;
   private gldToLatch = false;
@@ -99,6 +107,22 @@ export class G6kLogic implements Subsystem {
   private toPhase = false;
   // hydraulic temperatures (EST first-order warm-up)
   private readonly hydT = [0, 20, 20, 20];
+  // fix round 2 (function lens)
+  private prevBattSel = NaN;
+  private prevBattMaster = NaN;
+  private readonly fireRotT = { l: 0, apu: 0, r: 0 };
+  private apuPinUsed = false;
+  private apuFireT = 0;
+  private hydPwrT = 0;
+  private splrTestT = 0;
+  private rollDiscT = 0;
+  private rollPri = 0;
+  private readonly prevRollSw = [0, 0, 0];
+  private prevAutobrake = 0;
+  private abArmedSeen = false;
+  private ditchDumped = false;
+  private hornMuteLatched = false;
+  private readonly sovFailT = [0, 0, 0];
 
   constructor(vars: SimVars) {
     this.v = vars;
@@ -110,6 +134,27 @@ export class G6kLogic implements Subsystem {
     const tla1 = v.get(N.tla[1]);
     const tla2 = v.get(N.tla[2]);
     const flapLever = v.get(V.flapLever);
+
+    // ---------------- BATT MASTER OFF / EMS / ON (GX PTG 6-8 "BATT MASTER Switch: OFF isolates the battery bus from
+    // the batteries; EMS: Electrical Management System is in maintenance mode, batteries supply power to EMS only;
+    // ON: battery bus is powered by battery"). The 3-position switch (V.battMasterSel 0 / 1 / 2) and V.battMaster
+    // (1 = ON, the var every system reads) are kept in step both ways: a change of the switch sets V.battMaster, a
+    // direct write of V.battMaster (states, scripted tests) moves the switch.
+    {
+      const sel = v.get(V.battMasterSel);
+      const bm = v.get(V.battMaster);
+      if (sel !== this.prevBattSel) v.set(V.battMaster, sel === 2 ? 1 : 0);
+      else if (bm !== this.prevBattMaster) v.set(V.battMasterSel, bm === 1 ? 2 : sel === 1 ? 1 : 0);
+      this.prevBattSel = v.get(V.battMasterSel);
+      this.prevBattMaster = v.get(V.battMaster);
+    }
+    // ---------------- GND LIFT DUMPING switch (GX PTG 10-50, GX_10_049): MANUAL ARM / AUTO / OFF, one 3-position
+    // switch; the legacy MAN ARM / OFF vars follow it (append-only aliases read by the CAS and checklists).
+    {
+      const g = v.get(V.gldSw);
+      v.set(V.gldManArm, g === 1 ? 1 : 0);
+      v.set(V.gldOff, g === 2 ? 1 : 0);
+    }
 
     // ---------------- thrust levers / reversers
     v.set(V.toThrust, tla1 >= TLA.toMin || tla2 >= TLA.toMin ? 1 : 0);
@@ -171,7 +216,7 @@ export class G6kLogic implements Subsystem {
     // VFGs are operating."
     const configAuto = flapLever > 0.5 && v.get('slats.transit') === 0 && vfgs >= 2;
     const apuOnly = v.get('elec.apu_gen_online') !== 0 && vfgs === 0 && v.get('elec.ext_ac_online') === 0;
-    let apuSlotUsed = false;
+    const want = this.acmpWant;
     for (let k = 0; k < ACMPS.length; k++) {
       const a = ACMPS[k];
       const sw = v.get(a.sw);
@@ -179,23 +224,32 @@ export class G6kLogic implements Subsystem {
       if (sw === 2) on = true;
       else if (sw === 1 && anyEng) {
         // In support of a failed primary pump in flight (not on the ground), held >= 5 min.
-        const primaryLow = v.get(a.primaryLow) !== 0 || (a.sys === 3 && v.get(V.acmpCmd('3a')) === 0);
+        const primaryLow = v.get(a.primaryLow) !== 0 || (a.sys === 3 && v.get(V.hydPump('3a')) !== 2);
         if (!ground && primaryLow) this.acmpHoldT[k] = G6K_LIMITS.acmpMinOnS;
         else this.acmpHoldT[k] = Math.max(0, this.acmpHoldT[k] - dt);
         on = configAuto || this.acmpHoldT[k] > 0;
       } else this.acmpHoldT[k] = 0;
-      // APU single source: on the ground one pump at a time, in flight only 3A / 3B (GXHY).
-      if (on && apuOnly) {
-        if (ground) {
-          on = !apuSlotUsed;
-          apuSlotUsed = apuSlotUsed || on;
-        } else on = a.sys === 3;
-      }
-      v.set(a.cmd, on ? 1 : 0);
+      want[k] = on;
     }
-    let on3a = v.get(V.hydPump('3a')) === 2;
-    if (on3a && apuOnly && ground) on3a = !apuSlotUsed;
-    v.set(V.acmpCmd('3a'), on3a ? 1 : 0);
+    want[3] = v.get(V.hydPump('3a')) === 2;
+    // APU generator as the single source (GX PTG 12-23 / 12-25): on the ground only one ACMP runs at a time, priority
+    // 3A, 3B, 2B, 1B ("If a lower priority ACMP is running and a higher priority ACMP is activated, the lowest
+    // priority ACMP will shut off and the higher priority ACMP will turn on"); in flight only 3A / 3B.
+    if (apuOnly) {
+      if (ground) {
+        let slot = false;
+        for (let j = 0; j < ACMP_PRIORITY.length; j++) {
+          const k = ACMP_PRIORITY[j];
+          if (want[k] && !slot) slot = true;
+          else want[k] = false;
+        }
+      } else {
+        want[0] = false;
+        want[1] = false;
+      }
+    }
+    for (let k = 0; k < ACMPS.length; k++) v.set(ACMPS[k].cmd, want[k] ? 1 : 0);
+    v.set(V.acmpCmd('3a'), want[3] ? 1 : 0);
     v.set(V.pumpRatCmd, this.ratLatched ? 1 : 0);
     // Fluid temperature (EST: warms toward 45 C + 20 C with pumps delivering, cools to ambient, tau 20 min).
     for (let i = 1; i <= 3; i++) {
@@ -228,6 +282,9 @@ export class G6kLogic implements Subsystem {
       const xferNeed = (s === 'l' && this.wingDir === 1) || (s === 'r' && this.wingDir === -1);
       const aux = v.get(N.auxSw[s]) === 1 && (priLow || priOff || ((flapsOut || gearDownAir || lowWing) && engFeed) || apuStartFeed || xferNeed);
       v.set(N.auxCmd[s], aux ? 1 : 0);
+      // GX PTG 11: engine feed has priority over wing transfer: while the AUX pump backs up failed / inhibited PRI
+      // pumps, that side does not transfer (the wing transfer command below is dropped).
+      this.auxBackup[s] = priLow || priOff;
       // Centre transfer: start below ~93 % of the wing capacity, stop above 97 % (per side).
       const pct = ((v.get(N.wingKg[s]) - WING_UNUSABLE_KG) / WING_CAP_KG) * 100;
       if (pct < G6K_LIMITS.ctrXferStartPct) this.ctrOn[s] = true;
@@ -253,15 +310,20 @@ export class G6kLogic implements Subsystem {
     } else if (wingSw === 2) this.wingDir = 1;
     else if (wingSw === 3) this.wingDir = -1;
     else this.wingDir = 0;
-    v.set(V.wingXferCmd('lr'), this.wingDir === 1 ? 1 : 0);
-    v.set(V.wingXferCmd('rl'), this.wingDir === -1 ? 1 : 0);
+    v.set(V.wingXferCmd('lr'), this.wingDir === 1 && !this.auxBackup.l ? 1 : 0);
+    v.set(V.wingXferCmd('rl'), this.wingDir === -1 && !this.auxBackup.r ? 1 : 0);
     // Recirculation (-9 FMQGC automatic): > 34,000 ft and bulk < -20 C; off at +5 C, < 33,800 ft or an engine off.
+    // GX PTG 11-10 / 11-28: L / R RECIRC are per-side inhibit switches (FUEL RECIRC OFF status per side); each side's
+    // FCOC return warms its own wing tank (fuel.ts temperature bias).
     const alt = v.get('adc1.press_alt_ft');
     const bulk = Math.min(v.get('fuel.l_main_temp_c', 15), v.get('fuel.r_main_temp_c', 15));
-    const recircEnabled = v.get(V.recirc('l')) === 1 && v.get(V.recirc('r')) === 1;
     if (alt > 34000 && bulk < -20) this.recirc = true;
     if (bulk >= 5 || alt < 33800 || v.get(N.running[1]) === 0 || v.get(N.running[2]) === 0) this.recirc = false;
-    v.set(V.recircOn, this.recirc && recircEnabled ? 1 : 0);
+    const rl = this.recirc && v.get(V.recirc('l')) === 1;
+    const rr = this.recirc && v.get(V.recirc('r')) === 1;
+    v.set(RECIRC_L, rl ? 1 : 0);
+    v.set(RECIRC_R, rr ? 1 : 0);
+    v.set(V.recircOn, rl || rr ? 1 : 0);
 
     // ---------------- bleed / packs / crossbleed (IAMS, EST architecture)
     const starting = v.get(N.starter[1]) !== 0 || v.get(N.starter[2]) !== 0;

@@ -196,7 +196,7 @@ export function buildOverhead(c: G800CockpitContext): void {
     const gx = [-0.072, -0.024, 0.024, 0.072];
     // Generator switchlights: amber OFF when not on line (pushed out or tripped), green ON on line (code450 G700/G800).
     korry(ep, gx[0], r2, { id: 'g800.oh.gen_l', label: 'L GEN', var: V.genL, mode: 'toggle', segments: [lit('ON', 'green', 'elec.idg1_online'), lit('OFF', 'amber', 'elec.idg1_online', isZero)] }, 'L GEN');
-    korry(ep, gx[1], r2, { id: 'g800.oh.apu_gen', label: 'APU GEN', var: V.apuGen, mode: 'toggle', segments: [lit('ON', 'green', 'elec.apu_gen_online'), lit('OFF', 'amber', V.apuGen, isZero)] }, 'APU GEN');
+    korry(ep, gx[1], r2, { id: 'g800.oh.apu_gen', label: 'APU GEN', var: V.apuGen, mode: 'toggle', segments: [lit('ON', 'green', 'elec.apu_gen_online'), lit('OFF', 'amber', V.apuGenOffLt)] }, 'APU GEN'); // dark cockpit: OFF only with the APU available and the generator off line
     korry(ep, gx[2], r2, { id: 'g800.oh.gpu', label: 'EXT PWR', var: V.gpu, mode: 'toggle', segments: [lit('AVAIL', 'blue', CK.gpuAvail), lit('ON', 'amber', 'elec.gpu_online')] }, 'EXT PWR');
     korry(ep, gx[3], r2, { id: 'g800.oh.gen_r', label: 'R GEN', var: V.genR, mode: 'toggle', segments: [lit('ON', 'green', 'elec.idg2_online'), lit('OFF', 'amber', 'elec.idg2_online', isZero)] }, 'R GEN');
     // L / R BUS TIE (blue AUTO), names below the switchlights as in the photograph; bus flow lines.

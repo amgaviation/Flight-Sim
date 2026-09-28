@@ -23,7 +23,7 @@ export const CB_LEGEND: Readonly<Record<string, string>> = {
   du1: 'DU 1', du2: 'DU 2', du3: 'DU 3', du4: 'DU 4', tsc1: 'TSC 1', tsc2: 'TSC 2', tsc3: 'TSC 3', tsc4: 'TSC 4',
   sfd1: 'SFD 1', sfd2: 'SFD 2', ohpts1: 'OHPTS 1', ohpts2: 'OHPTS 2', ohpts3: 'OHPTS 3', gp: 'GP', gp_r: 'GP ALT',
   ccd1: 'CCD 1', ccd2: 'CCD 2', adc1: 'ADC 1', adc2: 'ADC 2', adc3: 'ADC 3', irs1: 'IRS 1', irs2: 'IRS 2', irs3: 'IRS 3',
-  ra1: 'RAD ALT 1', ra2: 'RAD ALT 2', radio1: 'NAV/COM 1', radio2: 'NAV/COM 2', xpdr1: 'XPDR 1', xpdr2: 'XPDR 2',
+  ra1: 'RAD ALT 1', ra2: 'RAD ALT 2', radio1: 'NAV/COM 1', radio2: 'NAV/COM 2', com3: 'VHF 3', hf1: 'HF 1', hf2: 'HF 2', pa: 'PA', xpdr1: 'XPDR 1', xpdr2: 'XPDR 2',
   afcs: 'AFCS', egpws: 'EGPWS', tcas: 'TCAS', fadec_l_aux: 'L FADEC', fadec_r_aux: 'R FADEC', ign_l: 'L IGN', ign_r: 'R IGN',
   boost_l: 'L BOOST PUMP', boost_r: 'R BOOST PUMP', fire_det: 'FIRE DET', stall_warn: 'STALL WARN', cas_l: 'CAS 1', cas_r: 'CAS 2',
   gear_ctl: 'GEAR CONT', brake_ctl_l: 'BRAKE CONT IB', brake_ctl_r: 'BRAKE CONT OB', nws_ctl: 'NWS CONT', flap_ctl: 'FLAP CONT',

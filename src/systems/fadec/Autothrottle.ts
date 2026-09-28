@@ -109,10 +109,21 @@ export interface AutothrottleConfig {
   vmoKt?: number;
   mmo?: number;
   /**
+   * (Appended by the g800 aircraft.) Var carrying the current Vmo (kt), e.g. an altitude-scheduled Vmo written by the
+   * aircraft logic; overrides `vmoKt` while it holds a value > 0. Default none.
+   */
+  vmoVar?: string;
+  /**
    * Always hold the selected speed, also in VNAV (`ap.at_spd_fms`): for installations whose speed selector
    * follows the FMS speed in FMS mode and overrides it in MAN (G5000 Longitude SPD knob, OG 7-4). Default false.
    */
   vnavSpeedFromSelected?: boolean;
+  /**
+   * (Appended by citation-longitude.) Bizjet: at the idle stop in a descent the A/T goes to HOLD (default true,
+   * previous behaviour). false: it stays in IDLE (DESC) with the servo holding idle, so an airborne HOLD cannot
+   * turn into climb thrust (the HOLD -> THR release is meant for the takeoff HOLD at `thrHoldEndFt`).
+   */
+  holdAfterDescentIdle?: boolean;
 }
 
 export class Autothrottle implements Subsystem {
@@ -288,7 +299,7 @@ export class Autothrottle implements Subsystem {
       if (this.mode === AtMode.Idle) {
         let allIdle = true;
         for (let k = 0; k < this.levers.length; k++) if (v.get(this.levers[k]) > this.lo + 0.01) allIdle = false;
-        if (allIdle) this.mode = this.boeing ? AtMode.Arm : AtMode.Hold;
+        if (allIdle) this.mode = this.boeing ? AtMode.Arm : cfg.holdAfterDescentIdle === false ? AtMode.Idle : AtMode.Hold;
       }
     }
 
@@ -428,7 +439,9 @@ export class Autothrottle implements Subsystem {
       if (v.get(AP.speedIsMach) !== 0) tgtMach = v.get(AP.selMach);
     }
     if (tgtMach > 0 && mach > 0.05) tgt = ias * (tgtMach / mach);
-    if (this.cfg.vmoKt !== undefined) tgt = Math.min(tgt, this.cfg.vmoKt - 3);
+    const vmoV = this.cfg.vmoVar ? v.get(this.cfg.vmoVar) : 0;
+    if (vmoV > 0) tgt = Math.min(tgt, vmoV - 3);
+    else if (this.cfg.vmoKt !== undefined) tgt = Math.min(tgt, this.cfg.vmoKt - 3);
     if (this.cfg.mmo !== undefined && mach > 0.05) tgt = Math.min(tgt, ias * ((this.cfg.mmo - 0.005) / mach));
     return tgt;
   }

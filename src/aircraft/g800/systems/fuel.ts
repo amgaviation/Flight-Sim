@@ -13,7 +13,9 @@
  *    its boost pump's output pressure is low.
  *  - Crossflow valve: one hopper feeds the opposite engine (SCQ balancing method 2).
  *    SCOPE: the intertank (hopper-to-hopper) valve is not modelled.
- *  - Engine HP pumps suction-feed with both electric pumps off (EST ceiling 25,000 ft).
+ *  - Engine HP pumps suction-feed with both electric pumps off. Function fix round 1 (EST): the suction capacity falls
+ *    with altitude (SUCTION_SL_PPH at sea level to zero at SUCTION_ZERO_FT) instead of an instant cut at 25,000 ft; an
+ *    engine whose flow exceeds it for 2 s loses its feed (flameout) until the capacity recovers (logic.ts).
  *  - APU fed from the left tank through its own DC pump (EST).
  *  - Low level alert 650 lb per side (GVI). Heated fuel return (HFR): AUTO when tank
  *    temperature <= -5 degC (SCQ), no altitude prerequisite on the G800 (FSB App. 4);
@@ -27,6 +29,14 @@ import { G800_FDM } from '../fdm';
 import { G800_VARS as V } from '../vars';
 
 export const FUEL_LOW_KG = G800_LIMITS.fuelLowLb * LB;
+/** EST suction-feed capacity: 6,000 pph at sea level falling linearly to zero at 36,000 ft (GVI-family suction feed is
+ * limited at altitude; no published figure). Cruise flow (~1,400-1,800 pph per engine) is lost above ~FL250-FL280. */
+export const SUCTION_SL_PPH = 6000;
+export const SUCTION_ZERO_FT = 36000;
+/** Fuel Imbalance caution (GVI limitation: 2,000 lb maximum imbalance, 1,000 lb for takeoff). EST: the caution uses
+ * the takeoff limit on the ground and the flight limit in the air. */
+export const IMBALANCE_GROUND_KG = G800_LIMITS.maxImbalanceTakeoffLb * LB;
+export const IMBALANCE_FLIGHT_KG = 2000 * LB;
 
 const starting = (i: number) => `(fadec.eng${i}.start_state >= 1 && fadec.eng${i}.start_state <= 3)`;
 
@@ -60,8 +70,8 @@ export function createFuel(ctx: Pick<SimContext, 'vars'>): FuelSystem {
     valves: [{ id: 'xflow', a: 'l_feed', b: 'r_feed', open: `${V.xflow} == 1`, travelS: 2, power: 'elec.l_ess_dc_powered || elec.r_ess_dc_powered' }],
     consumers: [
       // Engine fuel shutoff: FADEC fuel command (RUN/STOP + auto start) and the fire handle (firewall shutoff valve).
-      { id: 'eng1', node: 'l_feed', flowPph: ENG.fuelFlowPph(1), engine: 1, run: `fadec.eng1.fuel_cmd && ${V.fireHandleL} == 0`, suction: { tank: 'left', ceilingFt: 25000 } },
-      { id: 'eng2', node: 'r_feed', flowPph: ENG.fuelFlowPph(2), engine: 2, run: `fadec.eng2.fuel_cmd && ${V.fireHandleR} == 0`, suction: { tank: 'right', ceilingFt: 25000 } },
+      { id: 'eng1', node: 'l_feed', flowPph: ENG.fuelFlowPph(1), engine: 1, run: `fadec.eng1.fuel_cmd && ${V.fireHandleL} == 0`, suction: { tank: 'left', ceilingFt: SUCTION_ZERO_FT, running: 'eng1.n2_pct > 20 && !ac.g800.suction_fail1' } },
+      { id: 'eng2', node: 'r_feed', flowPph: ENG.fuelFlowPph(2), engine: 2, run: `fadec.eng2.fuel_cmd && ${V.fireHandleR} == 0`, suction: { tank: 'right', ceilingFt: SUCTION_ZERO_FT, running: 'eng2.n2_pct > 20 && !ac.g800.suction_fail2' } },
       { id: 'apu', node: 'apu_feed', flowPph: 'apu.ff_pph', run: `apu.state >= 1 && apu.state <= 4 && ${V.fireHandleApu} == 0`, minPressPsi: 2 },
     ],
     balance: { left: 'left', right: 'right', alertKg: G800_LIMITS.maxImbalanceTakeoffLb * LB },

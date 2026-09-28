@@ -21,7 +21,7 @@
  *    pedal-reach state only).
  */
 import * as THREE from 'three';
-import { GuardedSwitch, PushButton, RotaryKnob, RudderPedals, Sidestick } from '../../../cockpit/controls';
+import { PushButton, RotaryKnob, RudderPedals, Sidestick } from '../../../cockpit/controls';
 import { roundedBox } from '../../../cockpit/geometry/primitives';
 import { G800_VARS as V } from '../vars';
 import type { G800CockpitContext } from './context';
@@ -148,21 +148,8 @@ export function buildFlightControls(c: G800CockpitContext): void {
         -podLen / 2 + 0.13,
       );
       pod.label('PEDAL\nSTEER', 0.06, -podLen / 2 + 0.148, { height: 0.0019 });
-      pod.add(
-        new GuardedSwitch(env, {
-          id: 'g800.fc.nws',
-          var: V.nwsSw,
-          label: 'NOSEWHEEL STEERING',
-          positions: ['OFF', 'ON'],
-          values: [0, 1],
-          initial: 1,
-          labels: { name: 'NOSEWHEEL STEER', positions: true, height: 0.0021 },
-          scale: 0.8,
-          guard: { color: 'red', guardedPosition: 1, hinge: 'top' },
-        }),
-        0.06,
-        -podLen / 2 + 0.17,
-      );
+      // No NOSEWHEEL STEERING switch on the Symmetry ledge (BJT500: "the pedal steering switchlight and tiller"): steer-by-wire
+      // is engaged whenever powered; PEDAL STEER gates only the pedal authority (function fix round 1).
     }
     b.place(
       new RudderPedals(env, { id: `g800.fc.pedals_${lc}`, label: side < 0 ? 'PILOT RUDDER PEDALS' : 'COPILOT RUDDER PEDALS', style: 'floor', spacing: 0.3 }),

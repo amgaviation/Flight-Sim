@@ -108,23 +108,58 @@ describe('G800 failures -> CAS', () => {
     expect(Math.abs(v.get('fdm.beta_deg'))).toBeLessThan(3);
   });
 
-  it('ADC 1 failure: FCC reverts to ALTERNATE (latched until FLT CTRL RESET), stall protection unavailable', { timeout: 60000 }, () => {
+  it('single ADC / IRS loss is voted out (2-of-3); a second loss gives ALTERNATE, which returns to NORMAL automatically', { timeout: 60000 }, () => {
+    // BJT500: ALTERNATE only when the necessary data are lost; "If these conditions are fixed, the FBW automatically
+    // returns to normal mode, or the pilot can push the flight-control reset switch." (function fix round 1)
     const r = makeRig('cruise', { weightLb: 85000, air: { altFtMsl: 30000, iasKt: 280 } });
     const v = r.vars;
     r.run(2);
+    expect(v.get('ap.engaged')).toBe(1);
+    v.set('epic.gp.couple', 2); // PFD CMD to side 2: the AFCS uses ADC 2 / IRS 2 (sensorVote.ts)
     r.sys.failures.trigger('adc1');
+    r.run(6);
+    expect(v.get('fbw.mode_code')).toBe(0);
+    expect(v.get('ap.engaged')).toBe(1);
+    expect(casTexts(r, 'caution')).toContain('ADS 1 Fail');
+    expect(casTexts(r, 'caution')).not.toContain('FCC Alternate Mode');
+    r.sys.failures.trigger('irs1');
+    r.run(6);
+    expect(v.get('fbw.mode_code')).toBe(0);
+    expect(casTexts(r, 'caution')).toContain('IRS 1 Fail');
+    expect(v.get('ap.engaged')).toBe(1);
+    r.sys.failures.trigger('adc2');
     r.run(2);
     expect(v.get('fbw.mode_code')).toBe(1);
+    expect(v.get('ap.engaged')).toBe(0); // coupled-side air data lost
     expect(casTexts(r, 'caution')).toContain('FCC Alternate Mode');
     expect(casTexts(r, 'caution')).toContain('Stall Protection Unavail');
-    r.sys.failures.clear('adc1');
-    r.run(5);
-    expect(v.get('fbw.mode_code')).toBe(1); // latched
-    v.set(V.fltCtrlReset, 1);
-    r.run(0.3);
-    v.set(V.fltCtrlReset, 0);
+    r.sys.failures.clear('adc2');
+    r.run(30, () => v.get('adc2.valid') === 1); // ADC self test after the fault clears
     r.run(1);
+    expect(v.get('fbw.mode_code')).toBe(1); // confirmation time (EST 2 s)
+    r.run(1.5);
+    expect(v.get('fbw.mode_code')).toBe(0); // automatic return to NORMAL
+    // FLT CTRL RESET returns at once when the data are back.
+    r.sys.failures.trigger('adc3');
+    r.run(2);
+    expect(v.get('fbw.mode_code')).toBe(1);
+    r.sys.failures.clear('adc3');
+    r.run(30, () => v.get('adc3.valid') === 1);
+    v.set(V.fltCtrlReset, 1);
+    r.run(0.1);
+    v.set(V.fltCtrlReset, 0);
+    r.run(0.1);
     expect(v.get('fbw.mode_code')).toBe(0);
+  });
+
+  it('AFCS coupled to side 1 disconnects on an ADC 1 failure (the FGC uses its own side sensors)', { timeout: 60000 }, () => {
+    const r = makeRig('cruise', { weightLb: 85000, air: { altFtMsl: 30000, iasKt: 280 } });
+    r.run(2);
+    expect(r.vars.get('ap.engaged')).toBe(1);
+    r.sys.failures.trigger('adc1');
+    r.run(2);
+    expect(r.vars.get('ap.engaged')).toBe(0);
+    expect(r.vars.get('fbw.mode_code')).toBe(0); // the FBW votes ADC 1 out
   });
 
   it('decompression: "Cabin Pressure Low" warning above 8,000 ft cabin; passenger masks deploy at 14,000 ft', { timeout: 60000 }, () => {

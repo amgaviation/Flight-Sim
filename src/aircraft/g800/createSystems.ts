@@ -32,7 +32,7 @@ import { LandingGear, Brakes } from '../../systems/gear';
 import { Afcs, AFCS_PRIMUS_EPIC } from '../../systems/autopilot';
 import type { ThrustRatingComputer, ThrustLeverFadec, EngineStartController, Autothrottle } from '../../systems/fadec';
 import { FlyByWire, TrimAxis, Flaps, Spoilers, NosewheelSteering } from '../../systems/flightcontrols';
-import { StallWarning, Overspeed, AltitudeAlert, ALT_ALERT_GFC700, Taws, Tcas, TakeoffConfigWarning, CasManager, DisconnectAlerts } from '../../systems/warning';
+import { StallWarning, Overspeed, AltitudeAlert, type AltitudeAlertConfig, Taws, Tcas, TakeoffConfigWarning, CasManager, DisconnectAlerts } from '../../systems/warning';
 import type { LightingSystem } from '../../systems/lighting';
 import { Radios } from '../../nav/Radios';
 import { Fms } from '../../nav/fms/Fms';
@@ -55,6 +55,18 @@ import { G800SfdMenu } from './systems/sfdMenu';
 import { G800Furnishings } from './systems/furnishings';
 import { createLighting } from './systems/lighting';
 import { G800_CHECKLISTS } from './checklists';
+import { G800SensorVote, FCC_SENSORS, FCC_AIR_OK, FCC_IRS_OK, FGC_SENSORS, FGC_VALID, FGC_RA_VALID } from './systems/sensorVote';
+
+/**
+ * Primus Epic altitude alerter (function fix round 1). EST: Honeywell alerting as on the GV / G450 family - alert
+ * 1,000 ft before the selected altitude (C-chord + flashing selected altitude), capture band 200 ft, deviation alert
+ * beyond 200 ft once captured (no G800 figure published; same bands as the other bizjet presets). Chime on the
+ * approach and on the deviation. Replaces the Garmin GFC 700 preset used before.
+ */
+/** G800 FMS speed schedule: GAC LRC M0.85 / HSC M0.90 (EST climb / descent IAS). Also the PERF INIT defaults. */
+export const G800_FMS_SPEEDS = { climbKt: 290, climbMach: 0.85, cruiseKt: 300, cruiseMach: 0.85, descentKt: 300, descentMach: 0.85, approachKt: 140, machTransitionFt: 31000 };
+
+export const ALT_ALERT_PRIMUS_EPIC: AltitudeAlertConfig = { approachFt: 1000, captureFt: 200, deviationFt: 200, toneOn: ['approach', 'deviation'] }; // default tone: the C-chord
 
 export interface G800SystemsOptions {
   /** Omit radios, FMS and the Epic suite (pure systems tests without a navigation database). */
@@ -82,6 +94,7 @@ export interface G800Systems {
   adc: AirDataComputer[];
   irs: Irs[];
   ra: RadioAltimeter[];
+  vote: G800SensorVote;
   gear: LandingGear;
   brakes: Brakes;
   ratings: ThrustRatingComputer;
@@ -115,7 +128,7 @@ export const ALPHA_MAX = { x: G800_FDM.aero.alphaStall_deg.x, y: G800_FDM.aero.a
 
 export function createG800Systems(ctx: SimContext, opts: G800SystemsOptions = {}): G800Systems {
   const failures = new FailureManager(ctx.vars, { events: ctx.events, seed: 800 });
-  const logic = new G800Logic(ctx.vars);
+  const logic = new G800Logic(ctx.vars, ctx.events);
   const elec = createElectrical(ctx);
   const apu = createApu(ctx);
   const fuel = createFuel(ctx);
@@ -143,7 +156,7 @@ export function createG800Systems(ctx: SimContext, opts: G800SystemsOptions = {}
     handleVar: V.gearHandle,
     actuation: { power: `${hydFrac('left')} * elec.gear_ctl_powered` },
     groundRetractInhibit: true,
-    handleLock: { overrideVar: V.gearLockRel },
+    handleLock: { overrideVar: V.gearLockRelEff }, // LOCK RELEASE, held EST 5 s after the press (logic.ts)
     doors: { openS: 2, closeS: 2 },
     alternate: { kind: 'blowdown', trigger: V.gearAlt, blowdownS: 12 },
     horn: {
@@ -156,6 +169,8 @@ export function createG800Systems(ctx: SimContext, opts: G800SystemsOptions = {}
   });
 
   const tcas = new Tcas(ctx, { power: 'elec.tcas_powered' });
+  // Triplex sensor voting (FCCs) and coupled-side selection (FGC), after the sensors (systems/sensorVote.ts).
+  const vote = new G800SensorVote(ctx.vars);
 
   // ---- radios / FMS / Symmetry suite
   let radios: Radios | null = null;
@@ -164,14 +179,15 @@ export function createG800Systems(ctx: SimContext, opts: G800SystemsOptions = {}
   if (!opts.noAvionics) {
     radios = new Radios(ctx, { navCount: 2, adfCount: 1 });
     // Honeywell MOD / ACTIVATE = Boeing MOD / EXEC style. Speeds: GAC LRC M0.85 / HSC M0.90 (EST climb/descent IAS).
-    fms = new Fms(ctx, { style: 'boeing', engineCount: 2, bankLimitDeg: 27, speeds: { climbKt: 290, climbMach: 0.85, cruiseKt: 300, cruiseMach: 0.85, descentKt: 300, descentMach: 0.85, approachKt: 140, machTransitionFt: 31000 } });
+    fms = new Fms(ctx, { style: 'boeing', engineCount: 2, bankLimitDeg: 27, speeds: G800_FMS_SPEEDS });
     suite = createEpicSuite(
       { vars: ctx.vars, events: ctx.events, nav: ctx.nav, world: ctx.world, fms, canvas: opts.canvas },
       {
         variant: 'symmetry',
         // PFD flap-limit placards from the G800 limits (FSB App. 4: flaps 39 190 KCAS; the shared G800_AIRFRAME
         // default carries the G650 180 kt value).
-        airframe: { ...G800_AIRFRAME, flapPlacardKt: [NaN, G800_LIMITS.vfe10Kt, G800_LIMITS.vfe20Kt, G800_LIMITS.vfe39Kt], vleKt: G800_LIMITS.vleKt },
+        // showPlacardLimit: the PFD speed tape draws the placard of the current flap position / VLE (function fix round 1).
+        airframe: { ...G800_AIRFRAME, flapPlacardKt: [NaN, G800_LIMITS.vfe10Kt, G800_LIMITS.vfe20Kt, G800_LIMITS.vfe39Kt], vleKt: G800_LIMITS.vleKt, showPlacardLimit: true },
         // Engine display: TRS rating bug = selected rating N1 limit (fadec.n1_limit_pct).
         engines: { ...PEARL700_ENGINES, vars: { ...DEFAULT_ENGINE_VARS, target: () => 'fadec.n1_limit_pct' } },
         power: {
@@ -192,6 +208,18 @@ export function createG800Systems(ctx: SimContext, opts: G800SystemsOptions = {}
 
   // PERF INIT tail number: the first G800 flight-test aircraft, N800GA (the suite default is a G650 registration).
   if (suite) suite.fmsShared.perf.tail = 'N800GA';
+  // PERF INIT speed defaults = the G800 FMS schedule above (function fix round 1: the suite defaults climb 250/.80,
+  // descent 280/.80 overrode it on CONFIRM).
+  if (suite) {
+    const sp = G800_FMS_SPEEDS;
+    const pf = suite.fmsShared.perf;
+    pf.climbKt = sp.climbKt;
+    pf.climbMach = sp.climbMach;
+    pf.cruiseKt = sp.cruiseKt;
+    pf.cruiseMach = sp.cruiseMach;
+    pf.descentKt = sp.descentKt;
+    pf.descentMach = sp.descentMach;
+  }
   // G800 TSC applications: FLT CTL (autobrake, ground spoilers, roll / yaw trim) and ECB (electronic breakers).
   if (suite) installG800TscApps(suite, ctx.vars, elec.breakerNames().map((b) => b.name));
 
@@ -204,7 +232,9 @@ export function createG800Systems(ctx: SimContext, opts: G800SystemsOptions = {}
     ...AFCS_PRIMUS_EPIC,
     power: 'elec.afcs_powered',
     servoPower: 'elec.afcs_powered && (elec.fcc_powered || elec.bfcu_powered)',
-    sensors: { valid: 'ahrs1.valid && adc1.valid' },
+    // Coupled-side sensors (PFD CMD side's ADC / IRS / RA; systems/sensorVote.ts): a side-1 sensor loss with the AFCS
+    // coupled to side 2 does not disconnect it (EST, standard dual-FGC architecture).
+    sensors: { ...FGC_SENSORS, valid: FGC_VALID, raValid: FGC_RA_VALID },
     yawDamper: { withAp: false, requiredForAp: false },
     // Armed LNAV / LOC capture only once airborne (Primus Epic: NAV armed on the ground captures after takeoff; the
     // FD keeps TO on the roll). Found by tests/aircraft/g800/verify: LNAV went active on the runway.
@@ -229,11 +259,17 @@ export function createG800Systems(ctx: SimContext, opts: G800SystemsOptions = {}
   // EST: electric backup at reduced rate. The EBHA battery feeds the EBHA bus while its BATTERIES FCS EBHA switchlight is ON
   // (code450 G700/G800 electrical: FCS batteries power their buses when no AC is produced; charged from the EMER AC bus).
   const ebha = `(${V.fcsBattEbha} || elec.emer_ac_powered) ? clamp01(elec.emer_dc_v / 24) * 0.6 : 0`;
+  // No FCC and no BFCU power: no surface control (the actuators hold / float; function fix round 1).
+  const fcs = '(elec.fcc_powered || elec.bfcu_powered)';
+  const act = [`${fcs} * ${hydFrac('left')}`, `${fcs} * ${hydFrac('right')}`, `${fcs} * (${ebha})`];
   const fbw = new FlyByWire(ctx, {
     power: 'elec.fcc_powered || elec.bfcu_powered',
-    actuators: { pitch: [hydFrac('left'), hydFrac('right'), ebha], roll: [hydFrac('left'), hydFrac('right'), ebha], yaw: [hydFrac('left'), hydFrac('right'), ebha] },
-    airDataValid: 'adc1.valid',
-    inertialValid: 'ahrs1.att_valid',
+    actuators: { pitch: act, roll: act, yaw: act },
+    // Triplex air data / IRS, 2-of-3 (systems/sensorVote.ts); the laws read the voted values. BACKUP (BFCU) and the
+    // latched ALTERNATE are selected by logic.ts through ac.fcs_mode_sel.
+    airDataValid: FCC_AIR_OK,
+    inertialValid: FCC_IRS_OK,
+    sensors: FCC_SENSORS,
     pitch: {
       alphaMax: ALPHA_MAX,
       vmoKt: VMO_SCHEDULE,
@@ -286,7 +322,9 @@ export function createG800Systems(ctx: SimContext, opts: G800SystemsOptions = {}
     tiller: { input: V.steerCmd, maxDeg: G800_LIMITS.tillerSteerDeg },
     pedals: { maxDeg: G800_LIMITS.pedalSteerDeg, input: V.pedalSteerCmd }, // PEDAL STEER switchlight gates the pedal input (logic.ts)
     power: 'elec.nws_ctl_powered && hyd.left_psi > 1000',
-    engage: `${V.nwsSw} == 1`,
+    // Always engaged while powered: the Symmetry flight deck has no NWS switch; PEDAL STEER gates only the pedal term
+    // (logic.ts, V.pedalSteerCmd), the tiller keeps steering (BJT500; function fix round 1).
+    engage: 1,
     rateDegPerS: 30,
   });
   // Brake-by-wire (FSB), carbon brakes: inboard on the left system, outboard on the right (EST split); parking brake
@@ -326,8 +364,15 @@ export function createG800Systems(ctx: SimContext, opts: G800SystemsOptions = {}
   // ---- alerting
   const essPower = 'elec.l_ess_dc_powered || elec.r_ess_dc_powered';
   const overspeed = new Overspeed(ctx, { vmoKt: VMO_SCHEDULE, mmo: G800_LIMITS.mmo, vleKt: G800_LIMITS.vleKt, power: essPower });
-  const altAlert = new AltitudeAlert(ctx, { ...ALT_ALERT_GFC700, power: essPower }); // EST: 1,000 / 200 / 200 ft bands
-  const taws = new Taws(ctx, { class: 'A', power: 'elec.egpws_powered', flapsLanding: 'surf.flaps_deg >= 35', flapsDown: 'surf.flaps_deg >= 9' });
+  const altAlert = new AltitudeAlert(ctx, { ...ALT_ALERT_PRIMUS_EPIC, power: essPower });
+  const taws = new Taws(ctx, {
+    class: 'A',
+    power: 'elec.egpws_powered',
+    flapsLanding: 'surf.flaps_deg >= 35',
+    flapsDown: 'surf.flaps_deg >= 9',
+    // Crew inhibits on the TSC TAWS application (systems/tscApps.ts; function fix round 1).
+    inhibits: { terrain: V.tawsTerrInh, gpws: V.tawsGpwsInh, flapOverride: V.tawsFlapOvrd },
+  });
   const tocw = new TakeoffConfigWarning(ctx, {
     armed: `${V.toThrust} && gear.air_ground`,
     power: essPower,
@@ -336,6 +381,8 @@ export function createG800Systems(ctx: SimContext, opts: G800SystemsOptions = {}
       { id: 'trim', bad: 'trim.pitch_units < -0.2 || trim.pitch_units > 0.35', text: 'STAB TRIM', voice: 'Trim' },
       { id: 'speedbrake', bad: `${V.speedbrake} > 0.05`, text: 'SPEED BRAKE', voice: 'Speed brake' },
       { id: 'park', bad: 'brakes.parking_set', text: 'PARKING BRAKE', voice: 'Parking brake' },
+      // Rudder trim outside its takeoff band (TrimAxis takeoffBand [-0.2, 0.2], EST; function fix round 1).
+      { id: 'rudder_trim', bad: 'abs(trim.yaw_units) > 0.2', text: 'RUDDER TRIM', voice: 'Rudder trim' },
       { id: 'fcs', bad: 'fbw.mode_code != 0', text: 'FLIGHT CONTROLS', voice: 'Flight controls' },
     ],
   });
@@ -365,6 +412,7 @@ export function createG800Systems(ctx: SimContext, opts: G800SystemsOptions = {}
     ...adc,
     ...irs,
     ...ra,
+    vote,
     gear,
     ...(radios ? [radios] : []),
     ...(fms ? [fms] : []),
@@ -405,6 +453,10 @@ export function createG800Systems(ctx: SimContext, opts: G800SystemsOptions = {}
     { id: 'fire.apu', name: 'APU fire', category: 'fire' },
     { id: 'fire.baggage', name: 'Aft baggage smoke', category: 'fire' },
     { id: 'elec.ac_tie', name: 'AC bus tie contactor', category: 'electrical' },
+    { id: 'fire.core1', name: 'Left engine core fire', category: 'fire' },
+    { id: 'fire.core2', name: 'Right engine core fire', category: 'fire' },
+    { id: 'steer.pedal', name: 'Pedal steering channel', category: 'landing gear', description: 'Rudder-pedal steering lost (CAS Pedal Steering Fail); the tiller still steers.' },
+    { id: 'gear.lock_solenoid', name: 'Gear handle lock solenoid', category: 'landing gear', description: 'The handle lock solenoid stays locked after takeoff: LOCK RELEASE is needed to raise the gear.' },
   ]);
 
   return {
@@ -426,6 +478,7 @@ export function createG800Systems(ctx: SimContext, opts: G800SystemsOptions = {}
     adc,
     irs,
     ra,
+    vote,
     gear,
     brakes,
     ratings: eng.ratings,

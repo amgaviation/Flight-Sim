@@ -10,10 +10,11 @@
  *                 at the ends (white L / R legends), the red lit EMER LDG GEAR handle left of centre, the white
  *                 paddle LANDING GEAR handle with its green down-and-locked lights and LOCK RELEASE right of centre.
  *
- * Fire handles (code450 G700/G800 fire protection study sheets): locked by a 28 VDC solenoid until a fire warning (or
- * the fire test) releases them (ac.g800.fire_{l,r}_unlock); pulled, they close that engine's fuel, bleed and hydraulic
- * shut-offs (ac.g800.fire_{l,r}_handle); rotated while pulled: -1 = DISCH 1 (RIGHT bottle), +1 = DISCH 2 (LEFT bottle),
- * spring back to 0 (ac.g800.fire_{l,r}_rot). The lamp in each handle follows the zone's fire warning. The APU has no
+ * Fire handles (code450 G700/G800 fire protection study sheets): locked by a 28 VDC solenoid until a fire warning
+ * releases them (ac.g800.fire_{l,r}_unlock; the fire test lights but does not release them); pulled, they close that
+ * engine's fuel, bleed and hydraulic shut-offs (ac.g800.fire_{l,r}_handle); rotated while pulled OUTBOARD = DISCH 1
+ * (RIGHT bottle), INBOARD = DISCH 2 (LEFT bottle) (code450: "Rotating the fire handle outboard to the DISCH 1
+ * position"): L handle -1 / R handle +1 = DISCH 1; spring back to 0 (ac.g800.fire_{l,r}_rot). The lamp in each handle follows the zone's fire warning. The APU has no
  * handle: guarded APU FIRE EXT switchlight on the forward overhead strip (overhead/index.ts).
  *
  * The CAS is scrolled from the CCD / TSC (Epic events); there is no hardware CAS scroll switch (lower side panels
@@ -114,7 +115,7 @@ export function buildMainPanel(c: G800CockpitContext): void {
       knobScale: 0.6,
       labels: false,
       // Ground lock solenoid (LandingGear handleLock; LOCK RELEASE overrides it in the system).
-      inhibit: (to, _from, vars) => !(to === 1 && vars.get('gear.handle_lock') !== 0),
+      inhibit: (to, _from, vars) => !(to === 1 && vars.get(V.gearHandleLocked) !== 0), // ground lock or stuck solenoid (logic.ts)
       lights: [{ var: CK.gearRed, color: 'red' }],
     }),
     0.1,

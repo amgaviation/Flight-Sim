@@ -25,7 +25,7 @@ export const G800_VARS = {
   busTie: OH['elec.bus_tie'], // BUS TIE: 1 AUTO, 0 OPEN
   lMainTru: OH['elec.l_main_tru'], // L MAIN TRU: 0 OFF, 1 ON
   rMainTru: OH['elec.r_main_tru'],
-  emerPwr: OH['elec.emer_pwr'], // EMER PWR: 0 OFF, 1 ARM (emergency batteries connect below 20 V on an ESS DC bus)
+  emerPwr: OH['elec.emer_pwr'], // EMERGENCY POWER: 0 OFF, 1 ARM (E-batts connect below 20 V on an ESS DC bus), 2 ON (E-batts forced on; code450 G700/G800 electrical)
   ratDeploy: OH['elec.rat'], // RAT DEPLOY (guarded touch key) / RAT manual T-handle: 1 deployed (cannot be restowed in flight)
   cabinMaster: OH['elec.cabin_master'], // CABIN MASTER: 0 OFF, 1 ON (cabin electrical loads)
   galleyMaster: OH['elec.galley_master'], // GALLEY MASTER: 0 OFF, 1 ON
@@ -90,7 +90,7 @@ export const G800_VARS = {
   oxyPax: OH['oxy.pax'], // PASS O2: 0 OFF, 1 AUTO, 2 ON (manual deploy)
 
   // =============================================================== OVERHEAD hardware (few physical items)
-  fireTest: `${P}fire_test`, // FIRE TEST button, momentary 1 (overhead aft, SYSTEM TEST area)
+  fireTest: `${P}fire_test`, // FIRE TEST key, momentary 1 (OHPTS TEST page; C450S fire: "Fire Test switch ... on any OHPTS")
   // STORM light switch (overhead COCKPIT LIGHTS, cockpit-overhead agent): 0 OFF, 1 ON - all flood / dome lighting to full
   // brightness for lightning (EST: GVI-family storm function; drives the 'storm' dimmer in systems/lighting.ts).
   stormLt: `${P}storm_lt`,
@@ -102,7 +102,9 @@ export const G800_VARS = {
 
   // =============================================================== CENTER PANEL (below DU2/DU3)
   gearHandle: `${P}gear_handle`, // LANDING GEAR handle: 1 DN, 0 UP (lock solenoid on the ground: gear.handle_lock)
-  gearLockRel: `${P}gear_lock_rel`, // DN LOCK RELEASE button, momentary 1 (allows UP with weight on wheels; maintenance)
+  gearLockRel: `${P}gear_lock_rel`, // LOCK RELEASE button, momentary 1 (overrides the handle lock solenoid; the release holds EST 5 s, logic.ts)
+  gearLockRelEff: `${P}gear_lock_rel_eff`, // derived: lock-solenoid override active (button pressed within the last EST 5 s)
+  gearHandleLocked: `${P}gear_handle_locked`, // derived: handle held by the solenoid (ground lock or the stuck-solenoid failure in the air)
   gearAlt: `${P}gear_alt`, // EMERGENCY GEAR T-handle (nitrogen blowdown, one shot): 0 stowed, 1 pulled
   // HORN SILENCE button: event 'gear.horn_silence'
 
@@ -110,8 +112,8 @@ export const G800_VARS = {
   fireHandleL: `${P}fire_l_handle`, // L ENG FIRE handle: 0 in, 1 pulled (unlocks with a fire warning or the override)
   fireHandleR: `${P}fire_r_handle`,
   fireHandleApu: `${P}fire_apu_handle`, // APU FIRE handle
-  fireRotL: `${P}fire_l_rot`, // L handle rotated: -1 SHOT 1 (right bottle), 0, +1 SHOT 2 (left bottle); spring to 0
-  fireRotR: `${P}fire_r_rot`,
+  fireRotL: `${P}fire_l_rot`, // L handle rotated: -1 LEFT = outboard DISCH 1 (right bottle), +1 inboard DISCH 2 (left bottle); spring to 0
+  fireRotR: `${P}fire_r_rot`, // R handle rotated: +1 RIGHT = outboard DISCH 1 (right bottle), -1 inboard DISCH 2 (left bottle)
   fireRotApu: `${P}fire_apu_rot`, // APU handle rotated: +1 discharges the LEFT bottle (GVI: APU uses the left bottle)
 
   // =============================================================== PEDESTAL (throttle quadrant and aft)
@@ -120,16 +122,18 @@ export const G800_VARS = {
   // TO/GA buttons (outboard of each power-lever knob): event 'ap.toga'. A/T DISC buttons (inboard): event 'at.disc'.
   flapLever: `${P}flap_lever`, // FLAP handle: 0 UP, 1 10, 2 20, 3 39
   speedbrake: `${P}speedbrake`, // SPEED BRAKE handle: 0 RET .. 1 EXT (continuous; 0.5 mid detent)
-  gndSplrArm: `${P}gnd_splr_arm`, // GND SPLR switch: 0 OFF, 1 ARMED
+  gndSplrArm: `${P}gnd_splr_arm`, // GROUND SPOILERS ARM (TSC FLT CTL app): 0 OFF, 1 ARMED
   parkBrake: `${P}park_brake`, // PARKING BRAKE handle: 0 released, 1 set
-  autobrake: `${P}autobrake`, // AUTOBRAKE knob: -1 RTO, 0 OFF, 1 LOW, 2 MED, 3 HIGH
+  autobrake: `${P}autobrake`, // AUTOBRAKE (TSC FLT CTL app): -1 RTO, 0 OFF, 1 LOW, 2 MED, 3 HIGH
   runL: `${P}eng_run_l`, // L ENGINE RUN/STOP (lift-lock toggle): 1 RUN, 0 STOP
   runR: `${P}eng_run_r`,
-  rollTrimSw: `${P}roll_trim`, // ROLL TRIM rocker: -1 LWD, 0, +1 RWD (spring to 0)
-  yawTrimSw: `${P}yaw_trim`, // RUDDER TRIM knob: -1 NL, 0, +1 NR (spring to 0)
-  yawTrimCenter: `${P}yaw_trim_ctr`, // RUDDER TRIM AUTO CENTER button, momentary 1
+  rollTrimSw: `${P}roll_trim`, // ROLL TRIM (TSC FLT CTL app keys, held): -1 LWD, 0, +1 RWD
+  yawTrimSw: `${P}yaw_trim`, // YAW TRIM knob (pedestal): -1 NL, 0, +1 NR (spring to 0)
+  yawTrimCenter: `${P}yaw_trim_ctr`, // YAW TRIM AUTO CENTER (TSC FLT CTL app), momentary 1
   fltCtrlReset: `${P}flt_ctrl_reset`, // FLT CTRL RESET (guarded button), momentary 1
-  nwsSw: `${P}nws`, // NOSEWHEEL STEERING (guarded switch): 1 ON, 0 OFF
+  // RETIRED (function fix round 1): the Symmetry flight deck has no NOSEWHEEL STEERING switch, only the PEDAL STEER switchlight
+  // and the tiller (BJT500). Steer-by-wire is engaged whenever powered; the var is kept (1) for old tests / states only.
+  nwsSw: `${P}nws`,
   // CCDs and pedestal TSCs: owned by the Epic suite (epic.ccd{s}.*, touch displays).
 
   // =============================================================== SIDESTICKS (outboard consoles, BAE active control sidesticks)
@@ -141,7 +145,11 @@ export const G800_VARS = {
   ssDisc: (s: 1 | 2) => `${P}ss_disc${s}`,
   hudRocker: (s: 1 | 2) => `${P}hud_rocker${s}`, // HUD/EVS rocker: +1 cycles SVS/EVS/CVS video, -1 clears video (FSB App. 4); spring to 0
   ptt: (s: 1 | 2) => `${P}ptt${s}`, // PTT trigger on the front of the grip, momentary 1 = MIC keyed (systems/audio.ts)
-  micSel: (s: 1 | 2) => `${P}mic_sel${s}`, // TSC audio MIC select: 1 VHF1, 2 VHF2, 3 VHF3, 4 HF1, 5 HF2, 6 PA (SCOPE: no touch UI)
+  micSel: (s: 1 | 2) => `${P}mic_sel${s}`, // TSC AUDIO app MIC select: 1 VHF1, 2 VHF2, 3 VHF3, 4 HF1, 5 HF2, 6 PA (TSC 1/2 pilot, TSC 3/4 copilot)
+  /** TSC AUDIO app receiver on/off per side (1 = monitored) and volume 0..1; r = AUDIO_RX index (systems/audio.ts). */
+  rxOn: (s: 1 | 2, r: number) => `${P}rx${r}_on${s}`,
+  rxVol: (s: 1 | 2, r: number) => `${P}rx${r}_vol${s}`,
+  rxLevel: (s: 1 | 2, r: number) => `${P}rx${r}_level${s}`, // derived: headset level of that receiver (0 unpowered / off)
   micKeyed: (s: 1 | 2) => `${P}mic_keyed${s}`, // derived: transmitter keyed by that side (0 none)
   comTx: (r: 1 | 2 | 3) => `${P}com${r}_tx`, // derived: VHF r transmitting
   stuckMic: `${P}stuck_mic`, // derived: continuous keying past the stuck-mic timeout (CAS "Stuck Mic")
@@ -220,7 +228,27 @@ export const G800_VARS = {
   sfdMenuEvent: (s: 1 | 2) => `g800.sfd.menu${s}`, // SFD bezel MENU button event (systems/sfdMenu.ts opens the SFD baro menu)
   obsMask: `${P}oxy_mask3`, // observer (jump seat) quick-donning mask: 0 stowed, 1 donned (G500 BL7C0670 right aft bulkhead)
   obsMaskMode: `${P}oxy_mode3`, // observer mask regulator: 0 NORMAL, 1 100 %, 2 EMERGENCY
+  // =============================================================== FIX ROUND 1 (function audit)
+  // TAWS (TSC TAWS application; EST location - Honeywell EGPWS crew inhibits on Primus Epic Gulfstreams)
+  tawsTerrInh: `${P}taws_terr_inh`, // TERR INHIBIT: 1 = terrain awareness (FLTA / PDA) inhibited
+  tawsGpwsInh: `${P}taws_gpws_inh`, // GPWS INHIBIT: 1 = GPWS modes 1-5 inhibited
+  tawsFlapOvrd: `${P}taws_flap_ovrd`, // FLAP OVERRIDE: 1 = flaps treated as in the landing position
+  // Derived by logic.ts
+  fcsBackup: `${P}fcs_backup`, // 1 = FCCs lost, BFCU flying the aircraft (backup mode)
+  fcsSrc: `${P}fcs_src`, // voted-sensor block health: number of valid ADCs * 10 + valid IRSs (diagnostic)
+  edmActive: `${P}edm_active`, // Emergency Descent Mode active
+  vmoKt: `${P}vmo_kt`, // current VMO from the VMO schedule (A/T speed protection)
+  apuStartCmd: `${P}apu_start_cmd`, // APU START request latched until the inlet door is open (ECU start sequence)
+  startProtect: (i: 1 | 2) => `${P}start_protect${i}`, // engine start protection motoring (residual TGT / rotor bow) in progress
+  crankReq: (i: 1 | 2) => `${P}crank_req${i}`, // CRANK MASTER dry-motoring request latched by that engine's START key
+  apuGenOffLt: `${P}apu_gen_off_lt`, // APU GEN amber OFF legend: APU available and its generator off line (dark cockpit)
 } as const;
+
+/** Receivers of the TSC AUDIO app (index r of rxOn / rxVol). */
+export const AUDIO_RX = ['VHF 1', 'VHF 2', 'VHF 3', 'HF 1', 'HF 2', 'NAV 1', 'NAV 2', 'ADF', 'MKR'] as const;
+/** MIC select values (micSel). */
+export const MIC = { VHF1: 1, VHF2: 2, VHF3: 3, HF1: 4, HF2: 5, PA: 6 } as const;
+export const MIC_LABEL = ['', 'VHF 1', 'VHF 2', 'VHF 3', 'HF 1', 'HF 2', 'PA'] as const;
 
 /** Autobrake selector values. */
 export const AUTOBRAKE = { RTO: -1, OFF: 0, LOW: 1, MED: 2, HIGH: 3 } as const;

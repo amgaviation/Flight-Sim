@@ -110,7 +110,8 @@ export function createEngines(ctx: SimContext): G800Engines {
     return new EngineStartController(ctx, {
       engine: i,
       startSwitch: V.startReq(i),
-      runLever: `${run} == 1 && ${fire} == 0`,
+      // Start protection (logic.ts: residual TGT / rotor bow motoring) holds the fuel off until it completes.
+      runLever: `${run} == 1 && ${fire} == 0 && !${V.startProtect(i as 1 | 2)}`,
       stopSwitch: `${run} == 0 && ${V.crankMaster} == 0`,
       fuelOnN2Pct: 20, // EST: fdm light-off 18 % HP
       starterCutoutN2Pct: G800_LIMITS.starterCutoutN2Pct, // GVI: 42 % HP
@@ -137,11 +138,15 @@ export function createEngines(ctx: SimContext): G800Engines {
     retardRate: 0.1,
     thrHoldKt: 60,
     thrHoldEndFt: 400,
-    retardFt: 30, // EST
+    // GVI family: RETARD below 50 ft RA (g650.md, LUC G650 training material: "RETARD below 50 ft RA"); no G800-specific
+    // figure, the FSB lists no A/T difference (function fix round 1: was 30 ft EST, dossier §5 said 50 ft).
+    retardFt: 50,
     retardFlapsDeg: 30,
     discWarnS: 5,
     labels: { THR: 'THR', IDLE: 'IDLE', SPD: 'SPD', SPD_FMS: 'SPD', MACH: 'MACH', HOLD: 'HOLD', TO: 'TO', GA: 'GA', RETARD: 'RETARD' },
     vmoKt: G800_LIMITS.vmoKt,
+    // VMO schedule (TCDS / GVI: 340 KCAS, 300 KCAS below 8,000 ft) written by logic.ts from VMO_SCHEDULE.
+    vmoVar: V.vmoKt,
     mmo: G800_LIMITS.mmo,
   });
   return { ratings, fadec, starts, at };

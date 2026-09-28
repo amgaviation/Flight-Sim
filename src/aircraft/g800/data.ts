@@ -134,7 +134,12 @@ export const G800_LIMITS = {
   oilPressIdleMinPsi: 35, // E135: minimum to start a flight, idle to 72.3 % NH
   oilTempMaxC: 170, // E135: oil scavenge temperature 170 degC steady
   starterCutoutN2Pct: 42, // GVI / SCQ powerplant: SVO/IGN extinguish at ~42 % HP; starter re-engagement up to 42 % HP
-  maxResidualTgtStartC: 150, // GVI: residual TGT < 150 degC before a start
+  maxResidualTgtStartC: 120, // C450S G700/G800 powerplant: "Max TGT prior to start 120 C" (GVI sheet: 150 degC)
+  // C450S G700/G800 powerplant: FADEC rotor-bow avoidance - an engine shut down more than 20 min and less than 5 h
+  // earlier is dry-motored for 50 s before light-off (SVO displayed, CAS "Engine Start Protect").
+  rotorBowMinOffS: 20 * 60,
+  rotorBowMaxOffS: 5 * 3600,
+  rotorBowMotorS: 50,
   maxStartCrosswindKt: 30, // GVI
   reverseIdleByKt: 60, // GVI: idle reverse position by 60 KCAS
   // ------------------------------------------------------------ APU (TCDS §6: Honeywell RE220(GVI); GVI limits)

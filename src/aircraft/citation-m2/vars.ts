@@ -58,7 +58,7 @@ export const M2 = {
   startDiseng: `${P}start_diseng`,
   /** L / R IGNITION: NORM (0) / ON (1). Set on the GTC ENGINE page (AOPA Mar 2014: ignition in the G3000; no pedestal switch). */
   ignSw: (i: number) => `${P}ign${i}_sw`,
-  /** Throttle levers: CUTOFF (-0.1, gated, finger lift) / IDLE 0 / CRU 0.62 / CLB 0.82 / TO 1.0 (detents). */
+  /** Throttle levers: OFF (-0.1, fuel cut-off, gated, finger lift; quadrant legend OFF, 525AFM-06 p.3-83 "Throttles - OFF") / IDLE 0 / CRU 0.62 / CLB 0.82 / TO 1.0 (detents). */
   tla: (i: number) => `${P}tla${i}`,
   /** Derived FADEC lever input max(0, tla) (systems). */
   fadecTla: (i: number) => `${P}fadec_tla${i}`,
@@ -265,6 +265,23 @@ export const M2 = {
   iceTail: `${P}ice_tail`,
   hydPressOn: `${P}hyd_press_on`,
   gearHornActive: `${P}gear_horn_active`,
+
+  // ---------------------------------------------------------------- Procedure latches (systems/procedures.ts)
+  // Checklist auto-checks for items that are an action sequence rather than a switch position. Cleared by applyState.
+  /** GTC SYSTEM TESTS run (bit 1 << TEST_SEL value) with the emergency bus powered for >= 1 s. */
+  sysTestsDone: `${P}sys_tests_done`,
+  /** CVR TEST light seen lit (1). */
+  cvrTested: `${P}cvr_tested`,
+  /** Crew mask PRESS TO TEST flow seen (bit 1 pilot, bit 2 copilot). */
+  maskTested: `${P}mask_tested`,
+  /** 1 while every circuit breaker (cb.*) is in. */
+  cbAllIn: `${P}cb_all_in`,
+  /** After-start electrical check: bit 1 = L GEN OFF seen with R on line, bit 2 = R GEN OFF with L on line (M2 flows ELECTRICAL CHECK). */
+  elecCheck: `${P}elec_check`,
+  /** Trim check (M2 flows TRIM CHECKS): bit 1 = one split-switch half alone gave no trim; bit 2 = AP/TRIM DISC interrupted electric trim. */
+  trimCheck: `${P}trim_check`,
+  /** AUTOPILOT DISCONNECT TEST (M2 flows before taxi): AP engaged on the ground, then disconnected with AP/TRIM DISC (1). */
+  apDiscTested: `${P}ap_disc_tested`,
 } as const;
 
 /** Throttle detent lever values (FADEC detent law). */

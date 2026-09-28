@@ -262,11 +262,15 @@ export const CITATION_LONGITUDE_FDM: FdmConfig = {
     Cl_trim: 0.004, // electric aileron trim tab (OG 15-3)
     // Static margin EST 25 % MAC between the 25 % MAC ref point and the neutral point.
     Cm_alpha: { x: [-30, -14, 0, 13, 16, 20, 30, 45, 90], y: [0.55, 0.28, 0, -0.26, -0.33, -0.44, -0.62, -0.8, -1.0] },
-    Cm0: 0.02,
+    // Cm0 / Cm_trim re-balanced (function audit LON-F-20): the stabilizer takeoff trim now follows the OG 17-3 chart
+    // (-6.45 deg at 24 %, -5.15 at 28 %, -3.9 at 32 % MAC; ~0.33 deg per % MAC) at V2 / flaps 2 (computeTrim:
+    // 25.3 % -6.04 deg, 26.8 % -5.55, 29.4 % -4.72 vs the chart -6.03 / -5.54 / -4.70). Was 0.02 / 0.55 (0.12 deg
+    // per % MAC, 2.7x too flat). Cruise trim ~-1.6..-2.1 deg, flaps FULL approach ~-5.8..-7.2 deg (EST, no source).
+    Cm0: 0.1,
     Cm_q: -24,
     Cm_alphadot: -8,
     Cm_de: 0.95,
-    Cm_trim: 0.55, // electric horizontal stabilizer trim (OG 15-2; -7..0 deg, OG 17-3 chart), EST effectiveness
+    Cm_trim: 0.203, // electric horizontal stabilizer trim per normalized unit (5.5 deg nose up / 5 deg nose down of the -3.5 deg neutral): ~0.037 per deg, fitted to the OG 17-3 CG chart (see Cm0)
     Cm_flap: { x: [0, 7, 15, 35], y: [0, -0.03, -0.055, -0.12] }, // BCA: large nose-down pitch change with FULL
     Cm_gear: 0.004,
     Cm_spoiler: 0.01,

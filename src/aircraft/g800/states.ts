@@ -192,6 +192,14 @@ export function setG800Switches(ctx: Pick<SimContext, 'vars'>, sys: G800Systems,
   v.set(V.obsMask, 0);
   v.set(V.obsMaskMode, 0);
   v.set('ac.door.baggage', 0);
+  // ---- function fix round 1: TSC AUDIO / TAWS apps, gear LOCK RELEASE
+  v.set(V.micSel(1), 1);
+  v.set(V.micSel(2), 2);
+  v.set(V.tawsTerrInh, 0);
+  v.set(V.tawsGpwsInh, 0);
+  v.set(V.tawsFlapOvrd, 0);
+  v.set(V.gearLockRel, 0);
+  v.set('alert.annun_test', 0);
 }
 
 /** `AircraftInstance.applyState` of the G800. */
@@ -224,6 +232,7 @@ export function applyG800State(ctx: SimContext, sys: G800Systems, s: InitialStat
     sys.elec.reset();
     sys.logic.reset();
     for (const u of sys.irs) u.reset();
+    sys.vote.update();
     sys.pneu.snap(v.get('fdm.sat_c', 15));
     sys.press.settle();
     v.set(SURF.pitchTrim, 0.1);
@@ -278,6 +287,7 @@ export function applyG800State(ctx: SimContext, sys: G800Systems, s: InitialStat
     for (let i = 0; i < 200; i++) a.update(1 / 60); // run the power-up self test so air data are valid at once
   }
   for (const r of sys.ra) r.update(1 / 60);
+  sys.vote.update(); // voted / coupled-side sensor values before the AFCS and FBW set-up
   sys.fbw.reset();
   sys.pneu.snap(22);
   sys.press.settle();

@@ -265,7 +265,90 @@ export const G6K_VARS = {
   pttKeyed: `${P}comm.ptt`, // derived (vision.ts): 1 R/T keyed (either wheel), -1 IC (intercom) keyed, 0 idle
   evsCalT: `${P}evs.cal_timer`, // derived (vision.ts): EVS calibration running (s left)
   hudModeEff: `${P}hud.mode_eff`, // derived (vision.ts): HUD display mode shown (-1 = HUD blank)
+
+  // ======================================================== FIX ROUND 2 (function lens)
+  // ---- Pedestal reversion panel (aft-left, photo EB190582 e_ped_l / e_ped_aft): L PFD [ADC] [IRS], AFCS [1/2],
+  // R PFD [ADC] [IRS] switchlights, DISPLAYS NORM / REV and TUNE rotaries, L / CTR / R / LWR DSPL dimmers. The PBAs
+  // write the Collins Fusion RSP contract vars (src/avionics/collins-fusion/vars.ts FUSION_VARS.rsp*), consumed by the
+  // Fusion source selection / PFD / layout logic; systems/reversion.ts adds the DISPLAYS and TUNE logic.
+  rspAdc: (s: 1 | 2) => `fusion.rsp${s}.adc`, // L / R PFD ADC PBA: 0 NORM (on-side ADC), 1 X-SIDE (cross-side ADC)
+  rspAtt: (s: 1 | 2) => `fusion.rsp${s}.att`, // L / R PFD IRS PBA: 0 NORM (on-side IRS), 1 IRS 3
+  rspAfcs: 'fusion.rsp.afcs', // AFCS 1/2 PBA (alternate action): 1 = FGC 1, 2 = FGC 2
+  rspDspl: (s: 1 | 2) => `fusion.rsp${s}.dspl`, // derived (reversion.ts) from the DISPLAYS rotary: 1 REV (PFD + EICAS composite)
+  displaysRev: `${P}rev.displays`, // DISPLAYS rotary: 0 NORM, 1 REV
+  tuneSel: `${P}rev.tune`, // TUNE rotary: 0 NORM, 1 VHF, 2 DSPL (radio tuning reversion; SCOPE in reversion.ts)
+  tuneSrc: `${P}rev.tune_src`, // derived (reversion.ts): radio tuning source 0 CTP, 1 VHF control heads (MKP), 2 display
+  ltDisplayLwr: `${P}light.display_lwr`, // LWR DSPL knob 0 .. 1 (AFD 3, lower centre display)
+  // ---- Audio control panels ACP 1 / 2 (pedestal aft of the CCPs, photo EB190582 e_ped_aft / e_ped_l). Receiver
+  // knobs: pulled out = audio selected (listen), turned = volume; transmitter select keys with a lamp; MASK, SPKR,
+  // ID / BOTH / VOICE filter, R/T - IC toggle; systems/audioControl.ts gates the NAV / ADF ident and marker audio.
+  acpSel: (s: 1 | 2, ch: string) => `${P}acp${s}.${ch}_sel`, // receiver knob pulled out: 1 = audio on
+  acpVol: (s: 1 | 2, ch: string) => `${P}acp${s}.${ch}_vol`, // receiver knob volume 0 .. 1
+  acpMic: (s: 1 | 2) => `${P}acp${s}.mic`, // transmitter select key: 0 VHF 1, 1 VHF 2, 2 VHF 3, 3 HF 1, 4 HF 2, 5 SAT, 6 PA
+  acpMask: (s: 1 | 2) => `${P}acp${s}.mask`, // MASK PBA: 1 = oxygen-mask microphone selected
+  acpSpkr: (s: 1 | 2) => `${P}acp${s}.spkr`, // SPKR knob 0 OFF .. 1 (cockpit speaker volume)
+  acpFilter: (s: 1 | 2) => `${P}acp${s}.filter`, // NAV audio filter: 0 ID, 1 BOTH, 2 VOICE
+  acpRtIc: (s: 1 | 2) => `${P}acp${s}.rt_ic`, // R/T - IC toggle (spring to centre): +1 R/T, -1 IC
+  acpMkrHi: (s: 1 | 2) => `${P}acp${s}.mkr_hi`, // marker sensitivity: 1 HI, 0 LO
+  acpIdentOut: (ch: 'nav1' | 'nav2' | 'adf1' | 'adf2') => `${P}acp.ident_${ch}`, // derived: audible ident gain (keyed)
+  acpMkrOut: `${P}acp.mkr_gain`, // derived: marker audio gain (0 = muted / not selected)
+  // ---- Glareshield ROLL SPLRS priority switchlights (GX PTG 10-48 / 10-49; photo N835GL c_gs_l / c_gs_r)
+  rollSplr: (s: 1 | 2) => `${P}fctl.roll_splr${s}`, // ROLL SPLRS PLT CONT (1) / CPLT CONT (2) PBA: 1 pressed (priority)
+  rollPriority: `${P}fctl.roll_priority`, // derived (logic.ts): 0 averaged (normal), 1 pilot wheel, 2 copilot wheel
+  rollSelReq: `${P}fctl.roll_sel_req`, // derived: 1 = ROLL SEL captions / ROLL SELECT (disconnect, 30 s, no selection)
+  mfsRollCmd: `${P}fctl.mfs_roll_cmd`, // derived: aileron command used by the MFS roll assist (after the priority logic)
+  // ---- FIRE handles (GX PTG 9-12 .. 9-14): pull, then turn and hold >= 1 s (CCW bottle 1, CW bottle 2)
+  fireRot: (z: 'l' | 'apu' | 'r') => `${P}fire.${z}_rot`, // handle rotation -1 CCW (bottle 1), 0, +1 CW (bottle 2), spring to centre
+  fireOvrd: (z: 'l' | 'apu' | 'r') => `${P}fire.${z}_ovrd`, // manual override button behind the handle: momentary 1 (solenoid unlock)
+  fireApuPin: `${P}fire.apu_pin`, // APU bottle lockout release pin: 1 slid (second APU shot allowed)
+  fireUnlock: (z: 'l' | 'apu' | 'r') => `${P}fire.${z}_unlock`, // derived: handle solenoid unlocked (DAU fire warning)
+  apuFireShutdown: `${P}apu.fire_shutdown_cmd`, // derived: FADEC immediate shutdown (fire 5 s on ground / handle / BATT MASTER OFF without AC)
+  // ---- GND LIFT DUMPING switch (GX PTG 10-50 GX_10_049): MANUAL ARM / AUTO / OFF
+  gldSw: `${P}gld.sw`, // 0 AUTO, 1 MANUAL ARM, 2 OFF (V.gldManArm / V.gldOff are derived from it)
+  // ---- ELECTRICAL BATT MASTER OFF / EMS / ON (GX PTG 6-8): V.battMaster stays 1 = ON / 0 = not ON (its meaning)
+  battMasterSel: `${P}elec.batt_master_sel`, // BATT MASTER toggle: 0 OFF, 1 EMS (batteries to the EMS only), 2 ON
+  // ---- PRESSURIZATION RATE NORM / HIGH (GX PTG 13-40 / 13-57)
+  pressRateHigh: `${P}press.rate_high`, // RATE toggle: 0 NORM (+500 / -300 fpm), 1 HIGH (0 .. 800 fpm descent)
+  pressLimiter: `${P}press.limiter`, // derived (logic.ts): cabin altitude / rate limiter active (OFVs driven closed)
+  ditchSeq: `${P}press.ditch_seq`, // derived: ditching sequence 0 off, 1 packs off + depressurize, 2 OFVs closed, -1 inhibited (> 15,000 ft)
+  ramValveOpen: `${P}ecs.ram_valve_open`, // derived: ram air flow enters (switch ON, both packs off, below 15,000 ft)
+  tcvPos: (s: 'l' | 'r') => `${P}ecs.pack_${s}_tcv`, // derived alias of V.packManTemp (manual TCV position 0 COLD .. 1 HOT)
+  cabAltCautionFt: `${P}press.cab_alt_caution_ft`, // derived: CABIN ALT caution level (8,200 ft, raised for high landing fields)
+  cabAltWarnFt: `${P}press.cab_alt_warn_ft`, // derived: CABIN ALT warning level (9,000 ft, raised for high landing fields)
+  // ---- IAMS bleed (GX PTG 13-5 / 13-9)
+  prvOpen: (s: 'l' | 'r') => `${P}bleed.${s}_prv_open`, // derived: PRV actually commanded open (after the XBLEED / start rules)
+  bleedMisconfig: `${P}bleed.misconfig`, // derived: BLEED MISCONFIG (manual APU BLEED ON refused)
+  // ---- Stall protection (GX PTG 10-61 .. 10-63)
+  stallAdvSel: `${P}stall.adv_sel`, // EMS CDU SWITCH CONTROL STALL WARN ADVANCE: 0 NORM, 1 REV (advance)
+  stallAdvance: `${P}stall.advance`, // derived: stall warning advance active (slat / flap fault, ice with wing A/I off, REV)
+  aoaEff: `${P}stall.aoa_eff_deg`, // derived: SPC angle of attack after the advance factor (StallWarning input)
+  spcIgn: `${P}stall.ign_cmd`, // derived: SPC continuous-ignition command (high AoA)
+  discHeldT: `${P}yoke.disc_held_s`, // derived: time the AP/SP DISC (MASTER DISC) has been held (s)
+  slatFlapReset: `${P}sfcu.reset_btn`, // EMS CDU SWITCH CONTROL SLAT/FLAP RESET: momentary 1 (clears latched SFCU faults)
+  footWarmer: (s: 'l' | 'r') => `${P}elec.footwarmer_${s}`, // EMS CDU SWITCH CONTROL L / R FOOTWARMER: 1 ON (EST 150 W, AC 1 / AC 4)
+  // ---- Stabilizer trim (GX PTG 10-24 .. 10-27)
+  machTrimCmd: `${P}trim.mach_cmd`, // derived: Mach trim stabilizer demand (units ND+ / NU-), AP off only
+  stabClacker: `${P}trim.clacker`, // derived: stabilizer-in-motion clacker sounding
+  // ---- APU / FADEC / engines
+  autoRelight: (i: 1 | 2) => `${P}eng.relight${i}`, // derived: FADEC auto relight in progress
+  noTakeoffAdv: `${P}no_takeoff_adv`, // derived: NO TAKEOFF advisory (taxi, configuration not set)
+  splrStabTest: `${P}splr_stab_test`, // derived: SPLRS/STAB IN TEST (20 s after hydraulic power-up)
+  // ---- Autobrake (GX PTG 14-31)
+  autobrakeArmOk: `${P}autobrake.arm_ok`, // derived: arming conditions met (air, wheel speed 0, pedals < 20 %, no fault)
+  // ---- Landing gear horn (GX PTG 14-15 table)
+  hornMuteReset: `${P}gear.horn_mute_reset`, // derived: 1 while a mute-cancel condition holds (throttles advanced, gear down, flaps 30)
+  // ---- Oxygen (GX PTG 8-4 / 8-7, GX PTG 15-10 side consoles)
+  oxyEmer: (s: 1 | 2) => `${P}oxy.mask${s}_emer`, // mask regulator EMERGENCY push (100 % continuous flow pressure): 1 pushed
+  crewOxyR: 'ac.oxy.crew_r_sw', // copilot OXYGEN SUPPLY LOWER DISCONNECT: 1 ON (V.crewOxy is the pilot's)
+  // ---- Hydraulic
+  hydSovFail: (s: 'l' | 'r') => `${P}hyd.sov_${s}_fail`, // derived: SOV not in its commanded position (L / R HYD SOV FAIL)
+  // ---- Exterior lights / pass signs
+  beaconRed: `${P}light.beacon_red`, // derived: beacon flashing red (1) or white (0)
+  emerLtsOn: `${P}light.emer_on`, // derived: emergency lights lit (own battery packs)
 } as const;
+
+/** ACP receiver channels (knob ids): row 1 VHF 1-3, HF 1 / 2, SAT, PA; row 2 NAV 1 / 2, ADF 1 / 2, MKR, DME 1 / 2. */
+export const G6K_ACP_CH = ['vhf1', 'vhf2', 'vhf3', 'hf1', 'hf2', 'sat', 'pa', 'nav1', 'nav2', 'adf1', 'adf2', 'mkr', 'dme1', 'dme2'] as const;
 
 /** Gasper eyeballs: main-panel wings L / R, overhead aft corners L / R, overhead forward edge L / R. */
 export const G6K_GASPERS = ['wing_l', 'wing_r', 'ovhd_aft_l', 'ovhd_aft_r', 'ovhd_fwd_l', 'ovhd_fwd_r'] as const;
@@ -280,7 +363,7 @@ export const G6K_CONTROL_VARS: string[] = [
   G6K_VARS.extDc,
   G6K_VARS.apuGen,
   G6K_VARS.ratGen,
-  G6K_VARS.battMaster,
+  G6K_VARS.battMasterSel, // BATT MASTER OFF / EMS / ON (V.battMaster = ON, derived both ways in logic.ts)
   G6K_VARS.cabinPwr,
   ...([1, 2, 3, 4] as const).map((n) => G6K_VARS.acBusIsol(n)),
   ...(['dc_bus1', 'dc_bus2', 'dc_ess', 'batt_bus'] as const).map((b) => G6K_VARS.dcBusIsol(b)),
@@ -325,11 +408,13 @@ export const G6K_CONTROL_VARS: string[] = [
   G6K_VARS.wingAi,
   ...LR.map((s) => G6K_VARS.cowlAi(s)),
   G6K_VARS.wingXbleed,
-  ...(['l', 'apu', 'r'] as const).flatMap((z) => [G6K_VARS.fireHandle(z), G6K_VARS.fireDisch(z, 1), G6K_VARS.fireDisch(z, 2)]),
+  // Fire handles: pull, turn and hold (V.fireDisch is derived from the rotation, logic.ts); override button behind each.
+  ...(['l', 'apu', 'r'] as const).flatMap((z) => [G6K_VARS.fireHandle(z), G6K_VARS.fireRot(z), G6K_VARS.fireOvrd(z)]),
+  G6K_VARS.fireApuPin,
   G6K_VARS.fireTest,
   G6K_VARS.pressAutoMan,
   G6K_VARS.pressManAlt,
-  G6K_VARS.pressManRate,
+  G6K_VARS.pressRateHigh, // RATE NORM / HIGH (V.pressManRate is no longer a control)
   G6K_VARS.ldgElevFms,
   G6K_VARS.ldgElevFt,
   G6K_VARS.outflowClosed(1),
@@ -362,8 +447,7 @@ export const G6K_CONTROL_VARS: string[] = [
   G6K_VARS.terrOff,
   G6K_VARS.gsMute,
   G6K_VARS.flapOvrd,
-  G6K_VARS.gldManArm,
-  G6K_VARS.gldOff,
+  G6K_VARS.gldSw, // GND LIFT DUMPING MANUAL ARM / AUTO / OFF (V.gldManArm / V.gldOff derived)
   G6K_VARS.autobrake,
   G6K_VARS.gearHandle,
   G6K_VARS.gearDnLckRel,
@@ -378,7 +462,6 @@ export const G6K_CONTROL_VARS: string[] = [
   ...(['l', 'c', 'r'] as const).map((z) => G6K_VARS.ltDisplay(z)),
   ...(['l', 'c', 'r', 'cb', 'ovhd'] as const).map((z) => G6K_VARS.ltIntegral(z)),
   G6K_VARS.ltMaster,
-  G6K_VARS.ltDome,
   G6K_VARS.ltMap(1),
   G6K_VARS.ltMap(2),
   ...(['pax', 'emer', 'bag', 'aft_eqpt', 'svc_large', 'svc_small'] as const).map((d) => G6K_VARS.door(d)),
@@ -411,6 +494,30 @@ export const G6K_CONTROL_VARS: string[] = [
   G6K_VARS.yokePtt(1),
   G6K_VARS.yokePtt(2),
   G6K_VARS.fdrEvent,
+  // Fix round 2 (function lens): reversion panel, ACPs, ROLL SPLRS, EMS SWITCH CONTROL, mask EMERGENCY, copilot supply.
+  ...([1, 2] as const).flatMap((s) => [G6K_VARS.rspAdc(s), G6K_VARS.rspAtt(s)]),
+  G6K_VARS.rspAfcs,
+  G6K_VARS.displaysRev,
+  G6K_VARS.tuneSel,
+  G6K_VARS.ltDisplayLwr,
+  ...([1, 2] as const).flatMap((s) => [
+    ...G6K_ACP_CH.flatMap((ch) => [G6K_VARS.acpSel(s, ch), G6K_VARS.acpVol(s, ch)]),
+    G6K_VARS.acpMic(s),
+    G6K_VARS.acpMask(s),
+    G6K_VARS.acpSpkr(s),
+    G6K_VARS.acpFilter(s),
+    G6K_VARS.acpRtIc(s),
+    G6K_VARS.acpMkrHi(s),
+  ]),
+  G6K_VARS.rollSplr(1),
+  G6K_VARS.rollSplr(2),
+  G6K_VARS.stallAdvSel,
+  G6K_VARS.slatFlapReset,
+  G6K_VARS.footWarmer('l'),
+  G6K_VARS.footWarmer('r'),
+  G6K_VARS.oxyEmer(1),
+  G6K_VARS.oxyEmer(2),
+  G6K_VARS.crewOxyR,
   ...G6K_GASPERS.map((g) => G6K_VARS.gasper(g)),
 ];
 

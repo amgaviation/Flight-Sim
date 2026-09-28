@@ -45,9 +45,8 @@ const module: AircraftModule = {
       v.set(ESI_VARS.brtOffset, 0);
       v.set(GTC_PUSH_VAR('gtc1'), 0);
       v.set(GTC_PUSH_VAR('gtc2'), 0);
+      // Standby baro follows the G3000 sides: applyM2State sets adc1..3 (QNH, or STD above the transition altitude).
       applyM2State(ctx, sys, s);
-      // Standby baro follows the local QNH like the G3000 sides (applyM2State sets adc1..3).
-      v.set('adc3.baro_std', 0);
     };
 
     return {

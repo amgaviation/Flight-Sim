@@ -118,7 +118,7 @@ describe('G800 overhead flows', () => {
     expect(r.vars.get('ac.g800.l_ac_src')).toBe(2);
   });
 
-  it('lamp test lights every legend; EMERGENCY POWER OFF / ON under their guards; FIRE TEST unlocks the handles', { timeout: 180_000 }, async () => {
+  it('lamp test lights every legend; EMERGENCY POWER OFF / ON under their guards; FIRE TEST lights but does not unlock the handles', { timeout: 180_000 }, async () => {
     const { r, ctl, step } = await fullCockpit('ready_to_taxi');
     step(1);
     const bleedL = ctl<GuardedButton>('g800.oh.bleed_l').inner;
@@ -131,11 +131,12 @@ describe('G800 overhead flows', () => {
     r.vars.set('alert.annun_test', 0);
     step(0.2);
     expect(lit(bleedL, 0)).toBe(false);
-    // FIRE TEST (OHPTS touch function, same var): fire warnings test and the fire handles unlock while held.
+    // FIRE TEST (OHPTS TEST page, same var): fire warnings test; the handle solenoids stay locked (function fix round 1).
     r.vars.set(V.fireTest, 1);
     step(1);
     expect(r.vars.get('fire.test')).toBe(1);
-    expect(r.vars.get('ac.g800.fire_l_unlock')).toBe(1);
+    expect(r.vars.get('fire.eng1_warn')).toBe(1);
+    expect(r.vars.get('ac.g800.fire_l_unlock')).toBe(0);
     r.vars.set(V.fireTest, 0);
     step(1);
     expect(r.vars.get('ac.g800.fire_l_unlock')).toBe(0);

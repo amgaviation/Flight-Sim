@@ -167,6 +167,7 @@ The STANDBY bus is fed from the standby battery (24 V 10.4 Ah lead-acid, charged
 - PTCU hydraulic generator: 200 A.
 - External DC power: on the L mission bus.
 - Everything except the windshield heat runs on batteries only (BCA).
+- GEN LOAD L/R/APU: 75 % of the rating that applies (ground or flight), computed in `logic.ts` (`ac.lon.elec.gen_*_load_pct`), also shown on the ELECTRICAL synoptic.
 
 **Controls.**
 - BATT L/R: HOT BATT ↔ EMER.
@@ -174,8 +175,8 @@ The STANDBY bus is fed from the standby battery (24 V 10.4 Ah lead-acid, charged
 - MAIN L/R: MISSION ↔ MAIN.
 - INTERIOR: NORM / OFF.
 - GEN L/R/APU: ON / OFF / RESET, with automatic connection when ready.
-- BUS TIE: automatic on the ground. The button toggles in the air. The tie also closes automatically when only one side has a primary source (EST in the air).
-- STBY PWR: OFF / ON / TEST with an LED.
+- BUS TIE: automatic on the ground (the button does nothing). In the air a press toggles between the two states (OG 5-5/5-6) and the crew selection masks the automation until the next automatic trigger (a new one-sided / single-battery / APU-start event) or landing.
+- STBY PWR: OFF / ON / TEST with an LED. Amber = ON and the standby battery not being charged, i.e. no primary source on the L MISSION bus (OG 5-5); green = TEST with a good battery.
 - EXT PWR.
 
 **Automatic bus tie.** The tie closes when:
@@ -193,7 +194,8 @@ The STANDBY bus is fed from the standby battery (24 V 10.4 Ah lead-acid, charged
   - APU running with the right engine stopped (right pump);
   - low fuel (< 500 lb);
   - ejector low pressure.
-- **Recirculation pumps.** They run while the on-side boost pump is off and the tank holds more than 500 lb. They drive temperature only.
+- **Recirculation pumps.** OG 6-2: "always on during normal operations unless the on-side fuel pump is also running or the fuel level is too low" (EST threshold: the 500 lb FUEL LEVEL LOW level). They drive temperature only. The function audit suggested a low-temperature inhibit instead; the OG puts the temperature term on the scavenge ejectors, not on the recirc pumps.
+- **Scavenge ejectors** (OG 6-2): run at low fuel or very cold fuel (EST < −30 °C) with the engine running; shown on the FUEL synoptic (`ac.lon.fuel.scavenge*_on`).
 - **FUEL TRANSFER knob.** L TANK: the right pump pushes fuel to the left tank. R TANK: the left pump pushes fuel to the right tank. With both pumps running the net transfer is zero and FUEL TRANSFER FAIL posts.
 - **GRAVITY XFLOW.** Works in flight only.
 - **APU feed.** From the right tank.
@@ -206,7 +208,7 @@ The STANDBY bus is fed from the standby battery (24 V 10.4 Ah lead-acid, charged
 - **PTCU knob:** OFF / AUX A / NORM / AUX B / HYD GEN.
   - NORM: at power-up it charges the brake accumulators, B then A (EST 15 s each). It primes the on-side system during an engine start. Otherwise it transfers power (a bidirectional PTU).
   - AUX: an electric pump into A or B.
-  - HYD GEN: a 200 A generator driven from B. Moving the knob away for ≥ 1 s and back switches the source to A.
+  - HYD GEN: a 200 A generator driven from B (OG 13-4). Moving the knob away from HYD GEN for ≥ 1 s and back toggles the source (EST window: a return within 30 s; a later selection starts again from B). The source resets to B at every power-up. CONFLICT: OG 5-7 says HYD GEN starts on A and the toggle goes to B; the Section 13 system description (B default) is followed.
   - The PTCU is inhibited with a low reservoir (EST).
 - **Rudder Standby System.** A self-contained electric pump that powers the rudder when A is lost. RUDDER STANDBY NORM / OFF.
 - **Users.**
@@ -216,22 +218,22 @@ The STANDBY bus is fed from the standby battery (24 V 10.4 Ah lead-acid, charged
 - **Fluid temperature.** EST model. HYD O'TEMP above 135 °C.
 
 ### 4.4 Bleed, air conditioning, pressurization (OG 9-11; `systems/environment.ts`)
-- **Bleed ports.** LP and HP ports per engine. The HP port supplies when LP < 31.5 psig, or < 52 psig with wing A/I requested.
+- **Bleed ports.** LP and HP ports per engine. The HP PRSOV opens when LP < 31.5 psig (52 psig with wing A/I requested) and regulates the HP supply to that point (OG 9-2). At ground idle the manifold therefore sits near 31.5 psig and a cross-bleed start draws it below the 32 psi start minimum; the running engine needs about IDLE + 25 % N1 (OG 17-11/17-12).
 - **Valves.** The bleed PRSOV opens only above 12 psig. APU bleed feeds the L manifold. The BLEED ISOLATE valve (NORM / XFLOW) and a wing-only crossflow valve (XFLOW with wing A/I) sit between the sides. L/R PRESS SOURCE valves feed the ECS manifold.
 - **Automatic start logic.** During a start the ECS supply is removed. When the left engine starts with the right engine and the APU running, the start uses APU air only. Right-first starts are recommended.
 - **ACRP.** Heat exchangers plus one ACM.
-  - ECS knob: NORM / ACM ONLY / HEAT EXCHG ONLY.
-  - FLOW: NORM / HIGH. The APU gives 60 % of ACS capacity in NORM and 100 % in HIGH.
+  - ECS knob: NORM / ACM ONLY / HEAT EXCHG ONLY (OG 10-3). HEAT EXCHG ONLY (or the automatic switch after an ACM fault, failure `ecs.acm`) cannot cool below the RAT; ACM ONLY: outlet 10..40 °C and 80 % flow (EST). The pack outlet limits and flow come from `logic.ts`.
+  - FLOW: NORM / HIGH (EST 0.42 / 0.55 kg/s). With APU bleed only: 60 % of the ACS capacity in NORM and 100 % in HIGH (OG 10-4).
   - CABIN / CKPT TEMP knobs: NORM (GTC target) or manual supply temperature.
-  - Recirculation fan: AUTO / LOW / HIGH on the GTC.
+  - Recirculation fan: AUTO / LOW / HIGH on the GTC. Its motor power (3 A / 6 A) is added to the cabin heat load (EST).
 - **Pressurization.** 9.66 psid; relief EST 9.95 psid; CABIN DELTA P above 10.2 psid.
   - On the takeoff roll the cabin pre-pressurizes to about 200 ft below the field.
   - Landing target is 200 ft below landing elevation.
-  - High-altitude mode above an 8,000 ft field.
+  - High-altitude mode when the departure (latched at lift-off) or destination field is above 8,000 ft (OG 11-3).
   - PRESS MODE MANUAL with the CABIN ALT switch (slow for 6 s, then fast; single rate modelled).
   - DUMP is guarded.
   - Passenger masks deploy at 14,000 ft cabin (EST).
-- **Emergency Descent Mode** (BCA: cabin > 14,700 ft, AP engaged, > FL300: 90° left turn, idle, descend at Mmo/Vmo to 15,000 ft) is **not modelled** (open issue).
+- **Emergency Descent Mode** (BCA 2021; DGAC card "EMERGENCY DESCENT and EDM"; `systems/afcsExtras.ts`): cabin > 14,700 ft with the AP engaged above FL300 → HDG 90° left, selected altitude 15,000 ft, FLC at M0.82 / 315 KIAS (EST margins below Mmo/Vmo), A/T DESC (engaged if it was off). Level at 15,000 ft the speed target becomes 250 KIAS (EST). Any crew AFCS change (AP off, another lateral / vertical mode) ends EDM. Annunciation: white CAS EMERGENCY DESCENT (EST text; SCOPE: no dedicated FMA field). About 3,500-4,800 fpm from FL410.
 
 ### 4.5 Ice and rain (OG 12; `systems/environment.ts`)
 - Bleed-heated wing leading edges and engine inlets.
@@ -246,6 +248,7 @@ The STANDBY bus is fed from the standby battery (24 V 10.4 Ah lead-acid, charged
 - ON: door and self test (about 10-15 s). START: AVAIL in less than a minute (BCA). Bleed is available 90 s after the start.
 - Unattended operation: automatic fire shutdown and bottle discharge (BCA).
 - CAS: white APU ON above FL200, amber above FL350.
+- Start envelope (OG 8-2): ground starts to 13,500 ft, in-flight starts to FL310; above it the START command is inhibited (EST behaviour).
 
 ### 4.7 Fire protection (EST, Citation-family layout; `systems/environment.ts`)
 - The OG does not model fire protection.
@@ -265,7 +268,7 @@ The STANDBY bus is fed from the standby battery (24 V 10.4 Ah lead-acid, charged
   - The gear down-locks need hydraulic pressure to release, so no gear pins are needed (BCA).
 - **Brakes.** Carbon, brake-by-wire with anti-skid.
   - Inboard brakes on A, outboard on B.
-  - The EMER/PARK BRAKE handle applies all brakes from the accumulators.
+  - The EMER/PARK BRAKE handle meters emergency pressure (handle travel × 3,000 psi, limited by the accumulator) to all four assemblies through its own lines (OG 14-2/14-3); it works after a BRAKE FAIL (the `brakes.left/right` failures are the brake-by-wire channels here). PARK latches only at full travel. The toe brakes need the brake control unit (`elec.brake_ctl_powered`).
   - Automatic spin-down on gear retraction.
   - Pedal braking is disabled in the air.
   - BRAKE TEMP above 450 °C.
@@ -283,12 +286,13 @@ The STANDBY bus is fed from the standby battery (24 V 10.4 Ah lead-acid, charged
   - Stow: below 30 kt or when the throttles are advanced.
   - The accumulators allow deployment after a hydraulic loss.
 - **Trims.**
-  - Electric horizontal stabilizer: yoke switches, plus a secondary stab trim switch (guarded; SCOPE: same actuator). Display in degrees; takeoff band −7.5..−0.5° (EST from the OG 17-3 chart, −7 at 24 % MAC to 0 at 40 % MAC).
+  - Electric horizontal stabilizer: yoke switches (primary channel 1 / 2, breakers STAB TRIM PRI 1 L EMER / PRI 2 R EMER), plus the secondary trim (SECONDARY TRIM + rocker, breaker STAB TRIM SEC R EMER, half rate EST; SCOPE: same actuator). MASTER DISCONNECT held interrupts the primary channel, including a runaway; the secondary is not interrupted, and engaging it disengages the primary (runaway gone). Display in degrees; takeoff band −7.5..−0.5° (EST around the OG 17-3 chart). The EIS scale is the stabilizer in degrees with that band.
+  - OG 17-3 takeoff trim chart (read off the graph): −6.45° at 24 % MAC, −5.15° at 28 %, −3.9° at 32 %, −2.5° at 36 % and flat to 40 %. The FDM (`Cm0` 0.10, `Cm_trim` 0.203) trims to it at V2 / flaps 2, and the ground states set the chart stab for the loaded CG (`states.ts takeoffStabDeg`). The audit's "0° at 40 % MAC" does not match the published graph.
   - Electric aileron and rudder trim.
   - All three trims must be in the green band for takeoff, or NO TAKEOFF posts.
 - **Flaps.** Electric, lever on the right of the pedestal. UP / 1 (7°) / 2 (15°) / FULL (35°).
 - **Stall protection.** Stick shaker (AoA 0.82 normalized, EST; the gauge is amber from 0.8) and stick pusher (0.97, EST) (BCA).
-- **FBW limits.** No envelope protection overrides the pilot. The A/T gives min/max speed protection (BCA).
+- **FBW limits.** No envelope protection overrides the pilot. The A/T gives min/max speed protection (BCA; `systems/afcsExtras.ts`).
 - **PITCH/ROLL DISCONNECT** (DGAC abnormal card, AOPA, PAT). A T-handle splits the pilot's and copilot's columns and wheels, so each drives its own half of the elevator and ailerons after a jam. Model (`systems/pitchRollDisconnect.ts`): pulled, the surface is ½ operative half (the flying pilot's input) + ½ other half (frozen at the jam, or trailing at neutral). The AP disconnects and cannot be engaged while it is latched (EST). SCOPE: it is reset in the cockpit (a maintenance action on the aircraft). The handle position on the pedestal is EST.
 - **MASTER DISCONNECT** (the AP/TRIM DISC button on each wheel, and the hardware/keyboard AP DISC). Pressing it disconnects the AP. While it is held it interrupts electric trim and the pusher, and disengages nosewheel steering (DGAC abnormal card: "NOSEWHEEL STEERING MALFUNCTION: MASTER DISCONNECT push and hold").
 - **Pilot gearing (EST, `createSystems.ts` `PILOT_GEARING`).** The elevator and ailerons are cable driven, so the deflection a pilot can hold is force-limited (blow-down). The spring-centred sim column/wheel is geared with IAS:
@@ -310,7 +314,8 @@ The STANDBY bus is fed from the standby battery (24 V 10.4 Ah lead-acid, charged
 - **Lateral modes:** ROL, HDG, FMS (LNAV), VOR, LOC, BC, TO, GA.
 - **Vertical modes:** PIT, ALT, ALTS, ALTV, VS, FLC, PATH (VNAV path; G5000 CRG 190-02538-02 p.156 annunciates PATH), VFLC (VNAV climb), GS, GP, TO, GA.
 - **AP behaviour.** Engage limits: 400 ft after takeoff, 160 ft on approach. TO/GA disconnects the AP (BCA). Go-around pitch 7.5°. Not autoland capable.
-- **A/T modes:** TO, HOLD (on the ground above 60 kt, until 400 ft), CLIMB, DESC, SPD, RETARD (below 40 ft), MAX SPD, MIN SPD.
+- **A/T modes:** TO, HOLD (on the ground above 60 kt after TO/GA, or as soon as a lever is advanced to T/O by hand with the A/T engaged, until 400 ft; OG 7-5), CLIMB, DESC (stays DESC at the idle stop; no HOLD in the air), SPD, RETARD (below 40 ft), MAX SPD, MIN SPD.
+- **A/T protection** (`systems/afcsExtras.ts`, EST thresholds): above 400 ft RA, MIN SPD at AoA 0.72 of the stall AoA (cleared below 0.60) drives the levers to TO and stows the speedbrakes (needs the A/T engaged); MAX SPD within 2 kt of Vmo/Mmo (cleared 8 kt below) retards and engages the A/T if it was off (BCA).
 - **Speed selection.** SPD knob FMS / MAN.
 - **Approach speeds.** A pilot-selectable approach bug speed reduces to VREF plus an additive at 2 nm (BCA). Not modelled: open issue.
 
@@ -318,15 +323,15 @@ The STANDBY bus is fed from the standby battery (24 V 10.4 Ah lead-acid, charged
 - **Overhead.**
   - Exterior buttons: L LDG, R LDG, RECOG, PULSE, TAXI, WING INSP, TAIL FLOOD, ANTI COLL.
   - Knobs: PANEL, FLOOD, AUX.
-- **GTC Exterior Lights page.** NAV (auto ON at power-up); BEACON OFF / NORM / ON (NORM: on with RUN or a starter engaged); auto PULSE on TCAS TA/RA.
+- **GTC Exterior Lights page.** NAV: selected ON automatically when the G5000 powers up (rising edge of GDU power, `logic.ts`); BEACON OFF / NORM / ON, NORM at power-up (NORM: on with RUN or a starter engaged); auto PULSE on TCAS TA/RA. Both stay crew-selectable afterwards.
 - **Dimmers.** PFD/GTC dual knobs on the outboard lower panels. MFD/GTC dual knob on the forward pedestal. MAP LIGHT knobs.
 - **Emergency lights.** EMER LTS OFF / ARM / ON.
 
 ## 5. CAS messages (OG Section 3; `systems/cas.ts`)
 
 Inhibits:
-- **TOPI** (takeoff): from 85 kt until 400 ft or 30 s airborne.
-- **LOPI** (landing): below 400 ft RA until 50 kt / 30 s.
+- **TOPI** (takeoff, OG 3-3, event latched): set by lift-off, the IAS rising through 85 kt, or IAS > 30 kt with a brake failure; cancelled > 30 s airborne, above 400 ft, IAS < 50 kt (< 30 kt with a brake failure), after 90 s, or when the throttles leave T/O.
+- **LOPI** (landing, OG 3-4, event latched): set by touchdown or the RA dropping through 400 ft; cancelled 30 s on the ground, RA > 500 ft, IAS < 50 kt, or after 90 s.
 - **ESDI**: an engine is shut down.
 
 **Red: MASTER WARNING and tone**
@@ -335,15 +340,15 @@ Inhibits:
 |---|---|---|
 | BATTERY O'TEMP L/R | > 71 °C | TOPI, LOPI |
 | BRAKE FAIL | brakes inoperative below 400 ft | TOPI |
-| CABIN ALTITUDE | > 9,800 ft (14,800 ft in high-altitude mode) | TOPI, LOPI |
+| CABIN ALTITUDE | > 9,800 ft (14,800 ft in high-altitude mode; OG 3, OG 11-3 says amber there) | TOPI, LOPI |
 | CABIN DELTA P | > 10.2 psid | TOPI, LOPI |
-| ENG EXCEEDANCE L/R | N1 / N2 / ITT beyond limits (latched) | TOPI, LOPI |
+| ENG EXCEEDANCE L/R | N1 / N2 / ITT beyond limits > 1 s; latched until the maintenance (state) reset, not cleared by MASTER WARNING (OG 3-5) | TOPI, LOPI |
 | ENGINE FAIL L/R | FADEC: engine stopped with RUN selected | none |
 | GENS OFF | generators available but all selected off | TOPI, LOPI, ESDI |
 | HYD O'TEMP A/B | > 135 °C | TOPI, LOPI |
 | LANDING GEAR | not down and locked with flaps > 2, or below 500 ft with the throttles near idle (voice "LANDING GEAR") | none |
 | NO TAKEOFF | pre-flight conditions not met (flaps, trims, speedbrake, parking brake, XFLOW) with the throttles at TO | in air |
-| P/S BUTTON ON | ON on the ground for more than 2 min | TOPI, LOPI |
+| P/S BUTTON ON | ON on the ground for more than 2 min (replaces the amber one) | TOPI, LOPI |
 | ENG FIRE L/R, APU FIRE | fire detected (EST) | none |
 
 **Amber: MASTER CAUTION and chime**
@@ -353,14 +358,15 @@ Inhibits:
 - BLEED ISOLATE NORM (engine out > 2 min in flight). BLEED ISOLATE XFLOW (TO thrust on the ground, or > 5 min with both bleeds).
 - BRAKE FAIL (in flight). BRAKE TEMP L/R (> 450 °C).
 - BUS TIE CLOSED (> 5 min with both primaries).
-- CABIN ALTITUDE (> 8,500 ft).
+- CABIN ALTITUDE (> 8,500 ft; high-altitude mode: > 9,800 ft for 10 min, OG 3 CAS list; OG 11-3 says 30 min).
 - ELEC EMER L/R. EMER BUS OFF L/R. MAIN BUS OFF L/R. MISSION BUS OFF L/R.
 - ENG BLEED OFF L/R (on the ground).
 - FUEL IMBALANCE (> 500 lb). FUEL INLET COLD L/R (< 3 °C). FUEL LEVEL LOW L/R (< 500 lb). FUEL TANK COLD L/R (< −35 °C). FUEL TEMP MISCOMPARE (> 5 °C). FUEL TRANSFER FAIL. FUEL TRANSFER ON (into a tank already 60 lb heavier, or on > 10 min).
 - GEAR DISAGREE L/R/N.
-- GEN LOAD L/R/APU/HYD (> 75 %). GEN OFF L/R/APU. **GEN FAIL L/R** (EST addition: tripped or failed with the switch ON).
+- GEN LOAD L/R/APU/HYD (> 75 % of the ground / flight rating). GEN OFF L/R/APU (available but selected OFF, also with other generators online; suppressed only by GENS OFF). **GEN FAIL L/R** (EST addition, no Longitude source: the OG list has only GEN OFF / GENS OFF; kept so a tripped generator with its switch ON has a crew cue; the ELECTRICAL synoptic also shows the tripped source).
 - GND SPOILER FAIL. GRD SPOILER ACCUM.
-- HEAT EXCHG ONLY and ACM ONLY (on the ground).
+- HEAT EXCHG ONLY (on the ground, or the pack switched automatically to heat-exchanger mode after an ACM fault with the knob elsewhere; OG 10-3) and ACM ONLY (on the ground).
+- EST texts (no public Longitude source): ENG CONTROL FAULT L/R (FADEC channel fault, `fail.fadec.eng*`), PITCH/ROLL DISC (handle pulled), PITCH TRIM FAIL (runaway / jam / failed selected primary channel).
 - HYD GEN ON (another source available). HYD PRESS LOW A/B. HYD SHUTOFF A/B (pump available).
 - ICING (not all four anti-ice buttons ON).
 - PARK BRAKE LOW PRESS. PARK BRAKE ON (throttles advanced below TO).
@@ -369,7 +375,7 @@ Inhibits:
 - RUDDER FAIL A-B. RUDDER STANDBY OFF.
 - SPEEDBRAKE AUTO STOW. SPEEDBRAKES (< 500 ft).
 - YAW DAMPER FAIL A/B.
-- P/S BUTTON ON (on the ground, first 2 min).
+- P/S BUTTON ON (on the ground, first 2 min; never together with the red one).
 
 **White: CAS only**
 - A/I ENG ON L/R, A/I WING ON, A/I WING XFLOW OPEN, STAB DE-ICE ON, ICE PROTECT ALL ON.
@@ -383,6 +389,7 @@ Inhibits:
 - NO TAKEOFF (throttles not advanced).
 - PARK BRAKE ON.
 - PITOT STATIC ON (in air). PRESS SOURCE OFF L/R (on the ground).
+- EST texts: EMERGENCY DESCENT (EDM in progress), ENG START ABORT L/R (FADEC start abort: hot, hung, no light-off, or no rotation within 10 s, e.g. no starter air).
 
 ## 6. Normal procedures (OG 17; `checklists.ts`)
 
@@ -403,7 +410,7 @@ Inhibits:
 5. **Before taxi.** Flight controls. Speedbrakes retracted. Flaps 1 or 2. Instruments aligned; altimeters within 75 ft of the field and 50 ft of each other. ENG A/I as required. AUTO GROUND SPOILERS armed, POWER RESERVE AUTO (EST items).
 6. **Taxi.** Lights. Park brake stowed. Brakes. NWS. Reversers deploy/stow check.
 7. **Before takeoff.** Flaps, speedbrakes, trims, ice protection, V-speeds displayed, SPD knob FMS, briefing. In icing, P/S ON for 15 s. Lights. EIS/CAS (no NO TAKEOFF).
-8. **Takeoff.** Throttles TO; A/T shows green HOLD; N1 matches, green TO. Release the brakes. Rotate at VR to 10°.
+8. **Takeoff.** Throttles TO; A/T shows green HOLD (with the A/T engaged, HOLD comes as soon as the levers reach T/O on the ground); N1 matches, green TO. Release the brakes. Rotate at VR to 10°.
 9. **After takeoff.**
    - Gear UP with a positive rate.
    - Flaps UP at or above V2+20.
@@ -416,7 +423,7 @@ Inhibits:
 14. **Landing.** A/T RETARD at 50 ft; throttles IDLE; brakes after nosewheel touchdown; reversers, at idle by 45 KIAS.
 15. **Go-around.** TO/GA; throttles TO; 7.5° pitch; flaps 2; VAPP minimum; gear UP with a positive rate; flaps UP at VAPP+10.
 16. **Shutdown.** Throttles IDLE; park brake; ENG A/I OFF; RUN/STOP STOP; EMER LTS OFF; STBY PWR OFF; APU OFF; lights OFF; BATT OFF.
-17. **Also listed:** quick turn, APU start, dry motor (STOP + hold START until 19 % N2 or 15 s), cross-bleed start (running engine at idle + 25 % N1).
+17. **Also listed:** quick turn, APU start, dry motor (STOP + hold START until 20 % N2 or 15 s, OG 7-6), cross-bleed start (running engine at idle + 25 % N1: at plain idle the HP-regulated manifold is below 32 psi).
 
 Key abnormal procedures and the modelled reactions:
 
@@ -428,13 +435,21 @@ Key abnormal procedures and the modelled reactions:
 | Hydraulic A+B loss | Accumulators give ground spoilers, NWS and park/emergency brakes | — |
 | Engine fire | — | ENG FIRE switchlight, bottle switchlight above it, the other bottle if still burning |
 | APU fire | Automatic APU shutdown and bottle discharge (5 s) | APU FIRE switchlight (APU off, fuel shutoff, bottle) |
-| Engine failure at takeoff thrust | POWER RESERVE AUTO: APR on the operating engine (EST) | — |
+| Engine failure at takeoff thrust | POWER RESERVE AUTO: APR on the operating engine (EST) | MANUAL POWER RESERVE (WINDSHEAR, DGAC) |
+| Brake-by-wire failure (BRAKE FAIL) | Toe brakes lost | EMER/PARK BRAKE handle, metered (DGAC) |
+| Primary pitch-trim runaway | PITCH TRIM FAIL (EST) | MASTER DISCONNECT push and hold (DGAC); SECONDARY TRIM (EST) |
+| FADEC fault | ENG CONTROL FAULT (EST) | Throttle as required; RUN/STOP STOP if uncontrollable (DGAC uncommanded thrust) |
+| Start without starter air | ENG START ABORT after 10 s (EST) | Establish ≥ 32 psi |
+| Cabin > 14,700 ft, AP on, > FL300 | EDM: 90° left, FLC descent to 15,000 ft, A/T DESC | Masks 100 %, MIC SEL MASK, MIC/INPH as required (DGAC) |
 | Flap drive fault | FLAP FAIL, flaps held (EST) | FLAP RESET |
 | Yaw-damper normal channel | YAW DAMPER FAIL A/B | STANDBY YAW DAMP |
 | Primary stab-trim channel | Trim inoperative on that channel | STAB PRI TRIM CHANNEL SELECT, then SECONDARY TRIM |
 | Cabin altitude | Passenger masks at 14,000 ft | Emergency descent, crew masks |
 
-Checklist text for these abnormal procedures is not written yet.
+Emergency / abnormal checklists (`checklists.ts`, DGAC C700 card): CABIN ALTITUDE, EMERGENCY DESCENT and EDM, WINDSHEAR,
+BRAKE FAIL / WHEEL BRAKE FAILURE, PRIMARY PITCH TRIM RUNAWAY (+ EST secondary-trim continuation), JAMMED PITCH OR ROLL
+CONTROL SYSTEM, NOSEWHEEL STEERING MALFUNCTION, INADVERTENT STALL / PUSH, AT HOLD FAIL, BATTERY O'TEMP, ENG CONTROL FAULT /
+UNCOMMANDED THRUST.
 
 ## 7. Cockpit control inventory
 
@@ -585,11 +600,14 @@ PASS OXY, FIRE WARN TEST, ANNUN TEST.
 - **Yokes** (ram's horn): pitch / roll through `input.pitch` / `input.roll`; outboard grip (c_yokeL21): AP/TRIM DISC
   (red, `ac.lon.yoke.disc_l/_r`, event `ap.disc`), ICS push (`ac.lon.yoke.ics_l/_r`, SCOPE), split pitch-trim switch
   (`ac.lon.yoke.trim_l/_r`); PTT trigger on the back of the grip (`ac.lon.yoke.ptt_l/_r` → `ac.lon.com.transmitting`,
-  SCOPE).
+  SCOPE). Inboard grip face: MIC/INPH rocker (inboard MIC / outboard INPH = hot intercom; `ac.lon.audio.mic_inph_l/_r`
+  → `ac.lon.audio.intercom_hot_l/_r`; DGAC CABIN ALTITUDE step 3; EST position, SCOPE no audio model).
 - **Rudder pedals**: `input.yaw`, toe brakes.
 - **Tiller**: black finger-grip knob in the forward left console (`ac.lon.tiller`, ±81°).
 - **Oxygen**: mask in a console cup with the white hose loop and red squeeze tabs (`ac.lon.oxy.mask_l/_r`); regulator
-  NORM / 100 % / EMER, PRESS TO TEST and FLOW beside the cup (EST positions).
+  NORM / 100 % / EMER, PRESS TO TEST and FLOW beside the cup (EST positions). MIC SEL switchlight aft of them (MASK green /
+  BOOM white, `ac.lon.audio.mic_sel_l/_r` → mask mic live `ac.lon.audio.mask_mic_l/_r` with the mask in use; DGAC CABIN
+  ALTITUDE step 2; EST position, SCOPE no audio model).
 - **Circuit breakers**: forward sidewall grid panels (columns N.. left / AA.. right, rows 1-5), name under each
   breaker; every breaker is a `cb.<load>` of the network.
 
@@ -626,10 +644,9 @@ Written by the G5000 synoptic controls (`systems/synoptics.ts`):
 ## 9. Scope, simplifications and open issues
 
 - **Not modelled:**
-  - Emergency Descent Mode.
-  - A/T MIN SPD / MAX SPD protection modes and auto-engagement.
+  - (Emergency Descent Mode and the A/T MIN SPD / MAX SPD protection are modelled since the function fix round, §15.)
   - The 2-nm approach-speed reduction.
-  - Secondary stab trim as a separate motor.
+  - Secondary stab trim as a separate motor (separate switch path and breaker, same actuator: SCOPE).
   - Windshield heat controller temperatures.
   - The CABIN ALT switch's two rates.
   - The standby display's own boot / test.
@@ -637,7 +654,7 @@ Written by the G5000 synoptic controls (`systems/synoptics.ts`):
   - Weather radar (G5000 state only).
 - **Fire protection and oxygen:** layout and capacities are EST, because the OG does not describe them.
 - **Hydraulic assignments** of the gear and nosewheel steering (A / B) are EST.
-- **Liftoff speed.** The scripted 3°/s rotation lifts off at about VR+14 kt, a few knots late against typical VR+8..10 (EST expectation).
+- **Liftoff speed.** The scripted 3°/s rotation lifts off at about VR+15 kt; explained by the all-engine acceleration (§15.2), not changed.
 - **FPG takeoff field lengths** are factored balanced-field values. The tests check the all-engine 35 ft distance × 1.15 and the accelerate-stop distance against them. One-engine-inoperative accelerate-go is not tested.
 - **Minor data conflict:** MZFW is 26,000 lb (FPG) vs 26,800 lb (OG).
 
@@ -752,6 +769,7 @@ Code: `src/aircraft/citation-longitude/cockpit/overhead/index.ts`, `cockpit/side
   STBY / HOT BATT; R: EMER, MISSION, MAIN / INTERIOR / SERVICE), bound to `cb.<load>` / `cb.<load>_tripped`.
   Feeders above 50 A (APU starter, PTCU motor, MAIN feeds, BUS TIE) are J-box current limiters, not panel breakers.
   A network breaker missing from the table is placed automatically in an L/R MISC group.
+- MIC SEL MASK / BOOM switchlight per console (function fix round 1, §15).
 - No audio panel (G5000 audio is the GTC "Audio & Radios" page, OG 4), no jacks / PTT, no cockpit-door control (SCOPE).
 
 ### 11.3 Systems changes made with this work
@@ -887,9 +905,7 @@ This pass re-walked the control inventory against the code (every `LON_VARS` con
   - The cockpit alone has 702 visible meshes and 351 k triangles.
 
 ### 13.4 Remaining gaps (honest list)
-- **Longitudinal trim model.** The FDM trims across the loading range with only ~0.12° of stab per % MAC. The OG chart implies ~0.44° (−7° at 24 %, 0° at 40 %). The modelled stabilizer (`Cm_trim` 0.55) and elevator (`Cm_de` 0.95) are about 3-4× more effective than the chart implies.
-  - The takeoff states therefore keep −4.5° (in the green band) instead of the chart value. The chart value would pitch the aircraft up hard at rotation in this model.
-  - A consistent re-tune (`Cm_trim` ≈ 0.12, `Cm0`, `Cm_de`, then the trim-dependent FPG checks) is still to do. The pilot gearing hides the elevator part for the pilot, but the stab trim rate still feels fast.
+- **Longitudinal trim model.** Resolved in the function fix round (§4.10, §15): `Cm0` 0.10 / `Cm_trim` 0.203 trim to the OG 17-3 chart (read off the graph: ~0.33° per % MAC, flat above 36 %), and the ground states set the chart value. `Cm_de` unchanged (it does not set the liftoff speed, §15.2).
 - **Liftoff speed** is still VR + 14-17 kt with the scripted 3°/s rotation (unchanged by the CG move). All-engine distances meet the FPG.
 - **Draw calls.** The remaining ~700 cockpit meshes are per-control moving parts: 58 breakers × 3 meshes, and ~250 push-button caps, lenses and legends. Instancing them needs per-instance transforms in the shared control library (not an additive change). The panels' static parts are already consolidated (`merge.ts`).
 - **Toggle middle-position legends** (GEN OFF, STBY PWR ON) are partly under the switch nut: this is the shared ToggleSwitch layout. They are still readable.
@@ -937,3 +953,57 @@ the resulting inventory. Main points:
 - The EMER GEAR handle, aileron / rudder trim controls and the PITCH/ROLL DISCONNECT mount position are EST.
 - "TRIM" under the MFD / GTCs dimmer (c_pedFL2) is not engraved (meaning unclear).
 - The pilot's default view still shows the lower side windshield left of the panel wrap (cheek loft, EST shape).
+
+## 15. Function-audit fix round 1 (OG / DGAC / BCA function lens)
+
+Tests: `tests/aircraft/citation-longitude/functionFix1.test.ts` (each fails without its fix).
+
+### 15.1 Fixed
+- **EIS** (`createSystems.ts LONGITUDE_EIS_SIM`): SPOILERS reads `ac.lon.spoiler_ind` = max(speedbrake, ground-spoiler)
+  extension (was the unused `surf.speedbrake`); stab trim in degrees with the NO TAKEOFF band as the green band.
+- **Electrical**: BUS TIE toggles in the air over the automation; STBY PWR amber LED only when not charging; GEN LOAD vs
+  the ground / flight rating; new trim and standby-pitot breakers (STAB TRIM PRI 1 / PRI 2 / SEC, AIL TRIM, RUD TRIM,
+  P/S HT STBY).
+- **PTCU HYD GEN** source toggle from the exit edge only; B at power-up.
+- **Lights**: NAV ON and beacon NORM at G5000 power-up.
+- **A/T**: HOLD on the ground when the levers are advanced by hand; stays DESC at the idle stop in flight (the shared
+  bizjet A/T turned an airborne HOLD into CLIMB thrust on every FLC descent); MIN SPD / MAX SPD protection.
+- **EDM** (§4.4).
+- **Brakes**: EMER/PARK BRAKE proportional and independent of the normal (brake-by-wire) path; PARK at full travel.
+- **Pitch trim**: MASTER DISCONNECT held stops a primary runaway; secondary trim independent (half rate); breakers.
+- **ECS**: ACM ONLY / HEAT EXCHG ONLY limits, automatic heat-exchanger mode (failure `ecs.acm`), APU-only flow, recirc
+  fan heat.
+- **APU** start envelope (FL310 in flight, 13,500 ft on the ground).
+- **Engines**: no-rotation start abort (10 s, EST) with ENG START ABORT; ENG CONTROL FAULT; HP bleed regulated to
+  31.5 / 52 psig (cross-bleed needs IDLE + 25 % N1); wing A/I valves 4 s after selection with the idle raised; dry
+  motor 20 % N2; ENG EXCEEDANCE latched until the maintenance reset.
+- **CAS**: event-latched TOPI / LOPI (OG 3-3/3-4); high-altitude mode from the departure or destination; 10 min delay
+  for the high-alt amber CABIN ALTITUDE; single P/S BUTTON ON; GEN OFF APU with engine generators online; HEAT EXCHG
+  ONLY automatic case; PITCH/ROLL DISC and PITCH TRIM FAIL (EST texts).
+- **Synoptics**: PRE-FLIGHT (NO TAKEOFF reasons), FLIGHT CONTROLS, SUMMARY (shutdown time, dry motor, exceedance, brake
+  temperatures), PROPULSION (engine digits, APU); FUEL recirc / scavenge pumps; ELECTRICAL generator load %.
+- **Audio**: MIC SEL and MIC/INPH controls (§7.9).
+- **Flight model**: stab trim vs CG follows the OG 17-3 chart (§4.10); ground states set the chart stab.
+- **Standby air data**: own pitot / static probe (3) with its heater (EST).
+- **TOLD**: FIELD ELEV > LIMIT above 14,000 ft (OG 1-1; DGAC card 10,000 ft conflict noted in `data.ts`).
+- **Checklists**: DGAC emergency / abnormal items (§6).
+
+### 15.2 Not changed (with the reason)
+- Liftoff about VR + 15 kt: at 34,000 lb the all-engine acceleration is ~5.7 kt/s (T/W 0.45); the OG rotation (10° at
+  ~3°/s) reaches the ~7.2° liftoff attitude 2.6 s after VR. Raising `Cm_de` (0.95 → 1.6) does not change it (the
+  rotation rate, not the elevator authority, sets it); the FPG VR–V2 spread (13 kt) is the OEI V2. Liftoff stays
+  below V2 + 8 (check ride).
+- ELEC EMER endurance ~2 h: OG 5-2 says "over 40 minutes", a floor that 2 h meets; no public load data justify
+  heavier EMER-bus loads.
+- PITCH/ROLL DISCONNECT handle position: still EST (no photograph of it).
+- GEN FAIL L/R kept as an EST message (§5).
+
+### 15.3 Shared-library changes (additive, opt-in, default behaviour unchanged)
+- `systems/gear/Brakes.ts`: `emergency.bypassFailures`.
+- `systems/flightcontrols/TrimAxis.ts`: `electric.runawayEnable`.
+- `systems/pneumatic/types.ts` + `PneumaticSystem.ts`: `PackDef.minOutletCBinding / maxOutletCBinding`,
+  `BleedSourceDef.hp.regulation`.
+- `systems/fadec/EngineStartController.ts`: `noRotationS / noRotationN2Pct`.
+- `systems/fadec/Autothrottle.ts`: `holdAfterDescentIdle`.
+- `systems/warning/FlightPhase.ts`: `takeoffInhibit.latch`, `landingInhibit.latch`.
+

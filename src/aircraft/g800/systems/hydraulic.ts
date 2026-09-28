@@ -28,6 +28,13 @@ import { G800_LIMITS } from '../data';
 import { G800_VARS as V } from '../vars';
 
 const GAL_L = 3.785411784;
+/**
+ * EST internal leakage at 3,000 psi: ~20 FBW servo-valve actuators (both systems drive every primary surface, SCQ) at
+ * ~0.4 L/min each. With the system accumulators (EST 1.5 / 1.0 L) the pressure decays to the 1,500 psi low-pressure
+ * switch in a few seconds after a pump loss (SCQ: EDP loss drops the system pressure promptly; function fix round 1 -
+ * the 0.8 L/min default held 1,680 psi for more than 20 s after a dual EDP failure).
+ */
+export const LEAK_LPM = 8;
 export const hydFrac = (sys: 'left' | 'right'): string => `clamp01(hyd.${sys}_psi / 2600)`;
 
 export function createHydraulics(ctx: Pick<SimContext, 'vars'>): HydraulicSystem {
@@ -35,8 +42,8 @@ export function createHydraulics(ctx: Pick<SimContext, 'vars'>): HydraulicSystem
   const fc = '1 + 5 * (abs(surf.elevator) + abs(surf.aileron) + abs(surf.rudder))'; // FBW actuators, both systems (EST L/min)
   return new HydraulicSystem(ctx.vars, {
     systems: [
-      { id: 'left', nominalPsi: P, reservoirL: G800_LIMITS.hydReservoirLeftGal * GAL_L, accumulator: { prechargePsi: G800_LIMITS.accumPrechargePsi, volumeL: 2 }, lowPressPsi: 1500 },
-      { id: 'right', nominalPsi: P, reservoirL: G800_LIMITS.hydReservoirRightGal * GAL_L, accumulator: { prechargePsi: G800_LIMITS.accumPrechargePsi, volumeL: 1.5 }, lowPressPsi: 1500 },
+      { id: 'left', nominalPsi: P, reservoirL: G800_LIMITS.hydReservoirLeftGal * GAL_L, accumulator: { prechargePsi: G800_LIMITS.accumPrechargePsi, volumeL: 1.5 }, lowPressPsi: 1500, internalLeakLpm: LEAK_LPM },
+      { id: 'right', nominalPsi: P, reservoirL: G800_LIMITS.hydReservoirRightGal * GAL_L, accumulator: { prechargePsi: G800_LIMITS.accumPrechargePsi, volumeL: 1.0 }, lowPressPsi: 1500, internalLeakLpm: LEAK_LPM },
     ],
     pumps: [
       { id: 'edp_l', system: 'left', kind: 'edp', maxFlowLpm: 60, drive: 'eng1.n2_pct / 100', on: `${V.fireHandleL} == 0` },

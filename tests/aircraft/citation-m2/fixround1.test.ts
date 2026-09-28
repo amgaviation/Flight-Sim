@@ -277,7 +277,7 @@ describe('Citation M2 fix round 1: glareshield / cockpit logic', () => {
     const sd = M2_CHECKLISTS.find((c) => c.title === 'Shutdown')!.items.map((i) => i.challenge);
     expect(sd).toContain('STBY FLT DISPLAY switch');
     expect(sd).toContain('EMERGENCY LIGHTS switch');
-    const fire = M2_CHECKLISTS.find((c) => c.title === 'ENGINE FIRE')!;
+    const fire = M2_CHECKLISTS.find((c) => c.title === 'ENG FIRE LH or RH')!;
     expect(fire.items.some((i) => i.response === 'LIFT COVER and PUSH')).toBe(true);
   });
 });

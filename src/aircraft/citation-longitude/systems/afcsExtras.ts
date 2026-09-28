@@ -12,7 +12,8 @@
  *    OG 7-5 A/T protection modes MAX SPD ("limit throttle to prevent
  *    overspeed") and MIN SPD ("increase throttle to prevent nearing stall
  *    speeds"); BCA 2021: "If the autothrottles are not engaged, they will
- *    automatically engage to retard the throttles ... If you fly too slowly, the
+ *    automatically engage to retard the throttles" (MAX SPD only; MIN SPD
+ *    needs the A/T engaged, EST) "... If you fly too slowly, the
  *    autothrottles will advance and if the speedbrakes are deployed, they will
  *    automatically stow" (stow in logic.ts). Thresholds EST: MIN SPD at AoA 0.72
  *    of the stall AoA (shaker 0.82), cleared below 0.60; MAX SPD within 2 kt of
@@ -99,7 +100,10 @@ export class LongitudeAtProtection implements Subsystem {
       else if (vmax > 0 && (ias > vmax - MAX_SPD_ON_KT || (this.prot === 2 && ias > vmax - MAX_SPD_OFF_KT))) want = 2;
     }
     if (want !== 0 && this.prot === 0) {
-      if (!at.engaged) at.pressEngage(); // BCA: the A/T engages automatically for the protection
+      // BCA: for an overspeed "if the autothrottles are not engaged, they will automatically engage to retard the
+      // throttles". MIN SPD is an A/T mode (OG 7-5): with the A/T off it does not engage (EST reading; stall
+      // demonstrations are flown with the A/T off).
+      if (!at.engaged && want === 2) at.pressEngage();
       for (let k = 0; k < 2; k++) this.lever[k] = v.get(LEVERS[k]);
     }
     this.prot = at.engaged ? want : 0;

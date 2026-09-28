@@ -103,6 +103,12 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): ElectricalNetwo
     dc('alt_pump_l', 'l_main_dc', 'fuel.alt_l_amps', 15),
     dc('radar', 'l_main_dc', 4.0, 7.5),
     dc('fms', 'l_main_dc', 1.5, 5),
+    // VHF 3 / HF 1 / HF 2 transceivers and the PA amplifier (function fix round 1; EST buses and currents: non-essential
+    // radios on the main DC buses; transmit current while keyed from systems/audio.ts).
+    dc('com3', 'r_main_dc', `1.0 + 5 * ${V.comTx(3)}`, 5),
+    dc('hf1', 'l_main_dc', `1.5 + 20 * ac.g800.hf1_tx`, 25),
+    dc('hf2', 'r_main_dc', `1.5 + 20 * ac.g800.hf2_tx`, 25),
+    dc('pa', 'l_main_dc', 1.0, 5),
     dc('ice_det', 'l_main_dc', 0.6, 3),
     dc('panel_lts', 'l_main_dc', `4 * ${V.ltPanel} + 3 * ${V.ltFlood} + 1.5 * ${V.ltDome} + 2 * ${V.stormLt}`, 10, { model: 'resistive' }),
     dc('ext_nav', 'l_main_dc', 2.0, 5, { enabled: V.ltNav, model: 'resistive' }),

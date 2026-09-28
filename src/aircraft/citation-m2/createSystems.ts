@@ -9,7 +9,8 @@
  *   FADEC levers -> start controllers -> yaw damper, stall warning ->
  *   mechanical flight controls, trims -> flaps, speed brakes, steering, brakes ->
  *   overspeed, altitude alerter, TAWS, TCAS, takeoff config -> CAS ->
- *   disconnect aurals -> lighting -> M2LogicLate (annunciator outputs).
+ *   disconnect aurals -> lighting -> M2LogicLate (annunciator outputs) ->
+ *   M2ProcedureMonitor (checklist latches).
  *
  * The cockpit (src/aircraft/citation-m2/cockpit, other agent) maps
  * `suite.displayList()` onto its screen meshes and builds the G3000 hardware
@@ -37,6 +38,7 @@ import { createAvionics, type AvionicsBlocks, type AvionicsOptions } from './sys
 import { M2_CAS } from './systems/cas';
 import { M2Logic, M2LogicLate } from './systems/logic';
 import { M2AvionicsHealth } from './systems/avionicsHealth';
+import { M2ProcedureMonitor } from './systems/procedures';
 import { M2, TEST_SEL } from './vars';
 import { GcuController } from '../../avionics/garmin-g3000/state/Gcu';
 
@@ -46,6 +48,8 @@ export interface M2Systems extends EngineControls, FlightControlBlocks, Avionics
   failures: FailureManager;
   logic: M2Logic;
   logicLate: M2LogicLate;
+  /** Checklist latches (system tests, CVR / mask tests, electrical / trim / AP disconnect checks, breakers). */
+  procedures: M2ProcedureMonitor;
   avnHealth: M2AvionicsHealth;
   elec: ElectricalNetwork;
   fuel: FuelSystem;
@@ -90,6 +94,7 @@ export function createSystems(ctx: SimContext, opts: CreateSystemsOptions = {}):
   });
   const lights = createLighting(ctx);
   const logicLate = new M2LogicLate(ctx);
+  const procedures = new M2ProcedureMonitor(ctx);
   // Power-loss consequences of LRUs without a power input in the shared models (GMA, XPDR, radar, GDU cooling).
   const avnHealth = new M2AvionicsHealth(ctx, av.suite);
   // GCU 275 PFD controllers (LH / RH, under the glareshield; S&D15 §10.2.A / §10.3.D).
@@ -136,11 +141,12 @@ export function createSystems(ctx: SimContext, opts: CreateSystemsOptions = {}):
     av.disc,
     lights,
     logicLate,
+    procedures,
   ];
   for (const s of list) {
     if (s === failures) continue;
     const f = (s as { failures?: () => FailureDef[] }).failures;
     if (typeof f === 'function') failures.register(f.call(s));
   }
-  return { list, failures, logic, logicLate, avnHealth, gcu, elec, fuel, hyd, pneu, press, ice, fire, oxy, lights, cas, ...eng, ...fc, ...av };
+  return { list, failures, logic, logicLate, procedures, avnHealth, gcu, elec, fuel, hyd, pneu, press, ice, fire, oxy, lights, cas, ...eng, ...fc, ...av };
 }

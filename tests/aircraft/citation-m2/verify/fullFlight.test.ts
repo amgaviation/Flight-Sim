@@ -221,15 +221,18 @@ describe('Citation M2 check ride KICT -> KOKC (full normal procedure)', () => {
       r.run(1);
       // Arriving from PER the FILUM feeder is aligned with the final course: "straight-in", so the crew
       // removes the hold-in-lieu-of-procedure-turn (HF) at FILUM on the GTC (Waypoint Options > Remove).
+      // The loaded transition keeps the leg into the IAF ahead of the hold (shared FlightPlan fix, M2-L42 / F63),
+      // so the distance to destination counts PER -> FILUM, and removing the hold leaves FILUM in the route.
       const hfIdx = sys.suite.fms.plans.active.legs.findIndex((l) => l.type === 'HF');
-      if (hfIdx >= 0) {
-        expect(fpl.deleteLeg(hfIdx)).toBe(true);
-        // The editor drops the fix with its HF leg: put FILUM (the IAF) back in front of ROHAA as a TF.
-        const legsNow = sys.suite.fms.plans.active.legs;
-        const rohaa = legsNow.findIndex((l) => l.fix?.ident === 'ROHAA');
-        const filum = fpl.resolve('FILUM')[0];
-        if (rohaa > 0 && !legsNow.some((l) => l.fix?.ident === 'FILUM')) expect(fpl.insertWaypoint(rohaa, filum)).toBeTruthy();
-      }
+      expect(hfIdx).toBeGreaterThan(0);
+      expect(sys.suite.fms.plans.active.legs[hfIdx - 1].fix?.ident).toBe('FILUM');
+      r.run(1);
+      const withHoldNm = v.get('fms.dist_to_dest_nm');
+      expect(fpl.deleteLeg(hfIdx)).toBe(true);
+      expect(sys.suite.fms.plans.active.legs.some((l) => l.fix?.ident === 'FILUM' && l.type === 'TF')).toBe(true);
+      r.run(1);
+      LOG.push(`dist to dest with the hold ${withHoldNm.toFixed(1)} nm, straight-in ${v.get('fms.dist_to_dest_nm').toFixed(1)} nm`);
+      expect(v.get('fms.dist_to_dest_nm')).toBeLessThan(withHoldNm);
       r.run(1);
       if (v.getString('fms.next_wpt') !== 'PER') expect(fpl.activateLeg(1)).toBe(true);
       r.run(3);

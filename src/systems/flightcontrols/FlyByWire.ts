@@ -130,6 +130,26 @@ export interface FlyByWireConfig {
   speedSync?: Binding;
   /** (Appended by the g800 aircraft.) Extra inceptor-equivalent vars added per axis (e.g. yaw assist). Default none. */
   addVars?: { pitch?: string[]; roll?: string[]; yaw?: string[] };
+  /**
+   * (Appended by the g800 aircraft.) Sensor var names the control laws read instead of the side-1 defaults
+   * (adc1.* / ahrs1.*), e.g. the outputs of an aircraft-side sensor voter (triplex air data / IRS). Default side 1.
+   */
+  sensors?: Partial<FbwSensorVars>;
+}
+
+/** (Appended by the g800 aircraft.) Sensor inputs of the FBW laws. */
+export interface FbwSensorVars {
+  ias: string;
+  mach: string;
+  aoa: string;
+  pressAlt: string;
+  pitch: string;
+  bank: string;
+  p: string;
+  q: string;
+  r: string;
+  nz: string;
+  ny: string;
 }
 
 export class FlyByWire implements Subsystem {
@@ -164,6 +184,7 @@ export class FlyByWire implements Subsystem {
   private readonly extraRoll: string[];
   private readonly extraYaw: string[];
   private readonly sync: () => boolean;
+  private readonly sn: FbwSensorVars;
 
   constructor(env: BlockEnv, cfg: FlyByWireConfig) {
     const v = env.vars;
@@ -185,6 +206,20 @@ export class FlyByWire implements Subsystem {
     this.extraRoll = cfg.addVars?.roll ?? [];
     this.extraYaw = cfg.addVars?.yaw ?? [];
     this.sync = compileCondition(v, cfg.speedSync ?? 0, false);
+    const sn = cfg.sensors ?? {};
+    this.sn = {
+      ias: sn.ias ?? ADC.ias(1),
+      mach: sn.mach ?? ADC.mach(1),
+      aoa: sn.aoa ?? SENSOR_VARS.aoa(1),
+      pressAlt: sn.pressAlt ?? SENSOR_VARS.pressAlt(1),
+      pitch: sn.pitch ?? ADC.pitch(1),
+      bank: sn.bank ?? ADC.bank(1),
+      p: sn.p ?? SENSOR_VARS.p(1),
+      q: sn.q ?? SENSOR_VARS.q(1),
+      r: sn.r ?? SENSOR_VARS.r(1),
+      nz: sn.nz ?? SENSOR_VARS.nz(1),
+      ny: sn.ny ?? SENSOR_VARS.ny(1),
+    };
   }
 
   private sumVars(names: string[]): number {
@@ -203,7 +238,7 @@ export class FlyByWire implements Subsystem {
   reset(): void {
     const v = this.vars;
     this.stab = v.get(SURF.pitchTrim);
-    this.uRef = v.get(ADC.ias(1));
+    this.uRef = v.get(this.sn.ias);
     this.pI = v.get(SURF.elevator);
     this.rollPid.reset(0);
     this.elev = v.get(SURF.elevator);
@@ -232,7 +267,7 @@ export class FlyByWire implements Subsystem {
     this.mode = mode;
 
     const flaps = v.get(SURF.flapsDeg);
-    const ias = v.get(ADC.ias(1));
+    const ias = v.get(this.sn.ias);
     const onGround = this.ground();
     const yoke = v.get(INPUT.pitch) + v.get(FCS_VARS.apServo('pitch')) + this.sumVars(this.extraPitch);
     const wheel = v.get(INPUT.roll) + v.get(FCS_VARS.apServo('roll')) + this.sumVars(this.extraRoll);
@@ -250,12 +285,12 @@ export class FlyByWire implements Subsystem {
 
     if (mode === 'NORMAL' && !onGround) {
       const p = cfg.pitch;
-      const theta = v.get(ADC.pitch(1));
-      const phi = v.get(ADC.bank(1));
-      const q = v.get(SENSOR_VARS.q(1));
-      const nz = v.get(SENSOR_VARS.nz(1));
-      const alpha = v.get(SENSOR_VARS.aoa(1));
-      const mach = v.get(ADC.mach(1));
+      const theta = v.get(this.sn.pitch);
+      const phi = v.get(this.sn.bank);
+      const q = v.get(this.sn.q);
+      const nz = v.get(this.sn.nz);
+      const alpha = v.get(this.sn.aoa);
+      const mach = v.get(this.sn.mach);
       if (this.wasGround) {
         // Lift-off: start the flight law from the current state.
         this.pI = this.elev;
@@ -280,7 +315,7 @@ export class FlyByWire implements Subsystem {
           aoaLim = true;
         }
       }
-      const vmo = sched(p.vmoKt, v.get(SENSOR_VARS.pressAlt(1)));
+      const vmo = sched(p.vmoKt, v.get(this.sn.pressAlt));
       const over = Math.max(ias - (vmo + 6), (mach - (p.mmo + 0.01)) * 600);
       if (over > 0) {
         dnz = Math.max(dnz, 0.02 * over);
@@ -319,7 +354,7 @@ export class FlyByWire implements Subsystem {
       const maxRate = r.maxRateDps ?? 15;
       const hold = r.bankHoldDeg ?? 33;
       const maxBank = r.maxBankDeg ?? 67;
-      const pRate = v.get(SENSOR_VARS.p(1));
+      const pRate = v.get(this.sn.p);
       let pCmd: number;
       if (Math.abs(wheel) > 0.05) {
         this.bankHolding = false;
@@ -347,8 +382,8 @@ export class FlyByWire implements Subsystem {
 
       // ---- yaw
       const y = cfg.yaw ?? {};
-      const rRate = v.get(SENSOR_VARS.r(1));
-      const ny = v.get(SENSOR_VARS.ny(1));
+      const rRate = v.get(this.sn.r);
+      const ny = v.get(this.sn.ny);
       this.rud = clamp1(pedal - (y.yawDampGain ?? 0.02) * this.yawWashout.update(rRate, dt) - (y.turnCoordGain ?? 0.5) * ny);
     } else {
       // Ground law / ALTERNATE / DIRECT: proportional gearing.
@@ -356,7 +391,7 @@ export class FlyByWire implements Subsystem {
       this.elev = clamp1(yoke * pg);
       this.ail = clamp1(wheel * (d.roll ?? 1));
       let yd = 0;
-      if (mode !== 'DIRECT' && this.irsOk()) yd = (cfg.yaw?.yawDampGain ?? 0.02) * this.yawWashout.update(v.get(SENSOR_VARS.r(1)), dt);
+      if (mode !== 'DIRECT' && this.irsOk()) yd = (cfg.yaw?.yawDampGain ?? 0.02) * this.yawWashout.update(v.get(this.sn.r), dt);
       this.rud = clamp1(pedal * (d.yaw ?? 1) - yd);
       this.stab = clamp1(this.stab + trimSw * directStabRate * dt);
       this.uRef = ias;

@@ -21,7 +21,8 @@ const cas = (r: Rig) =>
     .map((m) => `${m.level[0].toUpperCase()}:${m.text}`)
     .join(' | ');
 function audit(r: Rig, title: string): string {
-  const cl = M2_CHECKLISTS.find((c) => c.title === title)!;
+  const cl = M2_CHECKLISTS.find((c) => c.title === title);
+  if (!cl) return `(no list ${title} after fix round 1)`;
   return cl.items.map((it) => `${it.challenge}=${it.check ? (it.check(r.vars) ? 'OK' : 'NO') : '-'}`).join('; ');
 }
 
