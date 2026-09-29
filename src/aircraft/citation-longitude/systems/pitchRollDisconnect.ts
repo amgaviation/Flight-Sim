@@ -26,9 +26,12 @@
  * at NORM; pulled = both axes split; rotated up = PITCH RECONNECT (pitch runs
  * re-joined, roll still split), down = ROLL RECONNECT; pushed in =
  * "PITCH/ROLL RECONNECT PUSH-RESET" (both re-joined, NORM).
- * SCOPE: on the aircraft the reconnect detents re-engage the disconnect
- * mechanism in flight only when the wheels / columns are aligned; here they
- * re-join at once.
+ * Reconnect (LON4-03): on the aircraft the reconnect detents re-engage the
+ * disconnect mechanism only when the columns / wheels are aligned (patent
+ * US7229047, dual-cable disconnect couplings). Modelled: a reconnect selection
+ * re-joins an axis only once the flying pilot's half is within RECONNECT_ALIGN
+ * of the other half (the jam position, or neutral with no jam); until then the
+ * axis stays split with the handle in the detent. EST threshold.
  *
  * Runs right after MechanicalFlightControls and before the spoilers (roll
  * spoilers follow the aileron). No per-step allocation.
@@ -38,6 +41,8 @@ import type { SimVars } from '../../../core/SimVars';
 import { LON_VARS as V } from '../vars';
 
 const RATE = 2.5; // surface full scale per second: MechanicalFlightControls default (EST)
+/** EST: coupling re-engagement window (normalized surface units), see the header (patent US7229047). */
+const RECONNECT_ALIGN = 0.08;
 
 interface Half {
   column: string;
@@ -62,9 +67,13 @@ export class LongitudePitchRollDisconnect implements Subsystem {
     const st = v.get(V.pitchRollDisc);
     for (let i = 0; i < this.halves.length; i++) {
       const h = this.halves[i];
-      const split = i === 0 ? st === 1 || st === 3 : st === 1 || st === 2;
-      if (!split) h.wasSplit = false;
+      const wantSplit = i === 0 ? st === 1 || st === 3 : st === 1 || st === 2;
       const channel = v.get(h.surf); // MechanicalFlightControls output this frame (frozen if jammed)
+      const other = v.get(h.jam) !== 0 ? channel : 0;
+      // Reconnect only when the halves are aligned (LON4-03, patent US7229047): the coupling re-engages
+      // once the flying pilot's half is within RECONNECT_ALIGN of the other half; otherwise stay split.
+      const split = wantSplit || (h.wasSplit && Math.abs(h.free - other) > RECONNECT_ALIGN);
+      if (!split) h.wasSplit = false;
       if (!split) {
         h.free = channel;
         continue;
@@ -75,7 +84,6 @@ export class LongitudePitchRollDisconnect implements Subsystem {
       const step = RATE * dt;
       const d = cmd - h.free;
       h.free += d > step ? step : d < -step ? -step : d;
-      const other = v.get(h.jam) !== 0 ? channel : 0;
       v.set(h.surf, 0.5 * h.free + 0.5 * other);
     }
   }

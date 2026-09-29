@@ -22,9 +22,10 @@
  * SCOPE: blue valve lights show one brightness for "open" and "in transit"
  * (the systems publish 1 dim / 2 bright; the lens lights for either). The
  * DOME WHITE switch is on the aft overhead (aft.ts). The yaw damper
- * indicator (not on the early-NG drawing, which keeps it on the MIP) stays
- * in the FLIGHT CONTROL module (EST). START VALVE OPEN is shown on the
- * upper DU engine display only (NG), not as an overhead light.
+ * indicator is on the MIP standby column (mainPanel.ts, as on the SCBG
+ * drawing and the NG centre panel; the overhead FLIGHT CONTROL module keeps
+ * only the YAW DAMPER switch and light, FCOM 9.10). START VALVE OPEN is
+ * shown on the upper DU engine display only (NG), not as an overhead light.
  */
 import { RotaryKnob } from '../../../../cockpit/controls';
 import { addTransferSwitches } from '../../../../avionics/boeing-737';
@@ -92,25 +93,10 @@ export function buildForwardOverhead(c: B738CockpitContext, root: Panel): void {
     o.annun(id('speed_trim_fail'), 'SPEED TRIM FAIL', [seg.on(['SPEED TRIM', 'FAIL'], 'amber', L.speedTrimFail)], 0.105, 0.18, 0.024, 0.011);
     o.annun(id('mach_trim_fail'), 'MACH TRIM FAIL', [seg.on(['MACH TRIM', 'FAIL'], 'amber', L.machTrimFail)], 0.105, 0.193, 0.024, 0.011);
     o.annun(id('auto_slat_fail'), 'AUTO SLAT FAIL', [seg.on(['AUTO SLAT', 'FAIL'], 'amber', L.autoSlatFail)], 0.105, 0.206, 0.024, 0.011);
-    // Yaw damper: light and the solenoid-held switch; indicator EST (see header).
+    // Yaw damper: light and the solenoid-held switch only; the indicator is on the MIP (mainPanel.ts, FCOM 9.10).
     o.label('YAW DAMPER', 0.045, 0.195, 0.0018);
     o.annun(id('yaw_damper'), 'YAW DAMPER', [seg.on(['YAW', 'DAMPER'], 'amber', L.yawDamper)], 0.045, 0.207, 0.024, 0.011);
     o.toggle({ id: id('yd_sw'), label: 'YAW DAMPER', var: B738.ydSw, ...OFF_ON }, 0.043, 0.228, false, 0.65);
-    dial(
-      o,
-      () => new ScaleDial({
-        id: 'b738_yd_ind',
-        vars,
-        powerVar: 'elec.yd_powered',
-        scales: [{ angle: lin(-1, 1, -60, 60), ticks: [{ v: -1, label: 'L' }, { v: -0.5, major: false }, { v: 0 }, { v: 0.5, major: false }, { v: 1, label: 'R' }] }],
-        needles: [{ var: L.yawDamperInd }],
-        title: ['YAW', 'DAMPER'],
-        titleY: 170,
-      }),
-      0.077,
-      0.225,
-      0.024,
-    );
   }
   {
     const o = M('navdisp', 0.001, 0.247, 0.145, 0.35);
@@ -183,11 +169,12 @@ export function buildForwardOverhead(c: B738CockpitContext, root: Panel): void {
       'elec.batt_bus_powered',
       [L.dcVolts, L.dcAmps, L.acVolts, L.acAmps, L.acHz],
       [
-        { text: () => f0(vars.get(L.dcAmps)), x: 100, y: 50, size: 56 },
-        { text: () => f0(vars.get(L.acHz)), x: 300, y: 50, size: 56 },
-        { text: () => f0(vars.get(L.dcVolts)), x: 70, y: 132, size: 56 },
-        { text: () => f0(vars.get(L.acAmps)), x: 200, y: 132, size: 56 },
-        { text: () => f0(vars.get(L.acVolts)), x: 330, y: 132, size: 56 },
+        // Green LED numerals (b737.org.uk NG overhead photographs: the DC/AC meter digits read green day and night).
+        { text: () => f0(vars.get(L.dcAmps)), x: 100, y: 50, size: 56, color: '#40d040' },
+        { text: () => f0(vars.get(L.acHz)), x: 300, y: 50, size: 56, color: '#40d040' },
+        { text: () => f0(vars.get(L.dcVolts)), x: 70, y: 132, size: 56, color: '#40d040' },
+        { text: () => f0(vars.get(L.acAmps)), x: 200, y: 132, size: 56, color: '#40d040' },
+        { text: () => f0(vars.get(L.acVolts)), x: 330, y: 132, size: 56, color: '#40d040' },
       ],
       0.216,
       0.095,

@@ -149,10 +149,12 @@ export interface SeatParts {
  * Z aft, origin on the floor under the front of the seat pan. Seat reference
  * point height ~0.42 m (airline), 0.36 m (GA) EST.
  */
-export function seatGeometry(style: SeatStyle): SeatParts {
+export function seatGeometry(style: SeatStyle, panRaise = 0): SeatParts {
+  // (panRaise appended by b737-800, additive: raises the seat pan / back / armrests by panRaise metres on a
+  // taller pedestal base, for decks whose design-eye geometry needs a higher cushion. Default 0 = unchanged.)
   const ga = style === 'ga';
   const W = ga ? 0.46 : 0.52;
-  const panH = ga ? 0.34 : 0.42;
+  const panH = (ga ? 0.34 : 0.42) + panRaise;
   const panD = ga ? 0.46 : 0.5;
   const pan = roundedBox(W, 0.1, panD, 0.035, 4);
   transform(pan, 0, panH, panD / 2);

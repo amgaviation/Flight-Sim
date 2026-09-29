@@ -12,6 +12,7 @@
  *          ac.g800.stuck_mic    1 when a transmitter has been keyed continuously past the timeout
  *                               (CAS advisory "Stuck Mic"; the radio stops transmitting).
  *          ac.g800.hf{1,2}_tx   HF transmitting (drives the HF load current)
+ *          ac.g800.pa_tx        PA keyed (drives the PA amplifier load current; fix round 1 F07)
  *          ac.g800.rx{r}_level{s} headset level of receiver r on side s (TSC AUDIO app on x volume x receiver power)
  * Function fix round 1: MIC select and the receivers are set on the TSC AUDIO application (systems/tscApps.ts);
  * each transmitter needs its own power (VHF 1 / 2: elec.radio1/2, VHF 3: elec.com3, HF 1 / 2: elec.hf1/2, PA: elec.pa)
@@ -68,6 +69,7 @@ export class G800Audio implements Subsystem {
     let tx3 = 0;
     let hf1 = 0;
     let hf2 = 0;
+    let pa = 0;
     let stuck = 0;
     for (let i = 0; i < 2; i++) {
       const s = SIDES[i];
@@ -86,6 +88,7 @@ export class G800Audio implements Subsystem {
       else if (keyed === 3) tx3 = 1;
       else if (keyed === 4) hf1 = 1;
       else if (keyed === 5) hf2 = 1;
+      else if (keyed === 6) pa = 1;
       // Receiver levels at this side's headset.
       for (let r = 0; r < RX_POWER.length; r++) {
         const lvl = pwr && v.get(RX_POWER[r]) !== 0 && v.get(this.rxOn[i][r]) !== 0 ? Math.max(0, Math.min(1, v.get(this.rxVol[i][r]))) : 0;
@@ -97,6 +100,7 @@ export class G800Audio implements Subsystem {
     v.set(V.comTx(3), tx3);
     v.set('ac.g800.hf1_tx', hf1);
     v.set('ac.g800.hf2_tx', hf2);
+    v.set(V.paTx, pa); // PA keyed: the cabin PA amplifier draws its keyed current (electrical.ts 'pa'; fix F07)
     v.set(V.stuckMic, stuck);
   }
 }

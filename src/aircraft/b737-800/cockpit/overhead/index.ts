@@ -22,6 +22,7 @@ import { MOUNTS } from '../layout';
 import { INSET } from '../shell';
 import { buildForwardOverhead, FWD } from './forward';
 import { buildAftOverhead, AFT } from './aft';
+import { ovhdPanelMaterial } from './parts';
 
 /** Cockpit-only derived vars for the cabin altitude / rate dials (x 1000 ft, x 1000 fpm). */
 const CAB_ALT_K = 'ac.b738.ck.cab_alt_k';
@@ -30,12 +31,16 @@ const CAB_RATE_K = 'ac.b738.ck.cab_rate_k';
 export function buildOverhead(c: B738CockpitContext): void {
   const { b, ctx } = c;
   const vars = ctx.vars;
-  // Gain EST: incandescent 5 V edge-lit overhead plates read brighter than the thin engraving suggests.
-  b.zone({ id: 'ovhd', intensityVar: 'ac.light.panel_ovhd', gain: 2.2 });
+  // Gain EST: incandescent 5 V edge-lit overhead plates read brighter than the thin engraving suggests; raised
+  // (2.2 -> 6.5, fix round 1 B738-L03) so every legend is legible at PANEL dimmer ~50 %, tuned against the
+  // b737.org.uk night overhead photograph (paneloverhead_737-700_night.jpg).
+  b.zone({ id: 'ovhd', intensityVar: 'ac.light.panel_ovhd', gain: 6.5 });
 
-  const fwd = b.panel({ ...MOUNTS.overheadFwd, name: 'b738.ovhd', width: FWD.w, height: FWD.h, origin: 'top-left', material: 'panel', screws: false });
+  // Base plates in the overhead plate material (slightly lighter than 'panel' so the shadowed ceiling renders
+  // the same Boeing grey as the direct-lit MIP; see parts.ts ovhdPanelMaterial, fix round 1 B738-L11).
+  const fwd = b.panel({ ...MOUNTS.overheadFwd, name: 'b738.ovhd', width: FWD.w, height: FWD.h, origin: 'top-left', material: ovhdPanelMaterial(b.env), screws: false });
   buildForwardOverhead(c, fwd);
-  const aft = b.panel({ ...MOUNTS.overheadAft, name: 'b738.aovhd', width: AFT.w, height: AFT.h, origin: 'top-left', material: 'panel', screws: false });
+  const aft = b.panel({ ...MOUNTS.overheadAft, name: 'b738.aovhd', width: AFT.w, height: AFT.h, origin: 'top-left', material: ovhdPanelMaterial(b.env), screws: false });
   buildAftOverhead(c, aft);
 
   const lining = b.env.materials.custom('paint', 0xb9bab5, 0.75);

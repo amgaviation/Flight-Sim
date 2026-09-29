@@ -363,6 +363,12 @@ export const B738 = {
   /** Radio tuning panel (VHF COM 1 / 2) transfer (momentary) and panel OFF switch (0 OFF / 1 ON). */
   comXfer: (r: Side) => `${P}com${r}_xfer`,
   rtpPower: (r: Side) => `${P}rtp${r}_on`,
+  /**
+   * Radio tuning panel TEST push button (momentary; Gables NG RTP): held, the panel runs its display self test
+   * (all LCD segments driven, logic.ts publishes `ac.b738.rtp{r}_test_active` and the frequency windows show the
+   * all-8s segment pattern). SCOPE: display / lamp self test only, no receiver BITE result.
+   */
+  comTest: (r: Side) => `${P}com${r}_test`,
   /** ADF control panels: mode OFF (0) / ANT (1) / ADF (2); TONE (0/1); transfer (momentary). */
   adfMode: (r: Side) => `${P}adf${r}_mode`,
   adfTone: (r: Side) => `${P}adf${r}_tone`,
@@ -401,6 +407,14 @@ export const B738 = {
   wxrGain: `${P}wxr_gain`,
   wxrTilt: `${P}wxr_tilt_deg`,
   wxrPower: `${P}wxr_on`,
+  /**
+   * WXR controller IDNT and STAB buttons (SCBG P8 drawing / NG weather radar controller). STAB (0 OFF / 1 ON,
+   * default ON): antenna attitude stabilization; OFF, the beam follows the airframe so the displayed tilt wanders
+   * with pitch and bank (surveillance.ts wxrEffectiveTiltDeg). IDNT (momentary): while held the display
+   * suppresses ground-clutter returns to identify weather (SCOPE: annotation flag consumed by the ND overlay).
+   */
+  wxrStab: `${P}wxr_stab`,
+  wxrIdnt: `${P}wxr_idnt`,
   /**
    * HF 1 / 2 control panels (P8, SCBG drawing: frequency window, RF SENS, OFF / USB / AM mode selector; Collins
    * HFS-900 style; fitted per operator). Mode OFF (0) / USB (1) / AM (2); frequency kHz 2,000..29,999 in 1 kHz

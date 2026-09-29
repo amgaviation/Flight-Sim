@@ -56,6 +56,16 @@ export const G800_CAS: CasMessageDef[] = [
   { id: 'fcs_backup', text: 'Flight Control Backup Mode', level: 'warning', when: V.fcsBackup },
   { id: 'fcs_fail', text: 'Flight Control Fail', level: 'warning', when: 'gear.air_ground == 0 && !fcc.power_ok' }, // [EST] no FCC and no BFCU power
   { id: 'takeoff_config', text: 'Takeoff Config', level: 'warning', when: 'alert.takeoff_config' }, // [EST] Gulfstream TOCW red CAS; the aural names the item (TakeoffConfigWarning)
+  // Reverser unlock in flight (fix round 1 F01): the G450-family CAS carries a red "Reverser Unlock, L-R"
+  // warning with an aural (code450 abnormal pages); posted when the FADEC sees the sleeve unlocked or in
+  // transit without a reverse-lever command. Mixed-case per the G800 style.
+  ...sides.map((x): CasMessageDef => ({
+    id: `rev_unlock_${x.l}`,
+    text: `${x.s} Reverser Unlock`,
+    level: 'warning',
+    when: `gear.air_ground == 0 && (fadec.eng${x.i}.rev_unlocked || eng${x.i}.reverser_pos > 0.05) && ${V.rev(x.i)} < 0.02`,
+    aural: { callout: `${x.s === 'L' ? 'Left' : 'Right'} reverser unlock`, priority: 8, repeatS: 5 },
+  })),
 
   // =============================================================== CAUTIONS (amber)
   // ---- electrical
@@ -92,6 +102,10 @@ export const G800_CAS: CasMessageDef[] = [
   ...sides.map((x): CasMessageDef => ({ id: `oil_temp_${x.l}`, text: `${x.s} Engine Oil Temp High`, level: 'caution', when: `eng${x.i}.oil_temp_c > 170`, delayS: 2 })), // E135 / GVI max 170 degC
   ...sides.map((x): CasMessageDef => ({ id: `eng_exceed_${x.l}`, text: `${x.s} Engine Exceedance`, level: 'caution', when: `eng${x.i}.running && (eng${x.i}.n1_pct > 97.8 || eng${x.i}.n2_pct > 103.4 || eng${x.i}.itt_c > 950)`, delayS: 1 })), // E135 overspeed / transient TGT
   ...sides.map((x): CasMessageDef => ({ id: `start_protect_${x.l}`, text: `${x.s} Engine Start Protect`, level: 'advisory', when: V.startProtect(x.i) })), // C450S G700/G800 powerplant
+  // Amber ground variant of the reverser unlock (fix round 1 F01): sleeve unlocked / in transit on the ground
+  // without a reverse command past the normal stow time ([EST] text in the F01 warning's style; delay lets a
+  // commanded stow transit finish without a nuisance caution).
+  ...sides.map((x): CasMessageDef => ({ id: `rev_unlock_gnd_${x.l}`, text: `${x.s} Reverser Unlock`, level: 'caution', when: `gear.air_ground && (fadec.eng${x.i}.rev_unlocked || eng${x.i}.reverser_pos > 0.05) && ${V.rev(x.i)} < 0.02`, delayS: 5 })),
   // ---- bleed / ECS / pressurization
   ...sides.map((x): CasMessageDef => ({ id: `bleed_low_${x.l}`, text: `${x.s} Bleed Pressure Low`, level: 'caution', when: `eng${x.i}.running && pneu.bleed_${x.l}_valve_open && pneu.${x.l}_man_psi < 12 && !ac.g800.warn_inh_active`, delayS: 5, inhibit: ['GROUND'] })), // [C450]
   ...sides.map((x): CasMessageDef => ({ id: `bleed_hot_${x.l}`, text: `${x.s} Bleed Air Hot`, level: 'caution', when: `pneu.bleed_${x.l}_trip` })), // [C450]
@@ -100,7 +114,14 @@ export const G800_CAS: CasMessageDef[] = [
   // ---- ice
   ...sides.map((x): CasMessageDef => ({ id: `wai_fail_${x.l}`, text: `${x.s} Wing Anti-Ice Fail`, level: 'caution', when: `${V.waiOn(x.i)} && pneu.wai_${x.l}_ok < 0.5`, delayS: 120 })), // [EST] (SCQ: amber after 2 min out of temperature)
   ...sides.map((x): CasMessageDef => ({ id: `cai_fail_${x.l}`, text: `${x.s} Cowl Anti-Ice Fail`, level: 'caution', when: `${V.caiOn(x.i)} && pneu.cai_${x.l}_ok < 0.5`, delayS: 20 })), // [EST]
-  { id: 'probe_heat_fail', text: 'Probe Heat Fail', level: 'caution', when: `${V.probeHeatOn} && (fail.ice.pitot1.heat || fail.ice.pitot2.heat || !elec.probes_l_powered || !elec.probes_r_powered)`, delayS: 2 }, // [EST]
+  // Per-probe heat monitoring (fix round 1 F09): GVI-family CAS annunciates individual probe-heat failures
+  // per side so the crew knows which ADS to distrust (SCQ ice & rain; side-labeled texts [EST] in GVI style).
+  // Pitot 1 / static 1 and the standby pitot 3 are on the L probes bus, pitot 2 / static 2 on the R (environment.ts).
+  { id: 'pitot_heat_fail_l', text: 'L Pitot Heat Fail', level: 'caution', when: `${V.probeHeatOn} && (fail.ice.pitot1.heat || !elec.probes_l_powered)`, delayS: 2 },
+  { id: 'pitot_heat_fail_r', text: 'R Pitot Heat Fail', level: 'caution', when: `${V.probeHeatOn} && (fail.ice.pitot2.heat || !elec.probes_r_powered)`, delayS: 2 },
+  { id: 'pitot_heat_fail_std', text: 'Std Pitot Heat Fail', level: 'caution', when: `${V.probeHeatOn} && (fail.ice.pitot3.heat || !elec.probes_l_powered)`, delayS: 2 },
+  { id: 'static_heat_fail_l', text: 'L Static Heat Fail', level: 'caution', when: `${V.probeHeatOn} && (fail.ice.static1.heat || !elec.probes_l_powered)`, delayS: 2 },
+  { id: 'static_heat_fail_r', text: 'R Static Heat Fail', level: 'caution', when: `${V.probeHeatOn} && (fail.ice.static2.heat || !elec.probes_r_powered)`, delayS: 2 },
   // ---- fire protection
   { id: 'fire_loop_fault', text: 'Fire Detection Loop Fault', level: 'caution', when: 'fire.eng1_fault || fire.eng2_fault || fire.apu_fault' }, // [C450]
   { id: 'bottle_l', text: 'L Fire Bottle Discharge', level: 'caution', when: 'fire.bottle_l_discharged' }, // [C450]
@@ -116,6 +137,7 @@ export const G800_CAS: CasMessageDef[] = [
   { id: 'bfcu_fail', text: 'BFCU Fail', level: 'caution', when: '!elec.bfcu_powered && elec.fcc_powered && (eng1.running || eng2.running || gear.air_ground == 0)', delayS: 1 },
   { id: 'speed_brake_auto_retract', text: 'Speed Brake Auto Retract', level: 'caution', when: `gear.air_ground == 0 && ${V.speedbrake} > 0.1 && !${V.idleBoth}`, delayS: 1 }, // [SCQ]
   { id: 'flap_fail', text: 'Flap Fail', level: 'caution', when: 'flaps.disagree || flaps.asym' }, // [EST]
+  { id: 'stab_fail', text: 'Stabilizer Failed', level: 'caution', when: 'fail.fbw.stab' }, // [SCQ] jammed horizontal stabilizer (failure fbw.stab; fix round 1 F13)
   { id: 'trim_up_limit', text: 'Elevator Trim Up Limit', level: 'advisory', when: 'surf.pitch_trim > 0.98' }, // [EPIC]
   { id: 'trim_dn_limit', text: 'Elevator Trim Down Limit', level: 'advisory', when: 'surf.pitch_trim < -0.98' }, // [EPIC]
   { id: 'aoa_limiting', text: 'AOA Limiting', level: 'advisory', when: 'fbw.aoa_limit' }, // [EPIC]
@@ -155,8 +177,9 @@ export const G800_CAS: CasMessageDef[] = [
   { id: 'rat_deployed', text: 'RAT Deployed', level: 'advisory', when: V.ratDeployed }, // [EST]
   { id: 'rat_gen_on', text: 'RAT Generator On', level: 'advisory', when: 'ac.g800.rat_mode' }, // code450 G700/G800 electrical (blue)
   { id: 'fcs_batt_ebha_on', text: 'EBHA Battery On', level: 'advisory', when: `${V.fcsBattEbha} && !elec.emer_ac_powered && elec.emer_dc_powered` }, // [EST] text
-  { id: 'fwd_emer_batt_on', text: 'Fwd Emer Battery On', level: 'advisory', when: V.ebattOn }, // code450 G700/G800 electrical
-  { id: 'aft_emer_batt_on', text: 'Aft Emer Battery On', level: 'advisory', when: V.ebattOn },
+  // Per-pair advisories (code450 G700/G800 electrical: two independent pairs; fix round 1 F08).
+  { id: 'fwd_emer_batt_on', text: 'Fwd Emer Battery On', level: 'advisory', when: V.ebattFwdOn },
+  { id: 'aft_emer_batt_on', text: 'Aft Emer Battery On', level: 'advisory', when: V.ebattAftOn },
   { id: 'door_safety', text: 'Main Door Safety On', level: 'advisory', when: `${V.doorSafety} && gear.air_ground` }, // [EST]
   { id: 'ice_detected', text: 'Ice Detected', level: 'advisory', when: 'ice.detected' }, // [EST]
   { id: 'hfr_on', text: 'Heated Fuel Return On', level: 'advisory', when: V.hfrActive }, // [EST]

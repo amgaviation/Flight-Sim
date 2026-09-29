@@ -186,6 +186,9 @@ export function createG800Systems(ctx: SimContext, opts: G800SystemsOptions = {}
         variant: 'symmetry',
         // The real Symmetry TSCs are tall portrait tablets (G800 demonstrator flight-deck photograph; fix round 1 L01).
         tscPortrait: true,
+        // GP HDG/TRK key cycles OFF -> HDG -> TRK -> OFF (BJT500: the Symmetry lateral key selects heading
+        // OR track; 'TRK' engraved on the panel arc). Function fix round 1 F02.
+        gpHdgTrkToggle: true,
         // PFD flap-limit placards from the G800 limits (FSB App. 4: flaps 39 190 KCAS; the shared G800_AIRFRAME
         // default carries the G650 180 kt value).
         // showPlacardLimit: the PFD speed tape draws the placard of the current flap position / VLE (function fix round 1).
@@ -223,7 +226,9 @@ export function createG800Systems(ctx: SimContext, opts: G800SystemsOptions = {}
     pf.descentMach = sp.descentMach;
   }
   // G800 TSC applications: FLT CTL (autobrake, ground spoilers, roll / yaw trim) and ECB (electronic breakers).
-  if (suite) installG800TscApps(suite, ctx.vars, elec.breakerNames().map((b) => b.name));
+  // The returned un-listen (QA hook on the shared EventBus) is disposed with the aircraft (fix round 1).
+  const offTscApps = suite ? installG800TscApps(suite, ctx.vars, elec.breakerNames().map((b) => b.name)) : null;
+  const tscAppsHook: Subsystem | null = offTscApps ? { name: 'g800.tsc_apps', update() {}, dispose: offTscApps } : null;
 
   // ---- engines / FADEC / autothrottle
   const eng = createEngines(ctx);
@@ -285,6 +290,9 @@ export function createG800Systems(ctx: SimContext, opts: G800SystemsOptions = {}
     },
     roll: { maxRateDps: 15, bankHoldDeg: 33, maxBankDeg: 67 },
     trimSwitchVars: [V.ssTrim(1), V.ssTrim(2), V.altTrimCmd], // grip trim switches + the pedestal PITCH TRIM split switch
+    // Jammed stabilizer failure (SCQ flight-controls quiz lists the CAS 'Stabilizer Failed'; a jammed stab is a
+    // trained abnormal). The C* law compensates within elevator authority. Function fix round 1 F13.
+    stabFrozen: 'fail.fbw.stab',
     speedSync: `(input.ap_disc || ${V.ssDisc(1)} || ${V.ssDisc(2)}) && !ap.engaged`, // hardware button or either 3D grip button
     addVars: { yaw: [V.eldac] },
   });
@@ -419,6 +427,7 @@ export function createG800Systems(ctx: SimContext, opts: G800SystemsOptions = {}
     ...(radios ? [radios] : []),
     ...(fms ? [fms] : []),
     ...(suite ? [suite.system, new G800SfdMenu(ctx.events, suite)] : []),
+    ...(tscAppsHook ? [tscAppsHook] : []),
     eng.ratings,
     afcs,
     eng.at,
@@ -459,6 +468,8 @@ export function createG800Systems(ctx: SimContext, opts: G800SystemsOptions = {}
     { id: 'fire.core2', name: 'Right engine core fire', category: 'fire' },
     { id: 'steer.pedal', name: 'Pedal steering channel', category: 'landing gear', description: 'Rudder-pedal steering lost (CAS Pedal Steering Fail); the tiller still steers.' },
     { id: 'gear.lock_solenoid', name: 'Gear handle lock solenoid', category: 'landing gear', description: 'The handle lock solenoid stays locked after takeoff: LOCK RELEASE is needed to raise the gear.' },
+    // Jammed horizontal stabilizer (SCQ flight-controls "Stabilizer Failed"; function fix round 1 F13).
+    { id: 'fbw.stab', name: 'Stabilizer jam', category: 'flight controls', description: 'Horizontal stabilizer jammed: no auto-trim or manual trim (CAS Stabilizer Failed); the FBW compensates with elevator.' },
   ]);
 
   return {

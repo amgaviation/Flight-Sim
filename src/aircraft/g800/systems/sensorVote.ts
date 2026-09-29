@@ -129,6 +129,9 @@ export class G800SensorVote implements Subsystem {
     }
     v.set(FCC_AIR_OK, bits(airMask) >= 2 ? 1 : 0);
     v.set(FCC_IRS_OK, bits(irsMask) >= 2 ? 1 : 0);
+    // Voted-sensor block health diagnostic (ac.g800.fcs_src, vars.ts): valid ADCs * 10 + valid IRSs
+    // (fix round 1 F14: the declared var was never written).
+    v.set('ac.g800.fcs_src', bits(airMask) * 10 + bits(irsMask));
 
     // Coupled side (PFD CMD): 1 or 2.
     const side2 = v.get(EPIC_VARS.coupleSide, 1) === 2;

@@ -126,7 +126,11 @@ export const G650_VARS = {
   paxShutoff: `${P}oxy.pass_shutoff`, // PASS OXYGEN shutoff: 1 ON (open), 0 OFF
   oxyMaskL: `${P}oxy.mask_l`, // pilot quick-donning mask out of its stowage (EROS MLD 20, LUC): 1 in use
   oxyMaskR: `${P}oxy.mask_r`,
+  /** @deprecated kept for compatibility; each EROS mask has its own regulator: use oxyMaskModeL / oxyMaskModeR. */
   oxyMaskMode: `${P}oxy.mask_mode`, // mask regulator: 0 N (diluter), 1 100 %, 2 EMERGENCY
+  // Each EROS mask has its own N / 100 % / EMERGENCY regulator (LUC oxygen): one mode var per crew mask.
+  oxyMaskModeL: `${P}oxy.mask_mode_l`, // pilot mask regulator: 0 N (diluter), 1 100 %, 2 EMERGENCY
+  oxyMaskModeR: `${P}oxy.mask_mode_r`,
 
   // ---- EXTERIOR / INTERIOR LIGHTS (overhead)
   ltNav: 'ac.light.nav_sw',
@@ -200,6 +204,11 @@ export const G650_VARS = {
   doorMain: 'ac.door.main', // 0 closed .. 1 open
   doorBaggage: 'ac.door.baggage', // internal baggage door
   doorExtBaggage: 'ac.door.ext_baggage',
+  // Flight-deck divider door on the aft bulkhead (cabin photographs show a cockpit divider/door; the lock
+  // switch and its logic are EST - no public lock-panel source found, dossier §13).
+  doorCockpit: `${P}door.cockpit`, // 0 closed .. 1 open (animated door leaf)
+  doorLockSw: `${P}door.lock_sw`, // cockpit door LOCK switch (pedestal/side console, EST): 1 LOCKED
+  doorLocked: `${P}door.locked`, // derived (systems/audio.ts): door closed and lock commanded
 
   // ======================================================== DERIVED (written by systems/logic.ts)
   lBtbCmd: `${P}elec.l_btb_cmd`,
@@ -240,6 +249,14 @@ export const G650_VARS = {
   aircraftConfig: `${P}aircraft_config`, // speed brake with flaps 39 / gear down in flight
   raasActive: `${P}taws.raas_active`, // RAAS available (TAWS powered, not inhibited)
   fmsCruise: `${P}fms_cruise`, // airborne in the FMS cruise phase (VNAV CRZ): automatic CRZ thrust rating (engines.ts)
+  // ---- added by fix round 1 (function lens)
+  parkSetCmd: `${P}park_set_cmd`, // logic.ts: PARK BRAKE handle near full travel (~>= 0.9) = parking brake SET
+  accumInbdPsi: `${P}brakes.accum_inbd_psi`, // inboard brake accumulator (charged from the LEFT system, LUC)
+  accumOutbdPsi: `${P}brakes.accum_outbd_psi`, // outboard brake accumulator (RIGHT system)
+  eprMode: (i: number) => `${P}eng${i}_epr_mode`, // BR725 EEC thrust-setting mode: 1 EPR (primary), 0 N1 "ALT" (reversion)
+  edm: `${P}press.edm`, // Emergency Descent Mode latched (high cabin altitude, no crew response)
+  raasCallout: `${P}taws.raas_callout`, // string: last RAAS callout ('' when none)
+  raasOnRunway: `${P}taws.raas_on_rwy`, // 1 while RAAS considers the aircraft on a runway
 
   // ======================================================== YOKE / TILLER (added with the cockpit build)
   // The app's input module rewrites input.pitch_trim_rate / input.ap_disc / input.tiller every frame, so the
@@ -296,7 +313,8 @@ export const G650_CONTROL_VARS: string[] = [
   G650_VARS.fireTestLA, G650_VARS.fireTestLB, G650_VARS.fireTestRA, G650_VARS.fireTestRB, G650_VARS.fireFaultTest,
   G650_VARS.sysTest('stall'), G650_VARS.sysTest('gpws'), G650_VARS.sysTest('antiskid'), G650_VARS.sysTest('ice_det'),
   G650_VARS.tempDispSel,
-  G650_VARS.crewOxy, G650_VARS.paxOxy, G650_VARS.paxShutoff, G650_VARS.oxyMaskL, G650_VARS.oxyMaskR, G650_VARS.oxyMaskMode,
+  G650_VARS.crewOxy, G650_VARS.paxOxy, G650_VARS.paxShutoff, G650_VARS.oxyMaskL, G650_VARS.oxyMaskR,
+  G650_VARS.oxyMaskModeL, G650_VARS.oxyMaskModeR,
   G650_VARS.ltNav, G650_VARS.ltBeacon, G650_VARS.ltStrobe, G650_VARS.ltLdgL, G650_VARS.ltLdgR, G650_VARS.ltTaxi, G650_VARS.ltRecog,
   G650_VARS.ltLogo, G650_VARS.ltWing, G650_VARS.ltEmer, G650_VARS.seatBelt, G650_VARS.noSmoke, G650_VARS.ltPanel, G650_VARS.ltFlood,
   G650_VARS.ltDome, G650_VARS.ltMaster, G650_VARS.vestOride, G650_VARS.ltMapL, G650_VARS.ltMapR, G650_VARS.duBrt(1), G650_VARS.duBrt(2), G650_VARS.duBrt(3), G650_VARS.duBrt(4),
@@ -308,7 +326,7 @@ export const G650_CONTROL_VARS: string[] = [
   G650_VARS.terrInhibit, G650_VARS.gpwsInhibit, G650_VARS.raasInhibit,
   G650_VARS.irsMode(1), G650_VARS.irsMode(2), G650_VARS.irsMode(3),
   G650_VARS.cockpitCall('crew'), G650_VARS.cockpitCall('reset'), G650_VARS.cockpitCall('privacy'), G650_VARS.cockpitCall('aft_privacy'),
-  G650_VARS.doorMain, G650_VARS.doorBaggage, G650_VARS.doorExtBaggage,
+  G650_VARS.doorMain, G650_VARS.doorBaggage, G650_VARS.doorExtBaggage, G650_VARS.doorCockpit, G650_VARS.doorLockSw,
   G650_VARS.yokeTrimL, G650_VARS.yokeTrimR, G650_VARS.yokeDiscL, G650_VARS.yokeDiscR, G650_VARS.tiller3d,
 ];
 

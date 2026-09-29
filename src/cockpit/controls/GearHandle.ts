@@ -84,6 +84,14 @@ export class GearHandle extends ControlBase {
     this.applyVisual();
   }
 
+  /**
+   * (Appended by b737-800, additive.) The sliding handle group (arm + knob; +z along the arm toward the knob).
+   * Controls mounted on it, such as a lock-override trigger on the knob itself, ride with the pull-out and swing.
+   */
+  get handle(): THREE.Group {
+    return this.slide;
+  }
+
   protected stateText(): string {
     return this.positions[this.logic.index] + (this.pending ? ' (moving)' : '');
   }

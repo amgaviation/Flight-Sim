@@ -79,6 +79,13 @@ export class G650Logic implements Subsystem {
   private prevReset = 0;
   // HFRS
   private readonly hfrs = [false, false, false];
+  // brake accumulators (inboard = L system, outboard = R system; LUC gear/brakes)
+  private readonly accum = [3000, 3000];
+  // Emergency Descent Mode
+  private edmT = 0;
+  private edmLatch = false;
+  // flight-deck door lock latch
+  private doorLocked = false;
 
   constructor(vars: SimVars) {
     this.v = vars;
@@ -257,9 +264,47 @@ export class G650Logic implements Subsystem {
     // ---------------- FMS cruise phase for the automatic thrust rating (engines.ts: TO -> CLB -> CRZ).
     v.set(V.fmsCruise, !ground && v.getString('fms.vnav_phase') === 'CRZ' ? 1 : 0);
 
-    // ---------------- RAAS INHIBIT (pedestal). SCOPE: the EGPWS runway awareness (RAAS) callouts are not modelled;
-    // the switch sets the RAAS availability state (switchlight legend) only.
+    // ---------------- RAAS INHIBIT (pedestal): gates the SmartRunway/RAAS callouts (G650Raas, createSystems.ts)
+    // and the switchlight legend (Honeywell EGPWS with RAAS, FAA FSB GVI).
     v.set(V.raasActive, v.get('elec.taws_powered') !== 0 && v.get(V.raasInhibit) === 0 ? 1 : 0);
+
+    // ---------------- PARK BRAKE handle (LUC gear/brakes; dossier §9.8): the handle meters emergency braking in
+    // proportion to its travel (Brakes `emergency` path from the accumulators) and SETS the parking brake only
+    // near full travel (EST >= 0.9 of the handle range).
+    v.set(V.parkSetCmd, v.get(V.parkBrake) >= 0.9 ? 1 : 0);
+
+    // ---------------- brake accumulators (LUC gear/brakes): separate inboard (charged from the LEFT hydraulic
+    // system) and outboard (RIGHT system) accumulators, 700 psi N2 precharge, each with its own INBD / OUTBD
+    // gauge scale. First-order charge through a check valve (tau 2 s, mirroring the shared Brakes accumulator)
+    // with a slow internal leak (EST 8 h). The shared Brakes block keeps one functional accumulator for the
+    // emergency/parking path; these vars drive the indication per scale.
+    for (let i = 0; i < 2; i++) {
+      const src = Math.min(i === 0 ? lPsi : rPsi, 3000);
+      let a = this.accum[i];
+      if (src > a) a += (src - a) * (1 - Math.exp(-dt / 2));
+      a -= a * dt * (1 / (8 * 3600));
+      if (a < 700) a = 700; // N2 precharge floor (LUC)
+      this.accum[i] = a;
+      v.set(i === 0 ? V.accumInbdPsi : V.accumOutbdPsi, a);
+    }
+
+    // ---------------- BR725 thrust-setting mode (LUC powerplant / LIM): the EEC controls EPR in the primary
+    // mode and reverts to LP-N1 "ALT" mode on an EPR (P50) sensor failure. SCOPE: the physics stays
+    // N1-controlled; this state drives the displayed mode and the CAS "L-R Engine Alternate Mode" caution.
+    v.set(V.eprMode(1), v.get('fail.eng.epr1') === 0 ? 1 : 0);
+    v.set(V.eprMode(2), v.get('fail.eng.epr2') === 0 ? 1 : 0);
+
+    // ---------------- Emergency Descent Mode (dossier §4.8): EST implementation of the CPC/AFCS EDM cue - the
+    // cabin altitude above the warning trip for 5 s in flight latches EDM; it clears on the ground or once the
+    // cabin is back below 8,000 ft. (The AFCS-coupled automatic descent itself is not modelled: SCOPE, the
+    // latch drives the annunciation and the abnormal checklist cue.)
+    const cabAlt = v.get('press.cabin_alt_ft');
+    const ldgElev = v.get('press.ldg_elev_ft');
+    const trip = ldgElev <= 7500 ? 8000 : ldgElev <= 9500 ? 10000 : ldgElev <= 14000 ? 14500 : 15500;
+    this.edmT = !ground && cabAlt > trip ? this.edmT + dt : 0;
+    if (this.edmT > 5) this.edmLatch = true;
+    if (ground || cabAlt < 8000) this.edmLatch = false;
+    v.set(V.edm, this.edmLatch ? 1 : 0);
 
     // ---------------- takeoff configuration (LIM: takeoff prohibited outside Normal law; flaps 10/20)
     const flaps = v.get('surf.flaps_deg');
@@ -268,6 +313,14 @@ export class G650Logic implements Subsystem {
     const sbOk = v.get(V.speedbrake) < 0.05;
     const park = v.get('brakes.parking_set') !== 0;
     v.set(V.noTakeoff, ground && (!flapsTo || !trimOk || !sbOk || park || fbwMode !== 0) ? 1 : 0);
+
+    // ---------------- flight-deck door (EST, dossier §13): LOCK latches the door closed - while locked the
+    // DOOR key cannot open it (an open command is rejected). LOCKED legend = door closed with LOCK on.
+    const doorPos = v.get(V.doorCockpit);
+    if (v.get(V.doorLockSw) !== 1) this.doorLocked = false;
+    else if (doorPos < 0.05) this.doorLocked = true;
+    if (this.doorLocked && doorPos !== 0) v.set(V.doorCockpit, 0);
+    v.set(V.doorLocked, this.doorLocked ? 1 : 0);
 
     // ---------------- TEMP DISPLAY row (overhead TEMP CONTROL section, Flickr 52948516166 "TEMP DISPLAY"):
     // publishes the selected zone's measured temperature for the overhead readout.
@@ -310,6 +363,11 @@ export class G650Logic implements Subsystem {
     this.sbRetracted = false;
     this.altLatch = false;
     this.prevReset = v.get(V.fltCtrlReset);
+    // Accumulators start charged (state presets: a parked aircraft holds accumulator pressure).
+    this.accum[0] = v.get(V.accumInbdPsi) > 0 ? v.get(V.accumInbdPsi) : 3000;
+    this.accum[1] = v.get(V.accumOutbdPsi) > 0 ? v.get(V.accumOutbdPsi) : 3000;
+    this.edmT = 0;
+    this.edmLatch = false;
   }
 }
 
@@ -331,10 +389,11 @@ export class G650PostLogic implements Subsystem {
 
   update(dt: number): void {
     const v = this.v;
-    // FADEC engine failure: the engine stopped with its FUEL CONTROL switch at RUN.
+    // FADEC engine failure: the engine stopped with its FUEL CONTROL switch at RUN. A pulled fire handle is a
+    // commanded shutdown (fuel SOV closed by the handle, dossier §4.10): no red "Engine Fail" then.
     for (let i = 1; i <= 2; i++) {
       const running = v.get(N.running[i]) !== 0;
-      const run = v.get(N.fuelCtl[i]) === 1;
+      const run = v.get(N.fuelCtl[i]) === 1 && v.get(N.fireHandle[i]) === 0;
       if (this.wasRunning[i] && !running && run) this.failed[i] = true;
       if (running || !run) this.failed[i] = false;
       this.wasRunning[i] = running;

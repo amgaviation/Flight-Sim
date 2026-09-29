@@ -394,7 +394,10 @@ describe('Pedestal functions (L22, L36, L39, L41-L44)', () => {
     r.run(1);
     expect(v.get('surf.elevator')).toBeCloseTo(jamE, 2);
     expect(v.get('surf.aileron')).toBeCloseTo(0.5 * v.get('fcs.roll_column') + 0.5 * jamA, 2);
-    v.set(V.pitchRollDisc, 3); // ROLL RECONNECT: roll joined (jammed), pitch split
+    v.set(V.pitchRollDisc, 3); // ROLL RECONNECT: roll re-joins (jammed), pitch split
+    // LON4-03: the coupling re-engages only with the wheels aligned; release the wheel so the free half
+    // trails back to the jammed half's position, then the roll run is joined again.
+    v.set(INPUT.roll, 0);
     r.run(1);
     expect(v.get('surf.aileron')).toBeCloseTo(jamA, 2);
     expect(v.get('surf.elevator')).toBeCloseTo(0.5 * v.get('fcs.pitch_column') + 0.5 * jamE, 2);

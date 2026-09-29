@@ -34,6 +34,7 @@
 import type { Subsystem } from '../../types';
 import type { SimVars } from '../../../core/SimVars';
 import { ADC, AP } from '../../../core/vars';
+import { G3K } from '../../../avionics/garmin-g3000/vars';
 import { AtMode, type Autothrottle } from '../../../systems/fadec';
 import type { Afcs } from '../../../systems/autopilot';
 import { LON_VARS as V } from '../vars';
@@ -158,5 +159,50 @@ export class LongitudeAtProtection implements Subsystem {
     this.prot = 0;
     this.edm = false;
     this.edmLevel = false;
+  }
+}
+
+/**
+ * Approach-speed schedule (LON4-07). BCA 2021: on the Longitude the G5000
+ * reduces the approach speed bug to VREF plus a pilot-set additive at 2 nm
+ * from the runway. Modelled: in FMS speed mode (SPD knob FMS), with the VREF
+ * bug set, inside 2 nm of the destination on a valid LNAV plan, the selected
+ * speed becomes VREF + additive (GTC Aircraft Systems > Pre-Flight "APPR SPD
+ * ADD", `ac.lon.fms.appr_spd_add_kt`, default 5 kt EST) instead of the FMS
+ * VNAV target. Runs after the G3000 System (which copies the FMS target into
+ * the selected speed) and before the AFCS / autothrottle. EST: the trigger
+ * distance is measured to the destination (the runway is the final fix of the
+ * loaded approach); the additive range 0-20 kt is EST.
+ */
+const APPR_SPD_NM = 2; // BCA 2021
+const APPR_ADD_DEFAULT_KT = 5; // EST
+const VREF_KT = G3K.vspeedKt('VREF');
+const VREF_ON = G3K.vspeedOn('VREF');
+
+export class LongitudeApproachSpeed implements Subsystem {
+  readonly name = 'lon.appr_speed';
+  constructor(private readonly vars: SimVars) {
+    if (!Number.isFinite(vars.get(V.apprSpdAddKt, NaN))) vars.set(V.apprSpdAddKt, APPR_ADD_DEFAULT_KT);
+  }
+  update(): void {
+    const v = this.vars;
+    const air = v.get('gear.air_ground') === 0;
+    const vref = v.get(VREF_KT, NaN);
+    const dist = v.get('fms.dist_to_dest_nm', NaN);
+    const active =
+      air &&
+      v.get(G3K.speedFms) >= 0.5 &&
+      v.get(VREF_ON) !== 0 &&
+      Number.isFinite(vref) &&
+      vref > 0 &&
+      v.get('fms.lnav_valid') !== 0 &&
+      dist > 0 &&
+      dist < APPR_SPD_NM;
+    if (active) {
+      const add = Math.max(0, Math.min(20, v.get(V.apprSpdAddKt, APPR_ADD_DEFAULT_KT)));
+      v.set(AP.speedIsMach, 0);
+      v.set(AP.selSpeed, Math.round(vref + add));
+    }
+    v.set(V.apprSpdActive, active ? 1 : 0);
   }
 }

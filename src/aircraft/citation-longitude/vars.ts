@@ -257,6 +257,10 @@ export const LON_VARS = {
   startFail: (i: number) => `${P}eng${i}_start_fail`, // derived: FADEC start abort latched (fadec.eng{i}.abort)
   fadecFault: (i: number) => `${P}eng${i}_fadec_fault`, // derived: FADEC channel fault (ENG CONTROL FAULT, EST)
   spoilerInd: `${P}spoiler_ind`, // derived: EIS SPOILERS indication 0..1 = max(speedbrake, ground-spoiler) panel extension (OG 15-5)
+
+  // ---------------- Function fix round 2 (LON4 gaps)
+  apprSpdAddKt: `${P}fms.appr_spd_add_kt`, // GTC pilot-set approach speed additive (kt) over VREF (BCA 2021; default 5, EST)
+  apprSpdActive: `${P}fms.appr_spd_active`, // derived: approach-speed schedule active (< 2 nm on final, FMS speed mode)
 } as const;
 
 /** Every cockpit control var (inputs), for the "every control is consumed" audit test. */

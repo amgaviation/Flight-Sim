@@ -45,7 +45,9 @@ export const EDM = { armAboveFt: 25000, speedKt: 340, altFt: 15000, slowKt: 250,
 
 export class G800Logic implements Subsystem {
   readonly name = 'g800.logic';
-  private ebattLatched = false;
+  /** Per-pair emergency-battery latches (fwd = L ESS, aft = R ESS; fix round 1 F08). */
+  private ebattFwdLatched = false;
+  private ebattAftLatched = false;
   private essWasUp = false;
   private ratLatched = false;
   private yawCentering = false;
@@ -95,7 +97,8 @@ export class G800Logic implements Subsystem {
 
   reset(): void {
     const v = this.vars;
-    this.ebattLatched = v.get(V.ebattOn) !== 0;
+    this.ebattFwdLatched = v.get(V.ebattFwdOn, v.get(V.ebattOn)) !== 0;
+    this.ebattAftLatched = v.get(V.ebattAftOn, v.get(V.ebattOn)) !== 0;
     this.essWasUp = v.get('elec.l_ess_dc_v') > 22 || v.get('elec.r_ess_dc_v') > 22;
     this.ratLatched = v.get(V.ratDeployed) !== 0;
     this.yawCentering = false;
@@ -213,15 +216,23 @@ export class G800Logic implements Subsystem {
     v.set(V.ratSpeed, this.ratLatched ? v.get('fdm.ias_kt') : 0); // physical turbine speed from the airflow
     v.set('ac.g800.rat_mode', v.get(V.ratGen, 1) === 1 && v.get('elec.rat_online') !== 0 && v.get('elec.l_main_ac_powered') === 0 && v.get('elec.r_main_ac_powered') === 0 ? 1 : 0);
 
-    // ---------------- emergency batteries: ARM connects them when an ESS DC bus drops below 20 V (SCQ)
+    // ---------------- emergency batteries: ARM connects a pair when its ESS DC bus drops below 20 V (SCQ).
+    // Two independent pairs (code450 G700/G800 electrical: four 24 V 9 Ah batteries in a forward and an aft
+    // pair, each with its own "Fwd/Aft Emer Battery On" advisory): the FWD pair backs the L ESS DC bus, the
+    // AFT pair the R ESS DC bus (EST assignment), latched separately (fix round 1 F08).
     const essL = v.get('elec.l_ess_dc_v');
     const essR = v.get('elec.r_ess_dc_v');
     // EMERGENCY POWER ON / ARM / OFF switchlights (code450 G700/G800 electrical): ON forces the E-batts on.
-    if (v.get(V.emerPwr) === 0) this.ebattLatched = false;
-    else if (v.get(V.emerPwr) === 2) this.ebattLatched = true;
-    else if (this.essWasUp && (essL < G800_LIMITS.emerBattArmV || essR < G800_LIMITS.emerBattArmV)) this.ebattLatched = true;
+    if (v.get(V.emerPwr) === 0) this.ebattFwdLatched = this.ebattAftLatched = false;
+    else if (v.get(V.emerPwr) === 2) this.ebattFwdLatched = this.ebattAftLatched = true;
+    else if (this.essWasUp) {
+      if (essL < G800_LIMITS.emerBattArmV) this.ebattFwdLatched = true;
+      if (essR < G800_LIMITS.emerBattArmV) this.ebattAftLatched = true;
+    }
     if (essL > 22 && essR > 22) this.essWasUp = true;
-    v.set(V.ebattOn, this.ebattLatched ? 1 : 0);
+    v.set(V.ebattFwdOn, this.ebattFwdLatched ? 1 : 0);
+    v.set(V.ebattAftOn, this.ebattAftLatched ? 1 : 0);
+    v.set(V.ebattOn, this.ebattFwdLatched || this.ebattAftLatched ? 1 : 0);
 
     // ---------------- engine start. G700/G800 AutoStart (code450 powerplant study sheets): "initiated by positioning the
     // fuel control switch to RUN and momentarily depressing the ENGINE START switch" (forward overhead strip). The OHPTS

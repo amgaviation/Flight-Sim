@@ -122,7 +122,10 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): ElectricalNetwo
     load('ldg_lt_r', 'main_r', 6, { enabled: V.ltLdgR }, 10),
     load('wing_insp', 'main_l', 2, { enabled: V.ltWingInsp }, 5),
     load('tail_flood', 'main_r', 3, { enabled: V.ltTailFlood }, 5),
-    load('galley', 'main_r', 25, { enabled: 'gear.air_ground == 0 || elec.gen_l_online || elec.gen_r_online || elec.apu_gen_online' }, 40),
+    // Galley shed whenever no generator (or GPU) is on line, on the ground and in flight (LON4-05): OG 5-2 has the
+    // batteries carrying only flight-critical + mission loads, and BCA notes a battery-only ELEC EMER runs everything
+    // except windshield heat *needed* for flight - a 25 A galley would materially shorten the battery endurance.
+    load('galley', 'main_r', 25, { enabled: 'elec.gen_l_online || elec.gen_r_online || elec.apu_gen_online || elec.gpu_online' }, 40),
     // ---- INTERIOR
     load('cabin_l', 'int_l', 18, {}, 30),
     load('cabin_r', 'int_r', 18, {}, 30),

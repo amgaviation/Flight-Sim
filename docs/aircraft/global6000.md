@@ -688,7 +688,7 @@ Global Vision layout (photos N835GL c_ped, EB190582 e_ped_mid / e_ped_aft / e_pe
 | EVENT | button | momentary 1 | — | `V.fdrEvent` → `V.fdrEventCount` (SCOPE: no recorder) | forward end of the quadrant |
 | FLIGHT SPOILER lever | lever | 0 (gate) / 0.25 1/4 / 0.5 1/2 / 0.75 3/4 / 0.9 FULL / 1.0 MAX (gate) | detents | `V.flightSpoiler` | own slot at the left edge of the quadrant, RETRACT arrow |
 | ENGINE RUN L / R | toggles (lift to move) | 1 ON / 0 OFF | lift-lock | `V.engRun(1/2)` | aft end of the quadrant |
-| MKP 1 / 2 | keyboards + scratchpad strip | Vision key set (ROUTE, FMS, DEP/ARR, CNCL, EXEC, letters, digits, CAS, CNS, CHART, ECL/EXT, arrows, PREV, NEXT) | — | `fusion.mkp{s}.key` | forward, y ∓0.17 |
+| MKP 1 / 2 | keyboards + scratchpad strip | Vision key set (ROUTE, FMS, DEP/ARR, CNCL, EXEC, letters, digits, CAS, CNS, CHART, ECL/EXT, arrows, PREV, NEXT); black key caps, white legends (photo c_ped) | — | `fusion.mkp{s}.key` | forward, y ∓0.17 |
 | CCP 1 / 2 | palm-rest cursor device, DSPL SEL < > ∨, ESC, DATA knob, PTT buttons | — | — | `fusion.ccp{s}.*`; PTT `V.yokePtt(s)` | aft of the MKPs |
 | Reversion panel: DISPLAYS NORM / REV, TUNE VHF / NORM / DSPL, L PFD ADC / IRS, AFCS 1/2, R PFD ADC / IRS | rotaries + Korry keys | DISPLAYS 0 / 1; TUNE 1 VHF / 0 NORM / 2 DSPL; keys toggle | — | `V.displaysRev`, `V.tuneSel` → `V.tuneSrc`, `V.rspAdc(s)`, `V.rspAtt(s)`, `V.rspAfcs` → Fusion `fusion.rsp{s}.adc/att/dspl`, `fusion.rsp.afcs` (systems/reversion.ts; GX PTG 16) | left, forward of the dimmers |
 | Display dimmers L / CTR / R DSPL, LWR DSPL | knobs | 0 … 1 | — | `V.ltDisplay(z)` (L / R also dim EMS CDU 1 / 2), `V.ltDisplayLwr` (AFD 3) | left, below the reversion keys |
@@ -700,7 +700,7 @@ Global Vision layout (photos N835GL c_ped, EB190582 e_ped_mid / e_ped_aft / e_pe
 | STAB CH 1 / CH 2 | PBAs, PUSH OFF/RESET | 1 = disconnected (OFF white legend, status STAB CH n OFF) | unguarded (GX PTG 10-24) | `V.stabCh(1/2)` | aft (EST) |
 | AIL trim | split switch | −1 LWD / 0 / +1 RWD | spring to centre | `V.ailTrimSw` | aft (EST) |
 | RUD trim | rotary | −1 NL / 0 / +1 NR | spring to centre | `V.rudTrimSw` | aft (EST) |
-| GND LIFT DUMPING | 3-position toggle | MANUAL ARM (up, 1) / AUTO (0) / OFF (down, 2) (GX PTG 10-50) | — | `V.gldSw` → `V.gldManArm`, `V.gldOff` (logic.ts); statuses GLD MANUAL ARM / GND LIFT DUMP OFF | aft (EST) |
+| GND LIFT DUMPING | 3-position toggle | MANUAL ARM (up, 1) / AUTO (0) / OFF (down, 2) (GX PTG 10-50) | — | `V.gldSw` → `V.gldManArm`, `V.gldOff` (logic.ts); statuses GLD MANUAL ARM / GND LIFT DUMP OFF | forward quadrant strip between the FLIGHT SPOILER slot and the levers, EVENT to its right (photo e_ped_mid; identity EST from the partially legible caption, round 3) |
 | IRS 1 / 2 / 3 | rotaries | 0 OFF / 1 ALN / 2 NAV / 3 ATT | — | `ac.irs1_mode` … `ac.irs3_mode` | aft (EST) |
 | RAT manual deploy, LDG GEAR manual release | T-handles | 1 pulled | latched | `V.ratDeploy`, `V.gearManRelease` | aft face |
 
@@ -1177,3 +1177,46 @@ The table conventions are those of §12.
 - `cockpit-main/round2.test.ts`: reversion panel, ACP, ROLL SPLRS, GND LIFT DUMPING, 3/4 detent, EMS CDU pages,
   linking, 4th-bus refusal, RAT TEST, dimming, oxygen.
 - Coverage, inventory, flows, failures, states and abnormal tests were updated for the new controls.
+
+## 20. Layout fix round 3 (LENS audit)
+
+Fixes for the round-3 layout audit (gaps G6K-L3-01 .. -18, G3-16/-18), verified against the photo set
+(N835GL crops, EB190582 crops, eb3840) and re-shot screenshots (`tests/output/g6k-r3-day`, `g6k-r3-night2`).
+
+- **MKP key caps black** (L3-01): `addMkpVision` passes `keyMaterial: 'plasticBlack'` (shared
+  `collins-fusion/visionHardware.ts`, opt-in - other keypads keep the KeyPad default grey).
+- **Night pedestal legends** (L3-02, G3-16): centre back-lighting zone gain raised to 3.4 (EST; `cockpit/index.ts`);
+  together with the black caps the MKP legends and the quadrant / ACP captions now show at night. Remaining dimness
+  in the audit shots is screenshot resolution (an MKP key is ~8 px in the preset views).
+- **Dark-cockpit unlit lenses** (L3-03, L3-13): MASTER WARNING/CAUTION `unlitTint: 0.04`; ROLL SPLRS, all overhead
+  korries and standalone annunciators `unlitTint: 0.05`; shared `guardClear` material opacity 0.28 → 0.15, and the
+  overhead clear guards are built thinner (height 0.014).
+- **AFD 3 default layout** (L3-04): the shared Fusion `defaultLayout()` now puts the FMS window beside a map on
+  AFD 3 (`L:FMS R:MAP`), matching the e_ped_mid photo; both FMS text windows remain one `showWindow` away. Fusion
+  is used only by this aircraft; the shared layout/suite tests were updated.
+- **GND LIFT DUMPING moved** (L3-05): from the EST aft plate to the photographed forward quadrant strip beside
+  EVENT; same id / var / logic.
+- **Thrust levers** (L3-06): drum grips enlarged (r 0.018 → 0.026, chrome), reverse levers thickened
+  (armWidth 0.013, full-size reverser knobs).
+- **Yokes** (L3-07): style 'ramshorn' with chrome hub trim ring, embossed oval hub cap (no trademark text) and
+  white stitch seam rings at the grip bases (`flightControls.ts`).
+- **Interior palette** (L3-08): tan leather darkened to 0x9a7546 at roughness 0.92; seats split into cream
+  sheepskin pan / back (0xcfc0a4) over the tan-leather frame (`shell.ts`).
+- **Overhead paint** (L3-09): modules 0x42454a → 0x6a675f gull-grey against the carbon surround.
+- **Headliner / pillars** (L3-10): carbon centre band around the overhead console; pillar and window-frame lofts
+  re-tessellated (no more faceted polygons).
+- **Pressure-differential placard** (L3-11): white plate, red two-line text ('inverse' placard style).
+- **Fire handles** (L3-12): new shared `fireCap: 'round'` TBarHandle cap - cylindrical round-grip T with the FIRE
+  lamp in the grip face; pull / rotate interaction unchanged.
+- **Side console** (L3-14): mask box recessed under a tan leather lid (`MaskStowage` `recess` / `doorMaterial`
+  options), regulator controls grouped on one recessed plate, chrome cup holder aft of the NOSE STEER hub.
+- **CCBP density** (L3-15): empty drawing positions filled with non-functional collared dummy breakers (one merged
+  mesh; SCOPE - no invented load names). The modelled breakers stay interactive.
+- **AREA knob** (L3-16): FLOOR / CEILING split legend engraved beside it.
+- **Favicon** (L3-17, G3-18): `index.html` ships an inline empty favicon; screenshot runs now log no errors.
+- **Draw calls** (L3-18, G3-18): re-measured at 604 for the full deck - the MKP/CTP/CCP keys are already drawn as
+  instanced batches (`src/cockpit/instancing.ts`); the budget guard was tightened from 1,200 to 800.
+
+Tests: `fidelity/round3-layout.test.ts` (AFD 3 default, GLD position, black MKP caps, favicon);
+`verify/drawcalls.test.ts` guard tightened; shared `tests/avionics/collins-fusion/layout.test.ts` /
+`suite.test.ts` updated for the AFD 3 default.

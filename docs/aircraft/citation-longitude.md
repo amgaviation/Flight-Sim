@@ -314,10 +314,10 @@ The STANDBY bus is fed from the standby battery (24 V 10.4 Ah lead-acid, charged
 - **Lateral modes:** ROL, HDG, FMS (LNAV), VOR, LOC, BC, TO, GA.
 - **Vertical modes:** PIT, ALT, ALTS, ALTV, VS, FLC, PATH (VNAV path; G5000 CRG 190-02538-02 p.156 annunciates PATH), VFLC (VNAV climb), GS, GP, TO, GA.
 - **AP behaviour.** Engage limits: 400 ft after takeoff, 160 ft on approach. TO/GA disconnects the AP (BCA). Go-around pitch 7.5°. Not autoland capable.
-- **A/T modes:** TO, HOLD (on the ground above 60 kt after TO/GA, or as soon as a lever is advanced to T/O by hand with the A/T engaged, until 400 ft; OG 7-5), CLIMB, DESC (stays DESC at the idle stop; no HOLD in the air), SPD, RETARD (below 40 ft), MAX SPD, MIN SPD.
+- **A/T modes:** TO, HOLD (on the ground above 60 kt after TO/GA, or as soon as a lever is advanced to T/O by hand with the A/T engaged, until 400 ft; OG 7-5), CLIMB, DESC (stays DESC at the idle stop; no HOLD in the air), SPD, RETARD (green at 50 ft, OG 17 Landing; OG 7-5's mode description says "reducing throttles to idle ... below 40 feet AGL" — the model annunciates and starts the retard at 50 ft so both statements hold, LON4-04), MAX SPD, MIN SPD.
 - **A/T protection** (`systems/afcsExtras.ts`, EST thresholds): above 400 ft RA, MIN SPD at AoA 0.72 of the stall AoA (cleared below 0.60) drives the levers to TO and stows the speedbrakes (needs the A/T engaged); MAX SPD within 2 kt of Vmo/Mmo (cleared 8 kt below) retards and engages the A/T if it was off (BCA).
 - **Speed selection.** SPD knob FMS / MAN.
-- **Approach speeds.** A pilot-selectable approach bug speed reduces to VREF plus an additive at 2 nm (BCA). Not modelled: open issue.
+- **Approach speeds.** A pilot-selectable approach bug speed reduces to VREF plus an additive at 2 nm (BCA). Modelled since fix round LON4 (`systems/afcsExtras.ts` `LongitudeApproachSpeed`): in FMS speed mode, with the VREF bug set, inside 2 nm of the destination the selected speed becomes VREF + additive (GTC Pre-Flight page "APPR SPD ADD", `ac.lon.fms.appr_spd_add_kt`, default 5 kt EST, range 0–20 kt EST).
 
 ### 4.13 Lighting (OG 16)
 - **Overhead.**
@@ -581,7 +581,7 @@ Plate 260 × 180 mm under the inboard half of the L PFD, white bus mimic joining
 | Aft right | FLAP RESET | Momentary, FAIL (amber) while a flap fault is latched (EST function) | `ac.lon.fc.flap_reset`; `ac.lon.fc.flap_fault` |
 | Aft right | APU box: OFF / ON / START (spring to ON); EVENT MARKER | Rotary; momentary (SCOPE: FDR event count) | `ac.lon.apu.knob`; `ac.lon.fdr.event_marker` → `fdr.event_count` |
 | Aft end | AIL TRIM, RUD TRIM | Spring-loaded; EST position (not in the photographs) | `ac.lon.trim.ail_sw`, `trim.rud_sw` |
-| Aft face | PITCH/ROLL DISCONNECT | Red flag "PULL": pull = split both, rotate up = PITCH RECONNECT, down = ROLL RECONNECT, push = reset (mount EST) | `ac.lon.fc.pitch_roll_disc` (0..3) |
+| Aft face | PITCH/ROLL DISCONNECT | Red flag "PULL": pull = split both, rotate up = PITCH RECONNECT, down = ROLL RECONNECT, push = reset (mount EST); a reconnect re-joins only once the halves are aligned (patent US7229047, LON4-03) | `ac.lon.fc.pitch_roll_disc` (0..3) |
 
 ### 7.8 Overhead LIGHTS strip (c_oh; OG Fig 16-2-1, 16-3-2)
 
@@ -644,8 +644,7 @@ Written by the G5000 synoptic controls (`systems/synoptics.ts`):
 ## 9. Scope, simplifications and open issues
 
 - **Not modelled:**
-  - (Emergency Descent Mode and the A/T MIN SPD / MAX SPD protection are modelled since the function fix round, §15.)
-  - The 2-nm approach-speed reduction.
+  - (Emergency Descent Mode and the A/T MIN SPD / MAX SPD protection are modelled since the function fix round, §15; the 2-nm approach-speed reduction since fix round LON4, §17.)
   - Secondary stab trim as a separate motor (separate switch path and breaker, same actuator: SCOPE).
   - Windshield heat controller temperatures.
   - The CABIN ALT switch's two rates.
@@ -654,7 +653,7 @@ Written by the G5000 synoptic controls (`systems/synoptics.ts`):
   - Weather radar (G5000 state only).
 - **Fire protection and oxygen:** layout and capacities are EST, because the OG does not describe them.
 - **Hydraulic assignments** of the gear and nosewheel steering (A / B) are EST.
-- **Liftoff speed.** The scripted 3°/s rotation lifts off at about VR+15 kt; explained by the all-engine acceleration (§15.2), not changed.
+- **Liftoff speed.** With the LON4-01 rotation technique (deliberate 4.5°/s to 10°), liftoff is VR+10..11 kt ≈ V2+1 at MTOW, inside the FPG p.4 VR–V2 spread; the check ride asserts liftoff ≤ V2+5 (§17).
 - **FPG takeoff field lengths** are factored balanced-field values. The tests check the all-engine 35 ft distance × 1.15 and the accelerate-stop distance against them. One-engine-inoperative accelerate-go is not tested.
 - **Minor data conflict:** MZFW is 26,000 lb (FPG) vs 26,800 lb (OG).
 
@@ -817,7 +816,7 @@ back end), yoke, pedals, tiller and toe brakes. Every phase asserts CAS / FMA / 
 | Engine starts (R, L) | idle < 35 s; peak ITT < 650 °C; generators on line; hydraulics > 2,800 psi |
 | Avionics / FMS | AHRS aligned, GPS valid; route, cruise FL280, ILS 01L via CYPRE loaded; W&F gross within 400 lb of the FDM mass; TOLD V1/VR/V2, field length, takeoff N1 |
 | Taxi | pure-pursuit taxi onto the runway, ≤ 20 kt, lined up < 15 m off the centre line |
-| Takeoff | no NO TAKEOFF; SPD FMS; A/T engaged + TO/GA → FMA TO / TO / A/T TO, FMS armed; A/T HOLD above 60 kt; takeoff N1 = TOLD N1 ± 1 % and ≤ 96.79 %; liftoff < 0.85 × TOLD field length and < V2 + 8; < 5 m centre-line deviation |
+| Takeoff | no NO TAKEOFF; SPD FMS; A/T engaged + TO/GA → FMA TO / TO / A/T TO, FMS armed; A/T HOLD above 60 kt; takeoff N1 = TOLD N1 ± 1 % and ≤ 96.79 %; 4.5°/s rotation at VR (LON4-01); liftoff < 0.85 × TOLD field length and ≤ V2 + 5; < 5 m centre-line deviation |
 | After takeoff | AP engages into PIT with FMS captured; flaps up at V2 + 20; FLC → A/T CLIMB; VNAV → VFLC; level FL280 in ALTS/ALT; STD baro above FL180; bank < 30°, IAS < Vmo; no cautions |
 | Cruise | ALT ± 60 ft, M0.70-0.84; fuel flow 1,500-3,200 pph (2,446 pph at M0.76); cabin < 3,000 ft at 9.66 psid; tank quantity decrements at the engine flow (± 10 %) |
 | Descent | VNAV PATH captured at TOD; IAS < Vmo; baro set below FL180 |
@@ -826,9 +825,9 @@ back end), yoke, pedals, tiller and toe brakes. Every phase asserts CAS / FMA / 
 | Rollout | ground spoilers deploy (≥ 0.9) and stow below 30 kt; reverse N1 > 50 %, reverse at idle by 45 kt; A/T disengaged; 25 kt with > 1,000 ft of runway left; < 10 m off the centre line |
 | Taxi in / shutdown | clear of the runway; ENGINE SHUTDOWN R (white) while L runs, no ENGINE FAIL; both engines stopped, hydraulics bleed down; batteries off → dark |
 
-Numbers from the last run: liftoff 127 KIAS (VR 110, V2 123) 1,879 ft from brake release (TOLD field length
-3,390 ft); FL280 reached 6.6 min after brake release; M0.76 / 452 KTAS / 2,446 pph at FL280 and 31,000 lb; touchdown
-116 KIAS 1,214 ft past the threshold; 25 kt at 3,870 ft with 0.45 brake pressure and reversers.
+Numbers from the last run (LON4-01 4.5°/s rotation): liftoff 124 KIAS (VR 110, V2 123) 1,785 ft from brake release (TOLD field length
+3,390 ft); M0.76 / 452 KTAS / 2,449 pph at FL280 and ~31,000 lb; touchdown −12 fpm, 116 KIAS, 1,203 ft past the
+threshold; A/T RETARD green through 50 ft; 25 kt at 3,849 ft with 0.45 brake pressure and reversers.
 
 ### 12.2 Defects found and fixed
 
@@ -853,9 +852,9 @@ Numbers from the last run: liftoff 127 KIAS (VR 110, V2 123) 1,879 ft from brake
 
 ### 12.4 Remaining gaps (honest list)
 
-- **Liftoff speed** is VR + 17 kt (127 vs V2 123) with the scripted 3°/s rotation: the pilot script applies only ~40 %
-  elevator and the nose wheel needs ~1.5 s to unstick. All-engine distances meet the FPG; a real crew rotates faster.
-  The FDM lift curve was left as calibrated (stall speeds within 1 kt of the FPG).
+- **Liftoff speed** was VR + 17 kt (127 vs V2 123) with the scripted 3°/s rotation. Fixed in fix round LON4 (§17,
+  LON4-01): the check ride now rotates at 4.5°/s and asserts liftoff ≤ V2 + 5. The FDM lift curve was left as
+  calibrated (stall speeds within 1 kt of the FPG).
 - **FMS (shared nav library):** (a) `dist_to_dest` and the VNAV profile use nominal leg lengths, so a large fly-by turn
   (EMP→BUM→final, 18 nm anticipation at FL200) makes the distance step 17 nm and the path deviation +5,000 ft at the
   sequence; the check-ride route avoids it with the CYPRE transition. (b) The FMS speed stays 300 KIAS until 10,000 ft
@@ -864,8 +863,8 @@ Numbers from the last run: liftoff 127 KIAS (VR 110, V2 123) 1,879 ft from brake
 - **ALTV after a sequenced constraint** now levels at the next constraint or the selected altitude, but the PATH
   re-capture after a level segment needs the path to come back within 150 ft; the aircraft may level early above the
   path (seen at DASHI 5,000 ft) instead of following a continuous path.
-- **A/T MIN / MAX SPD** protection and the 2-nm approach-speed reduction are still not modelled; no autobrake exists on the
-  Longitude, so none is modelled.
+- **A/T MIN / MAX SPD** protection is modelled since §15, and the 2-nm approach-speed reduction since §17 (LON4-07);
+  no autobrake exists on the Longitude, so none is modelled.
 - **A/T `reset()`** does not clear its touchdown timer (shared library); the Longitude avoids the latch through `resetAirGround`.
 - **Terrain map on the ground** (fixed in the integration QA): the MFD and PFD inset maps now default to Absolute (topographic) terrain like the M2; the TAWS pane stays Relative (EST default, not from the pilot's guide).
 - **Draw calls / triangles:** pilot view ~875 draw calls, cockpit 974 meshes / 354 k triangles (instanced bezel
@@ -980,8 +979,9 @@ Tests: `tests/aircraft/citation-longitude/functionFix1.test.ts` (each fails with
 - **CAS**: event-latched TOPI / LOPI (OG 3-3/3-4); high-altitude mode from the departure or destination; 10 min delay
   for the high-alt amber CABIN ALTITUDE; single P/S BUTTON ON; GEN OFF APU with engine generators online; HEAT EXCHG
   ONLY automatic case; PITCH/ROLL DISC and PITCH TRIM FAIL (EST texts).
-- **Synoptics**: PRE-FLIGHT (NO TAKEOFF reasons), FLIGHT CONTROLS, SUMMARY (shutdown time, dry motor, exceedance, brake
-  temperatures), PROPULSION (engine digits, APU); FUEL recirc / scavenge pumps; ELECTRICAL generator load %.
+- **Synoptics**: PRE-FLIGHT (NO TAKEOFF reasons; APPR SPD ADD control since §17), FLIGHT CONTROLS, SUMMARY (shutdown
+  time, dry motor, exceedance, brake temperatures), PROPULSION (engine digits, APU); FUEL recirc / scavenge pumps;
+  ELECTRICAL generator load %.
 - **Audio**: MIC SEL and MIC/INPH controls (§7.9).
 - **Flight model**: stab trim vs CG follows the OG 17-3 chart (§4.10); ground states set the chart stab.
 - **Standby air data**: own pitot / static probe (3) with its heater (EST).
@@ -989,10 +989,10 @@ Tests: `tests/aircraft/citation-longitude/functionFix1.test.ts` (each fails with
 - **Checklists**: DGAC emergency / abnormal items (§6).
 
 ### 15.2 Not changed (with the reason)
-- Liftoff about VR + 15 kt: at 34,000 lb the all-engine acceleration is ~5.7 kt/s (T/W 0.45); the OG rotation (10° at
-  ~3°/s) reaches the ~7.2° liftoff attitude 2.6 s after VR. Raising `Cm_de` (0.95 → 1.6) does not change it (the
-  rotation rate, not the elevator authority, sets it); the FPG VR–V2 spread (13 kt) is the OEI V2. Liftoff stays
-  below V2 + 8 (check ride).
+- Liftoff about VR + 15 kt with a 3°/s rotation: at 34,000 lb the all-engine acceleration is ~5.7 kt/s (T/W 0.45);
+  the rotation rate, not the elevator authority, sets the liftoff speed (raising `Cm_de` 0.95 → 1.6 does not change
+  it). Superseded by fix round LON4 (§17): the check-ride technique is now a deliberate 4.5°/s rotation at VR
+  (LON4-01), liftoff VR+10..11 ≈ V2+1, asserted ≤ V2 + 5.
 - ELEC EMER endurance ~2 h: OG 5-2 says "over 40 minutes", a floor that 2 h meets; no public load data justify
   heavier EMER-bus loads.
 - PITCH/ROLL DISCONNECT handle position: still EST (no photograph of it).
@@ -1041,3 +1041,47 @@ Tests: `tests/aircraft/citation-longitude/fixRound2.test.ts`; screenshots re-tak
 ### 16.1 Shared-library changes (additive, default behaviour unchanged)
 - `src/cockpit/controls/GearHandle.ts`: optional `knobGeometry` `{ key, build }` factory replacing the default wheel.
 - `src/cockpit/controls/ToggleSwitch.ts`: optional `labels.midOffset` for the 3-position centre legend.
+
+## 17. Function-audit fix round 2 (LENS function, gaps LON4-01..12)
+
+Tests: `tests/aircraft/citation-longitude/functionFix2.test.ts`; the check-ride assertions in
+`verify/fullFlight.test.ts` were tightened (LON4-01, LON4-04).
+
+### 17.1 Fixed
+- **LON4-01 Takeoff rotation.** The check-ride pilot script now commands a deliberate 4.5°/s rotation at VR
+  (a `ScriptedPilot.rotateRateDegS` parameter that already existed; no shared change). Liftoff at MTOW:
+  VR 126 → liftoff 137 KIAS = V2 + 1 (FPG p.4 spread), asserted ≤ V2 + 5 in the check ride and in
+  `functionFix2.test.ts`. The earlier VR + 15 came from the scripted 3°/s rotation, not from `Cm_de` (§15.2).
+- **LON4-03 PITCH/ROLL DISCONNECT reconnect.** The reconnect detents now re-join an axis only once the flying
+  pilot's half is within 0.08 (normalized surface, EST) of the other half (patent US7229047: the couplings
+  re-engage only with the columns / wheels aligned). Handle mount position and the CAS text stay EST (§15.2).
+- **LON4-04 A/T RETARD altitude.** `retardFt` 40 → 50. Both figures are genuinely in the OG: 7-5's mode
+  description says "reducing throttles to idle during landing operations below 40 feet AGL", while the OG 17
+  Landing checklist says "Check Green RETARD at 50 feet AGL". Modelled at 50 ft so the green RETARD annunciates
+  at 50 ft as the checklist expects (the levers are then still reducing below 40 ft), consistent with the AW/BCA
+  pilot report. `functionFix2.test.ts` asserts RETARD first engages inside 43..52 ft RA on a flaps-FULL descent.
+- **LON4-05 Galley load shedding.** The 25 A galley load is now enabled only with a generator (engine, APU,
+  PTCU-fed mission bus) or the GPU on line — on the ground *and* in the air (OG 5-2: batteries carry
+  flight-critical + mission loads; the old expression kept it powered airborne on batteries). ELEC EMER battery
+  endurance improves accordingly (still well above the OG 5-2 "over 40 minutes" floor).
+- **LON4-07 Approach speed schedule.** `LongitudeApproachSpeed` (`systems/afcsExtras.ts`): in FMS speed mode,
+  with the VREF bug set and a valid LNAV plan, inside 2 nm of the destination the selected speed becomes
+  VREF + a pilot-set additive (BCA 2021). The additive is on the GTC Aircraft Systems > Pre-Flight page
+  ("APPR SPD ADD", `ac.lon.fms.appr_spd_add_kt`, default 5 kt, range 0–20 kt, both EST);
+  `ac.lon.fms.appr_spd_active` publishes the state.
+
+### 17.2 Not changed (with the reason)
+- **LON4-02** Pilot gearing blow-down, `Cl_da` 0.028 + `Cl_spoiler` 0.022 and the 35 % MAC empty CG stay EST
+  (marked in code): no public AFM control-force / roll-rate / W&B envelope data; results chart-consistent (§13).
+- **LON4-06** EDM trigger/target values and the EMERGENCY DESCENT CAS text stay EST: BCA / DGAC confirm the mode
+  but publish no thresholds or annunciation text.
+- **LON4-08** Secondary stab trim keeps the shared actuator model (separate switch path, power expression and
+  breaker; SCOPE): behaviourally correct for the DGAC runaway procedure; a separate motor would only matter for
+  a simultaneous dual-channel failure.
+- **LON4-09** Fire-protection layout, oxygen capacities and the gear-on-A / NWS-on-B hydraulic assignments stay
+  EST (the OG does not cover them; Citation-family practice).
+- **LON4-12** Shared-FMS items (fly-by-turn distance step in VNAV, FplEditor active-leg after enroute insertion)
+  are `src/nav/fms` work items outside this aircraft's ownership (§12.4 unchanged).
+
+### 17.3 Shared-library changes
+- None. (`ScriptedPilot.rotateRateDegS` already existed.)

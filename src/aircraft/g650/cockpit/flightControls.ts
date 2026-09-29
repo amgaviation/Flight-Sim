@@ -122,7 +122,8 @@ export function buildFlightControls(c: G650CockpitContext): void {
   });
 
   // ---- nosewheel tiller on the forward end of the left console: -1..1 = +-80 deg (NosewheelSteering via
-  // systems/cockpitInputs.ts). SCOPE: the handle stays where it is left (no centring spring modelled).
+  // systems/cockpitInputs.ts, which also springs the handle back to centre when released - the steer-by-wire
+  // tiller self-centres, LUC landing gear).
   const hz = FLOOR_Z - TILLER.center_m[2];
   b.structureMesh(trimBoxGeometry(0.16, hz, 0.2, 0.012), 'panelDark', [TILLER.center_m[0], TILLER.center_m[1], TILLER.center_m[2] + hz / 2 + 0.003]).name = 'tiller_housing';
   const mount = b.panel({ name: 'g650.tiller_mount', center_m: TILLER.center_m, facing: 'up', width: 0.15, height: 0.18, material: 'panelDark', screws: false, radius: 0.015 });

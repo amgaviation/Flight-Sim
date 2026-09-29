@@ -109,4 +109,14 @@ describe('G800 CB panels', () => {
     expect(r.vars.get('cb.tcas_tripped')).toBe(0);
     expect(r.vars.get('elec.tcas_powered')).toBe(1);
   });
+
+  it('the mechanical breakers draw as instanced batches, not one mesh per cap/legend (fix round 1 F11)', { timeout: 180_000 }, async () => {
+    const { build } = await fullCockpit('ready_to_taxi');
+    const stats = build.movingStats;
+    expect(stats).toBeTruthy();
+    // Every mechanical breaker's cap and rating legend is an instance (>= 2 parts per CB), replaced by
+    // a handful of InstancedMesh draw calls shared with the other instanced controls.
+    expect(stats!.parts).toBeGreaterThanOrEqual(mechanicalBreakers().length * 2);
+    expect(stats!.batches).toBeLessThan(stats!.parts / 4);
+  });
 });

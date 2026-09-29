@@ -57,7 +57,8 @@ export function createPneumatics(ctx: Pick<SimContext, 'vars'>): PneumaticSystem
       { id: 'bleed_l', duct: 'l_duct', pressure: 'eng1.bleed_press_psi', valve: `${V.bleedL} == 1 && !${V.fireHandleL} && elec.bac_l_powered`, regulatedPsi: 40, maxFlowKgs: 0.9, engine: 1, hp },
       { id: 'bleed_r', duct: 'r_duct', pressure: 'eng2.bleed_press_psi', valve: `${V.bleedR} == 1 && !${V.fireHandleR} && elec.bac_r_powered`, regulatedPsi: 40, maxFlowKgs: 0.9, engine: 2, hp },
       // APU load control valve into the left duct, bleed after 60 s (LUC apu); EST 0.7 kg/s.
-      { id: 'apu_bleed', duct: 'l_duct', pressure: 'apu.bleed_psi', valve: `${V.bleedApu} == 1 && ${V.apuBleedReady}`, regulatedPsi: 45, maxFlowKgs: 0.7 },
+      // LUC apu / dossier §4.6: the LCV supplies bleed on the ground only - APU bleed cannot pressurize in flight.
+      { id: 'apu_bleed', duct: 'l_duct', pressure: 'apu.bleed_psi', valve: `${V.bleedApu} == 1 && ${V.apuBleedReady} && gear.air_ground`, regulatedPsi: 45, maxFlowKgs: 0.7 },
     ],
     valves: [{ id: 'iso', a: 'l_duct', b: 'r_duct', open: V.isoCmd, travelS: 3, power: 'elec.l_ess_dc_powered' }],
     consumers: [
@@ -150,7 +151,9 @@ export function createIce(ctx: Pick<SimContext, 'vars'>): IceProtection {
 export function createApu(ctx: Pick<SimContext, 'vars'>): Apu {
   return new Apu(ctx.vars, {
     master: `${V.apuMaster} == 1 && elec.apu_ecu_powered`,
-    start: V.apuStart,
+    // In-flight start envelope: dossier §7 (abnormals) "APU if needed (in flight <= 37,000 ft)"; the generator
+    // may then be used to 45,000 ft. Starts commanded above 37,000 ft press alt are inhibited (ECU envelope).
+    start: `${V.apuStart} == 1 && fdm.press_alt_ft <= 37000`,
     stop: V.apuStop,
     starterVolts: 'elec.l_batt_bus_v', // LUC: the APU starter uses the left main battery
     starterNominalV: 26,
@@ -178,12 +181,15 @@ export function createFire(ctx: Pick<SimContext, 'vars'>): FireProtection {
   const shot2 = (d: string) => `${d} < -0.5`; // rotate INWARD = shot 2 = LEFT bottle
   return new FireProtection(ctx.vars, {
     zones: [
+      // ENGINE FIRE TEST: each L/R LOOP A/B switch tests only its own engine's detection (LUC fire; dossier
+      // §4.10) - pressing L LOOP A must light only the L fire warning. Per-zone test overrides carry that.
       {
         id: 'eng1',
         loops: 2,
         handle: V.fireHandleL,
         discharge: [{ bottle: 'bottle_r', command: shot1(V.fireDischL) }, { bottle: 'bottle_l', command: shot2(V.fireDischL) }],
         power: 'elec.fdcu_l_powered',
+        test: { fire: `${V.fireTestLA} || ${V.fireTestLB}`, fault: V.fireFaultTest },
       },
       {
         id: 'eng2',
@@ -191,18 +197,25 @@ export function createFire(ctx: Pick<SimContext, 'vars'>): FireProtection {
         handle: V.fireHandleR,
         discharge: [{ bottle: 'bottle_r', command: shot1(V.fireDischR) }, { bottle: 'bottle_l', command: shot2(V.fireDischR) }],
         power: 'elec.fdcu_r_powered',
+        test: { fire: `${V.fireTestRA} || ${V.fireTestRB}`, fault: V.fireFaultTest },
       },
       // APU: single helium-tube detector; FIRE EXT (guarded) discharges the LEFT bottle (LUC apu, LIM).
-      { id: 'apu', loops: 1, handle: `${V.apuFireExtGuard} || ${V.apuFireExt}`, discharge: [{ bottle: 'bottle_l', command: V.apuFireExt }], power: 'elec.fdcu_l_powered' },
+      // APU TEST tests the APU detector only (LUC fire).
+      {
+        id: 'apu',
+        loops: 1,
+        handle: `${V.apuFireExtGuard} || ${V.apuFireExt}`,
+        discharge: [{ bottle: 'bottle_l', command: V.apuFireExt }],
+        power: 'elec.fdcu_l_powered',
+        test: { fire: V.apuFireTest, fault: V.fireFaultTest },
+      },
     ],
     bottles: [
       { id: 'bottle_r', chargePsi: 600, tempC: 'fdm.sat_c' }, // EST Halon 1301 charge
       { id: 'bottle_l', chargePsi: 600, tempC: 'fdm.sat_c' },
     ],
-    test: {
-      fire: `${V.fireTestLA} || ${V.fireTestLB} || ${V.fireTestRA} || ${V.fireTestRB} || ${V.apuFireTest}`,
-      fault: V.fireFaultTest,
-    },
+    // FAULT TEST stays system-wide (squib lamps); the per-zone overrides above carry it for the zone fault lamps.
+    test: { fault: V.fireFaultTest },
   });
 }
 
@@ -215,8 +228,9 @@ export function createOxygen(ctx: Pick<SimContext, 'vars'>): OxygenSystem {
       { id: 'pax', capacityL: L, fullPsi: G650_LIMITS.oxyFullPsi, lowPsi: 400, valve: `${V.paxShutoff} == 1` },
     ],
     crew: [
-      { id: 'pilot', bottle: 'crew', inUse: V.oxyMaskL, mode: V.oxyMaskMode },
-      { id: 'copilot', bottle: 'crew', inUse: V.oxyMaskR, mode: V.oxyMaskMode },
+      // LUC oxygen: each EROS mask has its own N / 100 % / EMERGENCY regulator (per-side mode vars).
+      { id: 'pilot', bottle: 'crew', inUse: V.oxyMaskL, mode: V.oxyMaskModeL },
+      { id: 'copilot', bottle: 'crew', inUse: V.oxyMaskR, mode: V.oxyMaskModeR },
     ],
     pax: { kind: 'gaseous', deploy: `${V.paxOxy} == 2 || (${V.paxOxy} == 1 && press.pax_masks)`, bottle: 'pax', flowLpm: 60 },
   });

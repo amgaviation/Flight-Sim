@@ -204,7 +204,7 @@ describe('G650 function probe', () => {
     r.run(2);
     r.vars.set(V.crewOxy, 0);
     r.vars.set(V.oxyMaskL, 1);
-    r.vars.set(V.oxyMaskMode, 1);
+    r.vars.set(V.oxyMaskModeL, 1);
     r.run(3);
     log(`[crew O2 supply OFF, mask on 100 %] pilot_flowing=${g(r, 'oxy.pilot_flowing')} crew_psi=${g(r, 'oxy.crew_psi').toFixed(0)} pax_psi=${g(r, 'oxy.pax_psi').toFixed(0)}`);
     expect(true).toBe(true);

@@ -137,15 +137,22 @@ describe('G650 cockpit: controls drive the systems', () => {
     expect(r.vars.get(V.acpPtt(1))).toBe(0);
   });
 
-  it('tiller handle steers the nosewheel (NWS POWER on)', { timeout: 120_000 }, async () => {
+  it('tiller handle steers the nosewheel (NWS POWER on) and self-centres when released', { timeout: 120_000 }, async () => {
     const { r, ctl, step } = await setup('ready_to_taxi');
     step(1);
     const t = ctl('g650.fc.tiller');
-    for (let i = 0; i < 8; i++) t.onWheel?.(1, p(t));
-    step(3);
+    expect(t).toBeTruthy();
+    // Hold the handle deflected (a drag rewrites the var each frame, which holds off the centring spring).
+    for (let i = 0; i < 60 * 3; i++) {
+      r.vars.set(V.tiller3d, 0.6);
+      step(1 / 60);
+    }
     expect(r.vars.get(V.tiller3d)).toBeGreaterThan(0.3);
     expect(r.vars.get(V.tillerCmd)).toBeGreaterThan(0.3);
     expect(r.vars.get('gear.steer_deg')).toBeGreaterThan(15);
+    // Released: the steer-by-wire tiller self-centres (LUC landing gear; spring ~2/s in cockpitInputs.ts).
+    step(2);
+    expect(Math.abs(r.vars.get(V.tiller3d))).toBeLessThan(0.05);
   });
 
   it('landing gear handle: UP is blocked by the down-lock solenoid on the ground', { timeout: 120_000 }, async () => {

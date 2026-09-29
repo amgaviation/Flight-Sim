@@ -38,6 +38,8 @@ export const AFCS_BUTTONS = [
   'AP', 'FD', 'FD1', 'FD2', 'YD', 'HDG', 'NAV', 'APR', 'BC', 'ALT', 'VS', 'FLC', 'VNAV', 'LNAV', 'VORLOC', 'APP',
   'LVLCHG', 'LVL', 'TOGA', 'DISC', 'DISC_RESET', 'CWS', 'UP', 'DN', 'HALF_BANK', 'CMD_A', 'CMD_B', 'CWS_A', 'CWS_B',
   'ARM', 'HDG_SYNC', 'CRS_SYNC', 'SPD_MACH', 'ROL', 'PIT', 'FPA',
+  // Appended (G800 fix round 1 F02): selected-track lateral mode (Honeywell Symmetry HDG/TRK key).
+  'TRK',
 ] as const;
 export type AfcsButton = (typeof AFCS_BUTTONS)[number];
 

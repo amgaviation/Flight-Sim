@@ -36,7 +36,7 @@ import type { SimVars } from '../../../core/SimVars';
 import type { EventBus } from '../../../core/EventBus';
 import { ADC, AP, FMS, GPS, NAV } from '../../../core/vars';
 import { AFCS_VARS } from '../../../systems/autopilot/vars';
-import { VERTICAL_MODES } from '../../../systems/autopilot/types';
+import { LATERAL_MODES, VERTICAL_MODES } from '../../../systems/autopilot/types';
 import { EPIC_EVENTS, EPIC_VARS, NavSrc } from '../vars';
 import type { EpicEventMap, EpicSensors } from '../config';
 
@@ -121,9 +121,17 @@ export interface GuidancePanelOptions {
   previewDirectNm?: number;
   /** Destination direct distance source, default reads the FMS approach plan through `approachInfo`. */
   approachInfo?: () => { freqMhz: number; courseMag: number } | null;
+  /**
+   * Appended (G800 fix round 1 F02, Symmetry): the HDG/TRK key cycles OFF -> HDG -> TRK -> OFF
+   * (BJT500: the GP lateral key selects heading OR track; 'TRK' is engraved on the panel). Default
+   * false keeps the plain HDG key of the PlaneView GP.
+   */
+  hdgKeyTogglesTrk?: boolean;
 }
 
 const NAV_SRC_VARS = [EPIC_VARS.navSrc(1), EPIC_VARS.navSrc(2)] as const;
+const HDG_CODE = LATERAL_MODES.indexOf('HDG');
+const TRK_CODE = LATERAL_MODES.indexOf('TRK');
 const VS_CODE = VERTICAL_MODES.indexOf('VS');
 const FPA_CODE = VERTICAL_MODES.indexOf('FPA');
 const PIT_CODE = VERTICAL_MODES.indexOf('PIT');
@@ -270,9 +278,15 @@ export class GuidancePanelLogic {
       case 'at':
         this.events.emit(this.opts.events.atEngage);
         break;
-      case 'hdg_btn':
-        this.afcs('hdg');
+      case 'hdg_btn': {
+        if (this.opts.hdgKeyTogglesTrk) {
+          // Symmetry HDG/TRK key (F02): OFF -> HDG -> TRK -> OFF. In TRK the 'trk' press toggles off
+          // (Afcs.selectLateral reverts to the default lateral mode).
+          const lat = v.get(AFCS_VARS.latCode);
+          this.afcs(lat === HDG_CODE || lat === TRK_CODE ? 'trk' : 'hdg');
+        } else this.afcs('hdg');
         break;
+      }
       case 'hdg_push':
         this.afcs('hdg_sync');
         break;

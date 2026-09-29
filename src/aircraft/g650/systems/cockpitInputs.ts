@@ -31,13 +31,23 @@ import { G650_VARS as V } from '../vars';
 export class G650CockpitInputs implements Subsystem {
   readonly name = 'g650.cockpit_inputs';
   private prevTrim = 0;
+  /** Tiller spring-return bookkeeping: last value this block wrote / grip-release hold timer (s). */
+  private tillerWritten = NaN;
+  private tillerHold = 0;
 
   constructor(
     private readonly vars: SimVars,
     private readonly events?: EventBus,
-  ) {}
+  ) {
+    // Below-G/S cancel (EGPWS glideslope cancel, valid below 2,000 ft RA in the shared Taws): the Epic fit has
+    // no dedicated G/S CANCEL key in the pedestal photographs, so pressing a MASTER WARNING switchlight while
+    // the BELOW G/S alert shows also cancels it (EST wiring; the acknowledgment press is the closest control).
+    events?.on('cas.ack_warning', () => {
+      if (this.vars.get('taws.gs_light') !== 0) this.events?.emit('taws.gs_cancel');
+    });
+  }
 
-  update(): void {
+  update(dt: number): void {
     const v = this.vars;
     const held = v.get(V.yokeDiscL) !== 0 || v.get(V.yokeDiscR) !== 0;
     v.set(V.discHeld, held ? 1 : 0);
@@ -48,11 +58,24 @@ export class G650CockpitInputs implements Subsystem {
     if (cmd !== 0 && this.prevTrim === 0 && v.get(AP.engaged) !== 0) this.events?.emit('ap.disc');
     this.prevTrim = cmd;
     const hw = v.get(INPUT.tiller);
-    const h3 = v.get(V.tiller3d);
+    // Steer-by-wire tiller self-centres when released (LUC landing gear): the 3D handle springs back to zero
+    // at ~2/s once it stops being moved (a change since our last write = the pilot's hand is on it; a short
+    // 0.3 s hold keeps a drag in progress from fighting the spring between mouse events).
+    let h3 = v.get(V.tiller3d);
+    if (h3 !== this.tillerWritten && !Number.isNaN(this.tillerWritten)) this.tillerHold = 0.3;
+    else if (this.tillerHold > 0) this.tillerHold = Math.max(0, this.tillerHold - dt);
+    if (this.tillerHold <= 0 && h3 !== 0) {
+      const step = 2 * dt;
+      h3 = Math.abs(h3) <= step ? 0 : h3 - Math.sign(h3) * step;
+      v.set(V.tiller3d, h3);
+    }
+    this.tillerWritten = h3;
     v.set(V.tillerCmd, Math.abs(hw) >= Math.abs(h3) ? hw : h3);
   }
 
   reset(): void {
     this.prevTrim = 0;
+    this.tillerWritten = NaN;
+    this.tillerHold = 0;
   }
 }

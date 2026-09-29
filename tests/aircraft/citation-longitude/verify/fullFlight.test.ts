@@ -298,7 +298,9 @@ describe('Citation Longitude check ride KICT -> KMCI (full normal procedure)', (
       let liftoffFt = NaN;
       const pilot = new ScriptedPilot(v, r.events);
       const pilotTick = () => pilot.update(1 / 60);
-      pilot.startTakeoff({ vrKt: vr, courseTrueDeg: rw01r.headingTrue, lat: rw01r.lat, lon: rw01r.lon, pitchDeg: 10, gearUp: false });
+      // LON4-01: a transport-category rotation is a deliberate full-back input at VR, ~4-5 deg/s to the 10 deg
+      // target (BCA flight: VR 113, liftoff a few knots later; FPG p.4 puts V2 - VR at ~10-13 kt with V2 at 35 ft).
+      pilot.startTakeoff({ vrKt: vr, courseTrueDeg: rw01r.headingTrue, lat: rw01r.lat, lon: rw01r.lon, pitchDeg: 10, rotateRateDegS: 4.5, gearUp: false });
       let holdSeen = false;
       let n1To = 0;
       let gearUpAt = NaN;
@@ -320,9 +322,11 @@ describe('Citation Longitude check ride KICT -> KMCI (full normal procedure)', (
       expect(n1To).toBeGreaterThan(90);
       expect(n1To).toBeLessThanOrEqual(LON_LIMITS.n1TakeoffPct + 0.1);
       expect(Math.abs(n1To - to.n1Pct!)).toBeLessThan(1); // the A/T sets the TOLD takeoff N1
-      // All-engine liftoff well inside the factored TOLD field length; liftoff before V2 + 8 (FPG p.4).
+      // All-engine liftoff well inside the factored TOLD field length; liftoff no later than V2 + 5 (LON4-01;
+      // FPG p.4 VR-V2 spreads are ~10-13 kt with V2 the OEI screen speed at 35 ft, so an all-engine liftoff with
+      // a 4-5 deg/s rotation belongs between VR and about V2).
       expect(liftoffFt).toBeLessThan(0.85 * to.fieldLengthFt!);
-      expect(pilot.log.liftoffIasKt).toBeLessThan(v2 + 8);
+      expect(pilot.log.liftoffIasKt).toBeLessThanOrEqual(v2 + 5);
       expect(pilot.log.maxGroundDeviationM).toBeLessThan(5);
       expect(v.get(FDM.altAgl)).toBeGreaterThan(400);
 
@@ -550,7 +554,7 @@ describe('Citation Longitude check ride KICT -> KMCI (full normal procedure)', (
       });
       log(r, 'touchdown');
       LOG.push(`touchdown ${tdVs.toFixed(0)} fpm, ${tdIas.toFixed(0)} KIAS, ${tdDistFt.toFixed(0)} ft past the threshold, ${clCross().toFixed(1)} m off centre`);
-      expect(retardSeen).toBe(true); // A/T RETARD below 40 ft (OG 7-5)
+      expect(retardSeen).toBe(true); // A/T RETARD at 50 ft (OG 17 landing procedure; LON4-04)
       expect(tdVs).toBeGreaterThan(-LON_LIMITS.maxLandingSinkFpm);
       expect(tdIas).toBeGreaterThan(vapp - 20);
       expect(tdIas).toBeLessThan(vapp + 5);

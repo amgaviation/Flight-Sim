@@ -217,6 +217,8 @@ export const G650_CHECKLISTS: Checklist[] = [
     items: [
       { challenge: 'Crew oxygen masks', response: 'ON, 100 %', check: both(on(V.oxyMaskL), on(V.oxyMaskR)) },
       { challenge: 'PASSENGER OXYGEN', response: 'MAN', check: eq(V.paxOxy, 2) },
+      // The CPC latches Emergency Descent Mode (blue EDM advisory, logic.ts) once the cabin exceeds the trip
+      // with no crew response; the descent itself is flown by the crew (dossier §4.8 SCOPE).
       { challenge: 'Emergency descent', response: 'Initiate' },
     ],
   },

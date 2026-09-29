@@ -54,11 +54,18 @@ describe('G650 cockpit lighting', () => {
     expect(v.get(V.ltPanel)).toBeGreaterThan(0.5);
     expect(annun()).toBe(1);
 
-    // Night setting: annunciators dim, panel backlighting on at the PANEL level.
+    // Night setting: annunciators dimmed, following the knob CONTINUOUSLY (G650 training material: rotating
+    // MASTER from OFF dims them; full clockwise brings them back to full bright).
     turn(4);
-    expect(v.get(V.ltMaster)).toBeGreaterThan(0.1);
-    expect(v.get(V.ltMaster)).toBeLessThan(0.5);
-    expect(annun()).toBeCloseTo(0.3, 5);
+    const m1 = v.get(V.ltMaster);
+    expect(m1).toBeGreaterThan(0.1);
+    expect(m1).toBeLessThan(0.5);
+    expect(annun()).toBeCloseTo(Math.min(1, 0.3 + 0.7 * m1), 5);
+    expect(annun()).toBeLessThan(0.95);
+    // Further clockwise (still in the night range): brighter than before - continuous dimming.
+    turn(1);
+    const m2 = v.get(V.ltMaster);
+    if (m2 < 0.95) expect(annun()).toBeGreaterThan(0.3 + 0.7 * m1 - 1e-6);
     expect(v.get('ac.light.panel')).toBeGreaterThan(0.5);
     expect(v.get('ac.light.dome')).toBe(0);
 

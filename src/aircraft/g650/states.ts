@@ -116,7 +116,12 @@ export function setG650Switches(ctx: Pick<SimContext, 'vars'>, sys: G650Systems,
   v.set(V.paxShutoff, 1);
   v.set(V.oxyMaskL, 0);
   v.set(V.oxyMaskR, 0);
-  v.set(V.oxyMaskMode, 0);
+  v.set(V.oxyMaskMode, 0); // deprecated shared var (kept for compatibility)
+  v.set(V.oxyMaskModeL, 0); // per-mask EROS regulators (LUC oxygen)
+  v.set(V.oxyMaskModeR, 0);
+  // ---- flight-deck door (EST): closed, unlocked in every state
+  v.set(V.doorCockpit, 0);
+  v.set(V.doorLockSw, 0);
   // ---- LIGHTS
   v.set(V.ltNav, b(powered));
   v.set(V.ltBeacon, b(powered));

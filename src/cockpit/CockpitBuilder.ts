@@ -482,9 +482,12 @@ export class CockpitBuilder {
     return this.addStructure(m, position_m, { occluder });
   }
 
-  /** Crew seat at a body position (origin on the floor under the front of the seat pan). */
-  seat(style: SeatStyle, position_m: BodyVec, material?: MaterialName): THREE.Group {
-    const parts = seatGeometry(style);
+  /**
+   * Crew seat at a body position (origin on the floor under the front of the seat pan).
+   * (`opts` appended by b737-800, additive: `panRaise_m` lifts the cushion on a taller base.)
+   */
+  seat(style: SeatStyle, position_m: BodyVec, material?: MaterialName, opts?: { panRaise_m?: number }): THREE.Group {
+    const parts = seatGeometry(style, opts?.panRaise_m ?? 0);
     const g = new THREE.Group();
     const mat = material ?? (this.env.materials.palette.seatMaterial === 'fabric' ? 'fabric' : 'leather');
     g.add(new THREE.Mesh(parts.cushion, this.env.materials.get(mat)));

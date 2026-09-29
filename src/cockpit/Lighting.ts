@@ -265,13 +265,20 @@ export class CockpitLighting {
     this.annunPowerVar = powerVar;
   }
 
-  /** Multiplier for annunciator emissive intensity (0 when annunciator power is off). */
+  /**
+   * Multiplier for annunciator emissive intensity (0 when annunciator power is off). A fractional var value
+   * (0 < x < 1) is a continuous brightness (floored at the dim level; appended additively by the g650
+   * aircraft for its MASTER CONTROL knob) - existing binary 0/1 vars behave exactly as before.
+   */
   annunciatorLevel(): number {
     const v = this.vars;
     if (this.annunPowerVar && v.has(this.annunPowerVar) && v.get(this.annunPowerVar) === 0) return 0;
     if (!this.annunVar || !v.has(this.annunVar)) return 1;
-    const bright = v.get(this.annunVar) !== 0;
-    return (this.annunInvert ? !bright : bright) ? 1 : this.annunDim;
+    let x = v.get(this.annunVar);
+    if (this.annunInvert) x = 1 - x;
+    if (x >= 1) return 1;
+    if (x <= 0) return this.annunDim;
+    return Math.max(this.annunDim, x);
   }
 
   /** True while the annunciator lamp test is active. */

@@ -39,10 +39,27 @@ export const MOD_W = 0.146;
 export const TXT = 1.45;
 
 /**
+ * Minimum nominal legend height (m, before TXT): Boeing panel lettering is ~2.4-3.5 mm cap height and every
+ * legend is legible from the seat; layout-table values below this are clamped so the smallest engravings render
+ * >= ~1.9 mm instead of aliasing away (fix round 1 B738-L10 / G19).
+ */
+export const MIN_LEGEND_H = 0.0013;
+
+/**
+ * Overhead plate material: the ceiling faces down and is lit only by indirect fill, so with the shared 'panel'
+ * albedo it rendered a markedly darker olive grey than the direct-lit MIP (day capture view_7 vs the light
+ * Boeing grey of paneloverhead_737-700.jpg). EST: a ~18 % lighter albedo of the same grey family brings the
+ * shadowed overhead to the same rendered tone (fix round 1 B738-L11).
+ */
+export function ovhdPanelMaterial(env: CockpitEnv): THREE.Material {
+  return env.materials.custom('paint', 0x6c6e68, 0.85);
+}
+
+/**
  * A Boeing overhead module plate on `parent` (top-left convention of the parent), centred at (x, y),
  * with its own top-left convention and four DZUS fasteners.
  */
-export function module(parent: Panel, name: string, x: number, y: number, w: number, h: number): Panel {
+export function module(parent: Panel, name: string, x: number, y: number, w: number, h: number, material?: THREE.Material): Panel {
   const i = 0.0055;
   return parent.subPanel({
     name,
@@ -51,7 +68,7 @@ export function module(parent: Panel, name: string, x: number, y: number, w: num
     width: w,
     height: h,
     origin: 'top-left',
-    material: 'panel',
+    material: material ?? 'panel',
     radius: 0.002,
     screws: { kind: 'dzus', diameter: 0.0062, positions: [[i, i], [w - i, i], [i, h - i], [w - i, h - i]] },
   });
@@ -77,12 +94,13 @@ export class Ovhd {
   }
 
   label(text: string, x: number, y: number, h = 0.0021, weight = 800): void {
-    this.p.label(text, this.X(x), this.Y(y), { height: h * TXT, zone: OZ, weight });
+    this.p.label(text, this.X(x), this.Y(y), { height: Math.max(h, MIN_LEGEND_H) * TXT, zone: OZ, weight });
   }
 
   /** Multi-line label (lines stacked downwards, first line at y). */
   labels(lines: string[], x: number, y: number, h = 0.0019): void {
-    lines.forEach((l, k) => this.label(l, x, y + k * h * TXT * 1.4, h));
+    const hh = Math.max(h, MIN_LEGEND_H);
+    lines.forEach((l, k) => this.label(l, x, y + k * hh * TXT * 1.4, hh));
   }
 
   /** Group bracket (title centred, ticks down) in the overhead zone. */
@@ -142,7 +160,7 @@ export class Ovhd {
         positions,
         initial: o.initial,
         diameter: o.diameter ?? 0.014,
-        labelHeight: (o.labelHeight ?? 0.0017) * TXT,
+        labelHeight: Math.max(o.labelHeight ?? 0.0017, MIN_LEGEND_H) * TXT,
         labelRadius: o.labelRadius,
         title: o.title,
         cap: o.cap ?? 'pointer',
@@ -197,7 +215,7 @@ export const OFF_ON: Pick<ToggleSwitchOptions, 'positions' | 'values' | 'initial
 export function moduleAbs(env: CockpitEnv, parent: Panel, name: string, x0: number, y0: number, x1: number, y1: number): Ovhd {
   const w = x1 - x0;
   const h = y1 - y0;
-  return new Ovhd(env, module(parent, name, x0 + w / 2, y0 + h / 2, w, h), [x0, y0]);
+  return new Ovhd(env, module(parent, name, x0 + w / 2, y0 + h / 2, w, h, ovhdPanelMaterial(env)), [x0, y0]);
 }
 
 /**

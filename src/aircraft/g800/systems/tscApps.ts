@@ -193,8 +193,12 @@ function installOhptsTest(logic: import('../../../avionics/honeywell-epic/logic/
   logic.addPage({ id: 'TEST', title: 'System Test', widgets: w });
 }
 
-/** Adds the FLT CTL, ECB, AUDIO and TAWS applications to every TSC and the TEST page to every OHPTS (idempotent). */
-export function installG800TscApps(suite: EpicSuite, vars: SimVars, breakers: readonly string[]): void {
+/**
+ * Adds the FLT CTL, ECB, AUDIO and TAWS applications to every TSC and the TEST page to every OHPTS (idempotent).
+ * Returns the un-listen function of the QA hook (fix round 1: the aircraft's dispose must remove it from the
+ * shared EventBus).
+ */
+export function installG800TscApps(suite: EpicSuite, vars: SimVars, breakers: readonly string[]): () => void {
   const ecb = electronicBreakers(breakers);
   suite.tscLogic.forEach((logic, idx) => {
     if (logic.has('FLTCTL')) return;
@@ -216,7 +220,7 @@ export function installG800TscApps(suite: EpicSuite, vars: SimVars, breakers: re
   });
   for (const logic of suite.ohptsLogic) installOhptsTest(logic, vars);
   // QA / debug hook (screenshot scripts: window.__sim.emit): show a page on TSC n (0..3) or OHPTS n (0..2).
-  suite.events.on('g800.tsc.show', (p) => {
+  return suite.events.on('g800.tsc.show', (p) => {
     const q = p as { tsc?: number; ohpts?: number; page?: string } | undefined;
     if (!q?.page) return;
     if (q.tsc !== undefined) suite.tscLogic[q.tsc]?.show(q.page);

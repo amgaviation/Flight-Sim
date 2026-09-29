@@ -26,7 +26,8 @@
  *   TRUs: L/R MAIN (switchable), L/R ESS, EMER (the "AUX" TRU of the GV family)
  *   L BATT <-(BATT sw)-> L ESS DC ; R BATT <-> R ESS DC ; MAIN DC -> ESS DC (diodes)
  *   L/R ESS DC -> EMER DC (diodes) ; EMER DC -> UPS bus (diode, charges the UPS battery)
- *   E-BATT -> L/R ESS DC (diodes) while EMER PWR ARM has latched (logic.ts)
+ *   E-BATT FWD pair -> L ESS DC, E-BATT AFT pair -> R ESS DC (diodes) while that pair's EMER PWR
+ *   latch is set (logic.ts; two independent pairs, code450 G700/G800 electrical; fix round 1 F08)
  * Load currents are EST typical values for each equipment class.
  */
 import type { SimContext } from '../../../core/SimContext';
@@ -108,7 +109,7 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): ElectricalNetwo
     dc('com3', 'r_main_dc', `1.0 + 5 * ${V.comTx(3)}`, 5),
     dc('hf1', 'l_main_dc', `1.5 + 20 * ac.g800.hf1_tx`, 25),
     dc('hf2', 'r_main_dc', `1.5 + 20 * ac.g800.hf2_tx`, 25),
-    dc('pa', 'l_main_dc', 1.0, 5),
+    dc('pa', 'l_main_dc', `1.0 + 4 * ${V.paTx}`, 5), // PA amplifier draws while keyed (EST 4 A audio power; fix F07)
     dc('ice_det', 'l_main_dc', 0.6, 3),
     dc('panel_lts', 'l_main_dc', `4 * ${V.ltPanel} + 3 * ${V.ltFlood} + 1.5 * ${V.ltDome} + 2 * ${V.stormLt}`, 10, { model: 'resistive' }),
     dc('ext_nav', 'l_main_dc', 2.0, 5, { enabled: V.ltNav, model: 'resistive' }),
@@ -153,15 +154,18 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): ElectricalNetwo
       { id: 'idg1_out', type: 'ac' }, { id: 'idg2_out', type: 'ac' }, { id: 'apu_out', type: 'ac' }, { id: 'gpu_out', type: 'ac' }, { id: 'rat_out', type: 'ac' },
       { id: 'l_main_ac', type: 'ac' }, { id: 'r_main_ac', type: 'ac' }, { id: 'l_ess_ac', type: 'ac' }, { id: 'r_ess_ac', type: 'ac' }, { id: 'emer_ac', type: 'ac' },
       { id: 'l_main_dc' }, { id: 'r_main_dc' }, { id: 'l_ess_dc' }, { id: 'r_ess_dc' }, { id: 'emer_dc' },
-      { id: 'batt_l_bus' }, { id: 'batt_r_bus' }, { id: 'ups' }, { id: 'ups_batt_bus' }, { id: 'ebatt_bus' },
+      { id: 'batt_l_bus' }, { id: 'batt_r_bus' }, { id: 'ups' }, { id: 'ups_batt_bus' }, { id: 'ebatt_fwd_bus' }, { id: 'ebatt_aft_bus' },
     ],
     batteries: [
       { id: 'batt_l', bus: 'batt_l_bus', ...BATTERY_G650_NICD, ambientC: 'fdm.sat_c' },
       { id: 'batt_r', bus: 'batt_r_bus', ...BATTERY_G650_NICD, ambientC: 'fdm.sat_c' },
       // SCQ: UPS single 24 V 10.5 Ah lithium (7 Li-ion cells EST), internal resistance EST 30 mOhm.
       { id: 'ups_batt', bus: 'ups_batt_bus', chemistry: 'li-ion', cells: 7, capacityAh: G800_LIMITS.upsBattAh, internalResistanceOhm: 0.03, ambientC: 20 },
-      // SCQ: four 24 V 9 Ah emergency batteries (two pairs) -> modelled as one 24 V 18 Ah NiCd string (EST chemistry).
-      { id: 'ebatt', bus: 'ebatt_bus', chemistry: 'nicd', cells: 20, capacityAh: 18, internalResistanceOhm: 0.03, ambientC: 20 },
+      // code450 G700/G800 electrical: four 24 V 9 Ah emergency batteries in TWO INDEPENDENT PAIRS (forward
+      // and aft), each pair with its own "Fwd/Aft Emer Battery On" advisory. Each pair is modelled as one
+      // 9 Ah string (fix round 1 F08; EST NiCd chemistry, EST pairing of the two units within a pair).
+      { id: 'ebatt_fwd', bus: 'ebatt_fwd_bus', chemistry: 'nicd', cells: 20, capacityAh: 9, internalResistanceOhm: 0.03, ambientC: 20 },
+      { id: 'ebatt_aft', bus: 'ebatt_aft_bus', chemistry: 'nicd', cells: 20, capacityAh: 9, internalResistanceOhm: 0.03, ambientC: 20 },
     ],
     acGenerators: [
       { id: 'idg1', bus: 'idg1_out', ratedKva: G800_LIMITS.idgKva, frequency: 400, drive: ENG.n2(1), minDrive: 50, switch: genSw(V.genL), reset: `${V.genL} == 0 || ac.g800.elec_reset_pulse` },
@@ -208,10 +212,13 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): ElectricalNetwo
       { id: 'emer_ups', a: 'emer_dc', b: 'ups', kind: 'diode' },
       // BATTERIES FCS UPS switchlight (code450 G700/G800 electrical): connects the UPS battery to the FCC UPS bus.
       { id: 'ups_batt_ctc', a: 'ups_batt_bus', b: 'ups', closed: `${V.fcsBattUps} == 1` },
-      { id: 'ebatt_l', a: 'ebatt_bus', b: 'l_ess_dc', kind: 'diode', closed: V.ebattOn },
-      { id: 'ebatt_r', a: 'ebatt_bus', b: 'r_ess_dc', kind: 'diode', closed: V.ebattOn },
-      // E-batts are kept charged from the L ESS DC bus through a charging diode (EST).
-      { id: 'ebatt_chg', a: 'l_ess_dc', b: 'ebatt_bus', kind: 'diode', closed: 'elec.l_ess_tru_online' },
+      // Two independent pairs (F08): the FWD pair feeds the L ESS DC bus, the AFT pair the R ESS DC bus,
+      // each on its own contactor state (logic.ts latches them per pair; EST bus assignment).
+      { id: 'ebatt_fwd_ctc', a: 'ebatt_fwd_bus', b: 'l_ess_dc', kind: 'diode', closed: V.ebattFwdOn },
+      { id: 'ebatt_aft_ctc', a: 'ebatt_aft_bus', b: 'r_ess_dc', kind: 'diode', closed: V.ebattAftOn },
+      // E-batt pairs are kept charged from their onside ESS DC bus through a charging diode (EST).
+      { id: 'ebatt_fwd_chg', a: 'l_ess_dc', b: 'ebatt_fwd_bus', kind: 'diode', closed: 'elec.l_ess_tru_online' },
+      { id: 'ebatt_aft_chg', a: 'r_ess_dc', b: 'ebatt_aft_bus', kind: 'diode', closed: 'elec.r_ess_tru_online' },
     ],
     loads,
   });

@@ -237,6 +237,12 @@ export const LONGITUDE_SYNOPTICS: SynopticPageDef[] = [
       { type: 'indicator', x: 250, y: 590, label: 'NO TAKEOFF', offLabel: 'TAKEOFF CONFIG OK', on: V.noTakeoff, color: 'red' },
       { type: 'readout', x: 250, y: 650, label: 'STAB', value: 'trim.pitch_units', decimals: 1, unit: '°' },
     ],
+    controls: [
+      // LON4-07 (BCA 2021): pilot-set approach speed additive over VREF, applied at 2 nm from the runway
+      // (systems/afcsExtras.ts LongitudeApproachSpeed). Range 0-20 kt EST; page placement EST (the real GTC
+      // has it on the speed-bug pages, not modelled).
+      { label: 'APPR SPD ADD', kind: 'number', var: V.apprSpdAddKt, min: 0, max: 20, step: 1, unit: 'KT' },
+    ],
   },
   {
     // OG 15-6 Flight Controls pane: surface positions, stabilizer, brake pressure and temperature. Layout EST.

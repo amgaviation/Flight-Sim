@@ -583,6 +583,67 @@ export class LcdDisplay extends CanvasDisplay {
   }
 }
 
+// ============================================================== rudder trim indicator (linear)
+
+/**
+ * Rudder trim indicator: the NG trim module's horizontal linear scale across the top of the rudder / aileron
+ * trim panel (FCOM 9.10 "Rudder trim indicator"; NG pedestal photographs): 15-0-15 scale with LEFT / RIGHT
+ * arrows and a vertical pointer, backlit window. Reads `ac.b738.lt.rud_trim_units` (logic.ts, +/-16 units).
+ */
+export class RudderTrimIndicator extends CanvasDisplay {
+  private readonly v: SimVars;
+
+  constructor(vars: SimVars, id: string, canvas?: CanvasOpt) {
+    super({ id, width: 512, height: 112, vars, powerVar: 'elec.dc_stby_powered', refreshHz: 30, canvas, background: '#0e0f10' });
+    this.v = vars;
+    this.watch(B738.lt.rudderTrimUnits, 0.05);
+  }
+
+  protected draw(ctx: Ctx2D): void {
+    const W = 512;
+    ctx.fillStyle = '#0e0f10';
+    ctx.fillRect(0, 0, W, 112);
+    const cx = W / 2;
+    const span = 220; // px from centre to the 16-unit end
+    const px = (u: number) => cx + (u / 16) * span;
+    ctx.strokeStyle = '#f0f0f0';
+    ctx.fillStyle = '#f0f0f0';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    // Scale line with ticks every unit, majors / numerals at 0, 5, 10, 15 each side (15-0-15 scale).
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(px(-16), 58);
+    ctx.lineTo(px(16), 58);
+    ctx.stroke();
+    for (let u = -15; u <= 15; u++) {
+      const major = u % 5 === 0;
+      ctx.lineWidth = major ? 3 : 1.5;
+      ctx.beginPath();
+      ctx.moveTo(px(u), 58);
+      ctx.lineTo(px(u), major ? 40 : 48);
+      ctx.stroke();
+      if (major) {
+        ctx.font = fontString(20, SANS, 'bold');
+        ctx.fillText(String(Math.abs(u)), px(u), 26);
+      }
+    }
+    ctx.font = fontString(17, SANS, 'bold');
+    ctx.fillText('LEFT', px(-13), 96);
+    ctx.fillText('RUDDER TRIM', cx, 96);
+    ctx.fillText('RIGHT', px(13), 96);
+    // Pointer (white triangle from below the scale).
+    const u = Math.max(-16, Math.min(16, this.v.get(B738.lt.rudderTrimUnits)));
+    ctx.fillStyle = '#f4f4f4';
+    ctx.beginPath();
+    ctx.moveTo(px(u), 60);
+    ctx.lineTo(px(u) - 9, 80);
+    ctx.lineTo(px(u) + 9, 80);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
 /** Flap position indicator angle (FCOM 9.10: marks 0 1 2 5 10 15 25 30 40, non-linear; EST angles). */
 export const FLAP_DIAL = {
   marks: [0, 1, 2, 5, 10, 15, 25, 30, 40],

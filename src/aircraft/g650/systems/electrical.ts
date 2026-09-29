@@ -179,8 +179,11 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): ElectricalNetwo
     ],
     acGenerators: [
       // LUC: IDGs 40 kVA 115 VAC 400 Hz; GCU online above the CSD underspeed (EST 55 % HP, below the 62 % ground idle).
-      { id: 'idg1', bus: 'l_main_ac', ratedKva: IDG, drive: 'eng1.n2_pct', minDrive: 55, switch: `${V.genL} == 1`, reset: V.elecReset },
-      { id: 'idg2', bus: 'r_main_ac', ratedKva: IDG, drive: 'eng2.n2_pct', minDrive: 55, switch: `${V.genR} == 1`, reset: V.elecReset },
+      // Pulling the fire handle trips the IDG off line at once (LUC fire: the handle closes the fuel and
+      // hydraulic SOVs, the bleed, and disconnects the IDG); stowing the handle restores it (SCOPE: the real
+      // trip latches until a GEN cycle / AC-DC RESET, but the handle itself is not normally re-stowed).
+      { id: 'idg1', bus: 'l_main_ac', ratedKva: IDG, drive: 'eng1.n2_pct', minDrive: 55, switch: `${V.genL} == 1 && !${V.fireHandleL}`, reset: V.elecReset },
+      { id: 'idg2', bus: 'r_main_ac', ratedKva: IDG, drive: 'eng2.n2_pct', minDrive: 55, switch: `${V.genR} == 1 && !${V.fireHandleR}`, reset: V.elecReset },
       // LUC: APU GEN 40 kVA, on line at 99 % + 2 s (apu.gen_drive reaches 100 once AVAIL).
       { id: 'apu_gen', bus: 'ac_tie', ratedKva: G650_LIMITS.apuGenKva, drive: 'apu.gen_drive', minDrive: 98, switch: `${V.apuGen} == 1`, reset: V.elecReset },
       // LUC/LIM: RAT GEN 15 kVA, drops off line below 180 KCAS.

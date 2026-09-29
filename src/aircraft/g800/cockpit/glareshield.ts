@@ -149,8 +149,10 @@ const KEYS: readonly [string, string, number, number, GpControl][] = [
  * knob with HDG / TRK marks, HDG/TRK key), LNAV, AUTOFLIGHT (AUTO key, green coupling arrow, XFR key, APR; bracketed),
  * VNAV, VERTICAL (window, wheel, key), FLCH, ALTITUDE (FT window, knob, HOLD key). Light bars sit above the keys, separate
  * from them. Mapping onto the Epic guidance events: AUTO = AP engage, XFR = PFD coupling transfer (the arrow shows the
- * coupled side), LNAV = NAV, HOLD = ALT, VERTICAL key = VS, HDG/TRK = HDG (SCOPE: track mode not modelled; FD, BC,
- * LO BANK and FPA are on the TSC GUIDANCE page; the A/T ENG / DISENG buttons are on the power levers).
+ * coupled side), LNAV = NAV, HOLD = ALT, VERTICAL key = VS. The HDG/TRK key cycles OFF -> HDG -> TRK -> OFF
+ * (function fix round 1 F02: Afcs TRK selected-track mode; guidance.ts hdgKeyTogglesTrk; the PFD FMA
+ * annunciates TRK). FD, BC, LO BANK and FPA are on the TSC GUIDANCE page; the A/T ENG / DISENG buttons are
+ * on the power levers.
  * Legend engraving 3 mm white on dark keys so it reads in daylight.
  */
 function addSymmetryGuidancePanel(c: G800CockpitContext, face: Panel, suite: EpicSuite): Panel {

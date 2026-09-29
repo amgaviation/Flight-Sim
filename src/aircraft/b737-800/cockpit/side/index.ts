@@ -283,8 +283,14 @@ function buildMaskBox(c: B738CockpitContext, p: Panel, s: Side, x: number, y: nu
 function buildCbPanel(c: B738CockpitContext, s: Side, groups: CbGroup[], ratings: ReadonlyMap<string, number>): void {
   const { b, env } = c;
   const sg = s === 1 ? -1 : 1;
-  // Each panel is as tall as its breakers need, hanging from CB_TOP_Z (P6 carries more breakers than P18).
-  const h = cbPanelHeight(groups, CB_PANEL.w, 0.024);
+  // Each panel is as tall as its breakers need, hanging from CB_TOP_Z (P6 carries more breakers than P18),
+  // plus static dummy breaker rows below the functional groups: the real P6 / P18 carry several hundred
+  // breakers each (one per LRU power feed; NG photographs), far more than the one-per-modelled-load set, so
+  // the remaining rows are populated with non-functional breaker bodies to approximate the real density
+  // (fix round 1 B738-L15; static meshes, merged by the builder's static consolidation: no draw-call cost).
+  const DUMMY_ROWS = 8;
+  const realH = cbPanelHeight(groups, CB_PANEL.w, 0.024);
+  const h = realH + CB_GRID.title + DUMMY_ROWS * CB_GRID.dy + 0.02;
   const P = { ...CB_PANEL, h, z: CB_TOP_Z + h / 2 };
   // Cabinet behind the panel (to the sidewall), from just above the panel down to the floor.
   const cabTop = P.z - P.h / 2 - 0.015;
@@ -316,6 +322,31 @@ function buildCbPanel(c: B738CockpitContext, s: Side, groups: CbGroup[], ratings
   const title = s === 1 ? 'P18  CIRCUIT BREAKER PANEL - CAPT' : 'P6  CIRCUIT BREAKER PANEL - F/O';
   panel.label(title, P.w / 2, 0.012, { height: 0.0032, zone: 'cb', weight: 800 });
   const cbs = fillCbPanel(env, panel, P.w, groups, ratings, 0.024);
+  // Dummy breaker population (see the panel-height comment above): rows of static breaker bodies with collars
+  // under a generic bus title. EST arrangement; the functional breakers above stay the interactive set.
+  {
+    const G = CB_GRID;
+    const cols = Math.min(G.maxCols, Math.max(1, Math.floor((P.w - 2 * G.margin) / G.dx)));
+    const y0 = realH + 0.004;
+    panel.line(G.margin, y0, P.w - G.margin, y0, 0.0005, 'cb');
+    panel.label(s === 1 ? 'EQUIP / SYSTEM FEEDS' : 'EQUIP / SYSTEM FEEDS', P.w / 2, y0, { height: 0.003, weight: 800, zone: 'cb' });
+    const bodyGeo = env.geometry.get('b738.cb_dummy_body', () => new THREE.CylinderGeometry(0.0047, 0.0047, 0.009, 10).rotateX(Math.PI / 2));
+    const collarGeo = env.geometry.get('b738.cb_dummy_collar', () => new THREE.CylinderGeometry(0.0072, 0.0072, 0.0035, 12).rotateX(Math.PI / 2));
+    const bodyMat = env.materials.get('plasticBlack');
+    const collarMat = env.materials.get('panelDark');
+    for (let r = 0; r < DUMMY_ROWS; r++) {
+      for (let ci = 0; ci < cols; ci++) {
+        const bx = G.margin + 0.004 + G.dx / 2 + ci * G.dx;
+        const by = y0 + G.title + 0.004 + r * G.dy;
+        const body = new THREE.Mesh(bodyGeo, bodyMat);
+        body.userData.cockpitStatic = true;
+        panel.addObject(body, bx, by, { z: 0.006 });
+        const collar = new THREE.Mesh(collarGeo, collarMat);
+        collar.userData.cockpitStatic = true;
+        panel.addObject(collar, bx, by, { z: 0.0018 });
+      }
+    }
+  }
   const cbVarNames = groups.flatMap((g) => g.items.map(([name]) => `cb.${name}`));
   // Draw-call saving (123 breakers): the white band on the stem shows only with the breaker out (pulled or
   // tripped), so it is not drawn while the breaker is in (same technique as the Citation M2 CB panels).

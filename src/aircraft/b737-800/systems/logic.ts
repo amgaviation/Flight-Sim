@@ -404,6 +404,8 @@ export class B738Logic implements Subsystem {
       v.set(`com${r}.powered`, v.get(B738.rtpPower(r)) !== 0 && v.get(r === 1 ? 'elec.com1_powered' : 'elec.com2_powered') !== 0 ? 1 : 0);
       v.set(`adf${r}.bfo`, v.get(B738.adfTone(r)) !== 0 ? 1 : 0);
       v.set(`nav${r}.test`, v.get(B738.navTest(r)) !== 0 && v.get(`nav${r}.powered`) !== 0 ? 1 : 0);
+      // RTP TEST held (Gables NG RTP): the panel drives every LCD segment while powered (windows show 888.888).
+      v.set(`ac.b738.rtp${r}_test_active`, v.get(B738.comTest(r)) !== 0 && v.get(`com${r}.powered`) !== 0 ? 1 : 0);
     }
     // ---- Audio control panels. SCOPE: no audio routing; the selections are published as state.
     for (const a of [1, 2, 3] as const) {
@@ -456,6 +458,10 @@ export class B738Logic implements Subsystem {
     v.set('wxr.mode', v.get(B738.wxrMode));
     v.set('wxr.gain', v.get(B738.wxrGain));
     v.set('wxr.tilt_deg', v.get(B738.wxrTilt));
+    // WXR IDNT / STAB (NG weather radar controller): STAB off = antenna stabilization lost (the beam follows the
+    // airframe, surveillance.ts wxrEffectiveTiltDeg); IDNT held = ground clutter suppressed on the display.
+    v.set('wxr.stab', v.get(B738.wxrStab, 1) !== 0 ? 1 : 0);
+    v.set('wxr.idnt', v.get(B738.wxrIdnt) !== 0 ? 1 : 0);
     // ---- Service interphone (SCOPE: no interphone audio), TAT probe test (SCOPE: aspirated TAT test flag).
     v.set('ac.b738.svc_interphone_active', v.get(B738.svcInterphone) !== 0 ? 1 : 0);
     v.set('ac.b738.tat_test_active', v.get(B738.tatTest) !== 0 && !air ? 1 : 0);

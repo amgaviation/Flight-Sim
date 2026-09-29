@@ -17,13 +17,13 @@
  * and panel backlighting on (PANEL knob level); full clockwise = annunciators full
  * bright; ORIDE = also the overhead dome light and the side-console floodlights
  * (modelled by the map lights, which light the consoles) at full, the Gulfstream
- * equivalent of a thunderstorm light. EST: the annunciator dimming is two-level
- * (dim / full). SCOPE: the integral backlighting follows the PANEL knob in every
- * MASTER position (the real one lights only in the night range): by day the cockpit
- * renderer washes the backlight out (Lighting.daylightWashout) and it stands in for
- * the sunlit white legends, which the scene lighting under-lights on the overhead;
- * and the initial state cannot tell day from night (env.ambient_light is written by
- * the renderer after applyState), so gating it would leave night starts unlit.
+ * equivalent of a thunderstorm light. The annunciator dimming follows the knob
+ * continuously through the night range (training material). The integral
+ * backlighting follows the PANEL knob whenever MASTER is out of OFF; with MASTER
+ * at OFF a reduced standby level remains only while the scene is dark
+ * (env.ambient_light < 0.3): by day the standby is extinguished, and a night
+ * start before the renderer writes env.ambient_light (it defaults to 0) still
+ * shows dim legends.
  * VEST LTS ORIDE (side console) forces the vestibule lights off; SCOPE: the cabin is
  * not rendered, the vestibule light is state only (`ac.light.vestibule`).
  */
@@ -55,13 +55,19 @@ export function createLighting(ctx: Pick<SimContext, 'vars'>): LightingSystem {
       // backlighting illuminates when MASTER leaves OFF); with MASTER at OFF (day) a reduced standby level
       // remains as the day stand-in for the sunlit legends (see the SCOPE note above - the renderer washes it
       // out in daylight, and a night start with MASTER untouched still shows dim legends).
-      { id: 'panel', knob: `${V.ltMaster} >= 0.005 ? ${V.ltPanel} : 0.35 * ${V.ltPanel}`, power: 'elec.panel_lts_powered', output: ['ac.light.panel'] },
+      // With MASTER at OFF the standby stand-in level is additionally extinguished in daylight once the
+      // renderer publishes the ambience (env.ambient_light; 0 while unwritten, e.g. a night start before the
+      // first frame, which keeps night starts lit - see the SCOPE note above).
+      { id: 'panel', knob: `${V.ltMaster} >= 0.005 ? ${V.ltPanel} : (env.ambient_light < 0.3 ? 0.35 * ${V.ltPanel} : 0)`, power: 'elec.panel_lts_powered', output: ['ac.light.panel'] },
       { id: 'flood', knob: V.ltFlood, power: 'elec.panel_lts_powered', output: ['ac.light.flood'] },
       { id: 'dome', knob: `${V.ltDome} == 1 || ${ORIDE} ? 1 : 0`, power: 'elec.panel_lts_powered || elec.emer_dc_powered', output: ['ac.light.dome'] },
       { id: 'map_l', knob: `max(${V.ltMapL}, ${ORIDE} ? 1 : 0)`, power: 'elec.l_ess_dc_powered', output: ['ac.light.map_l'] },
       { id: 'map_r', knob: `max(${V.ltMapR}, ${ORIDE} ? 1 : 0)`, power: 'elec.r_ess_dc_powered', output: ['ac.light.map_r'] },
-      // Annunciators full bright in day mode (MASTER OFF) and at full clockwise / ORIDE, dimmed in between.
-      { id: 'annun_bright', knob: `${V.ltMaster} < 0.005 || ${V.ltMaster} > 0.97 ? 1 : 0`, output: [V.annunBright] },
+      // Annunciators full bright in day mode (MASTER OFF); in the night range the brightness follows the knob
+      // CONTINUOUSLY (G650 training material: rotating MASTER from OFF dims the annunciators, full clockwise
+      // brings them to full bright): dimmest just past OFF, rising linearly to full at the clockwise stop.
+      // Cockpit consumers floor the value at their dim level (Lighting.annunciatorLevel).
+      { id: 'annun_bright', knob: `${V.ltMaster} < 0.005 ? 1 : min(1, 0.3 + 0.7 * ${V.ltMaster})`, output: [V.annunBright] },
       // Vestibule (entry area) lights: on with cabin power unless VEST LTS ORIDE (SCOPE: state only).
       { id: 'vestibule', knob: `${V.cabinMaster} == 1 && ${V.vestOride} == 0 ? 1 : 0`, power: 'elec.cabin_dc_powered', output: ['ac.light.vestibule'] },
       // DU brightness (Epic display ids epic.du1..4), never fully dark (EST min 5 %).

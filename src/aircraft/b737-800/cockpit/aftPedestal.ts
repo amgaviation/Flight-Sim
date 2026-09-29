@@ -22,7 +22,9 @@
  * publish mixer levels / keying state only (no audio routing). HF panels:
  * state only (no HF propagation; `HF_FITTED` = operator option). SELCAL:
  * push-to-reset lights; no ground-station calls are generated. The VHF COMM
- * TEST and WXR IDNT / STAB of the drawing are not modelled. The radio panels keep an active / standby window pair.
+ * TEST (self-test segment pattern) and the WXR IDNT / STAB buttons are modelled
+ * (vars.ts comTest / wxrIdnt / wxrStab; logic.ts / surveillance.ts consume them).
+ * The radio panels keep an active / standby window pair.
  */
 import { GuardedButton, GuardedSwitch, PushButton, RotaryKnob, SelectorKnob, TBarHandle } from '../../../cockpit/controls';
 import type { Panel } from '../../../cockpit/CockpitBuilder';
@@ -31,7 +33,7 @@ import { B738, XPDR_SEL, type AcpReceiver } from '../vars';
 import type { B738CockpitContext } from './context';
 import { CK, seg } from './context';
 import { annunciator, dimmer, toggle } from './common';
-import { DialDisplay, LcdDisplay } from './displays';
+import { LcdDisplay, RudderTrimIndicator } from './displays';
 import { AFT_PED } from './layout';
 import { TUNE_EVENTS } from './radioTuning';
 
@@ -102,9 +104,14 @@ export function buildAftPedestal(c: B738CockpitContext): void {
     const p = mod(`rtp${n}`, n === 1 ? UL : UR, r.y, W2, r.h);
     p.label('V\nH\nF', -0.066, 0.004, { height: 0.0026, lineHeight: 1.1 });
     p.label('C\nO\nM\nM', 0.066, 0.004, { height: 0.0026, lineHeight: 1.1 });
-    lcd(p, `b738_com${n}_lcd`, `com${n}.powered`, [NAV.comActive(n), NAV.comStandby(n)], [{ text: () => f3(vars.get(NAV.comActive(n), 118)), x: 80, size: 34 }, { text: () => f3(vars.get(NAV.comStandby(n), 118)), x: 240, size: 34 }], 0, 0.016, 0.112, 0.018);
+    // TEST held: the panel drives every LCD segment (all-8s pattern; Gables NG RTP TEST button, SCBG P8 drawing).
+    const tAct = `ac.b738.rtp${n}_test_active`;
+    const fq = (v0: string) => () => (vars.get(tAct) !== 0 ? '888.888' : f3(vars.get(v0, 118)));
+    lcd(p, `b738_com${n}_lcd`, `com${n}.powered`, [NAV.comActive(n), NAV.comStandby(n), tAct], [{ text: fq(NAV.comActive(n)), x: 80, size: 34 }, { text: fq(NAV.comStandby(n)), x: 240, size: 34 }], 0, 0.016, 0.112, 0.018);
     p.add(new PushButton(env, { id: `b738.aft.com${n}_tfr`, label: `VHF ${n} TFR`, style: 'small', width: 0.01, height: 0.007, mode: 'momentary', var: B738.comXfer(n), engraved: 'TFR', engravedHeight: 0.0018 }), 0, 0.001);
     toggle(env, p, { id: `b738.aft.rtp${n}_pwr`, label: `RADIO TUNING PANEL ${n}`, var: B738.rtpPower(n), positions: ['OFF', 'ON'], values: [0, 1], initial: 1, scale: 0.6, labels: { name: 'PANEL', positions: true, height: 0.0019 } }, -0.045, -0.014);
+    p.add(new PushButton(env, { id: `b738.aft.rtp${n}_test`, label: `VHF COMM ${n} TEST`, style: 'round', width: 0.009, height: 0.009, mode: 'momentary', var: B738.comTest(n), capMaterial: 'plasticBlack' }), -0.02, -0.02);
+    p.label('TEST', -0.02, -0.009, { height: LH });
     knob2(p, `b738.aft.com${n}_freq`, `VHF ${n} FREQUENCY`, 'com', n, 0.045, -0.014);
   }
   // ---------------------------------------------------------------- NAV 1 / 2, row 2
@@ -343,6 +350,10 @@ export function buildAftPedestal(c: B738CockpitContext): void {
     p.label('GAIN', -0.042, -0.02, { height: 0.0021 });
     p.add(new RotaryKnob(env, { id: 'b738.aft.wxr_tilt', label: 'WXR TILT', cap: 'fluted', diameter: 0.016, outer: { var: B738.wxrTilt, min: -15, max: 15, step: 0.5, initial: 0, angleRange: [-140, 140], label: 'TILT', format: (x) => `${x >= 0 ? 'UP' : 'DN'} ${Math.abs(x).toFixed(1)}°` } }), 0.042, -0.006);
     p.label('TILT', 0.042, -0.02, { height: 0.0021 });
+    // IDNT (momentary: ground clutter suppressed while held) and STAB (antenna stabilization) buttons of the NG
+    // radar controller (SCBG P8 drawing; surveillance.ts consumes wxr.idnt / wxr.stab).
+    p.add(new PushButton(env, { id: 'b738.aft.wxr_idnt', label: 'WXR IDNT (hold: ground clutter suppressed)', style: 'small', width: 0.011, height: 0.008, mode: 'momentary', var: B738.wxrIdnt, engraved: 'IDNT', engravedHeight: 0.0017 }), -0.02, -0.026);
+    p.add(new PushButton(env, { id: 'b738.aft.wxr_stab', label: 'WXR STAB (antenna stabilization)', style: 'small', width: 0.011, height: 0.008, mode: 'toggle', var: B738.wxrStab, values: [0, 1], initial: 1, engraved: 'STAB', engravedHeight: 0.0017 }), 0.02, -0.026);
     // No radar on/off switch on the NG panel: the radar transmits while WXR is selected on an EFIS control panel
     // (FCOM 11.30); the former power toggle is not fitted.
   }
@@ -501,18 +512,9 @@ export function buildAftPedestal(c: B738CockpitContext): void {
     const r = rowC(7);
     const p = mod('trim', 0, r.y, W2, r.h);
     if (!c.headless) {
-      const rt = new DialDisplay({
-        id: 'b738_rud_trim_ind',
-        vars,
-        powerVar: 'elec.dc_stby_powered',
-        angle: (v) => (Math.max(-16, Math.min(16, v)) / 16) * 60,
-        ticks: [-16, -12, -8, -4, 0, 4, 8, 12, 16].map((v) => ({ v, label: v % 8 === 0 ? String(Math.abs(v)) : undefined, major: v % 8 === 0 })),
-        needles: [{ var: B738.lt.rudderTrimUnits, color: '#f2f2f2' }],
-        title: ['RUDDER TRIM', 'LEFT   RIGHT'],
-        titleY: 176,
-      });
-      // SCOPE: the real indicator is a linear 15-0-15 scale across the top of the module; drawn as a dial.
-      p.roundInstrument(rt, 0, 0.03, 0.03);
+      // Linear 15-0-15 rudder trim scale across the top of the module (FCOM 9.10; NG pedestal photographs).
+      const rt = new RudderTrimIndicator(vars, 'b738_rud_trim_ind');
+      p.display(rt, 0, 0.032, 0.1, 0.022, { bezel: { border: 0.003, depth: 0.003 } });
       c.onDispose(() => rt.dispose());
     }
     p.label('AILERON', -0.045, 0.012, { height: 0.0022 });

@@ -424,6 +424,11 @@ export interface EpicSuiteConfig {
    * keeps the original landscape layouts.
    */
   tscPortrait?: boolean;
+  /**
+   * Appended (G800 fix round 1 F02): the GP lateral key cycles OFF -> HDG -> TRK -> OFF (Symmetry
+   * HDG/TRK key; BJT500). Default false keeps the plain HDG key.
+   */
+  gpHdgTrkToggle?: boolean;
 }
 
 /**

@@ -113,8 +113,14 @@ export function createEngines(ctx: SimContext): G650Engines {
         approach: { x: [0, 15000], y: [36, 40] }, // EST: approach idle for the 8 s go-around spool-up (LUC)
         approachWhen: 'surf.flaps_deg > 22', // LUC: flaps > 22 deg, WOW air
       },
-      // LIM: reverse 78.1 % LP max; L reverser on the left, R reverser on the right hydraulic system (LUC).
-      reverse: { maxN1: L.revMaxN1Pct, deployS: 2.0, stowS: 2.5, power: 'clamp01(max(hyd.left_psi, hyd.right_psi) / 2600)' },
+      // LIM: reverse 78.1 % LP max; the L reverser is powered by the LEFT hydraulic system only and the R
+      // reverser by the RIGHT (LUC hydraulics; dossier §4.3) - a failed side leaves that reverser stowed.
+      reverse: {
+        maxN1: L.revMaxN1Pct,
+        deployS: 2.0,
+        stowS: 2.5,
+        powerPerEngine: (e) => (e === 1 ? 'clamp01(hyd.left_psi / 2600)' : 'clamp01(hyd.right_psi / 2600)'),
+      },
       // LUC: EEC powered by its PMA above 35 % HP, else by the ESS DC bus.
       power: (e) => `eng${e}.n2_pct > 35 || elec.${e === 1 ? 'l' : 'r'}_ess_dc_powered`,
     },
@@ -128,7 +134,9 @@ export function createEngines(ctx: SimContext): G650Engines {
     return new EngineStartController(ctx, {
       engine: i,
       // Auto start: START MASTER + L/R ENG (momentary). Crank / alternate: CRANK MASTER + latched L/R ENG.
-      startSwitch: `(${V.startMaster} == 1 && ${btn} == 1) || (${V.crankMaster} == 1 && ${V.crankLatch(i)} == 1)`,
+      // LIM: starter cut-out AND re-engagement limit 42 % HP - the starter must not be re-engaged on a
+      // spooling / windmilling engine above 42 %, so the start request itself is inhibited there.
+      startSwitch: `((${V.startMaster} == 1 && ${btn} == 1) || (${V.crankMaster} == 1 && ${V.crankLatch(i)} == 1)) && eng${i}.n2_pct < ${L.starterCutoutN2Pct}`,
       manual: `${V.crankMaster} == 1 && ${V.startMaster} == 0`,
       runLever: `${fuelCtl} == 1 && !${handle}`,
       // LUC: autostart abort = FUEL CONTROL OFF (CUTOFF abort in the controller) + START MASTER OFF.

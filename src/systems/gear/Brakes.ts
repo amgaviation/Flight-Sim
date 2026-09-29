@@ -139,6 +139,13 @@ export interface BrakeConfig {
     applications?: number;
     /** Anti-skid available when braking on the accumulator. Default true (737: accumulator on the normal system). */
     antiskid?: boolean;
+    /**
+     * (Appended by the g650 aircraft, additive.) Whether the accumulator backs the pedal/autobrake/parking
+     * demand path when every source is down (default true, previous behaviour). False = the accumulator only
+     * serves the `emergency` handle path (brake-by-wire aircraft: with both BCU channels dead there is no
+     * pedal braking; the emergency/park handle meters the accumulators directly).
+     */
+    pedalSource?: boolean;
   };
   parking?: { var?: string; kind?: 'hydraulic' | 'mechanical' | 'trapped'; leakPerS?: number };
   /**
@@ -318,7 +325,7 @@ export class Brakes implements Subsystem {
       const charge = this.accCharge();
       if (charge > this.accumPsi) this.accumPsi += (Math.min(charge, acc.maxPsi) - this.accumPsi) * (1 - Math.exp(-dt / 2));
       this.accumPsi -= this.accumPsi * dt * (1 / (8 * 3600)); // EST: slow internal leak (8 h time constant)
-      if (srcIdx === -2 && this.accumPsi > acc.prechargePsi * 1.01) {
+      if (srcIdx === -2 && (acc.pedalSource ?? true) && this.accumPsi > acc.prechargePsi * 1.01) {
         srcIdx = -1;
         srcPsi = this.accumPsi;
       }

@@ -69,7 +69,9 @@ const B738_PALETTE: PaletteDef = {
   name: 'Boeing 737NG (medium Boeing grey)',
   panel: '#50524e',
   panelDark: '#303335',
-  backlight: '#ffc27f',
+  // Incandescent 5 V integral lighting ~2700 K (EST, tuned against the b737.org.uk night overhead photograph:
+  // clearly orange-white, every legend legible at mid dimmer).
+  backlight: '#ffb668',
 };
 const ANNUN_BRT = 'ac.b738.ck.annun_brt';
 
@@ -119,30 +121,42 @@ export function buildB738Cockpit(ctx: SimContext, sys: B738Systems, o: B738Cockp
   };
 
   // ---- lighting zones and real lights
-  // Legend backlight gain raised so the incandescent legends read clearly over the (dimmer) flood wash at night
-  // (b737.org.uk NG night flight-deck photographs: warm legends on a dark panel, floods only a dim wash).
-  b.zone({ id: 'panel', intensityVar: CK.panelLight, gain: 2.4 });
-  b.zone({ id: 'flood', intensityVar: FLOOD_VAR, color: 0xffe2b8 });
-  b.zone({ id: 'afds', intensityVar: 'ac.light.flood_afds', color: 0xffe2b8 });
-  b.zone({ id: 'ped_flood', intensityVar: 'ac.light.flood_pedestal', color: 0xffe2b8 });
+  // Legend backlight gain raised so every legend reads clearly at PANEL dimmer ~50 % over the (dimmer) flood
+  // wash at night (EST gains, tuned against the b737.org.uk NG night flight-deck / overhead photographs: warm
+  // ~2700 K legends bright on a dark panel, floods only a dim wash; fix round 1 B738-L03).
+  b.zone({ id: 'panel', intensityVar: CK.panelLight, gain: 4.5 });
+  b.zone({ id: 'flood', intensityVar: FLOOD_VAR, color: 0xffd9a6 });
+  // AFDS zone lights the MCP legends too: same gain class as the panel backlight (B738-L03).
+  b.zone({ id: 'afds', intensityVar: 'ac.light.flood_afds', color: 0xffd9a6, gain: 4.5 });
+  b.zone({ id: 'ped_flood', intensityVar: 'ac.light.flood_pedestal', color: 0xffd9a6 });
   b.zone({ id: 'dome', intensityVar: 'ac.light.dome', color: 0xfff0dc });
   env.lighting.setAnnunciatorDimming(ANNUN_BRT, 0.4);
   env.lighting.lampTestVar = CK.lampTest;
-  // Glareshield floods under the brow, aimed at each pilot's DUs (EST 1.5 cd incandescent floods: a dim wash).
-  env.lighting.addFloodLight('flood.l', 'flood', [14.45, -0.55, -0.26], [14.6, -0.55, 0.0], b.root, 1.5, 60);
-  env.lighting.addFloodLight('flood.r', 'flood', [14.45, 0.55, -0.26], [14.6, 0.55, 0.0], b.root, 1.5, 60);
-  // Pedestal flood in the overhead aft of the glareshield (EST 4 cd).
-  env.lighting.addFloodLight('flood.ped', 'ped_flood', [13.75, 0, -0.95], [13.8, 0, 0.35], b.root, 4, 45);
+  // Glareshield floods under the brow: sources outboard of each pilot, cross-aimed inboard with wide cones so
+  // the two washes overlap into one even low wash across P1-P3 (nightflightdeck.jpg; fix round 1 B738-L07).
+  env.lighting.addFloodLight('flood.l', 'flood', [14.44, -0.68, -0.27], [14.6, -0.25, 0.02], b.root, 1.3, 85);
+  env.lighting.addFloodLight('flood.r', 'flood', [14.44, 0.68, -0.27], [14.6, 0.25, 0.02], b.root, 1.3, 85);
+  // Pedestal flood in the overhead aft of the glareshield (EST 2.5 cd, narrowed so the centre panel shows no
+  // warm hotspot at night; fix round 1 G18).
+  env.lighting.addFloodLight('flood.ped', 'ped_flood', [13.75, 0, -0.95], [13.8, 0, 0.35], b.root, 2.5, 40);
   // Dome light in the headliner (EST 6 cd).
   env.lighting.addDomeLight('dome', 'dome', [13.2, 0, -1.2], b.root, 6);
+  // Interior daylight fill: the NG deck has a large glazed area over a light-grey interior; the default admitted
+  // fraction rendered the (shadowed) overhead markedly darker olive than the light Boeing grey of the direct-lit
+  // MIP (day capture view_7 vs paneloverhead_737-700.jpg). EST 0.09 raises the indirect fill so the shadowed
+  // ceiling reads the same grey family as the panels (fix round 1 B738-L11).
+  env.lighting.interiorFill.admitted = 0.09;
 
   buildShell(b);
   buildWipers(b, ctx.vars);
-  // AFDS flood strip under the glareshield brow (lights the MCP face).
-  const strip = new THREE.MeshStandardMaterial({ color: 0x151515, emissive: 0xffe2b8, emissiveIntensity: 0, roughness: 0.6 });
+  // AFDS flood strip tucked under the brow overhang, below the hood top surface, so it lights the MCP face but
+  // is hidden from the design eye behind the hood lip (night captures showed the emissive strip as a bright
+  // line along the hood top edge; fix round 1 B738-L08. Sight line from EYE_CAPT over the lip at z -0.345
+  // passes z -0.344 at this x, so the strip at z -0.331 is occluded).
+  const strip = new THREE.MeshStandardMaterial({ color: 0x151515, emissive: 0xffd9a6, emissiveIntensity: 0, roughness: 0.6 });
   env.materials.track(strip);
   env.lighting.registerBacklight(strip, 'afds', 1.4);
-  b.structureMesh(new THREE.BoxGeometry(0.48, 0.004, 0.008), strip, [GLARE.face.center_m[0] - 0.008, 0, -0.343], undefined, false).name = 'afds_flood_strip';
+  b.structureMesh(new THREE.BoxGeometry(0.48, 0.004, 0.008), strip, [GLARE.lipX + 0.012, 0, -0.331], undefined, false).name = 'afds_flood_strip';
 
   buildMainPanel(c);
   buildGlareshield(c);

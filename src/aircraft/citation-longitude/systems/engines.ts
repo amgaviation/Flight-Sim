@@ -130,7 +130,11 @@ export function createEngines(ctx: SimContext): LongitudeEngines {
     retardRate: 0.12,
     thrHoldKt: 60,
     thrHoldEndFt: 400, // OG 7-5: HOLD up to 400 ft AGL
-    retardFt: 40, // OG 7-5: RETARD below 40 ft AGL
+    // LON4-04: OG 17 Landing "Autothrottle (if used) - Check Green RETARD at 50 feet AGL"; OG 7-5 describes the
+    // mode as "reducing throttles to idle during landing operations below 40 feet AGL". Modelled at 50 ft so the
+    // green RETARD annunciates at 50 ft as the checklist expects (the levers are then still reducing below 40 ft),
+    // matching the AW/BCA pilot report (threshold at ~50 ft, A/T retarding into the flare).
+    retardFt: 50,
     retardFlapsDeg: 30,
     discWarnS: 5,
     // OG 7-5 FMA: TO, HOLD, CLIMB, DESC, SPD, RETARD (MAX SPD / MIN SPD protection and the manual-advance HOLD:

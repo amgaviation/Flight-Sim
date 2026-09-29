@@ -263,7 +263,7 @@ describe('G650 overhead flows', () => {
     // Crew oxygen mask out of its box with the regulator at 100 %: oxygen flows, the flow indicator lights.
     click(ctl('g650.side.mask_mode_l'));
     step(0.5);
-    expect(v.get(V.oxyMaskMode)).toBe(1);
+    expect(v.get(V.oxyMaskModeL)).toBe(1);
     click(ctl('g650.side.mask_l'));
     step(1);
     expect(v.get(V.oxyMaskL)).toBe(1);

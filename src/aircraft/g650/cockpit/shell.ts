@@ -15,6 +15,8 @@ import * as THREE from 'three';
 import type { CockpitBuilder } from '../../../cockpit/CockpitBuilder';
 import { pedestalGeometry, floorGeometry, trimBoxGeometry } from '../../../cockpit/geometry/structure';
 import { bl } from '../../../cockpit/frame';
+import { markMovingPart } from '../../../cockpit/instancing';
+import { G650_VARS as V } from '../vars';
 import { G650_FUSELAGE as F, CONSOLE, FLOOR_Z, GLARE_FACE, GLARE_HOOD, GLAZING, LOWER_CENTRE, MAIN_PANEL, PEDESTAL, SEAT_L, SEAT_R, SHELL_INSET, X_AFT, halfWidth, topZ } from './layout';
 import { carvedSkin, frameBand } from './glazing';
 
@@ -149,6 +151,33 @@ export function buildShell(b: CockpitBuilder): void {
   // Doorway: dark cabin beyond (a plane 0.3 m aft).
   const dark = new THREE.PlaneGeometry(0.7, 1.9);
   add(dark, 'panelDark', 'doorway_dark').position.copy(bl(X_AFT - 0.3, 0, FLOOR_Z - 0.95));
+  // Flight-deck divider door (cabin photographs show a divider/door at the aft bulkhead; leaf geometry EST).
+  // Hinged on the left jamb, swings aft into the vestibule with V.doorCockpit (side console DOOR key).
+  {
+    const leafG = new THREE.PlaneGeometry(0.6, 1.78);
+    b.trackGeometry(leafG);
+    leafG.translate(0.3, 0, 0); // hinge at the left edge
+    const leaf = new THREE.Mesh(leafG, m.get('interior'));
+    leaf.name = 'g650_cockpit_door';
+    const hinge = new THREE.Group();
+    hinge.name = 'g650_cockpit_door_hinge';
+    hinge.position.copy(bl(X_AFT, -0.3, FLOOR_Z - 0.89));
+    hinge.add(leaf);
+    b.root.add(hinge);
+    markMovingPart(leaf, hinge);
+    const vars = b.env.vars;
+    let shown = NaN;
+    b.onUpdate((dt) => {
+      // First-order tracking of the commanded position (EST ~1.5 s swing).
+      const cmd = vars.get(V.doorCockpit);
+      const cur = Number.isNaN(shown) ? cmd : shown;
+      const next = cur + (cmd - cur) * Math.min(1, dt / 0.4);
+      if (next !== shown) {
+        shown = next;
+        hinge.rotation.y = -next * (Math.PI / 2) * 0.95;
+      }
+    });
+  }
 
   // ---- floor (carpet) from the bulkhead to the rudder-pedal wells.
   const fx1 = 15.0;

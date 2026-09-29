@@ -247,7 +247,10 @@ export const G650_FDM: FdmConfig = {
     CL_spoiler: -0.14, // six panels at the 30 deg in-flight speed brake limit (LUC), EST
     CL_groundSpoiler: -0.4, // six panels at 55 deg (flaps >= 10, LUC): lift dump, EST
     groundEffectDrag: { x: [0, 0.05, 0.1, 0.2, 0.3, 0.5, 1.0], y: [0.3, 0.45, 0.72, 0.91, 0.954, 0.985, 1.0] },
-    groundEffectLift: { x: [0, 0.1, 0.2, 0.3, 0.5, 1.0], y: [1.1, 1.06, 1.03, 1.015, 1.004, 1.0] },
+    // EST: low-wing in extreme proximity (h/b ~0.08 at rotation); raised from 1.10 in fix round 1 so lift-off
+    // follows the rotation more promptly (audit F17). Note: with VR below the 1-g VS at flaps 20 (dossier §3,
+    // FAR 25 speeds), lift-off physically occurs near 1.10-1.15 VS1g ~ V2, not at VR+5 - see dossier §15.
+    groundEffectLift: { x: [0, 0.1, 0.2, 0.3, 0.5, 1.0], y: [1.16, 1.1, 1.05, 1.02, 1.005, 1.0] },
     CL_mach: { x: [0, 0.4, 0.6, 0.7, 0.8, 0.85, 0.9, 0.95], y: [1, 1.03, 1.08, 1.12, 1.15, 1.16, 1.12, 1.02] },
     // Drag: CD0 clean calibrated to the AIN cruise point; flap increments EST (single-slotted Fowler).
     CD0: { x: [0, 10, 20, 39], y: [0.0158, 0.027, 0.04, 0.085] },
@@ -273,7 +276,7 @@ export const G650_FDM: FdmConfig = {
     Cm0: 0.02,
     Cm_q: -26,
     Cm_alphadot: -9,
-    Cm_de: 1.0,
+    Cm_de: 1.15, // EST (raised from 1.0 in fix round 1: crisper rotation response; tail volume class)
     Cm_trim: 0.6, // horizontal stabilizer (HSTA, 0.4 deg/s normal rate, LUC), EST effectiveness over the normalized range
     Cm_flap: { x: [0, 10, 20, 39], y: [0, -0.035, -0.06, -0.13] },
     Cm_gear: 0.004,

@@ -253,6 +253,10 @@ export const G800_VARS = {
   startProtect: (i: 1 | 2) => `${P}start_protect${i}`, // engine start protection motoring (residual TGT / rotor bow) in progress
   crankReq: (i: 1 | 2) => `${P}crank_req${i}`, // CRANK MASTER dry-motoring request latched by that engine's START key
   apuGenOffLt: `${P}apu_gen_off_lt`, // APU GEN amber OFF legend: APU available and its generator off line (dark cockpit)
+  // =============================================================== FIX ROUND 1 (function lens, second pass)
+  paTx: `${P}pa_tx`, // derived: PA keyed (MIC sel 6 + PTT); drives the PA amplifier load (F07)
+  ebattFwdOn: `${P}ebatt_fwd_on`, // derived: FWD emergency-battery pair connected (CAS "Fwd Emer Battery On"; F08)
+  ebattAftOn: `${P}ebatt_aft_on`, // derived: AFT emergency-battery pair connected (F08). ebattOn stays fwd OR aft.
 } as const;
 
 /** Receivers of the TSC AUDIO app (index r of rxOn / rxVol). */

@@ -62,11 +62,18 @@ import { Pid, Washout, sched, type BlockEnv, type Schedule } from '../autopilot/
 import { SENSOR_VARS } from '../sensors/vars';
 import { FCS_VARS } from './vars';
 
-export type FbwMode = 'NORMAL' | 'ALTERNATE' | 'DIRECT';
+/** 'BACKUP' (appended by the g650 aircraft): independent backup computer (BFCU) below DIRECT, mode_code 3. */
+export type FbwMode = 'NORMAL' | 'ALTERNATE' | 'DIRECT' | 'BACKUP';
 
 export interface FlyByWireConfig {
   /** FCC power (any channel). */
   power: Binding;
+  /**
+   * (Appended by the g650 aircraft, additive.) Backup flight-control computer power (e.g. the UPS-powered
+   * BFCU): with every FCC channel dead but this true, the mode is 'BACKUP' (mode_code 3) - direct-law gains,
+   * no yaw damper. Aircraft that do not pass it keep the previous FCC-failure behaviour (DIRECT).
+   */
+  backupPower?: Binding;
   /** Actuator power per axis (each binding 0..1; best one wins; include the EBHAs). Default always powered. */
   actuators?: { pitch?: Binding[]; roll?: Binding[]; yaw?: Binding[] };
   /** Pilot mode selection var: 0 auto, 1 ALTERNATE, 2 DIRECT. Default ac.fcs_mode_sel. */
@@ -128,6 +135,12 @@ export interface FlyByWireConfig {
    * synchronised to the current IAS ("trim speed sync", Gulfstream sidestick AP DISC button). Default never.
    */
   speedSync?: Binding;
+  /**
+   * (Appended by the g800 aircraft, fix round 1 F13.) While true the horizontal stabilizer is jammed:
+   * auto-trim and the trim switches no longer move it (CAS "Stabilizer Failed"; the C* law compensates
+   * within elevator authority). Default never.
+   */
+  stabFrozen?: Binding;
   /** (Appended by the g800 aircraft.) Extra inceptor-equivalent vars added per axis (e.g. yaw assist). Default none. */
   addVars?: { pitch?: string[]; roll?: string[]; yaw?: string[] };
   /**
@@ -162,6 +175,7 @@ export class FlyByWire implements Subsystem {
   private readonly vars: SimVars;
   private readonly cfg: FlyByWireConfig;
   private readonly power: () => boolean;
+  private readonly backup: (() => boolean) | null;
   private readonly adcOk: () => boolean;
   private readonly irsOk: () => boolean;
   private readonly ground: () => boolean;
@@ -184,6 +198,7 @@ export class FlyByWire implements Subsystem {
   private readonly extraRoll: string[];
   private readonly extraYaw: string[];
   private readonly sync: () => boolean;
+  private readonly stabJam: () => boolean;
   private readonly sn: FbwSensorVars;
 
   constructor(env: BlockEnv, cfg: FlyByWireConfig) {
@@ -191,6 +206,7 @@ export class FlyByWire implements Subsystem {
     this.vars = v;
     this.cfg = cfg;
     this.power = compileCondition(v, cfg.power, true);
+    this.backup = cfg.backupPower !== undefined ? compileCondition(v, cfg.backupPower, false) : null;
     this.adcOk = compileCondition(v, cfg.airDataValid ?? ADC.valid(1), true);
     this.irsOk = compileCondition(v, cfg.inertialValid ?? SENSOR_VARS.attValid(1), true);
     this.ground = compileCondition(v, cfg.onGround ?? 'gear.air_ground', false);
@@ -206,6 +222,7 @@ export class FlyByWire implements Subsystem {
     this.extraRoll = cfg.addVars?.roll ?? [];
     this.extraYaw = cfg.addVars?.yaw ?? [];
     this.sync = compileCondition(v, cfg.speedSync ?? 0, false);
+    this.stabJam = compileCondition(v, cfg.stabFrozen ?? 0, false);
     const sn = cfg.sensors ?? {};
     this.sn = {
       ias: sn.ias ?? ADC.ias(1),
@@ -256,7 +273,8 @@ export class FlyByWire implements Subsystem {
     const fccOk = this.power() && v.get(this.fFcc) === 0;
     const dataOk = this.adcOk() && this.irsOk() && v.get(this.fAdc) === 0;
     let mode: FbwMode;
-    if (!fccOk || sel >= 2) mode = 'DIRECT';
+    if (!fccOk && this.backup !== null && this.backup()) mode = 'BACKUP';
+    else if (!fccOk || sel >= 2) mode = 'DIRECT';
     else if (!dataOk || sel >= 1) mode = 'ALTERNATE';
     else mode = 'NORMAL';
     if (mode !== this.mode) {
@@ -343,8 +361,8 @@ export class FlyByWire implements Subsystem {
       const saturated = (trial >= 1 && e > 0) || (trial <= -1 && e < 0);
       if (!saturated) this.pI = clamp1(this.pI + ki * e * dt);
       this.elev = clamp1(kp * e + this.pI - kq * q);
-      // Auto-trim: offload the integrator into the stabilizer.
-      if (Math.abs(this.pI) > 0.02) {
+      // Auto-trim: offload the integrator into the stabilizer (not with the stabilizer jammed, F13).
+      if (!this.stabJam() && Math.abs(this.pI) > 0.02) {
         const step = Math.sign(this.pI) * (p.stabRate ?? 0.03) * dt;
         this.stab = clamp1(this.stab + step);
       }
@@ -391,9 +409,9 @@ export class FlyByWire implements Subsystem {
       this.elev = clamp1(yoke * pg);
       this.ail = clamp1(wheel * (d.roll ?? 1));
       let yd = 0;
-      if (mode !== 'DIRECT' && this.irsOk()) yd = (cfg.yaw?.yawDampGain ?? 0.02) * this.yawWashout.update(v.get(this.sn.r), dt);
+      if (mode !== 'DIRECT' && mode !== 'BACKUP' && this.irsOk()) yd = (cfg.yaw?.yawDampGain ?? 0.02) * this.yawWashout.update(v.get(this.sn.r), dt);
       this.rud = clamp1(pedal * (d.yaw ?? 1) - yd);
-      this.stab = clamp1(this.stab + trimSw * directStabRate * dt);
+      if (!this.stabJam()) this.stab = clamp1(this.stab + trimSw * directStabRate * dt);
       this.uRef = ias;
       this.bankHolding = false;
     }
@@ -408,7 +426,7 @@ export class FlyByWire implements Subsystem {
     v.set(FCS_VARS.trimUnits('pitch'), u[0] + ((this.stab + 1) / 2) * (u[1] - u[0]));
 
     v.setString('fbw.mode', mode);
-    v.set('fbw.mode_code', mode === 'NORMAL' ? 0 : mode === 'ALTERNATE' ? 1 : 2);
+    v.set('fbw.mode_code', mode === 'NORMAL' ? 0 : mode === 'ALTERNATE' ? 1 : mode === 'DIRECT' ? 2 : 3);
     v.set('fbw.aoa_limit', aoaLim ? 1 : 0);
     v.set('fbw.hs_protect', hsProt ? 1 : 0);
     v.set('fbw.bank_protect', bankProt ? 1 : 0);

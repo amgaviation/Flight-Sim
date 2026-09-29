@@ -86,9 +86,11 @@ export const G6K_CAS: CasMessageDef[] = [
   { id: 'batt_master_off', text: 'BATT MASTER OFF', level: 'caution', when: `${V.battMaster} == 0 && (elec.dc_ess_powered || elec.batt_bus_powered)` },
   { id: 'apu_batt_fail', text: 'APU BATT FAIL', level: 'caution', when: 'elec.apu_batt_v < 18 || elec.apu_batt_overtemp || fail.elec.apu_batt', delayS: 5 },
   { id: 'av_batt_fail', text: 'AV BATT FAIL', level: 'caution', when: 'elec.av_batt_v < 18 || elec.av_batt_overtemp || fail.elec.av_batt', delayS: 5 },
-  // ---- hydraulics (GXHY): both pumps of a system below 1,800 psi
+  // ---- hydraulics (GXHY): both pumps of a system below 1,800 psi. The caution is gated only on the aircraft being
+  // powered (any engine or AC bus), NOT on that system's engine: a system 1 loss after a left-engine failure (EDP 1A
+  // windmilling, ACMP 1B failed) must still alert the crew (GXHY compound-failure case).
   ...([1, 2, 3] as const).map(
-    (n): CasMessageDef => ({ id: `hyd${n}_lo_press`, text: `HYD ${n} LO PRESS`, level: 'caution', when: `hyd.sys${n}_psi < ${G6K_LIMITS.hydLowPsi} && (${n === 3 ? `(${acAny} || ${V.ratDeployed})` : `eng${n}.running`})`, delayS: 3, inhibit: TL }),
+    (n): CasMessageDef => ({ id: `hyd${n}_lo_press`, text: `HYD ${n} LO PRESS`, level: 'caution', when: `hyd.sys${n}_psi < ${G6K_LIMITS.hydLowPsi} && (${n === 3 ? `(${acAny} || ${V.ratDeployed})` : `(${anyEng} || ${acAny})`})`, delayS: 3, inhibit: TL }),
   ),
   // GX PTG 12-26: LO QTY at 34 / 32 / 20 % (hydraulic.ts); system 3 at 28 % with the main gear uplocked.
   ...([1, 2, 3] as const).map((n): CasMessageDef => ({ id: `hyd${n}_lo_qty`, text: `HYD ${n} LO QTY`, level: 'caution', when: n === 3 ? `hyd.sys3_lowqty || (gear.up_locked && hyd.sys3_qty < ${G6K_LIMITS.hydLoQty3UpLocked})` : `hyd.sys${n}_lowqty` })),
@@ -125,8 +127,9 @@ export const G6K_CAS: CasMessageDef[] = [
   ...each((x) => [
     // collins GLOBAL_CAS_TEXTS: L/R ENG FLAMEOUT (caution).
     { id: `${x.s}_eng_flameout`, text: `${x.S} ENG FLAMEOUT`, level: 'caution', when: V.engFail(x.i) },
-    // EST text: oil pressure below the lower limit for flight (E018 35 psid at idle ... 45 psid at 90 % N2).
-    { id: `${x.s}_eng_oil_lo`, text: `${x.S} ENG OIL LO PRESS`, level: 'caution', when: `eng${x.i}.running && eng${x.i}.oil_press_psi < ${G6K_LIMITS.oilPressCautionPsi} && eng${x.i}.oil_press_psi >= ${G6K_LIMITS.oilPressMinPsi}`, delayS: 3, inhibit: TL },
+    // EST text: oil pressure below the lower limit for flight. E018 N2 schedule (data.ts oilPressCaution): 35.0 psid
+    // up to 72.3 % N2 rising linearly to 45.0 psid at 90 % N2 - at cruise N2 an oil pressure of 40 psid is below limits.
+    { id: `${x.s}_eng_oil_lo`, text: `${x.S} ENG OIL LO PRESS`, level: 'caution', when: `eng${x.i}.running && eng${x.i}.oil_press_psi < (eng${x.i}.n2_pct <= 72.3 ? ${G6K_LIMITS.oilPressCautionPsi} : min(45, ${G6K_LIMITS.oilPressCautionPsi} + 10 * (eng${x.i}.n2_pct - 72.3) / 17.7)) && eng${x.i}.oil_press_psi >= ${G6K_LIMITS.oilPressMinPsi}`, delayS: 3, inhibit: TL },
     { id: `${x.s}_eng_start_abort`, text: `${x.S} ENG START ABORT`, level: 'caution', when: `fadec.eng${x.i}.abort` }, // EST text
     { id: `${x.s}_eng_fire_fail`, text: `${x.S} ENG FIRE FAIL`, level: 'caution', when: `fire.eng${x.i}_fault` },
     { id: `${x.s}_rev_unlocked`, text: `${x.S} REV UNLOCKED`, level: 'caution', when: `${air} && fadec.eng${x.i}.rev_unlocked` }, // EST text

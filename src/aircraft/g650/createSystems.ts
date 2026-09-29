@@ -48,6 +48,7 @@ import { createHydraulics, hydFrac } from './systems/hydraulic';
 import { createPneumatics, createPressurization, createIce, createApu, createFire, createOxygen } from './systems/environment';
 import { createEngines, TLA } from './systems/engines';
 import { G650Logic, G650PostLogic, STAB_PER_DEG } from './systems/logic';
+import { G650Raas } from './systems/raas';
 import { G650_CAS } from './systems/cas';
 import { createLighting } from './systems/lighting';
 import { G650CockpitInputs } from './systems/cockpitInputs';
@@ -96,6 +97,7 @@ export interface G650Systems {
   steering: NosewheelSteering;
   overspeed: Overspeed;
   taws: Taws;
+  raas: G650Raas;
   tcas: Tcas;
   tocw: TakeoffConfigWarning;
   cas: CasManager;
@@ -169,7 +171,8 @@ export function createSystems(ctx: SimContext, opts: G650SystemsOptions = {}): G
     new AirDataComputer(ctx, { index: 4, power: 'elec.smc1_powered || elec.smc2_powered', pitotProbe: 4, staticPort: 3 }),
   ];
   const irs = ([1, 2, 3] as const).map(
-    (s) => new Irs(ctx, { index: s, modeVar: V.irsMode(s), power: `elec.irs${s}_powered`, requirePosition: true, gpsAutoPosition: true, gpsUpdating: true }),
+    // LIM: the IRUs align only up to 78 deg latitude (maxAlignLatDeg).
+    (s) => new Irs(ctx, { index: s, modeVar: V.irsMode(s), power: `elec.irs${s}_powered`, requirePosition: true, gpsAutoPosition: true, gpsUpdating: true, maxAlignLatDeg: 78 }),
   );
   const ra = [new RadioAltimeter(ctx, { index: 1, power: 'elec.ra_powered' }), new RadioAltimeter(ctx, { index: 2, power: 'elec.ra_powered' })];
 
@@ -260,7 +263,10 @@ export function createSystems(ctx: SimContext, opts: G650SystemsOptions = {}): G
     ...AFCS_PRIMUS_EPIC,
     power: 'elec.afcs1_powered || elec.afcs2_powered',
     servoPower: 'fbw.mode_code == 0',
-    sensors: { valid: '(ahrs1.valid && adc1.valid)' },
+    // Primus Epic AFCS sensor set: three hybrid IRUs and three ADS with automatic reversion (dossier §4.12) -
+    // losing one of three IRUs or ADS must not take the autopilot away, so the validity is a voted OR of the
+    // sides (SCOPE: the crew PFD sensor-select reversion switching itself is not modelled).
+    sensors: { valid: '(ahrs1.valid || ahrs2.valid || ahrs3.valid) && (adc1.valid || adc2.valid || adc3.valid)' },
     yawDamper: { withAp: false, requiredForAp: false }, // yaw damping is part of the FBW normal law
     // Primus Epic: NAV pressed on the ground arms LNAV; it captures after lift-off while the FD keeps TO on the
     // roll (found by tests/aircraft/g650/verify: LNAV went active on the runway before takeoff).
@@ -286,6 +292,10 @@ export function createSystems(ctx: SimContext, opts: G650SystemsOptions = {}): G
   const act = [hydFrac('left'), hydFrac('right'), 'elec.ebha_mce_powered ? 0.6 : 0'];
   const fbw = new FlyByWire(ctx, {
     power: 'elec.fcc1a_powered || elec.fcc1b_powered || elec.fcc2a_powered || elec.fcc2b_powered',
+    // Fourth level below DIRECT (LUC flight controls, dossier §4.4): the independent, UPS-powered BFCU BACKUP
+    // mode - all FCC channels dead but the BFCU alive -> mode BACKUP (mode_code 3): direct-law gains, no yaw
+    // damper, no ground spoilers (logic.ts gsArmed), CAS "FCC Backup Mode" (EST text).
+    backupPower: 'elec.bfcu_powered',
     actuators: { pitch: act, roll: act, yaw: act },
     modeSelectVar: V.fcModeSel,
     // Yoke split trim switches (cockpit), merged with pilot priority by systems/cockpitInputs.ts.
@@ -367,8 +377,15 @@ export function createSystems(ctx: SimContext, opts: G650SystemsOptions = {}): G
     ],
     maxPsi: 3000,
     minSourcePsi: 1000,
-    accumulator: { chargeFrom: 'max(hyd.left_psi, hyd.right_psi)', prechargePsi: 700, maxPsi: 3000, applications: 6 }, // LUC: 700 psi N2 precharge
-    parking: { var: V.parkBrake, kind: 'hydraulic' },
+    // LUC: 700 psi N2 precharge. Brake-by-wire: with both BCU channels dead there is NO pedal braking - the
+    // accumulators serve only the emergency/parking handle path (pedalSource false; "Brake by Wire Fail" CAS).
+    // Indication: separate inboard (L) / outboard (R) accumulators are modelled in G650Logic
+    // (V.accumInbdPsi / V.accumOutbdPsi) and drive the two BRAKE ACCUM gauge scales.
+    accumulator: { chargeFrom: 'max(hyd.left_psi, hyd.right_psi)', prechargePsi: 700, maxPsi: 3000, applications: 6, pedalSource: false },
+    // PARK BRAKE handle (LUC gear/brakes, dossier §9.8): proportional emergency braking over its travel from
+    // the accumulators (no anti-skid), parking brake SET only near full travel (logic.ts V.parkSetCmd >= 0.9).
+    parking: { var: V.parkSetCmd, kind: 'hydraulic' },
+    emergency: { var: V.parkBrake, pressurePsi: `max(${V.accumInbdPsi}, ${V.accumOutbdPsi})`, bypassFailures: true },
     antiskid: { enabled: 'elec.bcu_a_powered || elec.bcu_b_powered', minSpeedKt: 10 }, // LUC: anti-skid down to 10 kt
     autobrake: {
       selectorVar: V.autobrake,
@@ -398,6 +415,9 @@ export function createSystems(ctx: SimContext, opts: G650SystemsOptions = {}): G
     inhibits: { terrain: V.terrInhibit, gpws: V.gpwsInhibit, flapOverride: V.flapOride },
   });
   const tcas = new Tcas(ctx, { power: 'elec.tcas_powered' });
+  // SmartRunway/RAAS runway-awareness callouts (Honeywell EGPWS RAAS option, FAA FSB GVI), gated by the
+  // pedestal RAAS INHIBIT key through V.raasActive (logic.ts).
+  const raas = new G650Raas(ctx);
   const tocw = new TakeoffConfigWarning(ctx, {
     armed: `${V.toThrust} && gear.air_ground`,
     power: 'elec.l_ess_dc_powered || elec.r_ess_dc_powered',
@@ -459,6 +479,7 @@ export function createSystems(ctx: SimContext, opts: G650SystemsOptions = {}): G
     overspeed,
     altAlert,
     taws,
+    raas,
     tcas,
     tocw,
     cas,
@@ -477,6 +498,10 @@ export function createSystems(ctx: SimContext, opts: G650SystemsOptions = {}): G
     { id: 'fire.apu', name: 'APU fire', category: 'fire' },
     { id: 'elec.l_btb', name: 'Left bus tie relay', category: 'electrical' },
     { id: 'elec.r_btb', name: 'Right bus tie relay', category: 'electrical' },
+    // BR725 EPR (P50) sensing: failure reverts that EEC to the LP-N1 "ALT" thrust-setting mode (LUC
+    // powerplant, LIM; logic.ts V.eprMode -> CAS "Engine Alternate Mode", EST text).
+    { id: 'eng.epr1', name: 'Left engine EPR sensing', category: 'engine' },
+    { id: 'eng.epr2', name: 'Right engine EPR sensing', category: 'engine' },
   ]);
 
   return {
@@ -514,6 +539,7 @@ export function createSystems(ctx: SimContext, opts: G650SystemsOptions = {}): G
     steering,
     overspeed,
     taws,
+    raas,
     tcas,
     tocw,
     cas,

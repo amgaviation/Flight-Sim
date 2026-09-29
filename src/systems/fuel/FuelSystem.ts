@@ -70,6 +70,8 @@ class Tank {
   mass: number;
   ind: number;
   tempC: number;
+  /** Additive skin-temperature bias (°C) for this tank (temperature.tankBiasC; appended by the g650 aircraft). */
+  biasC: Evaluator | null = null;
   readonly unusable: number;
   readonly leakKgps: number;
   readonly low: Hysteresis | null;
@@ -271,7 +273,10 @@ export class FuelSystem implements Subsystem {
       usedIdx.add(t.index);
       if (!(t.capacityKg > 0)) throw new Error(`FuelSystem: tank '${t.id}' needs capacityKg > 0`);
       this.tankIndex.set(t.id, this.tanks.length);
-      this.tanks.push(new Tank(t, this.tanks.length, vars, P, t0));
+      const tank = new Tank(t, this.tanks.length, vars, P, t0);
+      const bias = cfg.temperature?.tankBiasC?.[t.id];
+      if (bias !== undefined) tank.biasC = compileBinding(vars, bias, 0);
+      this.tanks.push(tank);
     }
     for (const n of cfg.nodes) {
       this.ids.add(n, 'node');
@@ -451,7 +456,8 @@ export class FuelSystem implements Subsystem {
     for (const t of this.tanks) {
       if (this.hasTemp) {
         const tau = this.tauFull * Math.max(0.05, t.mass / t.def.capacityKg);
-        t.tempC += (skin - t.tempC) * (1 - Math.exp(-dt / tau));
+        const sk = t.biasC ? skin + t.biasC() : skin;
+        t.tempC += (sk - t.tempC) * (1 - Math.exp(-dt / tau));
       }
       const target = t.gaugePower() ? t.mass : 0;
       t.ind += (target - t.ind) * (t.gaugeLag > 0 ? 1 - Math.exp(-dt / t.gaugeLag) : 1);

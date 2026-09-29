@@ -44,7 +44,7 @@ import { createPneumatics, createPressurization, createIce, createApu, createFir
 import { createEngines } from './systems/engines';
 import { LongitudeLogic, LongitudePostLogic, TLA } from './systems/logic';
 import { LongitudeCockpitInputs } from './systems/cockpitInputs';
-import { LongitudeAtHold, LongitudeAtProtection } from './systems/afcsExtras';
+import { LongitudeAtHold, LongitudeAtProtection, LongitudeApproachSpeed } from './systems/afcsExtras';
 import type { EisConfig } from '../../avionics/garmin-g3000/config';
 import { LongitudePitchRollDisconnect } from './systems/pitchRollDisconnect';
 import { LONGITUDE_CAS, LON_BRAKE_FAIL } from './systems/cas';
@@ -424,6 +424,9 @@ export function createLongitudeSystems(ctx: SimContext, opts: LongitudeSystemsOp
   const lights = createLighting(ctx);
   const atHold = new LongitudeAtHold(ctx.vars, eng.at);
   const atProt = new LongitudeAtProtection(ctx.vars, eng.at, afcs);
+  // LON4-07 (BCA 2021): approach bug to VREF + pilot additive at 2 nm; after the suite (which writes the FMS
+  // target into the selected speed), before the AFCS / A/T.
+  const apprSpd = new LongitudeApproachSpeed(ctx.vars);
 
   const list: Subsystem[] = [
     failures,
@@ -445,6 +448,7 @@ export function createLongitudeSystems(ctx: SimContext, opts: LongitudeSystemsOp
     ...(suite ? suite.systems : []),
     ...(gcu ? [gcu] : []),
     gmcAlt,
+    apprSpd,
     eng.ratings,
     afcs,
     atHold,

@@ -109,6 +109,8 @@ export const G650_CAS: CasMessageDef[] = [
   // ---- powerplant
   ...lr('oil_press_c', 'Oil Pressure Low', 'caution', (x) => `eng${x.i}.running && eng${x.i}.oil_press_psi < ${G650_LIMITS.oilPressCautionPsi} && eng${x.i}.oil_press_psi >= ${G650_LIMITS.oilPressMinPsi}`, { delayS: 3, inhibit: TL }),
   ...lr('autostart_abort', 'Autostart Abort', 'caution', (x) => `fadec.eng${x.i}.abort`, { inhibit: TL }),
+  // BR725 EEC reverted from EPR to the LP-N1 "ALT" thrust-setting mode (LUC powerplant / LIM; EST text).
+  ...lr('eng_alt_mode', 'Engine Alternate Mode', 'caution', (x) => `${V.eprMode(x.i)} == 0 && eng${x.i}.running`, { delayS: 1, inhibit: TL }),
   ...lr('eng_exceed', 'Engine Exceedance', 'caution', (x) => `eng${x.i}.n1_pct > ${G650_LIMITS.n1TakeoffPct + 0.1} || eng${x.i}.n2_pct > ${G650_LIMITS.n2TakeoffPct + 0.1} || eng${x.i}.itt_c > ${G650_LIMITS.tgtTakeoffC}`, { delayS: 1, latch: true, inhibit: TL }), // EST text
   // ---- bleed / ECS / pressurization
   ...lr('bleed_low', 'Bleed Pressure Low', 'caution', (x) => `${x.l === 'l' ? V.bleedL : V.bleedR} == 1 && eng${x.i}.running && pneu.${x.l}_duct_psi < 5`, { delayS: 10, inhibit: TL }),
@@ -124,11 +126,17 @@ export const G650_CAS: CasMessageDef[] = [
   ...lr('cowl_ai_fail', 'Cowl Anti-Ice Fail', 'caution', (x) => `${V.caiCmd(x.l)} && pneu.cai_${x.l}_ok < 0.5 && eng${x.i}.running`, { delayS: 10, inhibit: TL }), // EST text
   ...lr('probe_heat', 'Probe Heat Fail', 'caution', (x) => (x.l === 'l' ? `(${V.probeHeatOn(1)} && !elec.probe1_powered) || (${V.probeHeatOn(3)} && !elec.probe3_powered)` : `(${V.probeHeatOn(2)} && !elec.probe2_powered) || (${V.probeHeatOn(4)} && !elec.probe4_powered)`), { delayS: 5, inhibit: TL }), // EST text
   // ---- flight controls
-  { id: 'fcc_alternate', text: 'FCC Alternate Mode', level: 'caution', when: 'fbw.mode_code == 1', inhibit: TO },
+  // EST gate: during the normal ground IRS alignment (~4 min after power-up) the FBW reports non-Normal until
+  // inertial data are valid; crews report a clean CAS after the power-up checklist and no public source shows
+  // this caution during a normal alignment (dossier §14), so like stall_prot_unavail it is engine-gated -
+  // suppressed on the ground with both engines shut down until a G650 CAS manual excerpt settles it.
+  { id: 'fcc_alternate', text: 'FCC Alternate Mode', level: 'caution', when: 'fbw.mode_code == 1 && (eng1.running || eng2.running || gear.air_ground == 0)', inhibit: TO },
   { id: 'fcc_direct', text: 'FCC Direct Mode', level: 'caution', when: 'fbw.mode_code == 2', inhibit: TO },
+  // BFCU BACKUP mode (LUC flight controls; EST text following the FCC mode caution convention).
+  { id: 'fcc_backup', text: 'FCC Backup Mode', level: 'caution', when: 'fbw.mode_code == 3', inhibit: TO },
   { id: 'stall_prot_unavail', text: 'Stall Protection Unavail', level: 'caution', when: 'fbw.mode_code != 0 && (eng1.running || eng2.running)', inhibit: TO },
   { id: 'stall_prot_active', text: 'Stall Protection Active', level: 'caution', when: `${air} && stall.aoa_norm >= 0.96` },
-  { id: 'yaw_damper_off', text: 'Yaw Damper Off', level: 'caution', when: `fbw.mode_code == 2 && (eng1.running || eng2.running)`, inhibit: TO },
+  { id: 'yaw_damper_off', text: 'Yaw Damper Off', level: 'caution', when: `fbw.mode_code >= 2 && (eng1.running || eng2.running)`, inhibit: TO },
   { id: 'sb_auto_retract', text: 'Speed Brake Auto Retract', level: 'caution', when: V.sbAutoRetract, inhibit: TL },
   { id: 'flaps_failed', text: 'Flaps Failed', level: 'caution', when: 'flaps.asym || flaps.disagree', delayS: 2, inhibit: TO },
   { id: 'steer_fail', text: 'Steer by Wire Fail', level: 'caution', when: `${V.nwsPower} == 1 && ${gnd} && (eng1.running || eng2.running) && (!elec.nwscu_powered || hyd.left_psi < 1000 || fail.steer)`, delayS: 2, inhibit: TL },
@@ -141,9 +149,24 @@ export const G650_CAS: CasMessageDef[] = [
   // ---- fire
   { id: 'bottle_r_disch', text: 'R Fire Bottle Discharge', level: 'caution', when: 'fire.bottle_r_discharged' },
   { id: 'bottle_l_disch', text: 'L Fire Bottle Discharge', level: 'caution', when: 'fire.bottle_l_discharged' },
-  { id: 'fire_loop_fault', text: 'Fire Detection Loop Fault', level: 'caution', when: 'fire.eng1_fault || fire.eng2_fault', delayS: 0.5 },
+  // Dual-loop detection (LUC fire): a SINGLE failed loop already degrades that zone to single-loop detection
+  // and posts the loop-fault caution (the zone-level fault only rises with both loops dead), so the per-loop
+  // fault outputs are watched too.
+  {
+    id: 'fire_loop_fault',
+    text: 'Fire Detection Loop Fault',
+    level: 'caution',
+    when: 'fire.eng1_fault || fire.eng2_fault || fire.apu_fault || fire.eng1_loopa_fault || fire.eng1_loopb_fault || fire.eng2_loopa_fault || fire.eng2_loopb_fault || fire.apu_loopa_fault',
+    delayS: 0.5,
+  },
 
   // ================================================================ BLUE (advisory)
+  // EST text: CPC Emergency Descent Mode latched (logic.ts: cabin altitude above the trip in flight, dossier §4.8).
+  { id: 'edm', text: 'Emergency Descent Mode', level: 'advisory', when: V.edm },
+  // EST text (Gulfstream CAS convention posts a blue advisory for a deliberate in-flight shutdown with the
+  // FUEL CONTROL switch - checklist confirmation cue; not posted for a fire-handle shutdown, which has its
+  // own white "Fire Handle Pulled" status).
+  ...lr('eng_shutdown', 'Engine Shutdown', 'advisory', (x) => `${x.l === 'l' ? V.fuelCtlL : V.fuelCtlR} == 0 && !eng${x.i}.running && ${air} && !${fireHandle(x)}`),
   { id: 'fwd_emer_batt', text: 'Fwd Emer Battery On', level: 'advisory', when: V.ebattOn },
   { id: 'aft_emer_batt', text: 'Aft Emer Battery On', level: 'advisory', when: V.ebattOn },
   { id: 'aux_hyd_on', text: 'Aux Hyd Pump On', level: 'advisory', when: 'hyd.aux_on', inhibit: TL },

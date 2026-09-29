@@ -5,7 +5,7 @@
  * overhead drawing (0.66 x 0.35 m; coordinates in metres from the top-left
  * corner, top = aft):
  *
- *   left column: ELT (ARM / ON, ELT light), LE DEVICES annunciator (4
+ *   left column: loudspeaker grille (top corner), LE DEVICES annunciator (4
  *     Krueger flaps + 8 slats: TRANSIT / EXT / FULL EXT, TEST), PSEU light
  *   2nd column: IRS MODE SELECT UNIT (ISDU window, DSPL SEL, SYS DSPL L/R,
  *     keyboard, GPS light, ALIGN / ON DC / FAULT / DC FAIL lights, L / R mode
@@ -14,8 +14,9 @@
  *   4th column: observer audio control panel (ACP 3), ENGINE (REVERSER,
  *     ENGINE CONTROL lights, EEC ON / ALTN), CREW OXYGEN pressure and PASS
  *     OXYGEN switch with PASS OXY ON; LEFT / RIGHT / NOSE GEAR greens
- *   right column: FLIGHT RECORDER TEST / NORMAL + OFF, MACH AIRSPEED
- *     WARNING TEST 1 / 2, STALL WARNING TEST 1 / 2
+ *   right column: ELT (ARM / ON, ELT light; operator-fit position, above the
+ *     recorder per paneloverhead_737-700.jpg), FLIGHT RECORDER TEST / NORMAL
+ *     + OFF, MACH AIRSPEED WARNING TEST 1 / 2, STALL WARNING TEST 1 / 2
  *   INDEX TO LOCK latches at the lower corners.
  * The DOORS annunciators are on the forward overhead (forward.ts).
  *
@@ -24,6 +25,7 @@
  * systems/sensors Irs). SCOPE: the keyed latitude / longitude are not
  * parsed; the IRSs take the aircraft position (as the FMC POS INIT entry).
  */
+import * as THREE from 'three';
 import { AnnunciatorLight, KeyPad, PushButton, RotaryKnob } from '../../../../cockpit/controls';
 import type { Panel } from '../../../../cockpit/CockpitBuilder';
 import { B738, type AcpReceiver } from '../../vars';
@@ -49,20 +51,40 @@ export function buildAftOverhead(c: B738CockpitContext, root: Panel): void {
   };
 
   // Blank plates (unused module positions, as on the aircraft).
-  M('blank1', 0.003, 0.03, 0.14, 0.143);
-  M('blank2', 0.515, 0.03, 0.658, 0.14);
-  M('blank3', 0.515, 0.26, 0.658, 0.29);
-
-  // ============================================================== ELT, LE DEVICES, PSEU (left column)
   {
-    const o = M('elt', 0.003, 0.145, 0.14, 0.212);
-    const id = (s: string) => `b738.aovhd.elt.${s}`;
-    o.label('ELT', 0.07, 0.165, 0.0022);
-    o.guarded({ id: id('sw'), label: 'ELT', var: B738.eltSw, positions: ['ON', 'ARM'], values: [1, 0], initial: 1, guard: { color: 'red', guardedPosition: 1 } }, 0.1, 0.185, false, 0.6);
-    o.label('ARM', 0.086, 0.172, 0.0016);
-    o.label('ON', 0.088, 0.2, 0.0016);
-    o.annun(id('lt'), 'ELT', [seg.on('ELT', 'amber', L.elt)], 0.033, 0.188, 0.022, 0.011);
+    // Flush loudspeaker at the left forward corner of the aft overhead (paneloverhead_737-700.jpg, top-left):
+    // static grille geometry (disc + concentric rings, merged; no control - the speaker is the cockpit
+    // aural-warning loudspeaker, driven by the audio module).
+    const o = M('blank1', 0.003, 0.03, 0.14, 0.143);
+    const gx = o.X(0.038);
+    const gy = o.Y(0.112);
+    const disc = new THREE.Mesh(env.geometry.get('b738.spkr_disc', () => new THREE.CylinderGeometry(0.033, 0.035, 0.004, 28).rotateX(Math.PI / 2)), env.materials.get('plasticBlack'));
+    disc.userData.cockpitStatic = true;
+    o.p.addObject(disc, gx, gy, { z: 0.002 });
+    for (const [k, r] of [0.009, 0.017, 0.025].entries()) {
+      const ring = new THREE.Mesh(env.geometry.get(`b738.spkr_ring${k}`, () => new THREE.TorusGeometry(r, 0.0012, 6, 36)), env.materials.get('panelDark'));
+      ring.userData.cockpitStatic = true;
+      o.p.addObject(ring, gx, gy, { z: 0.004 });
+    }
   }
+  M('blank2', 0.603, 0.03, 0.658, 0.14);
+  M('blank3', 0.515, 0.26, 0.658, 0.29);
+  M('blank4', 0.003, 0.145, 0.14, 0.212);
+
+  // ============================================================== ELT (right column, above FLIGHT RECORDER)
+  // Position per paneloverhead_737-700.jpg: the ELT remote panel sits right of the oxygen module, above the
+  // FLIGHT RECORDER module (operator-fit position varies between airlines; EST within the module).
+  {
+    const o = M('elt', 0.515, 0.03, 0.6, 0.14);
+    const id = (s: string) => `b738.aovhd.elt.${s}`;
+    o.label('ELT', 0.557, 0.06, 0.0022);
+    o.guarded({ id: id('sw'), label: 'ELT', var: B738.eltSw, positions: ['ON', 'ARM'], values: [1, 0], initial: 1, guard: { color: 'red', guardedPosition: 1 } }, 0.578, 0.095, false, 0.6);
+    o.label('ARM', 0.564, 0.078, 0.0016);
+    o.label('ON', 0.566, 0.112, 0.0016);
+    o.annun(id('lt'), 'ELT', [seg.on('ELT', 'amber', L.elt)], 0.533, 0.098, 0.022, 0.011);
+  }
+
+  // ============================================================== LE DEVICES, PSEU (left column)
   {
     const o = M('le_dev', 0.003, 0.214, 0.14, 0.29);
     const id = (s: string) => `b738.aovhd.le.${s}`;

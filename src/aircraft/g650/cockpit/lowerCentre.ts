@@ -38,20 +38,20 @@ export const LC = {
 };
 
 /**
- * BRAKE ACCUM PRESS gauge: two vertical scales 0-3.5 (psi x 1000), INBD (left hydraulic) and OUTBD (right).
- * SCOPE: the brake model has one accumulator (`brakes.accum_psi`, charged from the higher system), shown on both
- * scales; the real aircraft has an inboard (L) and an outboard (R) accumulator (LUC).
+ * BRAKE ACCUM PRESS gauge: two vertical scales 0-3.5 (psi x 1000), INBD (inboard accumulator, charged from the
+ * LEFT hydraulic system) and OUTBD (outboard, RIGHT system) - separate accumulators with their own scales (LUC
+ * gear/brakes; G650ER photograph Flickr 52948656184). Each scale reads its own var (G650Logic).
  */
 export class BrakeAccumGauge extends CanvasDisplay {
   private readonly v: SimVars;
   constructor(vars: SimVars, canvas?: DisplayCanvas) {
     super({ id: 'g650.lc.brake_accum', width: 128, height: 176, vars, refreshHz: 10, powerVar: LC.gaugePower, brightnessVar: null, canvas, background: '#0b0c0d' });
     this.v = vars;
-    this.watch('brakes.accum_psi', 25);
+    this.watch(V.accumInbdPsi, 25);
+    this.watch(V.accumOutbdPsi, 25);
   }
 
   protected draw(ctx: Ctx2D): void {
-    const psi = Math.max(0, Math.min(3500, this.v.get('brakes.accum_psi')));
     const top = 22;
     const bot = 150;
     const yOf = (p: number) => bot - ((bot - top) * p) / 3500;
@@ -65,10 +65,11 @@ export class BrakeAccumGauge extends CanvasDisplay {
       const y = yOf(k * 1000);
       ctx.fillText(String(k), 64, y);
     }
-    for (const [x, name] of [
-      [34, 'INBD'],
-      [94, 'OUTBD'],
+    for (const [x, name, varName] of [
+      [34, 'INBD', V.accumInbdPsi],
+      [94, 'OUTBD', V.accumOutbdPsi],
     ] as const) {
+      const psi = Math.max(0, Math.min(3500, this.v.get(varName)));
       ctx.strokeStyle = '#c8c8c8';
       ctx.lineWidth = 1;
       ctx.strokeRect(x - 6, top, 12, bot - top);

@@ -271,9 +271,11 @@ export function buildShell(b: CockpitBuilder): void {
     add(new THREE.BoxGeometry(w, FLOOR_Z - sh.z - 0.03, sh.xFwd - sh.xAft), 'panelDark', 'side_shelf_body', [(sh.xFwd + sh.xAft) / 2, s * (sh.yIn + w / 2 + 0.02), (FLOOR_Z + sh.z + 0.03) / 2]);
   }
 
-  // ---- crew seats
-  b.seat('airline', SEAT_L);
-  b.seat('airline', SEAT_R);
+  // ---- crew seats. Pan raised 0.1 m over the library airline seat (design-eye geometry, dossier §12.6: seated
+  // eye ~0.78 m above the cushion puts the pan ~0.52 m above the floor; the library pan is 0.42 m). Fix round 1
+  // B738-L16: the seat is raised rather than the floor, keeping the design eye fixed.
+  b.seat('airline', SEAT_L, undefined, { panRaise_m: 0.1 });
+  b.seat('airline', SEAT_R, undefined, { panRaise_m: 0.1 });
 }
 
 /**

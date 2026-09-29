@@ -83,6 +83,12 @@ export interface IrsConfig {
   attHdgDriftDegPerHr?: number;
   /** Start in NAV (states other than cold & dark). Default false. */
   startAligned?: boolean;
+  /**
+   * (Appended by the g650 aircraft, additive.) Maximum |latitude| (deg) at which a ground alignment can
+   * complete (G650 LIM: the IRUs align only up to 78° latitude). Beyond it the alignment holds with the
+   * ALIGN light flashing (align fail). Default: no limit (previous behaviour).
+   */
+  maxAlignLatDeg?: number;
 }
 
 export class Irs implements Subsystem {
@@ -109,6 +115,8 @@ export class Irs implements Subsystem {
   private readonly attHdgDrift: number;
   private dcTest = 0;
   private motionFault = 0;
+  private readonly maxAlignLat: number | undefined;
+  private latFault = false;
   private attTimer = 0;
   private attHdgEntered = false;
   private attHdgOffset = 0;
@@ -134,6 +142,7 @@ export class Irs implements Subsystem {
     this.attAlignS = cfg.attAlignS ?? 30;
     this.dcTestS = cfg.dcTestS ?? 5;
     this.motionKt = cfg.motionLimitKt ?? 1.5;
+    this.maxAlignLat = cfg.maxAlignLatDeg;
     this.requirePos = cfg.requirePosition ?? true;
     this.gpsAuto = cfg.gpsAutoPosition ?? false;
     this.gpsUpd = cfg.gpsUpdating ?? false;
@@ -231,6 +240,11 @@ export class Irs implements Subsystem {
 
     // ---- alignment
     if (this.state === IrsState.Aligning) {
+      if (this.maxAlignLat !== undefined && Math.abs(v.get(FDM.lat)) > this.maxAlignLat) {
+        // Latitude beyond the alignment limit: the alignment cannot complete (align fail, ALIGN flashing).
+        this.latFault = true;
+        this.alignRemaining = Math.max(this.alignRemaining, 1);
+      } else this.latFault = false;
       if (gs > this.motionKt) {
         // Motion during alignment: restart (ALIGN flashes for 10 s).
         this.motionFault = 10;
@@ -287,7 +301,7 @@ export class Irs implements Subsystem {
     let alignLight = 0;
     if (this.state === IrsState.Aligning) {
       const needPos = this.requirePos && !this.posEntered && this.alignRemaining <= 0;
-      alignLight = this.motionFault > 0 || needPos ? 2 : 1;
+      alignLight = this.motionFault > 0 || needPos || this.latFault ? 2 : 1;
     } else if (this.state === IrsState.Nav && sel === 1) {
       alignLight = 1;
     }

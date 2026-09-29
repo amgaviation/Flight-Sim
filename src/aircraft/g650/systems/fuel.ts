@@ -12,8 +12,9 @@
  * APU is fed from the left manifold (right via crossflow, LUC apu).
  * SCOPE: the hopper is not a separate tank (it is kept full while the wing
  * tank has fuel, so the modelled wing tank feeds directly); the heated fuel
- * return (HFRS) changes the tank temperature only through the logic.ts fuel
- * temperature bias; refuelling is instantaneous from the service menu.
+ * return (HFRS) warms its tank through the per-tank temperature bias below
+ * while `logic.ts` reports it running; refuelling is instantaneous from the
+ * service menu.
  */
 import type { SimContext } from '../../../core/SimContext';
 import { FuelSystem } from '../../../systems/fuel';
@@ -55,6 +56,15 @@ export function createFuel(ctx: Pick<SimContext, 'vars'>): FuelSystem {
       { id: 'intertank', from: 'left', to: 'right', kind: 'gravity', ratePph: 3000, bidirectional: true, active: `${V.interTank} == 1 && elec.fuel_valves_r_powered` },
     ],
     balance: { left: 'left', right: 'right', alertKg: 1000 * LB }, // CAS "Fuel Imbalance" amber at 1,000 lb (LUC fuel)
-    temperature: { skin: 'fdm.tat_c', tauFullS: 14400, initialC: 15 },
+    // Heated fuel return (LUC fuel): while HFRS runs (logic.ts: AUTO on at 0 °C tank, off at +10 °C) the warm
+    // FOHE return raises the tank temperature. EST bias +55 °C on the effective skin temperature: at TAT -45 °C
+    // the tank equilibrates near +10 °C, reproducing the 0 -> +10 °C AUTO hysteresis cycling, and in a very cold
+    // cruise (TAT -60) it holds the fuel near -5 °C, clear of the -34.5 °C amber.
+    temperature: {
+      skin: 'fdm.tat_c',
+      tauFullS: 14400,
+      initialC: 15,
+      tankBiasC: { left: `${V.hfrsOn(1)} != 0 ? 55 : 0`, right: `${V.hfrsOn(2)} != 0 ? 55 : 0` },
+    },
   });
 }

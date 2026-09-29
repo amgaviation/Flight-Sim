@@ -209,6 +209,11 @@ function buildConsole(c: G650CockpitContext, side: 1 | 2): void {
   // for turning off the vestibule or companionway lights ... blue ON"). EST: pilot side, between ACP and mask.
   if (side === 1) {
     sl(env, p, { id: 'g650.side.vest_oride', label: 'VEST LTS ORIDE (vestibule lights off)', var: V.vestOride, name: 'VEST LTS\nORIDE', segments: [seg.on('ON', 'cyan', V.vestOride)] }, X(0.2), 0.3);
+    // Flight-deck door controls (EST: cabin photographs show a cockpit divider/door; no public lock-panel
+    // source found, so the keys and their placement are estimated - dossier §13). DOOR toggles the aft
+    // bulkhead door leaf (shell.ts animates V.doorCockpit); LOCK latches it closed (audio/logic state).
+    sl(env, p, { id: 'g650.side.door', label: 'COCKPIT DOOR open/close', var: V.doorCockpit, name: 'DOOR', segments: [seg.on('OPEN', 'cyan', V.doorCockpit)] }, X(0.335), 0.3);
+    sl(env, p, { id: 'g650.side.door_lock', label: 'COCKPIT DOOR LOCK', var: V.doorLockSw, name: 'DOOR\nLOCK', segments: [seg.on('LOCKED', 'cyan', V.doorLocked)] }, X(0.47), 0.3);
   }
 
   // ---- oxygen mask stowage, regulator, flow indicator.
@@ -217,7 +222,8 @@ function buildConsole(c: G650CockpitContext, side: 1 | 2): void {
   p.add(
     new SelectorKnob(env, {
       id: `g650.side.mask_mode_${tag}`,
-      var: V.oxyMaskMode,
+      // Each EROS mask has its own N / 100 % / EMERGENCY regulator (LUC oxygen): per-side var.
+      var: side === 1 ? V.oxyMaskModeL : V.oxyMaskModeR,
       label: 'MASK REGULATOR (N / 100 % / EMER)',
       cap: 'pointer',
       diameter: 0.014,

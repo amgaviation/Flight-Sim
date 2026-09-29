@@ -137,10 +137,15 @@ export const PEDALS_R: [number, number, number] = [14.62, 0.53, 0.36];
 /** Crew seat reference (floor point under the front of the seat pan). */
 export const SEAT_L: [number, number, number] = [13.52, -0.53, FLOOR_Z];
 export const SEAT_R: [number, number, number] = [13.52, 0.53, FLOOR_Z];
-/** Captain's nose-wheel steering tiller (left sidewall shelf, ~0.45 m below and ~0.35 m outboard of the eye; EST, the dossier's 0.6 m would sit inside this model's narrower sidewall). */
-export const TILLER: { center_m: BodyVec } = { center_m: [14.05, -0.88, 0.06] };
+/**
+ * Captain's nose-wheel steering tiller (left sidewall shelf, ~0.45 m below the eye). Dossier §10.0: ~0.6 m
+ * outboard; this model's inner skin half-width at the shelf station is 1.128 m (fuselage.ts, x 14.05), so the
+ * tiller housing sits against the wall at y -1.05 = 0.52 m outboard of the eye (fix round 1 B738-L13; the last
+ * 8 cm would need a wider nose section, EST).
+ */
+export const TILLER: { center_m: BodyVec } = { center_m: [14.05, -1.05, 0.06] };
 /** Sidewall shelves (the tiller housing on the left; the side-console agent extends them aft). */
-export const SIDE_SHELF = { xFwd: 14.3, xAft: 13.85, z: 0.1, yIn: 0.78, yOut: 1.12 };
+export const SIDE_SHELF = { xFwd: 14.3, xAft: 13.85, z: 0.1, yIn: 0.78, yOut: 1.13 };
 
 /** Standby magnetic compass on the windshield centre post (NG: stowable compass at the post top). */
 export const COMPASS: BodyVec = [14.3, 0, -0.66];

@@ -440,6 +440,12 @@ export class Afcs implements Subsystem {
       case 'HDG':
         this.selectLateral('HDG');
         break;
+      case 'TRK':
+        // Appended (G800 fix round 1 F02): selected-track mode (Honeywell Symmetry GP HDG/TRK key,
+        // BJT500: the lateral knob/key selects heading OR track). Flies the heading-window value as a
+        // ground track (drift corrected); previously unreachable, so no existing preset changes.
+        this.selectLateral('TRK');
+        break;
       case 'ROL':
         this.selectLateral('ROL');
         break;
@@ -516,7 +522,8 @@ export class Afcs implements Subsystem {
         if (!this.kapAltArm) this.vertArmed &= ~ARM.ALTS;
         break;
       case 'HDG_SYNC':
-        v.set(AP.selHeading, Math.round(norm360(this.hdg)));
+        // In TRK mode the window is a track, so PUSH SYNC syncs to the current track (F02).
+        v.set(AP.selHeading, Math.round(norm360(this.lat === 'TRK' && this.trkOk ? this.trk : this.hdg)));
         break;
       case 'CRS_SYNC': {
         const r = this.navReceiver();
@@ -1419,6 +1426,9 @@ export class Afcs implements Subsystem {
       case 'HDG':
         return this.headingLaw(v.get(AP.selHeading), this.hdg);
       case 'TRK':
+        // Selected-track mode (F02): the heading window/bug is a ground track. Track hold (GA-style
+        // trackRef) is the 'GA' case below; TRK proper was unreachable before this mode was appended.
+        return this.onGround ? 0 : this.headingLaw(v.get(AP.selHeading), this.trackOrHeading());
       case 'GA':
         return this.onGround ? 0 : this.headingLaw(this.trackRef, this.trackOrHeading());
       case 'TO':
@@ -1800,7 +1810,8 @@ export class Afcs implements Subsystem {
     const btn = AFCS_VARS.button;
     const navArmedOrActive = NAV_LATERAL.has(this.lat) || NAV_LATERAL.has(this.latArmed);
     v.set(btn('ap'), this.engaged ? 1 : 0);
-    v.set(btn('hdg'), this.lat === 'HDG' ? 1 : 0);
+    v.set(btn('hdg'), this.lat === 'HDG' || this.lat === 'TRK' ? 1 : 0); // HDG/TRK share the key light (Symmetry, F02)
+    v.set(btn('trk'), this.lat === 'TRK' ? 1 : 0);
     v.set(btn('nav'), navArmedOrActive && !this.approach ? 1 : 0);
     v.set(btn('apr'), this.approach ? 1 : 0);
     v.set(btn('app'), this.approach && this.vert !== 'GS' ? 1 : 0);

@@ -139,7 +139,7 @@ export class EpicSuite {
     const ccdEval = [compileBinding(vars, pw.ccd?.[0], 1), compileBinding(vars, pw.ccd?.[1], 1)];
     this.cursor = new CursorControl(vars, events, { duWidth: DU_W, duHeight: DU_H, powered: (s) => ccdEval[s - 1]() >= 0.5 });
     const gpEval = compileBinding(vars, pw.gp, 1);
-    this.gp = new GuidancePanelLogic(vars, events, { sensors: cfg.sensors, events: cfg.events, powered: () => gpEval() >= 0.5, approachInfo: () => this.approachInfo() });
+    this.gp = new GuidancePanelLogic(vars, events, { sensors: cfg.sensors, events: cfg.events, powered: () => gpEval() >= 0.5, approachInfo: () => this.approachInfo(), hdgKeyTogglesTrk: cfg.gpHdgTrkToggle });
     const stbyIds = [1, 2].map((s) => `${p}.${sym ? 'sfd' : 'smc'}${s}`);
     const stbyEval = [compileBinding(vars, pw.standby?.[0], 1), compileBinding(vars, pw.standby?.[1], 1)];
     this.dc = new DisplayControllerLogic(vars, events, {

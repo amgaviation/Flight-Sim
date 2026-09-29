@@ -120,6 +120,20 @@ function hash(a: number, b: number): number {
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }
 
+/**
+ * Effective antenna tilt (deg): with STAB on (`wxr.stab`, logic.ts from the controller's STAB button) the antenna
+ * is attitude-stabilized and the selected tilt holds relative to the horizon; with STAB off the beam follows the
+ * airframe, so the effective tilt wanders with pitch and (scanning across the bank angle) part of the bank
+ * (NG weather radar controller / Honeywell WXR pilot guides: "unstabilized antenna"; bank coupling EST 0.5x mean
+ * over the scan). Clamped to the +/-15 deg control range.
+ */
+export function wxrEffectiveTiltDeg(v: Pick<SimContext['vars'], 'get'>): number {
+  const sel = v.get(B738.wxrTilt);
+  if (v.get('wxr.stab', 1) !== 0) return sel;
+  const t = sel + v.get('ahrs1.pitch_deg') - 0.5 * Math.abs(v.get('ahrs1.bank_deg'));
+  return Math.max(-15, Math.min(15, t));
+}
+
 /** Weather radar returns for the ND weather hook (see the file header). */
 export function createWxrOverlay(ctx: Pick<SimContext, 'vars' | 'world'>): NdWeatherOverlay {
   const v = ctx.vars;
@@ -185,15 +199,17 @@ export function createWxrOverlay(ctx: Pick<SimContext, 'vars' | 'world'>): NdWea
     // Returns rebuilt about once a second (the overlay is drawn at the display rate, <= 30 Hz).
     if (frames++ % 30 === 0) build(la0, lo0);
     const alt = v.get('adc1.press_alt_ft');
-    const tilt = v.get(B738.wxrTilt);
+    const tilt = wxrEffectiveTiltDeg(v);
+    const idnt = v.get('wxr.idnt') !== 0;
     const gain = v.get(B738.wxrGain, 0.5);
     const gk = Math.pow(2, (gain - 0.5) * 3); // mid = calibrated; +/- ~2.8x at the stops (EST)
     const tanLo = Math.tan(((tilt - HALF_BEAM_DEG) * Math.PI) / 180);
     const tanHi = Math.tan(((tilt + HALF_BEAM_DEG) * Math.PI) / 180);
     const cosLat = Math.max(0.1, Math.cos((la0 * Math.PI) / 180));
     const beamAt = (rNm: number, tn: number): number => alt + rNm * 6076 * tn - 0.662 * rNm * rNm;
-    // Ground returns: MAP mode, and ground clutter in WX / WX+T where the beam hits the ground.
-    const gScale = mode === 2 ? 1 : 0.5;
+    // Ground returns: MAP mode, and ground clutter in WX / WX+T where the beam hits the ground. IDNT held
+    // suppresses the clutter so weather stands out (NG radar controller IDNT; SCOPE: full suppression).
+    const gScale = mode === 2 ? 1 : idnt ? 0 : 0.5;
     for (let ri = 1; ri <= 24; ri++) {
       const r = (ri / 24) * rangeNm;
       if (beamAt(r, tanLo) > groundFt) continue;

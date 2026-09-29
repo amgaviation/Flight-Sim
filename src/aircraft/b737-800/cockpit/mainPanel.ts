@@ -142,9 +142,11 @@ export function buildMainPanel(c: B738CockpitContext): void {
       mv(s === 1 ? 0.122 : 0.123),
     );
     // EST: TAKEOFF CONFIG / CABIN ALTITUDE lights are a post-2008 retrofit (FAA AD 2008-23-07, separate lights
-    // for the shared intermittent horn) not on the early-NG SCBG drawing; placed in the upper strip between
-    // BELOW G/S and the display select plate (Capt) / outboard of the display select plate (F/O) until a
-    // late-NG photograph confirms the spot.
+    // for the shared intermittent horn) not on the early-NG SCBG drawing. The AD's classic-737 companion text
+    // (FR E8-26660) puts the two lights "on the P2-2 center instrument panel"; late-NG installations photograph
+    // in the P1 / P3 upper strips on some airframes and the position varies by operator SB. Kept in the upper
+    // strip between BELOW G/S and the display select plate (Capt) / outboard of it (F/O) until a definitive
+    // late-NG photograph is found (fix round 1 B738-L14: re-checked, no authoritative photo located).
     annunciator(env, p, `${pfx}.to_config`, 'TAKEOFF CONFIG', [seg.on(['TAKEOFF', 'CONFIG'], 'red', B738.lt.takeoffConfig)], sg * 0.528, mv(0.122), 0.026, 0.013);
     annunciator(env, p, `${pfx}.cabin_alt`, 'CABIN ALTITUDE', [seg.on(['CABIN', 'ALTITUDE'], 'red', B738.lt.cabinAltitude)], sg * 0.497, mv(0.122), 0.026, 0.013);
     // ---- lower strip: MAIN PANEL BRIGHT, DU brightness (Capt: UPPER / OUTBD / INBD / LOWER; F/O: INBD / OUTBD).
@@ -283,6 +285,28 @@ export function buildMainPanel(c: B738CockpitContext): void {
   }
   // SCOPE: the lower half of the standby column (standby RMI on early NGs, blank on ISFD aircraft) is a plain plate.
   plate('b738.stby_col_plate', -0.188, -0.083, -0.1, -0.005);
+  // Yaw damper indicator at the top of the standby column, left of the N1 SET / SPD REF module and above the
+  // standby instruments (FCOM 9.10; panelcentreinst_700.jpg: the small L-0-R dial at the P2 top left corner).
+  if (!c.headless) {
+    const yd = new DialDisplay({
+      id: 'b738_yd_ind',
+      vars,
+      powerVar: 'elec.yd_powered',
+      angle: (x) => Math.max(-1, Math.min(1, x)) * 60,
+      ticks: [
+        { v: -1, label: 'L' },
+        { v: -0.5, major: false },
+        { v: 0 },
+        { v: 0.5, major: false },
+        { v: 1, label: 'R' },
+      ],
+      needles: [{ var: B738.lt.yawDamperInd }],
+      title: ['YAW', 'DAMPER'],
+      titleY: 170,
+    });
+    p.roundInstrument(yd, -0.162, mv(0.18), 0.028, { flange: true });
+    c.onDispose(() => yd.dispose());
+  }
 
   // ---------------------------------------------------------------- P2 upper strip (above the upper DU)
   // N1 SET / SPD REF knobs over FUEL FLOW and the MFD buttons.
@@ -346,7 +370,7 @@ export function buildMainPanel(c: B738CockpitContext): void {
   // Lever in a tall vertical slot the full DU height right of the upper DU (UP top, OFF, DN bottom).
   const gu = 0.161;
   p.subPanel({ name: 'b738.mip.gear_slot', x: gu, y: mv(0.049), width: 0.026, height: 0.145, origin: 'center', material: 'panelDark', thickness: 0.004, radius: 0.012, screws: false });
-  p.add(
+  const gear = p.add(
     new GearHandle(env, {
       id: 'b738.mip.gear',
       label: 'LANDING GEAR',
@@ -367,8 +391,18 @@ export function buildMainPanel(c: B738CockpitContext): void {
   p.label('OFF', gu - 0.021, mv(0.063), { height: LEG_H });
   p.label('DN', gu - 0.02, mv(0.026), { height: LEG_H });
   p.label('L\nA\nN\nD\nI\nN\nG\n\nG\nE\nA\nR', gu - 0.021, mv(0.052), { height: 0.0028, lineHeight: 1.05, anchor: 'middle' });
-  p.add(new PushButton(env, { id: 'b738.mip.gear_ovrd', label: 'GEAR LEVER LOCK OVERRIDE', style: 'small', width: 0.008, height: 0.008, mode: 'momentary', var: B738.gearLockOvrd, capMaterial: 'knobRed' }), gu + 0.021, mv(0.085));
-  p.label('OVRD', gu + 0.021, mv(0.095), { height: 0.0019 });
+  // Lock-override trigger on the gear lever handle itself, squeezed while moving the lever (FCOM 14.20: the
+  // override trigger is part of the lever knob, not a separate panel button). Mounted on the sliding handle
+  // group so it rides the pull-out and swing (same technique as TO/GA on the thrust lever knob, pedestal.ts).
+  {
+    gear.handle.userData.cockpitDynamic = true;
+    const ovrd = new PushButton(env, { id: 'b738.mip.gear_ovrd', label: 'GEAR LEVER LOCK OVERRIDE (trigger on the handle)', style: 'small', width: 0.008, height: 0.008, mode: 'momentary', var: B738.gearLockOvrd, capMaterial: 'knobRed' });
+    ovrd.object.position.set(0, -0.014, 0.092);
+    ovrd.object.rotation.set(Math.PI / 2, 0, 0);
+    gear.handle.add(ovrd.object);
+    b.add(ovrd);
+    for (const h of ovrd.hitTargets) h.userData.hitPriority = 1;
+  }
   // LANDING GEAR LIMIT (IAS) / FLAPS LIMIT (IAS) placard under the lever (values: data/b738 [LIM] / [PLAC]).
   {
     const sp = B738_SPEEDS;

@@ -33,7 +33,7 @@ export function buildFlightControls(c: B738CockpitContext): void {
     const inboard = L ? 'right' : 'left';
     const name = L ? 'CAPT' : 'F/O';
     const hub = L ? YOKE_HUB_L : YOKE_HUB_R;
-    b.place(
+    const yoke = b.place(
       new Yoke(env, {
         id: `b738.fc.yoke${s}`,
         label: `${name} CONTROL WHEEL`,
@@ -81,6 +81,23 @@ export function buildFlightControls(c: B738CockpitContext): void {
       }),
       { center_m: hub, facing: 'aft' },
     );
+    // Hub chart clip with checklist card (both NG control wheels carry one on the hub: deck1.jpg / deck2.jpg;
+    // static geometry riding the wheel, no control).
+    {
+      const g = new THREE.Group();
+      g.name = `yoke_clip${s}`;
+      const back = new THREE.Mesh(new THREE.BoxGeometry(0.105, 0.125, 0.004), env.materials.get('plasticBlack'));
+      const card = new THREE.Mesh(new THREE.BoxGeometry(0.095, 0.112, 0.0015), env.materials.custom('paint', 0xe8e6da, 0.85));
+      card.position.z = 0.0029;
+      const clip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.012, 0.006), env.materials.get('chrome'));
+      clip.position.set(0, 0.055, 0.003);
+      g.add(back, card, clip);
+      b.trackGeometry(back.geometry, card.geometry, clip.geometry);
+      // On the hub face toward the pilot, below the wheel centre, tilted back with the wheel plane (EST).
+      g.position.set(0, -0.01, 0.055);
+      g.rotation.x = -0.15;
+      yoke.wheel.add(g);
+    }
     b.place(new RudderPedals(env, { id: `b738.fc.pedals${s}`, label: `${name} RUDDER / BRAKE PEDALS`, style: 'hanging', spacing: 0.3 }), {
       center_m: L ? PEDALS_L : PEDALS_R,
       facing: 'aft',

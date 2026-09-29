@@ -120,8 +120,12 @@ export interface FuelSystemConfig {
   transfers?: FuelTransferDef[];
   /** Lateral imbalance: `fuel.imbalance_kg` = left − right, `fuel.imbalance` when |Δ| ≥ alertKg. */
   balance?: { left: string; right: string; alertKg: number };
-  /** Bulk fuel temperature model (optional): tanks approach `skin` (default 'fdm.tat_c') with τ = tauFullS × fill fraction. */
-  temperature?: { skin?: Binding; tauFullS?: number; initialC?: number };
+  /**
+   * Bulk fuel temperature model (optional): tanks approach `skin` (default 'fdm.tat_c') with τ = tauFullS × fill
+   * fraction. `tankBiasC` (appended by the g650 aircraft, additive): per-tank-id bias (°C) added to the skin
+   * temperature for that tank, e.g. a heated-fuel-return system warming its tank while active.
+   */
+  temperature?: { skin?: Binding; tauFullS?: number; initialC?: number; tankBiasC?: Record<string, Binding> };
   /** Aircraft altitude for suction-feed ceilings (default 'fdm.press_alt_ft'). */
   altitude?: Binding;
 }
