@@ -121,13 +121,18 @@ export function buildB738Cockpit(ctx: SimContext, sys: B738Systems, o: B738Cockp
   };
 
   // ---- lighting zones and real lights
-  // Legend backlight gain raised so every legend reads clearly at PANEL dimmer ~50 % over the (dimmer) flood
-  // wash at night (EST gains, tuned against the b737.org.uk NG night flight-deck / overhead photographs: warm
-  // ~2700 K legends bright on a dark panel, floods only a dim wash; fix round 1 B738-L03).
-  b.zone({ id: 'panel', intensityVar: CK.panelLight, gain: 4.5 });
+  // Backlit legends are alpha-masked quads whose night brightness is capped by their on-screen pixel
+  // coverage, so raising the emissive gain alone (fix round 1, 4.5/6.5) still rendered them as a faint
+  // grey glow: over-driven emissive desaturates in the ACES tone map while the coverage cap keeps it dim.
+  // Fix round 2 B738-L03: enable the shared label night-glow (labels.ts nightGlow, alpha boost of the mip
+  // ring around each glyph while the backlight drives it) and bring the gains back down into the warm part
+  // of the tone curve, tuned against the b737.org.uk night photographs (paneloverhead_737-700_night.jpg,
+  // nightflightdeck.jpg): every legend legible in orange-white ~2700 K at the preset dimmers.
+  b.env.labels.nightGlow.value = 1;
+  b.zone({ id: 'panel', intensityVar: CK.panelLight, gain: 2.2 });
   b.zone({ id: 'flood', intensityVar: FLOOD_VAR, color: 0xffd9a6 });
   // AFDS zone lights the MCP legends too: same gain class as the panel backlight (B738-L03).
-  b.zone({ id: 'afds', intensityVar: 'ac.light.flood_afds', color: 0xffd9a6, gain: 4.5 });
+  b.zone({ id: 'afds', intensityVar: 'ac.light.flood_afds', color: 0xffd9a6, gain: 2.2 });
   b.zone({ id: 'ped_flood', intensityVar: 'ac.light.flood_pedestal', color: 0xffd9a6 });
   b.zone({ id: 'dome', intensityVar: 'ac.light.dome', color: 0xfff0dc });
   env.lighting.setAnnunciatorDimming(ANNUN_BRT, 0.4);

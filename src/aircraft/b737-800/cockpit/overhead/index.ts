@@ -31,10 +31,11 @@ const CAB_RATE_K = 'ac.b738.ck.cab_rate_k';
 export function buildOverhead(c: B738CockpitContext): void {
   const { b, ctx } = c;
   const vars = ctx.vars;
-  // Gain EST: incandescent 5 V edge-lit overhead plates read brighter than the thin engraving suggests; raised
-  // (2.2 -> 6.5, fix round 1 B738-L03) so every legend is legible at PANEL dimmer ~50 %, tuned against the
-  // b737.org.uk night overhead photograph (paneloverhead_737-700_night.jpg).
-  b.zone({ id: 'ovhd', intensityVar: 'ac.light.panel_ovhd', gain: 6.5 });
+  // Gain EST: incandescent 5 V edge-lit overhead plates. Fix round 2 B738-L03: legibility now comes from the
+  // shared label night-glow (cockpit/index.ts, labels.ts nightGlow), so the gain drops back from the fix
+  // round 1 over-drive (6.5, which only desaturated the tone-mapped colour) to the warm part of the ACES
+  // curve, tuned against the b737.org.uk night overhead photograph (paneloverhead_737-700_night.jpg).
+  b.zone({ id: 'ovhd', intensityVar: 'ac.light.panel_ovhd', gain: 2.6 });
 
   // Base plates in the overhead plate material (slightly lighter than 'panel' so the shadowed ceiling renders
   // the same Boeing grey as the direct-lit MIP; see parts.ts ovhdPanelMaterial, fix round 1 B738-L11).

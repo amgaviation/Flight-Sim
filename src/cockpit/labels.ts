@@ -207,6 +207,21 @@ export class LabelFactory {
   private readonly matCache = new Map<string, THREE.MeshStandardMaterial>();
   private readonly geoCache = new Map<string, THREE.BufferGeometry>();
   private readonly measureCtx: AnyContext2D | null;
+  /**
+   * Night-glow alpha boost of backlit labels (shared shader uniform; additive
+   * opt-in, default 0 = exactly the previous look). Backlit legends are
+   * alpha-masked quads, so a minified glyph's peak brightness is capped by its
+   * mip-filtered pixel coverage: at night a 3 mm legend a metre away renders
+   * a few dim pixels however high the zone's emissive gain is driven, while a
+   * real edge-lit panel legend blooms into a legible warm glow (light spreads
+   * in the acrylic and in the eye). With `nightGlow` > 0 the label shader
+   * raises the alpha of partially covered pixels while (and only while) the
+   * material's backlight emissive is driving them - the mip ring around each
+   * glyph becomes a soft halo, night legends read at their emissive colour,
+   * and daylight (emissive washed out to 0) is untouched. Set it once before
+   * building panels (aircraft cockpit index).
+   */
+  readonly nightGlow = { value: 0 };
 
   constructor(materials: CockpitMaterials, lighting: CockpitLighting, opts: { atlasSize?: number } = {}) {
     this.materials = materials;
@@ -462,6 +477,23 @@ export class LabelFactory {
         polygonOffsetUnits: -4,
       });
       m.name = `cockpit.label.${key}`;
+      if (zone) {
+        // Night-glow alpha boost (see `nightGlow`): lift partial-coverage (mip ring)
+        // pixels toward opaque in proportion to the backlight drive. `emissive` is
+        // three's material uniform emissive x emissiveIntensity, so the boost follows
+        // the zone dimmer and the daylight wash-out with no extra per-frame work.
+        const glow = this.nightGlow;
+        m.onBeforeCompile = (shader) => {
+          shader.uniforms.labelNightGlow = glow;
+          shader.fragmentShader =
+            'uniform float labelNightGlow;\n' +
+            shader.fragmentShader.replace(
+              '#include <alphamap_fragment>',
+              '#include <alphamap_fragment>\n\tdiffuseColor.a = mix( diffuseColor.a, 1.0 - pow( 1.0 - diffuseColor.a, 2.5 ), clamp( labelNightGlow * dot( emissive, vec3( 0.45 ) ), 0.0, 1.0 ) );',
+            );
+        };
+        m.customProgramCacheKey = () => 'cockpitLabelGlow';
+      }
       this.materials.patchInterior(m);
       this.matCache.set(key, m);
       if (zone) this.lighting.registerBacklight(m, zone);

@@ -100,6 +100,12 @@ export interface SimDebugApi {
   pick(ndcX: number, ndcY: number): PickResult | null;
   /** Cockpit displays: power, render counters and the fraction of lit (non-black) canvas pixels. */
   displays(): DisplayProbe[];
+  /**
+   * Debug probe (additive; headless QA scripts): material state of the visible
+   * meshes whose `name` contains `match`, for checking that panel-backlight /
+   * emissive updates actually reach the rendered materials.
+   */
+  probeMaterials(match: string, limit?: number): MaterialProbe[];
   /** World ground sample under the aircraft (surface type, elevation, precise = terrain tile loaded). */
   /** Optional lat/lon (deg) sample elsewhere (e.g. along the fuselage for placement checks). */
   ground(lat?: number, lon?: number): { surface: string; elevation_m: number; precise: boolean; normal: [number, number, number] };
@@ -114,6 +120,17 @@ export interface SimDebugApi {
     stop(): void;
     state(): { phase: ScriptedPilotPhase; log: TakeoffLog };
   };
+}
+
+export interface MaterialProbe {
+  mesh: string;
+  material: string;
+  color: string;
+  emissive: string;
+  emissiveIntensity: number;
+  visible: boolean;
+  transparent: boolean;
+  toneMapped: boolean;
 }
 
 export interface PickResult {
@@ -1042,6 +1059,29 @@ export class App {
           return { name: o.name, parent: o.parent?.name ?? '', kind, distance_m: h.distance };
         }
         return null;
+      },
+      probeMaterials(match: string, limit = 20): MaterialProbe[] {
+        const out: MaterialProbe[] = [];
+        if (!app.render) return out;
+        app.render.scene.traverse((o) => {
+          const m = o as THREE.Mesh;
+          if (out.length >= limit || !m.isMesh || !m.name.includes(match)) return;
+          const mats = Array.isArray(m.material) ? m.material : [m.material];
+          for (const mat of mats) {
+            const s = mat as THREE.MeshStandardMaterial;
+            out.push({
+              mesh: m.name,
+              material: s.name,
+              color: s.color ? `#${s.color.getHexString()}` : '-',
+              emissive: s.emissive ? `#${s.emissive.getHexString()}` : '-',
+              emissiveIntensity: s.emissiveIntensity ?? -1,
+              visible: m.visible && effectivelyVisible(m),
+              transparent: !!s.transparent,
+              toneMapped: s.toneMapped !== false,
+            });
+          }
+        });
+        return out;
       },
       displays(): DisplayProbe[] {
         const s = app.session;
