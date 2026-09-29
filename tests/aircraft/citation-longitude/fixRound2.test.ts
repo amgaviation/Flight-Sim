@@ -9,6 +9,7 @@ import { makeRig } from './helpers';
 import { buildLongitudeCockpit } from '../../../src/aircraft/citation-longitude/cockpit';
 import { LON_VARS as V } from '../../../src/aircraft/citation-longitude/vars';
 import { GuardedButton, PushButton, Lever } from '../../../src/cockpit/controls';
+import { LONGITUDE_FUSELAGE } from '../../../src/aircraft/citation-longitude/exterior';
 import type { InitialState } from '../../../src/aircraft/types';
 
 function cockpit(state: InitialState) {
@@ -153,6 +154,71 @@ describe('L2-10 / L2-11: pedestal / glareshield finish states', () => {
       const face = ctl<GuardedButton>(id).inner.face as unknown as { segs: { mat: THREE.MeshStandardMaterial }[] };
       face.segs[0].mat.color.getHSL(hsl);
       expect(hsl.l, id).toBeLessThan(0.035);
+    }
+  });
+
+  // L2-11 residual: the near-black lens rendered pale salmon anyway, because the shared guardClear cover
+  // (opacity 0.15, whitish) hazed it under daylight ambient. The fire guards now carry a per-guard clearer
+  // cover (opacity 0.05) so the unlit lens stays deep opaque red (OEG p.12 / a21_004).
+  it('fire switchlight clear guards carry almost no haze (cover opacity <= 0.06)', { timeout: 120_000 }, () => {
+    const { ctl } = cockpit('cold_dark');
+    for (const id of ['lon.gs.fire_l', 'lon.gs.fire_r', 'lon.gs.fire_apu']) {
+      let cover: THREE.Material | null = null;
+      ctl<GuardedButton>(id).object.traverse((o) => {
+        const m = o as THREE.Mesh;
+        const mat = m.material as THREE.Material | undefined;
+        if (m.isMesh && mat?.name === 'cockpit.guardClear' && mat.transparent) cover = mat;
+      });
+      expect(cover, `${id} clear cover`).toBeTruthy();
+      expect((cover! as THREE.Material).opacity, id).toBeLessThanOrEqual(0.06);
+    }
+  });
+});
+
+describe('L2-03 residual: no shell trim intrudes into the glazing (the "faceted cheek" wedge)', () => {
+  /** |theta| (rad from the top of the section) of a shell-loft vertex, from the un-inset section radii (small error, wide margins below). */
+  const thetaOf = (v: THREE.Vector3): { x: number; th: number } => {
+    const bx = -v.z;
+    const by = v.x;
+    const bz = -v.y;
+    const s = LONGITUDE_FUSELAGE.at(bx);
+    return { x: bx, th: Math.abs(Math.atan2(by / Math.max(0.01, s.ry), (s.cz - bz) / Math.max(0.01, s.rz))) };
+  };
+  /** Unmerged build so the shell's named structure meshes are inspectable. */
+  const shellRoot = (): THREE.Object3D => {
+    const r = makeRig('cold_dark', { avionics: false });
+    const { build } = buildLongitudeCockpit(r.ctx, r.sys, r.sys.suite, { headless: true, mergeStatic: false });
+    return build.root;
+  };
+  const verts = (root: THREE.Object3D, name: string): { x: number; th: number }[] => {
+    let g: THREE.BufferGeometry | null = null;
+    root.traverse((o) => {
+      if ((o as THREE.Mesh).isMesh && o.name === name) g = (o as THREE.Mesh).geometry;
+    });
+    expect(g, name).toBeTruthy();
+    const p = (g! as THREE.BufferGeometry).getAttribute('position');
+    const out: { x: number; th: number }[] = [];
+    for (let i = 0; i < p.count; i++) out.push(thetaOf(new THREE.Vector3(p.getX(i), p.getY(i), p.getZ(i))));
+    return out;
+  };
+
+  it('the CB-panel wall band stays below the side-window sill', { timeout: 120_000 }, () => {
+    // Round 2 lofted cb_wall_* over theta 1.02..1.3 at inset 0.033 (outside the sidewall): its only visible part
+    // poked through the windshield / forward-window glazing corner as a big faceted black wedge in the pilot
+    // view (the audit blamed the cheek loft). The band must stay at or below the sill (1.3).
+    const root = shellRoot();
+    for (const name of ['cb_wall_l', 'cb_wall_r']) for (const v of verts(root, name)) expect(v.th, `${name} at x ${v.x.toFixed(2)}`).toBeGreaterThan(1.27);
+  });
+
+  it('the panel-cheek upper edge tapers aft below the sill instead of a straight angular cut', { timeout: 120_000 }, () => {
+    const root = shellRoot();
+    for (const name of ['panel_cheek_l', 'panel_cheek_r']) {
+      const vs = verts(root, name);
+      const aftTop = Math.min(...vs.filter((v) => v.x < 8.32).map((v) => v.th));
+      const fwdTop = Math.min(...vs.filter((v) => v.x > 8.6).map((v) => v.th));
+      // Forward the wrap still meets the A-pillar base (~1.215); aft its free edge rolls down below the sill.
+      expect(fwdTop, `${name} fwd`).toBeLessThan(1.28);
+      expect(aftTop, `${name} aft`).toBeGreaterThan(1.4);
     }
   });
 });

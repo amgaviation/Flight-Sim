@@ -151,7 +151,9 @@ export class B737Afds implements Subsystem {
           engageInhibit: orBinding(bar, a.engageInhibit),
           auto: orBinding(bar, a.autoDisconnect),
         },
-        autoland: { ...AFCS_B737_AFDS.autoland, rollout: env.cfg.autoland === 'fail-operational' },
+        // clearOnGroundDisconnect: disconnecting the A/Ps on the rollout drops ROLLOUT / FLARE from the FMA
+        // (737NG FCOM 4.20: the F/D gives no rollout guidance after an autoland disconnect).
+        autoland: { ...AFCS_B737_AFDS.autoland, rollout: env.cfg.autoland === 'fail-operational', clearOnGroundDisconnect: true },
         sensors: {
           ra: `ra${env.cfg.vars.raIndex[0]}.alt_ft`,
           raValid: `ra${env.cfg.vars.raIndex[0]}.valid`,

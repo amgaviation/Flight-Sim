@@ -48,6 +48,8 @@ export const G650_CB_GROUPS_L: CbGroup[] = [
       ['mcdu2', 'MCDU\n2', 'L MAIN DC'], ['mcdu3', 'MCDU\n3', 'EMER DC'],
       ['adc1', 'ADS\n1', 'L ESS DC'], ['adc2', 'ADS\n2', 'R ESS DC'], ['adc3', 'ADS\n3', 'EMER DC'], ['irs1', 'IRU\n1', 'EMER DC'],
       ['irs2', 'IRU\n2', 'EMER DC'], ['irs3', 'IRU\n3', 'EMER DC'], ['ra', 'RAD\nALT', 'R MAIN DC'],
+      ['hud', 'HUD', 'L ESS DC'], ['evs_cam', 'EVS\nCAM', 'L MAIN DC'], ['cvr', 'CVR', 'R ESS DC'], ['fdr', 'FDR', 'L ESS DC'],
+      ['clock_l', 'L\nCLOCK', 'L ESS DC'], ['clock_r', 'R\nCLOCK', 'R ESS DC'],
     ],
   },
   {
@@ -59,6 +61,7 @@ export const G650_CB_GROUPS_L: CbGroup[] = [
       ['fecu_a', 'FLAP\nCONT A', 'L ESS DC'], ['fecu_b', 'FLAP\nCONT B', 'R ESS DC'], ['stall_warn', 'STALL\nWARN', 'L ESS DC'], ['fcs_chargers', 'FCS BATT\nCHGR', 'EMER AC'],
       ['hyd_aux', 'AUX HYD\nPUMP', 'L ESS DC'], ['lgcu1', 'LGCU\n1', 'L ESS DC'], ['lgcu2', 'LGCU\n2', 'R MAIN DC'], ['bcu_a', 'BCU\nA', 'L ESS DC'],
       ['bcu_b', 'BCU\nB', 'R ESS DC'], ['nwscu', 'NWS\nCONT', 'L ESS DC'],
+      ['trim_ail', 'AIL\nTRIM', 'L ESS DC'], ['trim_rud', 'RUD\nTRIM', 'R ESS DC'], ['prox1', 'PROX\nSYS 1', 'L ESS DC'], ['prox2', 'PROX\nSYS 2', 'R ESS DC'],
     ],
   },
   {
@@ -70,6 +73,8 @@ export const G650_CB_GROUPS_L: CbGroup[] = [
       ['fdcu_l', 'L FIRE\nDET', 'L ESS DC'], ['fdcu_r', 'R FIRE\nDET', 'R ESS DC'], ['fire_ext', 'FIRE\nEXTING', 'R ESS DC'],
       ['boost_l', 'L MAIN\nPUMP', 'L ESS DC'], ['alt_l', 'L ALT\nPUMP', 'L MAIN DC'], ['fuel_valves_l', 'L VLV\nX-FLOW', 'L ESS DC'],
       ['boost_r', 'R MAIN\nPUMP', 'R ESS DC'], ['alt_r', 'R ALT\nPUMP', 'R MAIN DC'], ['fuel_valves_r', 'R VLV\nINT TK', 'R ESS DC'],
+      ['eec_l', 'L\nEEC', 'L ESS DC'], ['eec_r', 'R\nEEC', 'R ESS DC'], ['evm', 'ENG\nVIB', 'R MAIN DC'],
+      ['fqsc_l', 'L FUEL\nQTY', 'L ESS DC'], ['fqsc_r', 'R FUEL\nQTY', 'R ESS DC'],
     ],
   },
 ];
@@ -83,18 +88,24 @@ export const G650_CB_GROUPS_R: CbGroup[] = [
       ['gps1', 'GPS\n1', 'L ESS DC'], ['gps2', 'GPS\n2', 'R ESS DC'], ['nav1', 'NAV/\nCOM 1', 'EMER DC'], ['nav2', 'NAV\n2', 'R ESS DC'],
       ['adf', 'ADF', 'L MAIN DC'], ['xpdr1', 'XPDR\n1', 'L MAIN DC'], ['xpdr2', 'XPDR\n2', 'R MAIN DC'], ['tcas', 'TCAS', 'R MAIN DC'],
       ['radar', 'WX\nRADAR', 'L MAIN DC'], ['taws', 'EGPWS', 'L MAIN DC'], ['acp', 'AUDIO', 'EMER DC'],
+      ['hf1', 'HF\n1', 'L MAIN DC'], ['hf2', 'HF\n2', 'R MAIN DC'], ['dme1', 'DME\n1', 'L MAIN DC'], ['dme2', 'DME\n2', 'R MAIN DC'],
+      ['satcom', 'SATCOM', 'R MAIN DC'], ['cmc', 'MAINT\nCOMP', 'L MAIN DC'], ['printer', 'CKPT\nPRNTR', 'R MAIN DC'],
     ],
   },
   {
     // Photographed title: cabin and service power distribution.
     title: 'ELECTRICAL',
-    items: [['cabin_dc', 'CABIN\nDC', 'AUX DC'], ['cabin_60hz', 'CABIN\n60 HZ', 'L MAIN AC'], ['galley', 'GALLEY', 'R MAIN AC'], ['gsb_loads', 'GND SVC\nBUS', 'GSB']],
+    items: [
+      ['cabin_dc', 'CABIN\nDC', 'AUX DC'], ['cabin_60hz', 'CABIN\n60 HZ', 'L MAIN AC'], ['galley', 'GALLEY', 'R MAIN AC'], ['gsb_loads', 'GND SVC\nBUS', 'GSB'],
+      ['gcu_l', 'L GEN\nCONT', 'L ESS DC'], ['gcu_r', 'R GEN\nCONT', 'R ESS DC'],
+    ],
   },
   {
     title: 'AIR COND / PRESS', // EST title (not readable in the photograph)
     items: [
       ['bac_l', 'L BLEED\nCONT', 'L ESS DC'], ['bac_r', 'R BLEED\nCONT', 'R ESS DC'], ['cpc', 'CABIN\nPRESS', 'L ESS DC'], ['recirc_fans', 'RECIRC\nFANS', 'L MAIN AC'],
       ['oxy_panel', 'OXYGEN\nCONT', 'R ESS DC'],
+      ['cpc2', 'CABIN\nPRESS 2', 'R ESS DC'], ['temp_ctrl', 'TEMP\nCONT', 'L MAIN DC'], ['equip_cool', 'EQUIP\nCOOL', 'R MAIN AC'],
     ],
   },
   {
@@ -103,7 +114,7 @@ export const G650_CB_GROUPS_R: CbGroup[] = [
       ['probe1', 'ADS 1\nHTR', 'L ESS DC'], ['probe2', 'ADS 2\nHTR', 'R ESS DC'], ['probe3', 'ADS 3\nHTR', 'L ESS DC'], ['probe4', 'ADS 4\nHTR', 'R ESS DC'],
       ['wshld_l', 'L WSHLD\nHEAT', 'L MAIN AC'], ['wshld_r', 'R WSHLD\nHEAT', 'R MAIN AC'], ['cabin_wdo', 'CABIN\nWDO HT', 'R MAIN AC'], ['evs_wdo', 'EVS\nWDO HT', 'L MAIN AC'],
       ['ice_det_l', 'L ICE\nDET', 'L MAIN AC'], ['ice_det_r', 'R ICE\nDET', 'R MAIN AC'], ['ice_det', 'ICE DET\nCONT', 'R MAIN DC'], ['cowl_valve_l', 'L COWL\nA/I VLV', 'L ESS DC'],
-      ['cowl_valve_r', 'R COWL\nA/I VLV', 'R ESS DC'],
+      ['cowl_valve_r', 'R COWL\nA/I VLV', 'R ESS DC'], ['wing_valve_l', 'L WING\nA/I VLV', 'L ESS DC'], ['wing_valve_r', 'R WING\nA/I VLV', 'R ESS DC'],
     ],
   },
   {
@@ -112,6 +123,7 @@ export const G650_CB_GROUPS_R: CbGroup[] = [
       ['ldg_lt_l', 'L LDG\nLT', 'L MAIN DC'], ['ldg_lt_r', 'R LDG\nLT', 'R MAIN DC'], ['taxi_lt', 'TAXI\nLT', 'L MAIN DC'], ['nav_lts', 'NAV\nLTS', 'L MAIN DC'],
       ['beacon', 'BEACON', 'L MAIN DC'], ['strobe', 'ANTI-\nCOLL', 'R MAIN DC'], ['recog', 'RECOG\nLTS', 'R MAIN DC'], ['logo', 'LOGO\nLTS', 'R MAIN DC'],
       ['wing_insp', 'WING\nINSP', 'L MAIN DC'], ['panel_lts', 'CKPT\nLTS', 'L MAIN DC'], ['emer_lts', 'EMER\nLTS', 'EMER DC'],
+      ['cabin_lts', 'CABIN\nLTS', 'AUX DC'], ['vest_lts', 'VEST\nLTS', 'AUX DC'],
     ],
   },
 ];

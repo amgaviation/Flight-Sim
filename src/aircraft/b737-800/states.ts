@@ -15,6 +15,8 @@ import type { FlightModel } from '../../physics/FlightModel';
 import type { Turbofan } from '../../physics/engines/Turbofan';
 import type { B738Systems } from './createSystems';
 import { B738_FLAP_DETENTS, FLAP_LEVER, STAB } from './data';
+import { takeoffSpeeds, vref } from '../../avionics/boeing-737/data/perf';
+import { B737_VARS } from '../../avionics/boeing-737/vars';
 import { B738, APU_SW, ENG_START, GEAR_LEVER, SPEEDBRAKE, XPDR_SEL, FUEL_PUMPS, HYD_PUMP_SWITCHES, WINDOW_HEATS, DOORS, ACP_RECEIVERS } from './vars';
 
 /** Normal take-off stabilizer setting (units): EST mid green band for a mid CG (perf.ts takeoffTrimUnits ~5 at 22 % MAC). */
@@ -93,7 +95,9 @@ export function setB738Switches(ctx: Pick<SimContext, 'vars'>, s: InitialState):
     v.set(B738.eec(i), 1);
     v.set(B738.engAi(i), 0);
     v.set(B738.bleed(i), 1);
-    v.set(B738.pack(i), 1);
+    // SECURE checklist final item "Packs ... OFF" (Boeing NC): a cold & dark aircraft is one the secure
+    // checklist was completed on, so both pack switches are OFF; AUTO in every powered state.
+    v.set(B738.pack(i), cold ? 0 : 1);
     v.set(B738.recircFan(i), 1);
     v.set(B738.fireHandle(i), 0);
     v.set(B738.fireRot(i), 0);
@@ -270,6 +274,42 @@ export function setB738Switches(ctx: Pick<SimContext, 'vars'>, s: InitialState):
   // ------------------------------------------------ MCP / EFIS: set by the avionics suite applyState; baro set below.
 }
 
+/**
+ * Seeds the FMC to the state the CDU preflight leaves it in (Boeing NC BEFORE START: "CDU preflight ...
+ * Completed", "Takeoff speeds ... V1 ___, VR ___, V2 ___"): PERF INIT (ZFW = FDM gross weight less fuel,
+ * cost index, cruise altitude), TAKEOFF REF (flaps 5, CG, QRH v-speeds; N1 LIMIT stays TO). For the
+ * approach preset also APPROACH REF VREF 30, as the DESCENT checklist leaves it ("Landing data ...
+ * VREF ___"); the cruise preset leaves VREF unselected — real crews select it in the descent, and the
+ * FMC 'APPRCH VREF NOT SELECTED' message prompts for it near the destination.
+ */
+function seedB738Fmc(ctx: SimContext, sys: B738Systems, s: InitialState): void {
+  const fmc = sys.suite.fmc;
+  if (!fmc || s === 'cold_dark') return;
+  const v = ctx.vars;
+  const fm = ctx.fdm as Partial<FlightModel> & SimContext['fdm'];
+  const fuelKg = v.get('fuel.total_kg', 9600);
+  const gwKg = typeof fm.mass === 'number' && fm.mass > 30000 ? fm.mass : 56500 + fuelKg;
+  fmc.zfwKg = gwKg - fuelKg;
+  fmc.perf.costIndex = 30; // EST: typical short/medium-haul cost index
+  // Cruise level: the actual level in cruise (matches the FLT ALT window below), planned FL350 otherwise.
+  fmc.perf.crzAltFt = s === 'cruise' ? Math.max(10000, Math.round(v.get(FDM.altMsl) / 500) * 500) : 35000;
+  if (s === 'ready_to_taxi' || s === 'takeoff') {
+    const fieldFt = v.get(FDM.altMsl);
+    const oatC = v.get(ENV.oatSeaLevelC, 15) - 0.0019812 * fieldFt;
+    fmc.toFlaps = 5; // TAKEOFF_FLAP_LEVER
+    fmc.toCgPct = 22; // EST mid-CG (TAKEOFF_TRIM_UNITS reasoning above)
+    const vs = takeoffSpeeds(gwKg, 5, fieldFt, oatC);
+    if (vs) {
+      fmc.v1Sel = vs.v1;
+      fmc.vrSel = vs.vr;
+      fmc.v2Sel = vs.v2;
+    }
+  } else if (s === 'approach') {
+    fmc.vrefFlaps = 30;
+    fmc.vrefSel = vref(gwKg, 30);
+  }
+}
+
 /** `AircraftInstance.applyState` of the 737-800. */
 export function applyB738State(ctx: SimContext, sys: B738Systems, s: InitialState): void {
   const v = ctx.vars;
@@ -387,7 +427,21 @@ export function applyB738State(ctx: SimContext, sys: B738Systems, s: InitialStat
   sys.gear.update(1 / 60);
   // Brakes: the seeded weight-on-wheels is not a touchdown (else RTO would read as 'selected on landing').
   sys.brakes.resetTouchdown();
+  // CDU preflight completed before the suite applies its state (its 'takeoff' branch copies V2 to the MCP).
+  seedB738Fmc(ctx, sys, s);
   sys.suite.applyState(s);
+  // BEFORE START "MCP ... V2 ___" (Boeing NC): the speed window shows V2 from the CDU preflight on; the suite
+  // copies it for 'takeoff', do the same when ready to taxi.
+  if (s === 'ready_to_taxi' && sys.suite.fmc && Number.isFinite(sys.suite.fmc.v2Sel)) v.set(AP.selSpeed, sys.suite.fmc.v2Sel);
+  // DESCENT "Landing data ... VREF ___, minimums ___": the approach preset has the EFIS minimums set on both
+  // sides (BARO, CAT I DA = field + 200 ft — 14 CFR 91.175 standard CAT I minima; EST for the generic preset).
+  if (s === 'approach') {
+    const fieldFt = Math.round(v.get(FDM.altMsl) - v.get(FDM.altAgl));
+    for (const side of [1, 2] as const) {
+      v.set(B737_VARS.efisMinsRef(side), 1);
+      v.set(B737_VARS.efisMinsBaroFt(side), Math.round((fieldFt + 200) / 10) * 10);
+    }
+  }
   sys.press.settle();
   sys.pneu.snap(22);
   sys.yd.reset?.();

@@ -69,7 +69,8 @@ export function createLighting(ctx: Pick<SimContext, 'vars'>): LightingSystem {
       // Cockpit consumers floor the value at their dim level (Lighting.annunciatorLevel).
       { id: 'annun_bright', knob: `${V.ltMaster} < 0.005 ? 1 : min(1, 0.3 + 0.7 * ${V.ltMaster})`, output: [V.annunBright] },
       // Vestibule (entry area) lights: on with cabin power unless VEST LTS ORIDE (SCOPE: state only).
-      { id: 'vestibule', knob: `${V.cabinMaster} == 1 && ${V.vestOride} == 0 ? 1 : 0`, power: 'elec.cabin_dc_powered', output: ['ac.light.vestibule'] },
+      // Fed from its own VEST LTS breaker on the cabin (AUX DC) bus (fix round 2, G650-L06).
+      { id: 'vestibule', knob: `${V.cabinMaster} == 1 && ${V.vestOride} == 0 ? 1 : 0`, power: 'elec.vest_lts_powered', output: ['ac.light.vestibule'] },
       // DU brightness (Epic display ids epic.du1..4), never fully dark (EST min 5 %).
       { id: 'du1_brt', knob: V.duBrt(1), min: 0.05, output: ['display.epic.du1.brt'] },
       { id: 'du2_brt', knob: V.duBrt(2), min: 0.05, output: ['display.epic.du2.brt'] },

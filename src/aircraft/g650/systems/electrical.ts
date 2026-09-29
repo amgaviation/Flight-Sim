@@ -70,6 +70,14 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): ElectricalNetwo
     dc('probe3', 'l_ess_dc', `9 * ${V.probeHeatOn(3)}`, 15, { model: 'resistive' }),
     dc('fuel_valves_l', 'l_ess_dc', 0.3, 3), // L engine SOV / crossflow valve (LUC)
     dc('cpc', 'l_ess_dc', 0.8, 3), // cabin pressure controller (ch 1 via the static inverter)
+    dc('hud', 'l_ess_dc', 2.5, 7.5), // HGS computer + overhead unit (Rockwell Collins HGS install; EST bus L ESS DC, EST 70 W)
+    dc('fdr', 'l_ess_dc', 0.8, 3), // flight data recorder (14 CFR 25.1459: essential power; EST current)
+    dc('clock_l', 'l_ess_dc', 0.1, 1), // pilot clock (EST)
+    dc('trim_ail', 'l_ess_dc', `0.3 + 2 * (${V.ailTrimSw} != 0)`, 5), // aileron trim actuator (EST)
+    dc('prox1', 'l_ess_dc', 0.4, 3), // proximity sensing (gear / door position) ch 1 (EST)
+    dc('eec_l', 'l_ess_dc', 1.0, 5), // L EEC aircraft backup supply (BR725 FADEC: dedicated alternator with 28 V DC aircraft backup; EST)
+    dc('fqsc_l', 'l_ess_dc', 0.5, 3), // L fuel quantity signal conditioner (EST)
+    dc('wing_valve_l', 'l_ess_dc', 0.2, 3), // L wing anti-ice valve (EST, as the cowl valves)
     dc('apu_ecu', 'l_ess_dc', `0.5 + 1.5 * (${V.apuMaster} != 0)`, 5), // APU ECU (L BATT bus or R ESS DC via MASTER; EST single feed)
     dc('start_valve_l', 'l_ess_dc', '0.5 * pneu.ats_l_valve_open', 3),
     dc('cowl_valve_l', 'l_ess_dc', 0.2, 3),
@@ -94,6 +102,14 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): ElectricalNetwo
     dc('cowl_valve_r', 'r_ess_dc', 0.2, 3),
     dc('oxy_panel', 'r_ess_dc', 0.2, 3), // OXYGEN SYSTEM panel (L/R ESS DC, LUC)
     dc('fire_ext', 'r_ess_dc', 0.2, 5), // bottle squibs
+    dc('cvr', 'r_ess_dc', 0.8, 3), // cockpit voice recorder w/ RIPS (14 CFR 25.1457; EST current)
+    dc('clock_r', 'r_ess_dc', 0.1, 1), // copilot clock (EST)
+    dc('trim_rud', 'r_ess_dc', `0.3 + 2 * (${V.rudTrimSw} != 0)`, 5), // rudder trim actuator (EST)
+    dc('prox2', 'r_ess_dc', 0.4, 3), // proximity sensing ch 2 (EST)
+    dc('eec_r', 'r_ess_dc', 1.0, 5), // R EEC aircraft backup supply (EST, as eec_l)
+    dc('fqsc_r', 'r_ess_dc', 0.5, 3), // R fuel quantity signal conditioner (EST)
+    dc('wing_valve_r', 'r_ess_dc', 0.2, 3), // R wing anti-ice valve (EST)
+    dc('cpc2', 'r_ess_dc', 0.8, 3), // cabin pressure controller ch 2 (dual-channel CPCS; EST bus)
     // ------------------------------------------------ L MAIN DC
     dc('du2', 'l_main_dc', 6.5, 10), // DU 2 (MFD)
     dc('alt_l', 'l_main_dc', 'fuel.alt_l_amps', 25), // L ALT fuel pump (LUC: MAIN DC)
@@ -108,6 +124,11 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): ElectricalNetwo
     dc('beacon', 'l_main_dc', 2, 5, { enabled: V.ltBeacon }),
     dc('wing_insp', 'l_main_dc', 2, 5, { enabled: V.ltWing }),
     dc('panel_lts', 'l_main_dc', `3 * ${V.ltPanel} + 2 * ${V.ltFlood} + 0.5 * max(${V.ltDome}, ${V.ltMaster} > 1.05 ? 1 : 0)`, 7.5, { model: 'resistive' }), // + dome with MASTER CONTROL ORIDE
+    dc('hf1', 'l_main_dc', 1.0, 7.5), // HF COM 1 (HF-9000 class; EST receive-standby current)
+    dc('dme1', 'l_main_dc', 0.6, 3), // DME 1 (DME-4000 class; EST)
+    dc('cmc', 'l_main_dc', 0.8, 3), // central maintenance computer (EST)
+    dc('evs_cam', 'l_main_dc', 1.5, 5), // EVS II IR camera + window controller (Kollsman EVS; EST bus/current)
+    dc('temp_ctrl', 'l_main_dc', 0.5, 3), // cabin zone temperature controllers (EST)
     // ------------------------------------------------ R MAIN DC
     dc('du3', 'r_main_dc', 6.5, 10), // DU 3 (MFD)
     dc('alt_r', 'r_main_dc', 'fuel.alt_r_amps', 25),
@@ -120,6 +141,13 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): ElectricalNetwo
     dc('recog', 'r_main_dc', 3, 5, { enabled: V.ltRecog }),
     dc('logo', 'r_main_dc', 3, 5, { enabled: V.ltLogo }),
     dc('ice_det', 'r_main_dc', 0.5, 3),
+    dc('hf2', 'r_main_dc', 1.0, 7.5), // HF COM 2 (EST)
+    dc('dme2', 'r_main_dc', 0.6, 3), // DME 2 (EST)
+    dc('satcom', 'r_main_dc', 2.0, 7.5), // SATCOM data unit (EST)
+    dc('printer', 'r_main_dc', 1.0, 5), // flight-deck printer (EST)
+    dc('evm', 'r_main_dc', 0.4, 3), // engine vibration monitor unit (EST)
+    dc('gcu_l', 'l_ess_dc', 0.4, 3), // L generator control unit (EST bus)
+    dc('gcu_r', 'r_ess_dc', 0.4, 3), // R generator control unit (EST bus)
     // ------------------------------------------------ L/R EMERGENCY + FLIGHT INSTRUMENT buses (emer_dc)
     dc('smc1', 'emer_dc', 1.5, 3), // standby multifunction controller 1
     dc('smc2', 'emer_dc', 1.5, 3),
@@ -139,6 +167,8 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): ElectricalNetwo
     dc('ebha_mce', 'ebha', '3 + 20 * (abs(surf.elevator) + abs(surf.aileron)) * 0.1', 20), // 7 MCEs (EST standby + surface motion)
     // ------------------------------------------------ AUX DC (cabin) / ground service bus
     dc('cabin_dc', 'aux_dc', 25, 40, { enabled: V.cabinMaster }),
+    dc('cabin_lts', 'aux_dc', 4, 10, { enabled: V.cabinMaster }), // cabin general lighting (EST)
+    dc('vest_lts', 'aux_dc', 1, 5, { enabled: V.cabinMaster }), // vestibule / entry lights (systems/lighting.ts vestibule; EST)
     dc('gsb_loads', 'gsb', 4, 10), // ground service lights / refuel panel / cabin cleaning (EST)
     // ------------------------------------------------ L battery bus
     dc('apu_starter', 'l_batt_bus', 'apu.starter_amps', 600), // APU start from the left battery (LUC apu)
@@ -154,6 +184,7 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): ElectricalNetwo
     ac('ice_det_l', 'l_main_ac', 40, 3), // ice detectors (LUC: L MAIN AC / R MAIN AC)
     ac('ice_det_r', 'r_main_ac', 40, 3),
     ac('recirc_fans', 'l_main_ac', `800 * (pneu.pack_l_on || pneu.pack_r_on)`, 10), // cabin recirculation / avionics cooling (EST)
+    ac('equip_cool', 'r_main_ac', 300, 5), // EBAY / rack equipment cooling fans (EST)
     ac('fcs_chargers', 'emer_ac', 200, 5), // EBHA / UPS chargers (LUC)
   ];
   const contactor = { pickupV: 15, dropoutV: 7 }; // MIL-PRF-6106 28 V-class relay (pull-in 15 V max), drop-out EST

@@ -1132,3 +1132,38 @@ Tests: `tests/aircraft/citation-longitude/fixRound3.test.ts` (each fails without
 
 ### 18.3 Shared-library changes (additive, opt-in, default behaviour unchanged)
 - `src/systems/fadec/Autothrottle.ts`: config option `groundEngage?: 'toga'` (bizjet ground-engagement policy).
+
+## 19. Layout-audit residuals (round-2 re-check, gaps LON-L2-11 / LON-L2-03 / LON4-12)
+
+Tests: `tests/aircraft/citation-longitude/fixRound2.test.ts` ("L2-11 residual" / "L2-03 residual" blocks; each
+fails against the round-2 geometry/materials). Verified on fresh cold & dark daylight screenshots
+(`node scripts/lon-shots.mjs`, pilot view and preset view 3).
+
+### 19.1 Fixed
+- **LON-L2-11** (residual) The unlit fire lenses still read pale salmon although the lens diffuse was already
+  near black (unlitTint 0.03): the wash came from the shared `guardClear` cover (opacity 0.15, whitish) hazing
+  the dark lens under daylight ambient — two blended cover surfaces over the lens. The fire-switchlight guards
+  now use a per-guard cover opacity of 0.05 (`guard.opacity`, glareshield.ts) and the lens tint was lowered to
+  0.022, so the unlit lens renders deep opaque red with the legend barely visible (OEG p.12 / a21_004); in a
+  direct-sun patch it reads as a sunlit dark-red lens, no longer salmon. The unguarded MASTER WARNING/CAUTION
+  lenses were already correct and are unchanged. Pixel check (view_3, cold & dark 15:00): shaded lenses ~(48,26,28)
+  sRGB vs the round-2 pale salmon.
+- **LON-L2-03** (residual) The "faceted cheek" wedge in the pilot view was not the cheek loft: colour-probing the
+  shell showed it was `cb_wall_l` (§ L2-05 band), lofted over theta 1.02..1.3 at inset 0.033 — *outside* the
+  interior sidewall skin — so its only visible part poked through the windshield / forward-window glazing corner
+  as a large faceted black wedge (removing the cheeks changed nothing). The band now sits proud *inside* the
+  sidewall (inset 0.053) and below the sill (theta 1.32..1.62), framing the CB grid without covering glass. The
+  cheek loft itself was also re-built (`cheekGeometry`, shell.ts): its upper (free) edge now tapers along a
+  cosine spline from the A-pillar base at the windshield down below the sill at the aft end, so the wrap's
+  silhouette reads as one smooth rolled edge with no straight angular cut or detached sliver.
+
+### 19.2 Not fixable here
+- **LON4-12** unchanged: fly-by-turn along-path distances in `VnavGuidance` and active-leg re-selection after
+  enroute insertion in `FplEditor` remain `src/nav/fms` work items outside this aircraft's ownership (§12.4).
+
+### 19.3 Shared-library changes (additive, default behaviour unchanged)
+- `src/cockpit/controls/Guarded.ts`: optional `GuardOptions.opacity` (per-guard clone of the clear cover with the
+  requested opacity; omitted = shared material as before). `GuardAssembly`'s internal constructor gained an
+  optional `own` callback for disposal of the clone.
+- `src/aircraft/citation-longitude/cockpit/index.ts` (own file): `LongitudeCockpitOptions.mergeStatic`
+  passthrough so tests can inspect named structure meshes before consolidation.

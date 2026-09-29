@@ -26,6 +26,12 @@ import { smoothTo } from '../anim';
 export interface GuardOptions {
   /** Cover colour (default red). */
   color?: 'red' | 'black' | 'yellow' | 'clear';
+  /**
+   * Cover opacity override for 'clear' guards (default: the shared guardClear
+   * material's 0.15). Lower values read as thin polished plastic with almost no
+   * haze, so a dark lens behind the guard stays dark. Ignored for opaque covers.
+   */
+  opacity?: number;
   /** Switch position the guard protects (default 0). */
   guardedPosition?: number;
   close?: GuardClose;
@@ -57,7 +63,7 @@ class GuardAssembly {
   private angle = 0;
   private readonly openRad: number;
 
-  constructor(env: CockpitEnv, parent: THREE.Object3D, o: GuardOptions, w: number, len: number, h: number) {
+  constructor(env: CockpitEnv, parent: THREE.Object3D, o: GuardOptions, w: number, len: number, h: number, own?: (m: THREE.Material) => void) {
     this.openRad = THREE.MathUtils.degToRad(o.openDeg ?? 105);
     const side = o.hinge ?? 'top';
     const rot = { top: 0, bottom: Math.PI, left: Math.PI / 2, right: -Math.PI / 2 }[side];
@@ -70,7 +76,14 @@ class GuardAssembly {
     this.hinge.add(base);
     this.pivot.position.z = 0.0025;
     this.hinge.add(this.pivot);
-    const cover = new THREE.Mesh(env.geometry.get(`guard.cover.${w}.${len}.${h}`, () => guardCoverGeometry(w, len, h)), env.materials.get(COLOR_MAT[o.color ?? 'red']));
+    let coverMat: THREE.Material = env.materials.get(COLOR_MAT[o.color ?? 'red']);
+    if (o.opacity !== undefined && o.color === 'clear') {
+      // Per-guard clone with the requested haze (the shared guardClear stays untouched).
+      coverMat = coverMat.clone();
+      coverMat.opacity = o.opacity;
+      own?.(coverMat);
+    }
+    const cover = new THREE.Mesh(env.geometry.get(`guard.cover.${w}.${len}.${h}`, () => guardCoverGeometry(w, len, h)), coverMat);
     this.pivot.add(cover);
     this.hit = hitBox(env.materials.get('hitbox'), w + 0.002, len + 0.002, h + 0.002, 0, -len / 2, h / 2);
     this.pivot.add(this.hit);
@@ -106,7 +119,7 @@ export class GuardedSwitch extends ControlBase {
     this.object.add(this.inner.object);
     this.guard = new GuardLogic(this.inner.logic, { guardedPosition: this.g.guardedPosition ?? 0, close: this.g.close, open: this.g.initialOpen });
     const s = o.scale ?? 1;
-    this.assembly = new GuardAssembly(env, this.object, this.g, this.g.width ?? 0.017 * s, this.g.length ?? 0.034 * s, this.g.height ?? 0.024 * s);
+    this.assembly = new GuardAssembly(env, this.object, this.g, this.g.width ?? 0.017 * s, this.g.length ?? 0.034 * s, this.g.height ?? 0.024 * s, (m) => this.own(m));
     this.hitTargets.push(this.assembly.hit, ...this.inner.hitTargets);
     this.initVar(this.g.var, this.guard.open ? 1 : 0);
     if (this.g.var) this.guard.open = env.vars.get(this.g.var) !== 0;
@@ -207,7 +220,7 @@ export class GuardedButton extends ControlBase {
     this.guard = new GuardLogic(null, { close: this.g.close ?? 'free', open: this.g.initialOpen });
     const w = (o.width ?? 0.0159) + 0.005;
     const len = (o.height ?? 0.0159) + 0.008;
-    this.assembly = new GuardAssembly(env, this.object, this.g, this.g.width ?? w, this.g.length ?? len, this.g.height ?? 0.012);
+    this.assembly = new GuardAssembly(env, this.object, this.g, this.g.width ?? w, this.g.length ?? len, this.g.height ?? 0.012, (m) => this.own(m));
     this.hitTargets.push(this.assembly.hit, ...this.inner.hitTargets);
     this.initVar(this.g.var, this.guard.open ? 1 : 0);
     if (this.g.var) this.guard.open = env.vars.get(this.g.var) !== 0;

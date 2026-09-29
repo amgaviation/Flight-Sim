@@ -23,6 +23,15 @@ describe('G650 initial states', () => {
     expect(v.get('eng1.running')).toBe(0);
     expect(v.get('brakes.parking_set')).toBe(1);
     expect(v.get('alert.master_warning')).toBe(0);
+    // G650-N01: the HGS combiner is stowed on a cold, parked aircraft (photographed HGS installs).
+    expect(v.get('epic.hud.on')).toBe(0);
+  });
+
+  it('HUD combiner per state: stowed except takeoff / approach (G650-N01)', () => {
+    for (const [s, on] of [['cold_dark', 0], ['ready_to_taxi', 0], ['takeoff', 1], ['approach', 1], ['cruise', 0]] as const) {
+      const r = makeRig(s);
+      expect(r.vars.get('epic.hud.on'), s).toBe(on);
+    }
   });
 
   it('ready to taxi: engines at idle, parked without drift, IRS aligned, no warnings, all vars finite', () => {

@@ -30,7 +30,9 @@ export interface OhSegment {
 
 export const OH_WIDTH = 0.72;
 
-export const OH_BREAKERS: OhSegment = { name: 'g650.oh.cb', aft: [13.13, -1.448], fwd: [13.5, -1.44], width: OH_WIDTH };
+// Aft edge at the populated extent of the CB grids (fix round 2, G650-L06: no blank plate below the last
+// breaker row; the modelled network has fewer breakers than the real edge-to-edge panels, SCOPE).
+export const OH_BREAKERS: OhSegment = { name: 'g650.oh.cb', aft: [13.19, -1.4467], fwd: [13.5, -1.44], width: OH_WIDTH };
 export const OH_SYSTEMS: OhSegment = { name: 'g650.oh.sys', aft: [13.5, -1.44], fwd: [13.97, -1.395], width: OH_WIDTH };
 export const OH_FORWARD: OhSegment = { name: 'g650.oh.fwd', aft: [13.97, -1.395], fwd: [14.1, -1.31], width: 0.68 };
 

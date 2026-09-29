@@ -46,9 +46,11 @@ function buildGmcTier(c: LonCockpitContext): void {
         mode: 'toggle',
         width: 0.036,
         height: 0.027,
-        unlitTint: 0.03, // deep opaque red, legend barely visible unlit (L2-11: OEG p.12 / a21_004)
+        unlitTint: 0.022, // deep opaque red, legend barely visible unlit even in direct sun (L2-11: OEG p.12 / a21_004)
         segments: [{ text: side < 0 ? ['L ENG', 'FIRE'] : ['ENG R', 'FIRE'], color: 'red', var: `fire.eng${i}_warn`, style: 'field' }],
-        guard: { color: 'clear', hinge: 'top', close: 'free' },
+        // L2-11 round 3: the shared guardClear's 0.15 haze washed the dark lens to pale salmon under daylight
+        // ambient; a near-invisible cover keeps the unlit lens deep opaque red (OEG p.12 / a21_004).
+        guard: { color: 'clear', opacity: 0.05, hinge: 'top', close: 'free' },
       }),
       fx,
       -0.012,
@@ -82,9 +84,10 @@ function buildGmcTier(c: LonCockpitContext): void {
       mode: 'toggle',
       width: 0.034,
       height: 0.027,
-      unlitTint: 0.03, // L2-11: matches the ENG FIRE lenses
+      unlitTint: 0.022, // L2-11: matches the ENG FIRE lenses
       segments: [{ text: ['APU', 'FIRE'], color: 'red', var: 'fire.apu_warn', style: 'field' }],
-      guard: { color: 'clear', hinge: 'top', close: 'free' },
+      guard: { color: 'clear', opacity: 0.05, hinge: 'top', close: 'free' }, // L2-11 round 3: see ENG FIRE
+
     }),
     0.282,
     -0.012,

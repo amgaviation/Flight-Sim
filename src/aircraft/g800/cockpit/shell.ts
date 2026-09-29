@@ -37,7 +37,9 @@ function hoodGeometry(): THREE.BufferGeometry {
   // Half-width of the hood at the brow line: overlaps INTO the interior skin by ~2 cm so no exterior
   // white shows through at the A-pillar corners (fix round 1 L04; the real glareshield rolls into the
   // A-pillar trim with no daylight gaps, g800_flying_cockpit.jpg).
-  const wBrow = halfWidth(aPillarX(zb) - 0.01, zb, SHELL_INSET) + 0.02;
+  // Round 2 L04: overlap deepened 2 cm -> 3.5 cm — a thin exterior sliver still showed at the extreme
+  // outboard corner from the pilot's default eye point with the 2 cm overlap.
+  const wBrow = halfWidth(aPillarX(zb) - 0.01, zb, SHELL_INSET) + 0.035;
   const pos: number[] = [];
   const uv: number[] = [];
   const idx: number[] = [];
@@ -71,6 +73,43 @@ function hoodGeometry(): THREE.BufferGeometry {
       const b = a + row;
       idx.push(a, b, a + 1, b, b + 1, a + 1); // faces up
     }
+  // Closing skirt (fix round 2 L04): a strip dropped from the hood's outboard and forward edges down
+  // into the structure, so the carved exterior skin's sawtooth edge can never show through the corner
+  // between the hood, the windshield base and the sidewall (it still did on the LEFT side below the
+  // brow from the pilot's default eye point after the round-1 overlap fix; the real glareshield rolls
+  // into the A-pillar trim with no daylight gaps, g800_flying_cockpit.jpg). Same geometry/material as
+  // the hood, so no extra draw call. Both windings so it occludes from any interior angle.
+  const drop = 0.14; // m, +z is down (body frame)
+  const skirt = (edge: number[]) => {
+    for (let s = 0; s < edge.length - 1; s++) {
+      const a = edge[s];
+      const b = edge[s + 1];
+      const base = pos.length / 3;
+      for (const k of [a, b]) {
+        pos.push(pos[k * 3], pos[k * 3 + 1], pos[k * 3 + 2]);
+        uv.push(uv[k * 2], uv[k * 2 + 1]);
+      }
+      for (const k of [a, b]) {
+        const w = new THREE.Vector3(pos[k * 3], pos[k * 3 + 1], pos[k * 3 + 2]);
+        // cockpit-local: body +z (down) maps to local -y (bodyToLocal), so drop lowers y.
+        pos.push(w.x, w.y - drop, w.z);
+        uv.push(uv[k * 2], uv[k * 2 + 1] + drop * 4);
+      }
+      idx.push(base, base + 2, base + 1, base + 1, base + 2, base + 3);
+      idx.push(base, base + 1, base + 2, base + 1, base + 3, base + 2);
+    }
+  };
+  const left: number[] = [];
+  const right: number[] = [];
+  const fwd: number[] = [];
+  for (let i = 0; i <= nx; i++) {
+    left.push(i); // j = 0 row (y = -wBrow)
+    right.push(ny * row + i); // j = ny row (y = +wBrow)
+  }
+  for (let j = 0; j <= ny; j++) fwd.push(j * row + nx); // forward (windshield-base) edge
+  skirt(left);
+  skirt(right);
+  skirt(fwd);
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
@@ -116,7 +155,7 @@ export function buildShell(b: CockpitBuilder): void {
   add(hoodGeometry(), 'glareshield', 'glareshield').castShadow = true;
   // Brow / soffit width overlaps the interior skin by ~2 cm each side (fix round 1 L04: closes the
   // daylight gaps between hood, soffit and sidewall at the A-pillar junction).
-  const hw = halfWidth(aPillarX(GLAZING.baseZ) - 0.01, GLAZING.baseZ, SHELL_INSET) + 0.02;
+  const hw = halfWidth(aPillarX(GLAZING.baseZ) - 0.01, GLAZING.baseZ, SHELL_INSET) + 0.035;
   const brow = new THREE.CylinderGeometry(0.014, 0.014, 2 * hw, 16, 1);
   brow.rotateZ(Math.PI / 2);
   add(brow, 'glareshield', 'glareshield_brow', [GLARE_HOOD.browX + 0.04, 0, GLARE_HOOD.topZ + 0.012]);

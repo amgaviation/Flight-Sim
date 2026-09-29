@@ -36,6 +36,8 @@ export interface LongitudeCockpitOptions {
   headless?: boolean;
   /** Skip the overhead / side-console builders even when present. */
   mainOnly?: boolean;
+  /** Forwarded to the CockpitBuilder (tests pass false to inspect named structure meshes before consolidation). */
+  mergeStatic?: boolean;
 }
 
 export interface LongitudeCockpit {
@@ -47,6 +49,7 @@ export function buildLongitudeCockpit(ctx: SimContext, sys: LongitudeSystems, su
   const b = new CockpitBuilder(ctx, {
     palette: 'citation',
     name: 'citation-longitude',
+    mergeStatic: o.mergeStatic,
     eyePosition_m: EYE_L,
     views: [
       { name: 'Copilot', position_m: EYE_R, yawDeg: 0, pitchDeg: -8 },

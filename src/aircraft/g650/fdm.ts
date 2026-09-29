@@ -250,6 +250,9 @@ export const G650_FDM: FdmConfig = {
     // EST: low-wing in extreme proximity (h/b ~0.08 at rotation); raised from 1.10 in fix round 1 so lift-off
     // follows the rotation more promptly (audit F17). Note: with VR below the 1-g VS at flaps 20 (dossier §3,
     // FAR 25 speeds), lift-off physically occurs near 1.10-1.15 VS1g ~ V2, not at VR+5 - see dossier §15.
+    // Fix round 2 (G650-L14): a public-source search (2026-09) found no G650 AFM VS table / CLmax data
+    // (EASA TCDS IM.A.169 carries none), so this calibration stands per the gap's own prescription;
+    // recalibrate CLMAX flaps 20 only when a published stall-speed source appears (dossier §18).
     groundEffectLift: { x: [0, 0.1, 0.2, 0.3, 0.5, 1.0], y: [1.16, 1.1, 1.05, 1.02, 1.005, 1.0] },
     CL_mach: { x: [0, 0.4, 0.6, 0.7, 0.8, 0.85, 0.9, 0.95], y: [1, 1.03, 1.08, 1.12, 1.15, 1.16, 1.12, 1.02] },
     // Drag: CD0 clean calibrated to the AIN cruise point; flap increments EST (single-slotted Fowler).

@@ -189,11 +189,26 @@ describe('G650 cockpit: controls drive the systems', () => {
     expect(r.vars.get('ap.sel_hdg_deg')).not.toBe(h0);
   });
 
-  it('HUD: powered with the SMC HUD page on, combiner stows when off', { timeout: 120_000 }, async () => {
+  it('HUD: stowed and dark by default on the ramp, deploys and powers with the SMC HUD page on', { timeout: 120_000 }, async () => {
+    // Fix round 2, G650-N01: the HGS combiner is manually stowed against the headliner when not in use
+    // (Rockwell Collins HGS installs) - a parked aircraft starts with it stowed and the symbology off.
     const { r, step } = await setup('ready_to_taxi');
+    step(2);
+    expect(r.vars.get('epic.hud.on')).toBe(0);
+    expect(r.vars.get(DISPLAY_VARS.power(HUD_DISPLAY_ID))).toBe(0);
+    expect(r.vars.get(CK.hudDeploy)).toBeLessThan(0.01);
+    r.vars.set('epic.hud.on', 1);
     step(2);
     expect(r.vars.get(DISPLAY_VARS.power(HUD_DISPLAY_ID))).toBe(1);
     expect(r.vars.get(CK.hudDeploy)).toBeGreaterThan(0.99);
+    // Pulling the HUD breaker (FLT INSTRUMENTS section) blanks the symbology even with the page ON.
+    r.vars.set('epic.hud.on', 1);
+    step(2);
+    r.vars.set('cb.hud', 0);
+    step(2);
+    expect(r.vars.get('elec.hud_powered')).toBe(0);
+    expect(r.vars.get(DISPLAY_VARS.power(HUD_DISPLAY_ID))).toBe(0);
+    r.vars.set('cb.hud', 1);
     r.vars.set('epic.hud.on', 0);
     step(2);
     expect(r.vars.get(DISPLAY_VARS.power(HUD_DISPLAY_ID))).toBe(0);

@@ -91,6 +91,54 @@ function glareshieldHood(): THREE.BufferGeometry {
   return g;
 }
 
+/**
+ * Panel-cheek wrap (L2-03): a fuselage-skin patch between the main panel and the sidewall whose upper boundary
+ * theta_top(x) follows a cosine spline - at the forward end (windshield base) it meets the A-pillar base
+ * (`thetaTopFwd`), and toward the aft end it rolls smoothly down below the side-window sill so the free edge falls
+ * away into the dark lower sidewall instead of ending in a straight angular cut (a21_004 / OEG p.12: the
+ * panel-to-sidewall wrap is one smooth continuous dark surface).
+ */
+function cheekGeometry(side: 1 | -1, thetaTopFwd: number): THREE.BufferGeometry {
+  const x0 = 8.26; // aft edge (EST, matches the round-2 wrap extent)
+  const x1 = WINDSHIELD.baseX + 0.02; // forward edge, just past the windshield base
+  const inset = INSET + 0.02;
+  const thetaBot = 1.75; // down at the console (unchanged)
+  const thetaTopAft = 1.48; // below the sill (1.3): the edge disappears into the lower sidewall
+  const nx = 24;
+  const ny = 16;
+  const pos: number[] = [];
+  const uv: number[] = [];
+  const idx: number[] = [];
+  const v = new THREE.Vector3();
+  for (let i = 0; i <= nx; i++) {
+    const t = i / nx; // 0 = aft, 1 = fwd
+    const k = (1 - Math.cos(Math.PI * t)) / 2; // cosine ease: tangent-continuous at both ends, no corner
+    const top = thetaTopAft + (thetaTopFwd - thetaTopAft) * k;
+    const x = x0 + (x1 - x0) * t;
+    for (let j = 0; j <= ny; j++) {
+      const th = top + ((thetaBot - top) * j) / ny;
+      F.point(x, side * th, inset, v);
+      pos.push(v.x, v.y, v.z);
+      uv.push(t, j / ny);
+    }
+  }
+  const row = ny + 1;
+  for (let i = 0; i < nx; i++)
+    for (let j = 0; j < ny; j++) {
+      const a = i * row + j;
+      const b = a + row;
+      // Inward-facing winding (seen from inside the cockpit), mirrored for the left side.
+      if (side > 0) idx.push(a, b, a + 1, b, b + 1, a + 1);
+      else idx.push(a, a + 1, b, b, a + 1, b + 1);
+    }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
 export function buildShell(b: CockpitBuilder): void {
   const m = b.env.materials;
   const L = lonMaterials(b.env);
@@ -159,20 +207,23 @@ export function buildShell(b: CockpitBuilder): void {
 
   // Panel cheeks: the glareshield / panel wrap either side of the main panel down to the consoles (Textron panel
   // photograph: the deck curves back to the side windows), inside the lower corners of the windshield glazing.
-  // L2-03: re-lofted with more sections so the wrap reads as a smooth panel-to-sidewall curve instead of the
-  // faceted wedge the first build showed in the pilot default view.
-  const cheek = { inset: INSET + 0.02, inward: true };
-  // The wrap starts below the A-pillar band so the pilot sees glass left of the panel (a21_004), instead of the
-  // first build's high black wedge that covered the windshield lower corner.
+  // The wrap starts below the A-pillar band so the pilot sees glass left of the panel (a21_004).
+  // L2-03 round 3: the upper (free) edge is no longer a straight angular cut at constant theta - it tapers along a
+  // cosine spline from the A-pillar base at the panel down below the sill at the aft end, so the silhouette against
+  // the glass reads as one smooth rolled edge (a21_004 / OEG p.12) with no hard polygon corners or detached sliver.
   const cheekTop = ws.halfAngle + aPillar;
-  add(loftFuselage(F, 8.26, ws.baseX + 0.02, cheekTop, 1.75, 14, 22, cheek), L.trim, 'panel_cheek_r');
-  add(loftFuselage(F, 8.26, ws.baseX + 0.02, -1.75, -cheekTop, 14, 22, cheek), L.trim, 'panel_cheek_l');
+  add(cheekGeometry(1, cheekTop), L.trim, 'panel_cheek_r');
+  add(cheekGeometry(-1, cheekTop), L.trim, 'panel_cheek_l');
 
   // L2-05: black trim band on the forward sidewall around the circuit-breaker panels (OEG p.12 right-console crop:
-  // the CB grid sits on a black sidewall just above the console). Slightly less proud than the window frames.
-  const cbBand = { inset: INSET - 0.012, inward: true };
-  add(loftFuselage(F, 7.3, 8.3, 1.02, sw.sill, 8, 4, cbBand), lowerWall, 'cb_wall_r');
-  add(loftFuselage(F, 7.3, 8.3, -sw.sill, -1.02, 8, 4, cbBand), lowerWall, 'cb_wall_l');
+  // the CB grid sits on a black sidewall just above the console).
+  // L2-03 round 3: the round-2 band (inset 0.033, theta 1.02..sill) sat OUTSIDE the sidewall skin, so its only
+  // visible part was where it poked through the windshield / forward-window glazing corner - the faceted black
+  // wedge in the pilot view the audit blamed on the cheek loft. The band now sits proud INSIDE the sidewall
+  // (inset > lowerWall's 0.045) and stays below the sill, so it frames the CB grid without covering any glass.
+  const cbBand = { inset: INSET + 0.008, inward: true };
+  add(loftFuselage(F, 7.3, 8.3, sw.sill + 0.02, 1.62, 8, 4, cbBand), lowerWall, 'cb_wall_r');
+  add(loftFuselage(F, 7.3, 8.3, -1.62, -sw.sill - 0.02, 8, 4, cbBand), lowerWall, 'cb_wall_l');
 
   // Aft bulkhead (faces forward) with the cockpit doorway frame.
   const s = F.at(X_AFT);

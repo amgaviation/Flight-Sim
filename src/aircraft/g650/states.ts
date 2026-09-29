@@ -149,6 +149,10 @@ export function setG650Switches(ctx: Pick<SimContext, 'vars'>, sys: G650Systems,
   v.set(V.ltMapL, 0);
   v.set(V.ltMapR, 0);
   for (const n of [1, 2, 3, 4] as const) v.set(V.duBrt(n), night ? 0.7 : 1);
+  // HUD (SMC HUD page epic.hud.on): the HGS combiner is manually stowed against the headliner when not in
+  // use - a cold, parked aircraft is photographed with it stowed - and brought down by the crew for the
+  // phases where HUD use is normal (Rockwell Collins HGS installs: takeoff / low-visibility approach).
+  v.set('epic.hud.on', s === 'takeoff' || s === 'approach' ? 1 : 0);
   // ---- PEDESTAL: thrust levers, FUEL CONTROL, fire handles
   v.set(V.tla(1), 0);
   v.set(V.tla(2), 0);

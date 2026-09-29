@@ -264,6 +264,13 @@ export class B738Logic implements Subsystem {
     } else {
       this.maxAltFt = Math.max(this.maxAltFt, alt);
       if (v.get(B738.pressMode) === 0 && v.get(B738.fltAltFt) - this.maxAltFt > 1000 && this.maxAltFt - alt > 1000) this.offSched = true;
+      // QRH 2.7 OFF SCHED DESCENT: "FLT ALT indicator ... Reset to actual airplane altitude" restores the
+      // normal schedule and extinguishes the light; re-anchor so a later descent below the new FLT ALT
+      // re-evaluates the condition.
+      else if (this.offSched && v.get(B738.fltAltFt) - alt <= 1000) {
+        this.offSched = false;
+        this.maxAltFt = alt;
+      }
     }
     v.set('ac.b738.off_sched_descent', this.offSched ? 1 : 0);
 

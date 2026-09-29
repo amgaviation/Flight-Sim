@@ -201,15 +201,19 @@ export function buildG650Cockpit(ctx: SimContext, sys: G650Systems, o: G650Cockp
   // ---- derived annunciator / display states (display-side only; systems never read these)
   const vars = ctx.vars;
   const hudPower = DISPLAY_VARS.power(HUD_DISPLAY_ID);
-  let deploy = vars.get('epic.hud.on', 1) !== 0 ? 1 : 0;
+  // Default STOWED: the HGS combiner is manually stowed against the headliner when not in use, and a cold,
+  // unpowered parked aircraft is photographed with the combiner stowed (Rockwell Collins HGS installs).
+  // states.ts sets epic.hud.on per initial state (1 only for takeoff / approach, where HUD use is normal).
+  let deploy = vars.get('epic.hud.on', 0) !== 0 ? 1 : 0;
   b.onUpdate((dt) => {
     const ess = vars.get('elec.l_ess_dc_powered') !== 0 || vars.get('elec.r_ess_dc_powered') !== 0;
     vars.set(CK.annunPower, ess || vars.get('elec.emer_dc_powered') !== 0 ? 1 : 0);
     vars.set(CK.gearRed, vars.get('gear.red0') !== 0 || vars.get('gear.red1') !== 0 || vars.get('gear.red2') !== 0 ? 1 : 0);
     if (hud) {
-      // HUD on (SMC HUD page) and powered from the left ESS DC bus (EST): combiner deployed, symbology drawn.
-      const on = vars.get('epic.hud.on', 1) !== 0;
-      vars.set(hudPower, on && vars.get('elec.l_ess_dc_powered') !== 0 ? 1 : 0);
+      // HUD on (SMC HUD page) and powered through its own HUD breaker on the left ESS DC bus (EST bus):
+      // combiner deployed, symbology drawn; pulling cb.hud blanks the symbology.
+      const on = vars.get('epic.hud.on', 0) !== 0;
+      vars.set(hudPower, on && vars.get('elec.hud_powered') !== 0 ? 1 : 0);
       const target = on ? 1 : 0;
       deploy += Math.max(-dt * 1.5, Math.min(dt * 1.5, target - deploy));
       vars.set(CK.hudDeploy, deploy);
@@ -231,6 +235,21 @@ export function buildG650Cockpit(ctx: SimContext, sys: G650Systems, o: G650Cockp
   });
 
   const build = b.build();
+  // Keypad key legends (MCDU / SMC keyboards, KeyPad legend colour #f2f2ee) at a higher backlight gain than
+  // the engraved panel legends: with the night MASTER range set, every key legend must read clearly (G650
+  // training material: night setting = "panel backlighting illuminates", incl. the MCDU keyboards), and the
+  // small glyphs otherwise render dimmer than the panel engravings at screen resolution. EST gain x2.
+  // Covers both the instanced legend batches (instancing.ts '#inst' materials) and their hover proxies.
+  {
+    const seen = new Set<THREE.Material>();
+    build.root.traverse((o) => {
+      const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
+      if (!m || Array.isArray(m) || seen.has(m) || !/^cockpit\.label\.\d+\|panel\|f2f2ee/.test(m.name ?? '')) return;
+      seen.add(m);
+      env.lighting.unregister(m);
+      env.lighting.registerBacklight(m, 'panel', 2);
+    });
+  }
   // Default pilot view pitched down so the PFD (DU centre ~33 deg below the design eye line, layout.ts) is on
   // screen with the windshield above it (the app default -8 deg shows only the top of the DUs).
   build.eyePitchDeg = G650_EYE_PITCH_DEG;
