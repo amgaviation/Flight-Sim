@@ -72,6 +72,11 @@ export interface ThrustLeverConfig {
     deployS: number;
     stowS: number;
     power?: Binding;
+    /**
+     * Per-engine reverser power 0..1 (additive; overrides `power` for that engine), e.g. the 737 reverser 1 on
+     * hydraulic system A and reverser 2 on B, with the standby system as a slower alternate source.
+     */
+    powerPerEngine?: (engine: number) => Binding;
     interlock?: Binding;
   };
   /** FADEC channel power per engine. Default always. */
@@ -83,6 +88,8 @@ class EngLane {
   rev = 0;
   lastCmd = 0;
   readonly power: () => boolean;
+  /** Per-engine reverser power (null = the shared `reverse.power`). */
+  readonly revPower: Evaluator | null;
   readonly lever: string;
   readonly revLever: string | null;
   readonly fFadec: string;
@@ -91,6 +98,8 @@ class EngLane {
   readonly o: { cmd: string; rev: string; target: string; lever: string; detent: string; idle: string; unlk: string; dep: string };
   constructor(vars: SimVars, readonly engine: number, cfg: ThrustLeverConfig) {
     this.power = compileCondition(vars, cfg.power?.(engine), true);
+    const rp = cfg.reverse?.powerPerEngine?.(engine);
+    this.revPower = rp !== undefined ? compileBinding(vars, rp, 1) : null;
     this.lever = cfg.leverVar ? cfg.leverVar(engine) : `ac.tla${engine}`;
     this.revLever = cfg.reverseLeverVar ? cfg.reverseLeverVar(engine) : null;
     this.fFadec = failVar(`fadec.eng${engine}`);
@@ -212,8 +221,9 @@ export class ThrustLeverFadec implements Subsystem {
     const idle = this.idleN1(alt, onGround);
     const idleMode = this.idleMode;
     const rv = cfg.reverse;
-    const revPow = clamp01(this.revPower());
+    const revPowShared = clamp01(this.revPower());
     for (const l of this.lanes) {
+      const revPow = l.revPower ? clamp01(l.revPower()) : revPowShared;
       let lever = v.get(l.lever);
       let revLever = 0;
       if (l.revLever) revLever = Math.max(0, v.get(l.revLever));

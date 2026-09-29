@@ -13,13 +13,23 @@
  *  forward end | MKP 2 (u +0.17);
  *  CCP 1 / 2 palm rests aft of the MKPs; ENGINE RUN L / R (ON / OFF, lift to
  *  move) at the aft end of the quadrant;
- *  ACP row (audio control panels: SCOPE, not modelled - no audio routing);
- *  left: display dimmers (L / CTR / R DSPL); centre: PARK/EMER BRAKE in a
+ *  ACP 1 / 2 (fix round 2, photos e_acp / e_ped_aft; GX PTG 18): seven
+ *  transmitter select keys (VHF1..3, HF1 / 2, SAT, PA), fourteen receiver
+ *  volume knobs (push in = off, pull out = on: VHF1..3, HF1 / 2, SAT, PA, NAV1 / 2,
+ *  ADF1 / 2, MKR, DME1 / 2), R/T - IC toggle, ID / BOTH / VOICE filter, MKR HI /
+ *  LO, MASK / BOOM and SPKR (systems/audioControl.ts: Morse idents, marker
+ *  tones, keyed radio);
+ *  left: reversion panel (GX PTG 16: DISPLAYS NORM / REV, TUNE VHF / NORM /
+ *  DSPL, L / R PFD ADC and IRS keys, AFCS 1/2 key -> Fusion RSP vars,
+ *  systems/reversion.ts) above the display dimmers (L / CTR / R DSPL and the
+ *  LWR DSPL knob for AFD 3); centre: PARK/EMER BRAKE in a
  *  recessed gate and the SLAT/FLAP lever (SLAT IN / OUT, FLAP 0 / 0 / 6 / 16
  *  / 30); right: COCKPIT LIGHTS (AREA, OVHD / CB / L / CTR / R INTEG, PBA DIM /
  *  BRT, EYE REF, MASTER INTEG ON / AUTO / OFF, FOOT);
  *  aft section (not shown in the photographs, EST positions): STAB CH 1 / 2
- *  (guarded), AIL trim, RUD trim; GND LIFT DUMPING MAN ARM / OFF; IRS 1 / 2 / 3.
+ *  (unguarded PBAs, PUSH OFF/RESET), AIL trim, RUD trim; GND LIFT DUMPING
+ *  3-position switch (MANUAL ARM / AUTO / OFF); IRS 1 / 2 / 3.
+ *  FLIGHT SPOILER detents: 0 (gate) / 1/4 / 1/2 / 3/4 / FULL / MAX (gate).
  *  aft face: RAT manual deploy handle, landing-gear manual release handle.
  *
  * Moved off the pedestal by the Vision layout: EPR / N1 MODE (overhead ENGINE),
@@ -28,11 +38,12 @@
  * TEST CONTROL page entry of the EMS CDU (GX PTG 15-19), not a pedestal switch.
  */
 import * as THREE from 'three';
-import { GuardedButton, Lever, PushButton, RotaryKnob, SelectorKnob, TBarHandle, ToggleSwitch } from '../../../cockpit/controls';
+import { Lever, PushButton, RotaryKnob, SelectorKnob, TBarHandle, ToggleSwitch } from '../../../cockpit/controls';
 import type { Panel } from '../../../cockpit/CockpitBuilder';
 import { INPUT } from '../../../core/vars';
 import { addCcpVision, addMkpVision } from '../../../avionics/collins-fusion';
-import { G6K_EVENTS, G6K_VARS as V } from '../vars';
+import { G6K_ACP_CH, G6K_EVENTS, G6K_VARS as V } from '../vars';
+import { FSL_FULL } from '../systems/logic';
 import { TLA } from '../systems/engines';
 import { seg, ZONE, type G6kCockpitContext } from './context';
 import { PEDESTAL, FLOOR_Z } from './layout';
@@ -76,6 +87,155 @@ function dimmer(c: G6kCockpitContext, p: Panel, id: string, label: string, v: st
 /** Sub-panel on the pedestal top with dzus fasteners. */
 function plate(p: Panel, name: string, x0: number, y0: number, w: number, h: number): Panel {
   return p.subPanel({ name, x: x0 + w / 2, y: y0 + h / 2, width: w, height: h, origin: 'top-left', material: 'panel', screws: { kind: 'dzus', diameter: 0.006, inset: 0.007, pitch: 0.2 } });
+}
+
+/** ACP row and reversion / cockpit-lights row (m aft of the pedestal's forward edge, photo e_ped_aft proportions). */
+const ACP_Y = 0.335;
+const ACP_H = 0.078;
+const REV_Y = 0.418;
+
+/** ACP channel legends (knob rows) and the transmitter key legends. */
+const ACP_ROW1 = ['vhf1', 'vhf2', 'vhf3', 'hf1', 'hf2', 'sat', 'pa'] as const;
+const ACP_ROW2 = ['nav1', 'nav2', 'adf1', 'adf2', 'mkr', 'dme1', 'dme2'] as const;
+const ACP_NAME: Record<(typeof G6K_ACP_CH)[number], string> = {
+  vhf1: 'VHF1', vhf2: 'VHF2', vhf3: 'VHF3', hf1: 'HF1', hf2: 'HF2', sat: 'SAT', pa: 'PA',
+  nav1: 'NAV1', nav2: 'NAV2', adf1: 'ADF1', adf2: 'ADF2', mkr: 'MKR', dme1: 'DME1', dme2: 'DME2',
+};
+
+/**
+ * Audio control panel (photo EB190582 e_ped_aft: seven columns; square transmitter keys with a lamp above; two rows of
+ * push / pull volume knobs VHF1 VHF2 VHF3 HF1 HF2 SAT (PA, EST: legend illegible) and NAV1 NAV2 ADF1 ADF2 MKR DME1
+ * (DME2); bottom row R/T - IC, ID / BOTH / V, MKR HI / LO (bat handles), MASK, SPKR). Knob push toggles the audio
+ * (pulled out = on), turning sets the volume. systems/audioControl.ts consumes the vars.
+ */
+function buildAcp(c: G6kCockpitContext, p: Panel, s: 1 | 2): void {
+  const { env } = c;
+  const z = ZONE.centre;
+  const w = s === 1 ? 0.17 : 0.185;
+  const pitch = (w - 0.02) / 7;
+  const x = (k: number) => 0.01 + pitch * (k + 0.5);
+  for (let k = 0; k < 7; k++) {
+    // Transmitter select key with a green lamp bar (lit while that transmitter is selected).
+    p.add(
+      new PushButton(env, {
+        id: `g6k.ped.acp${s}.mic_${ACP_ROW1[k]}`,
+        label: `ACP ${s} ${ACP_NAME[ACP_ROW1[k]]} MIC`,
+        var: V.acpMic(s),
+        mode: 'toggle',
+        values: [k, k],
+        style: 'korry',
+        width: 0.0085,
+        height: 0.0075,
+        layout: 'stack',
+        segments: [{ text: '▬', color: 'green', var: V.acpMic(s), test: (x2: number) => x2 === k }],
+      }),
+      x(k),
+      0.009,
+    );
+    for (const [row, list] of [[0.028, ACP_ROW1], [0.049, ACP_ROW2]] as const) {
+      const ch = list[k];
+      p.add(
+        new RotaryKnob(env, {
+          id: `g6k.ped.acp${s}.${ch}`,
+          label: `ACP ${s} ${ACP_NAME[ch]}`,
+          cap: 'pointer',
+          diameter: 0.0105,
+          height: 0.009,
+          zone: z,
+          outer: { var: V.acpVol(s, ch), min: 0, max: 1, step: 0.05, angleRange: [-130, 130], label: `${ACP_NAME[ch]} VOL`, format: (v) => `${Math.round(v * 100)} %` },
+          push: { var: V.acpSel(s, ch), mode: 'toggle', label: 'PULL ON / PUSH OFF' },
+        }),
+        x(k),
+        row,
+      );
+      p.label(ACP_NAME[ch], x(k), row - 0.0085, { height: 0.0018, zone: z });
+    }
+  }
+  const by = 0.068;
+  p.add(new ToggleSwitch(env, { id: `g6k.ped.acp${s}.rt_ic`, label: `ACP ${s} R/T - IC`, var: V.acpRtIc(s), positions: ['IC', '', 'R/T'], values: [-1, 0, 1], initial: 1, springs: { 0: 1, 2: 1 }, labels: { positions: true, height: 0.0016, zone: z }, scale: 0.6 }), x(0), by);
+  p.add(
+    new SelectorKnob(env, {
+      id: `g6k.ped.acp${s}.filter`,
+      var: V.acpFilter(s),
+      label: `ACP ${s} ID / BOTH / VOICE`,
+      cap: 'bar',
+      diameter: 0.0105,
+      labelHeight: 0.0016,
+      labelZone: z,
+      positions: [
+        { value: 0, label: 'ID', angle: -40 },
+        { value: 1, label: 'BOTH', angle: 0 },
+        { value: 2, label: 'V', angle: 40 },
+      ],
+      initial: 1,
+    }),
+    x(1),
+    by,
+  );
+  p.add(new ToggleSwitch(env, { id: `g6k.ped.acp${s}.mkr_sens`, label: `ACP ${s} MKR HI / LO SENS`, var: V.acpMkrHi(s), positions: ['LO', 'HI'], values: [0, 1], initial: 1, labels: { positions: true, height: 0.0016, zone: z }, scale: 0.6 }), x(2), by);
+  p.add(new PushButton(env, { id: `g6k.ped.acp${s}.mask`, label: `ACP ${s} MASK`, var: V.acpMask(s), mode: 'toggle', style: 'round', width: 0.0095, capMaterial: 'plasticBlack' }), x(4), by);
+  p.label('MASK', x(4), by - 0.0085, { height: 0.0018, zone: z });
+  p.add(
+    new RotaryKnob(env, {
+      id: `g6k.ped.acp${s}.spkr`,
+      label: `ACP ${s} SPKR`,
+      cap: 'pointer',
+      diameter: 0.0105,
+      zone: z,
+      outer: { var: V.acpSpkr(s), min: 0, max: 1, step: 0.05, angleRange: [-130, 130], label: 'SPKR', format: (v) => (v <= 0.001 ? 'OFF' : `${Math.round(v * 100)} %`) },
+    }),
+    x(5),
+    by,
+  );
+  p.label('SPKR', x(5), by - 0.0085, { height: 0.0018, zone: z });
+  p.label(`ACP ${s}`, w - 0.012, ACP_H - 0.004, { height: 0.0016, zone: z });
+}
+
+/**
+ * Reversion panel (aft-left of the pedestal, photo EB190582 e_ped_l): L DSPL / CTR DSPL / R DSPL dimmers (OFF - BRT),
+ * DISPLAYS NORM / REV rotary with the LWR DSPL dimmer, TUNE rotary (VHF / NORM / DSPL), and the switchlights
+ * L PFD [ADC] [IRS], AFCS [1/2], R PFD [ADC] [IRS] (Collins Fusion RSP vars; systems/reversion.ts).
+ */
+function buildReversion(c: G6kCockpitContext, p: Panel): void {
+  const { env } = c;
+  const z = ZONE.centre;
+  const dx = [0.035, 0.085, 0.135];
+  (['l', 'c', 'r'] as const).forEach((zz, k) => dimmer(c, p, `g6k.ped.display_${zz}`, `${zz === 'l' ? 'L' : zz === 'c' ? 'CTR' : 'R'} DSPL`, V.ltDisplay(zz), dx[k], 0.035, `${zz === 'l' ? 'L' : zz === 'c' ? 'CTR' : 'R'} DSPL`, 'OFF'));
+  dimmer(c, p, 'g6k.ped.display_lwr', 'LWR DSPL', V.ltDisplayLwr, dx[1], 0.103, 'LWR DSPL', 'OFF');
+  // Engraved boxes round DISPLAYS / LWR DSPL and TUNE (photo).
+  p.line(0.008, 0.062, 0.108, 0.062, 0.0005, z);
+  p.line(0.108, 0.062, 0.108, 0.128, 0.0005, z);
+  p.line(0.108, 0.128, 0.062, 0.128, 0.0005, z);
+  p.line(0.112, 0.062, 0.162, 0.062, 0.0005, z);
+  const big = (id: string, label: string, v: string, x: number, positions: { value: number; label: string; angle: number }[], title: string) => {
+    p.add(new SelectorKnob(env, { id, var: v, label, cap: 'bar', diameter: 0.02, labelRadius: 0.019, labelHeight: 0.0019, labelZone: z, positions, initial: 1 }), x, 0.098);
+    p.label(title, x, 0.069, { height: 0.0024, zone: z });
+  };
+  big('g6k.ped.displays', 'DISPLAYS NORM / REV', V.displaysRev, dx[0], [
+    { value: 0, label: 'NORM', angle: 0 },
+    { value: 1, label: 'REV', angle: 50 },
+  ], 'DISPLAYS');
+  big('g6k.ped.tune', 'TUNE (VHF / NORM / DSPL)', V.tuneSel, dx[2], [
+    { value: 1, label: 'VHF', angle: -50 },
+    { value: 0, label: 'NORM', angle: 0 },
+    { value: 2, label: 'DSPL', angle: 50 },
+  ], 'TUNE');
+  // Switchlights (Korry, white legends lit while reverted).
+  const ky = 0.172;
+  const key = (id: string, label: string, v: string, x: number, text: string, lit: (x: number) => boolean, values?: [number, number]) =>
+    p.add(
+      new PushButton(env, { id, label, var: v, mode: 'toggle', values, style: 'korry', width: 0.018, height: 0.012, layout: 'stack', segments: [{ text, color: 'white', var: v, test: lit }], zone: z }),
+      x,
+      ky,
+    );
+  key('g6k.ped.rev_adc1', 'L PFD ADC (X-SIDE)', V.rspAdc(1), 0.024, 'ADC', (x) => x >= 0.5);
+  key('g6k.ped.rev_irs1', 'L PFD IRS (IRS 3)', V.rspAtt(1), 0.05, 'IRS', (x) => x >= 0.5);
+  key('g6k.ped.rev_afcs', 'AFCS 1/2', V.rspAfcs, 0.085, '1/2', (x) => x === 2, [1, 2]);
+  key('g6k.ped.rev_adc2', 'R PFD ADC (X-SIDE)', V.rspAdc(2), 0.12, 'ADC', (x) => x >= 0.5);
+  key('g6k.ped.rev_irs2', 'R PFD IRS (IRS 3)', V.rspAtt(2), 0.146, 'IRS', (x) => x >= 0.5);
+  p.label('[ L PFD ]', 0.037, ky - 0.012, { height: 0.0021, zone: z });
+  p.label('AFCS', 0.085, ky - 0.012, { height: 0.0021, zone: z });
+  p.label('[ R PFD ]', 0.133, ky - 0.012, { height: 0.0021, zone: z });
 }
 
 export function buildPedestal(c: G6kCockpitContext): void {
@@ -207,8 +367,10 @@ export function buildPedestal(c: G6kCockpitContext): void {
     onHandle(rev, [0, 0.02, L * 0.5], new THREE.Euler(0, 0, 0));
   }
 
-  // ---- FLIGHT SPOILER lever in its own slot at the left edge of the quadrant (RETRACT arrow; logic.ts schedule
-  // 0 / 1/4 / 1/2 / FULL / MAX). SCOPE: the 3/4 scale mark of the photo has no separate detent in the model.
+  // ---- FLIGHT SPOILER lever in its own slot at the left edge of the quadrant (RETRACT arrow). Scale 0 / 1/4 / 1/2 /
+  // 3/4 / FULL / MAX (photo EB190582 e_ped_mid / e_acp). GX PTG 10-44: the lever is latched at 0 (the unlatch selector on
+  // top of the lever must be pressed to leave 0) and gated FULL -> MAX; soft detents between. logic.ts schedule:
+  // 0 .. FULL (0.9) proportional inboard MFS, MAX adds the outboard MFS with the flaps at 0.
   ped.add(
     new Lever(env, {
       id: 'g6k.ped.spoiler',
@@ -217,10 +379,11 @@ export function buildPedestal(c: G6kCockpitContext): void {
       min: 0,
       max: 1,
       detents: [
-        { value: 0, label: '0' },
+        { value: 0, label: '0', kind: 'gate', direction: 'increasing' },
         { value: 0.25, label: '1/4' },
         { value: 0.5, label: '1/2' },
-        { value: 0.8, label: 'FULL' },
+        { value: 0.75, label: '3/4' },
+        { value: FSL_FULL, label: 'FULL' },
         { value: 1, label: 'MAX', kind: 'gate', direction: 'increasing' },
       ],
       softWidth: 0.02,
@@ -257,12 +420,11 @@ export function buildPedestal(c: G6kCockpitContext): void {
     );
   }
 
-  // ---- display dimmers (left, the reversion-panel position; photo e_ped_l: L DSPL / CTR DSPL / R DSPL).
-  // SCOPE: the DISPLAYS NORM / REV and TUNE reversion knobs and the L / R PFD ADC / IRS / AFCS keys of that panel
-  // are on the Fusion RSP in this build (not modelled on the pedestal).
-  const dp = plate(ped, 'display_dimmers', ux(-0.265), R.mid - 0.08, 0.175, 0.16);
-  const dx = [0.035, 0.0875, 0.14];
-  (['l', 'c', 'r'] as const).forEach((zz, k) => dimmer(c, dp, `g6k.ped.display_${zz}`, `${zz === 'l' ? 'L' : zz === 'c' ? 'CTR' : 'R'} DSPL`, V.ltDisplay(zz), dx[k], 0.04, `${zz === 'l' ? 'L' : zz === 'c' ? 'CTR' : 'R'} DSPL`, 'OFF'));
+  // ---- ACP 1 / 2 (audio control panels) aft of the CCPs, either side of the PARK/EMER BRAKE / SLAT/FLAP (photo
+  // e_ped_aft), and the reversion panel below ACP 1 (photo e_ped_l).
+  buildAcp(c, plate(ped, 'acp1', ux(-0.265), ACP_Y, 0.17, ACP_H), 1);
+  buildAcp(c, plate(ped, 'acp2', ux(0.08), ACP_Y, 0.185, ACP_H), 2);
+  buildReversion(c, plate(ped, 'reversion', ux(-0.265), REV_Y, 0.17, 0.2));
 
   // ---- PARK/EMER BRAKE (centre, recessed gate between ACP 1 and the flap lever; caption on both sides, photo)
   const gate = plate(ped, 'park_gate', ux(-0.092), R.acp - 0.055, 0.09, 0.28);
@@ -354,7 +516,7 @@ export function buildPedestal(c: G6kCockpitContext): void {
 
   // ---- COCKPIT LIGHTS (right; photo e_ped_aft): AREA, OVHD / CB INTEG; L / CTR / R INTEG; PBA, EYE REF, MASTER INTEG,
   // FOOT (GX PTG 15-11 .. 15-13).
-  const lp = plate(ped, 'cockpit_lights', ux(0.08), R.mid - 0.08, 0.185, 0.2);
+  const lp = plate(ped, 'cockpit_lights', ux(0.08), REV_Y, 0.185, 0.2);
   const lx = [0.035, 0.0925, 0.15];
   dimmer(c, lp, 'g6k.ped.area', 'AREA (FLOOR / CEILING)', V.ltArea, lx[0], 0.035, 'AREA', 'OFF');
   dimmer(c, lp, 'g6k.ped.integral_ovhd', 'OVHD INTEG', V.ltIntegral('ovhd'), lx[1], 0.035, 'OVHD INTEG');
@@ -376,26 +538,13 @@ export function buildPedestal(c: G6kCockpitContext): void {
   // TRIM: STAB CH 1 / CH 2 disconnect (guarded), AIL trim split switch, RUD trim rotary.
   const ty2 = 0.045;
   ap.label('STAB TRIM', 0.07, ty2 - 0.028, { height: 0.0026, zone: zc });
+  // GX PTG 10-24 (GX_10_020): STAB CH 1 / CH 2 "PUSH OFF/RESET" switchlights, not guarded, normally dark; white OFF
+  // legend while selected (the channel is disconnected; STAB CH n OFF status).
   for (const n of [1, 2] as const) {
     const x = n === 1 ? 0.045 : 0.095;
-    ap.add(
-      new GuardedButton(env, {
-        id: `g6k.ped.stab_ch${n}`,
-        label: `STAB CH ${n}`,
-        var: V.stabCh(n),
-        mode: 'toggle',
-        style: 'korry',
-        width: 0.0165,
-        height: 0.0165,
-        layout: 'stack',
-        segments: [seg.on('OFF', 'amber', V.stabCh(n))],
-        guard: { color: 'red', hinge: 'top', close: 'free' },
-      }),
-      x,
-      ty2,
-    );
-    ap.label(`CH ${n}`, x, ty2 + 0.017, { height: 0.0024, zone: zc });
+    pba(c, ap, { id: `g6k.ped.stab_ch${n}`, label: `STAB CH ${n}`, v: V.stabCh(n), x, y: ty2, segments: [seg.on('OFF', 'white', V.stabCh(n))], name: `CH ${n}`, nameBelow: true, zone: zc });
   }
+  ap.label('PUSH OFF/RESET', 0.07, ty2 + 0.02, { height: 0.0019, zone: zc });
   ap.add(
     new ToggleSwitch(env, {
       id: 'g6k.ped.ail_trim',
@@ -432,10 +581,23 @@ export function buildPedestal(c: G6kCockpitContext): void {
     0.3,
     ty2,
   );
-  // GND LIFT DUMPING MAN ARM / OFF.
-  ap.label('GND LIFT DUMP', 0.43, ty2 - 0.028, { height: 0.0026, zone: zc });
-  pba(c, ap, { id: 'g6k.ped.gld_man_arm', label: 'GLD MAN ARM', v: V.gldManArm, x: 0.405, y: ty2, segments: [seg.on('ARM', 'white', V.gldManArm)], name: 'MAN ARM', nameBelow: true, zone: zc });
-  pba(c, ap, { id: 'g6k.ped.gld_off', label: 'GLD OFF', v: V.gldOff, x: 0.455, y: ty2, segments: [seg.on('OFF', 'white', V.gldOff)], name: 'OFF', nameBelow: true, zone: zc });
+  // GND LIFT DUMPING (GX PTG 10-50, GX_10_049): one three-position switch MANUAL ARM / AUTO / OFF.
+  ap.label('GND LIFT', 0.43, ty2 - 0.03, { height: 0.0026, zone: zc });
+  ap.label('DUMPING', 0.43, ty2 - 0.025, { height: 0.0026, zone: zc });
+  ap.add(
+    new ToggleSwitch(env, {
+      id: 'g6k.ped.gld',
+      var: V.gldSw,
+      label: 'GND LIFT DUMPING',
+      positions: ['OFF', 'AUTO', 'MANUAL ARM'],
+      values: [2, 0, 1],
+      initial: 1,
+      labels: { positions: true, height: 0.0021, zone: zc },
+      scale: 0.9,
+    }),
+    0.43,
+    ty2,
+  );
   // IRS 1 / 2 / 3 mode selectors.
   const iy = 0.14;
   for (const n of [1, 2, 3] as const) {

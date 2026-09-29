@@ -125,6 +125,9 @@ describe('(f) coupled ILS approach and autoland', () => {
     v.set('input.ap_disc', 0);
     r.run(1);
     expect(v.get(AP.engaged)).toBe(0);
+    // F22 (FCOM 4.20): no ROLLOUT / FLARE guidance on the F/D after the A/P disconnect on the ground.
+    expect(v.getString('ac.fma.roll')).not.toBe('ROLLOUT');
+    expect(v.getString('ac.fma.pitch')).not.toBe('FLARE');
     void SPEEDBRAKE;
   });
 });

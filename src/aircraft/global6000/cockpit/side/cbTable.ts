@@ -51,7 +51,7 @@ export type EmsSystem = (typeof EMS_SYSTEMS)[number];
 export type CbLocation = 'SSPC' | 'CCBP' | 'ACPC' | 'DCPC' | 'ASCA';
 
 /** EMS bus labels (07-20-4 .. 38). */
-export const EMS_BUSES = ['AC 1', 'AC 2', 'AC 3', 'AC 4', 'AC ESS', 'DC 1', 'DC 2', 'DC ESS', 'BATT', 'DC EMER', 'APU BATT'] as const;
+export const EMS_BUSES = ['AC 1', 'AC 2', 'AC 3', 'AC 4', 'AC ESS', 'DC 1', 'DC 2', 'DC ESS', 'BATT', 'DC EMER', 'AV BATT', 'APU BATT'] as const;
 export type EmsBus = (typeof EMS_BUSES)[number];
 
 export interface CbEntry {
@@ -80,9 +80,11 @@ export const CB_TABLE: CbEntry[] = [
   e('ign1', 'L ENG IGN 1', 'ENGINE', 'DC ESS'),
   e('start_valve1', 'L ENG START A', 'ENGINE', 'DC ESS'),
   e('aux_pump_l', 'L AUX PUMP', 'FUEL', 'DC ESS'),
-  e('sfcu1', 'SLAT/FLAP PWR 1', 'FLT CONTROLS', 'DC ESS', 'CCBP'),
+  e('sfcu2', 'SLAT/FLAP CTLR 2', 'FLT CONTROLS', 'DC ESS'), // GX PTG 10-71
   e('fcu1', 'FLT CTL 1 CH A', 'FLT CONTROLS', 'DC ESS'),
-  e('stab_trim1', 'STAB TRIM CH 1', 'FLT CONTROLS', 'DC ESS', 'CCBP'),
+  e('rud_trim', 'RUDDER TRIM', 'FLT CONTROLS', 'DC ESS'), // GX PTG 10-71
+  e('ram_air_vlv', 'RAM AIR VLV', 'AIR COND/PRESS', 'DC ESS'),
+  e('eng_bleed_vlv', 'ENG BLEED VLV', 'BLEED', 'DC ESS'),
   e('lgecu_a', 'GEAR CTL A PWR 1', 'LDG GEAR', 'DC ESS'),
   e('bcu_a', 'BRAKE CTL CH A', 'LDG GEAR', 'DC ESS'),
   e('nws1', 'NOSE STEER PWR 1', 'LDG GEAR', 'DC ESS'),
@@ -107,9 +109,10 @@ export const CB_TABLE: CbEntry[] = [
   e('ign2', 'R ENG IGN 1', 'ENGINE', 'BATT'),
   e('start_valve2', 'R ENG START A', 'ENGINE', 'BATT'),
   e('aux_pump_r', 'R AUX PUMP', 'FUEL', 'BATT'),
-  e('sfcu2', 'SLAT/FLAP PWR 2', 'FLT CONTROLS', 'BATT', 'CCBP'),
+  e('sfcu1', 'SLAT/FLAP CTLR 1', 'FLT CONTROLS', 'BATT'), // GX PTG 10-71
   e('fcu2', 'FLT CTL 2 CH A', 'FLT CONTROLS', 'BATT'),
-  e('stab_trim2', 'STAB TRIM CH 2', 'FLT CONTROLS', 'BATT', 'CCBP'),
+  e('xbleed_vlv', 'XBLEED VLV', 'BLEED', 'BATT'),
+  e('nav_lts', 'NAV LTS', 'LIGHTS', 'BATT'),
   e('lgecu_b', 'GEAR CTL B PWR 1', 'LDG GEAR', 'BATT'),
   e('bcu_b', 'BRAKE CTL CH B', 'LDG GEAR', 'BATT'),
   e('nws2', 'NOSE STEER PWR 2', 'LDG GEAR', 'BATT'),
@@ -133,13 +136,9 @@ export const CB_TABLE: CbEntry[] = [
   e('tcas', 'TCAS', 'NAV', 'DC 1'),
   e('adf1', 'ADF 1', 'NAV', 'DC 1'),
   e('fms', 'FMS 3 CDU', 'NAV', 'DC 1'),
-  e('ldg_lt_l', 'L WING LDG LT', 'LIGHTS', 'DC 1'),
   e('ldg_lt_nose', 'NOSE LDG LTS', 'LIGHTS', 'DC 1'),
-  e('taxi_lt', 'TAXI LTS', 'LIGHTS', 'DC 1'),
-  e('nav_lts', 'NAV LTS', 'LIGHTS', 'DC 1'),
-  e('beacon', 'BEACON LTS', 'LIGHTS', 'DC 1'),
+  e('strobe', 'STROBE LTS', 'LIGHTS', 'DC 1'),
   e('logo', 'LOGO LTS', 'LIGHTS', 'DC 1'),
-  e('flood_lts', 'FLOOD LTS', 'LIGHTS', 'DC 1'),
   e('integral_lts', 'INTG LTS', 'LIGHTS', 'DC 1'),
   e('hud', 'HUD', 'IND/RECORD', 'DC 1'),
   // ---------------------------------------------------------------- DC BUS 2 (07-20-17 .. 23)
@@ -151,9 +150,9 @@ export const CB_TABLE: CbEntry[] = [
   e('nav2', 'VOR/ILS 2', 'NAV', 'DC 2'),
   e('gps2', 'GPS 2', 'NAV', 'DC 2'),
   e('com3', 'VHF COM 3', 'COMM', 'DC 2'),
-  e('ldg_lt_r', 'R WING LDG LT', 'LIGHTS', 'DC 2'),
-  e('strobe', 'WING STROBE LTS', 'LIGHTS', 'DC 2'),
+  e('beacon', 'BEACON LTS', 'LIGHTS', 'DC 2'),
   e('wing_insp', 'WING INSPECT LTS', 'LIGHTS', 'DC 2'),
+  e('ail_trim', 'AILERON TRIM', 'FLT CONTROLS', 'DC 2'), // GX PTG 10-71
   e('dome_map_lts', 'DOME/MAP LTS', 'LIGHTS', 'DC 2'),
   e('cabin_dc', 'DC 2 CABIN FEED', 'ELEC', 'DC 2'),
   e('pass_signs', 'SEAT BELTS SIGN', 'LIGHTS', 'DC 2'),
@@ -165,6 +164,8 @@ export const CB_TABLE: CbEntry[] = [
   e('fire_ext', 'FIREX CH A', 'FIRE', 'DC EMER', 'DCPC'),
   e('emer_lts', 'EMER LTS', 'LIGHTS', 'DC EMER'),
   e('elt', '(ELT)', 'COMM', 'DC EMER', 'DCPC'),
+  // ---------------------------------------------------------------- AV BATT DIR
+  e('flood_lts', 'AREA LTS', 'LIGHTS', 'AV BATT'), // GX PTG 15-11: area lights on the AV BATT DIR bus
   // ---------------------------------------------------------------- APU BATT (ASCA)
   e('apu_starter', 'APU START', 'APU', 'APU BATT', 'ASCA'),
   // ---------------------------------------------------------------- AC buses (07-20-4 .. 8)
@@ -184,14 +185,24 @@ export const CB_TABLE: CbEntry[] = [
   e('wshld_s', 'WINDOW HEAT', 'ICE', 'AC 2', 'CCBP'),
   e('wshld_r', 'R WSHLD HEAT', 'ICE', 'AC 4', 'CCBP'),
   e('probe_heat', 'PITOT/AOA/TAT HT', 'ICE', 'AC ESS', 'CCBP'),
-  e('recirc_fans', 'RECIRC FANS', 'AIR COND/PRESS', 'AC 3', 'ACPC'),
+  e('recirc_fan_l', 'L RECIRC FAN', 'AIR COND/PRESS', 'AC 1', 'ACPC'), // GX PTG 13-34
+  e('recirc_fan_r', 'R RECIRC FAN', 'AIR COND/PRESS', 'AC 4', 'ACPC'),
+  e('slat_flap_pwr1', 'SLAT/FLAP PWR 1', 'FLT CONTROLS', 'AC 1', 'CCBP'), // GX PTG 10-71
+  e('slat_flap_pwr2', 'SLAT/FLAP PWR 2', 'FLT CONTROLS', 'AC ESS', 'CCBP'),
+  e('stab_trim1', 'STAB TRIM CH 1', 'FLT CONTROLS', 'AC 1', 'CCBP'),
+  e('stab_trim2', 'STAB TRIM CH 2', 'FLT CONTROLS', 'AC ESS', 'CCBP'),
+  e('ldg_lt_l', 'L WING LDG/TAXI LT', 'LIGHTS', 'AC 1', 'ACPC'), // GX PTG 15 EMS list
+  e('ldg_lt_r', 'R WING LDG/TAXI LT', 'LIGHTS', 'AC 4', 'ACPC'),
+  e('taxi_lt', '(WING TAXI LTS)', 'LIGHTS', 'AC 1', 'ACPC'),
+  e('footwarmer_l', 'L FOOTWARMER', 'ELEC', 'AC 1', 'ACPC'), // EST bus
+  e('footwarmer_r', 'R FOOTWARMER', 'ELEC', 'AC 4', 'ACPC'),
   e('cabin_ac', 'AC 2 CABIN FEED', 'ELEC', 'AC 2', 'ACPC'),
   e('cabin_ac2', 'AC 3 CABIN FEED', 'ELEC', 'AC 3', 'ACPC'),
   e('cabin_outlets', 'CABIN OUTLETS', 'ELEC', 'AC 3', 'ACPC'), // EST name / location
-  e('av_batt_chgr', 'AV BATT CHGR', 'ELEC', 'AC 2', 'CCBP'),
-  e('apu_batt_chgr', 'APU BATT CHGR', 'ELEC', 'AC 3', 'CCBP'),
+  e('av_batt_chgr', 'AV BATT CHGR', 'ELEC', 'AC 3', 'CCBP'), // GX PTG 6-40 / 6-44
+  e('apu_batt_chgr', 'APU BATT CHGR', 'ELEC', 'AC 2', 'CCBP'),
   e('apu_oil_heat', 'APU OIL HEAT', 'APU', 'AC 4', 'ACPC'),
-  e('avionics_fans', 'AVIONICS FAN', 'IND/RECORD', 'AC ESS', 'ACPC'),
+  e('avionics_fans', 'AVIONICS FAN', 'IND/RECORD', 'AC 4', 'ACPC'), // GX PTG 13 EMS list
 ];
 
 export const CB_BY_ID: ReadonlyMap<string, CbEntry> = new Map(CB_TABLE.map((x) => [x.id, x]));

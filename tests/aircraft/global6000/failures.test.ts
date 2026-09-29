@@ -79,24 +79,29 @@ describe('Global 6000 failures -> CAS', () => {
     r.events.emit('cas.ack_warning');
     r.run(0.5);
     expect(v.get('alert.master_warning')).toBe(0);
-    // Memory items (GXFP / checklists.ts): L thrust lever IDLE, L ENG RUN OFF, L fire handle PULL, DISCH bottle 1.
+    // Memory items (GX PTG 9-13 / checklists.ts): L thrust lever IDLE, L ENG RUN OFF, L fire handle PULL (unlocked by
+    // the DAU on the fire warning), then turn it left and hold >= 1 s: bottle 1.
+    expect(v.get(V.fireUnlock('l'))).toBe(1);
     v.set(V.tla(1), 0);
     v.set(V.engRun(1), 0);
     v.set(V.fireHandle('l'), 1);
     r.run(2);
     expect(v.get(V.sovOpen(1))).toBe(0);
-    expect(posted(r)).toContain('status:L ENG SOV CLSD');
-    expect(posted(r)).toContain('status:L ENG BLEED OFF');
-    v.set(V.fireDisch('l', 1), 1);
+    expect(posted(r)).toContain('status:L ENG SOVS CLSD'); // GX PTG 9-28 (replaces HYD SOV CLSD / ENG BLEED OFF)
+    expect(posted(r)).not.toContain('status:L ENG BLEED OFF');
+    expect(v.get('elec.gen1_online')).toBe(0); // the handle trips the VFGs
+    v.set(V.fireRot('l'), -1);
     r.run(0.5);
-    v.set(V.fireDisch('l', 1), 0);
+    expect(v.get('fire.bottle1_discharged')).toBe(0); // not yet held 1 s
+    r.run(1);
+    v.set(V.fireRot('l'), 0);
     r.run(30);
     expect(v.get('fire.bottle1_discharged')).toBe(1);
     expect(posted(r)).toContain('caution:FIRE BTL1 LO PRESS');
     if (v.get('fire.eng1_warn')) {
-      v.set(V.fireDisch('l', 2), 1);
-      r.run(0.5);
-      v.set(V.fireDisch('l', 2), 0);
+      v.set(V.fireRot('l'), 1); // clockwise: bottle 2
+      r.run(1.5);
+      v.set(V.fireRot('l'), 0);
       r.run(10);
       expect(v.get('fire.bottle2_discharged')).toBe(1);
     }
@@ -112,7 +117,7 @@ describe('Global 6000 failures -> CAS', () => {
     for (const n of [1, 2, 3, 4]) expect(v.get(`elec.ac_bus${n}_powered`)).toBe(1);
   });
 
-  it('APU fire on the ground: "APU FIRE", automatic APU shutdown and bottle discharge', () => {
+  it('APU fire on the ground: "APU FIRE", automatic APU shutdown after 5 s (GX PTG 9-20)', () => {
     const r = makeRig('ready_to_taxi', { weightLb: 80000 });
     const v = r.vars;
     v.set(V.apuSw, 1);

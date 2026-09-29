@@ -145,6 +145,8 @@ export class Pressurization implements Subsystem {
   private readonly altFt: Evaluator;
   private readonly cabinT: Evaluator;
   private readonly prepress: () => boolean;
+  private readonly outflowLimit: Evaluator | null;
+  private readonly descFpm: Evaluator | null;
   private readonly o: Record<string, string>;
   private readonly f: Record<'auto' | 'altn' | 'outflow' | 'leak' | 'decomp', string>;
 
@@ -183,6 +185,8 @@ export class Pressurization implements Subsystem {
     this.altFt = compileBinding(vars, cfg.pressureAltitudeFt ?? FDM.pressAlt, 0);
     this.cabinT = compileBinding(vars, cfg.cabinTempC, 22);
     this.prepress = compileCondition(vars, cfg.groundPrepress?.active, false);
+    this.outflowLimit = cfg.outflowLimit !== undefined ? compileBinding(vars, cfg.outflowLimit, 1) : null;
+    this.descFpm = cfg.maxCabinDescentFpmBinding !== undefined ? compileBinding(vars, cfg.maxCabinDescentFpmBinding, cfg.maxCabinDescentFpm ?? 300) : null;
 
     const names = [
       'cabin_alt_ft', 'cabin_rate_fpm', 'diff_psi', 'cabin_psi', 'outflow_pos', 'target_alt_ft', 'sched_alt_ft', 'ldg_elev_ft',
@@ -313,7 +317,8 @@ export class Pressurization implements Subsystem {
 
     // ---- commanded cabin altitude (rate limited)
     const climbLim = ((cfg.maxCabinClimbFpm ?? 500) / 60) * dt;
-    const descLim = ((cfg.maxCabinDescentFpm ?? 300) / 60) * dt;
+    const descFpm = this.descFpm ? this.descFpm() : (cfg.maxCabinDescentFpm ?? 300);
+    const descLim = (descFpm / 60) * dt;
     if (onGround) {
       // Depressurise on the ground at ~500 fpm (EST; G450 post-landing: 500 fpm, then 2000 fpm), or hold pre-pressurisation.
       const gTarget = this.prepress() && cfg.groundPrepress ? altitudeFtAtPressure(pa + cfg.groundPrepress.psi * PSI_TO_PA) : H;
@@ -355,6 +360,10 @@ export class Pressurization implements Subsystem {
       }
     }
     // else: failed controller in AUTO/ALTN: the valve freezes where it is.
+    if (this.outflowLimit) {
+      const lim = clamp01(this.outflowLimit());
+      if (valveCmd > lim) valveCmd = lim;
+    }
     this.valve.update(valveCmd, dt);
 
     // ---- cabin integration

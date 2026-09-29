@@ -1212,8 +1212,16 @@ export class Nd implements CdsFormatRenderer {
       if (v.get(B737_VARS.efisMapButton(p, 'pos')) !== 0) opt('POS');
     }
     if (v.get(B737_VARS.efisMapButton(p, 'wxr')) !== 0 && this.mode !== NdMode.Pln) {
-      opt('WXR');
-      opt('+0');
+      const wm = this.env.cfg.vars.wxrModeText;
+      const mt = wm ? v.getString(wm) : '';
+      if (mt.startsWith('WXR')) opt(mt, CDS.amber);
+      else {
+        opt('WXR');
+        if (mt) opt(mt);
+        const wt = this.env.cfg.vars.wxrTiltDeg;
+        const tilt = wt ? Math.round(v.get(wt) * 10) / 10 : 0;
+        opt(wt ? (tilt >= 0 ? '+' : '-') + Math.abs(tilt).toFixed(1) : '+0');
+      }
     }
     if (v.get(B737_VARS.efisMapButton(p, 'terr')) !== 0 && this.mode !== NdMode.Pln) {
       const inop = v.get(this.env.cfg.vars.tawsInop) !== 0 || !this.env.world;
@@ -1231,6 +1239,7 @@ export class Nd implements CdsFormatRenderer {
     if (v.get(B737_VARS.efisTfc(p)) !== 0 && this.mode !== NdMode.Pln) {
       const status = v.getString(cv.tcasStatus);
       if (status === 'TCAS OFF' || status === 'TCAS FAIL') opt(status === 'TCAS OFF' ? 'TCAS OFF' : 'TCAS FAIL', CDS.amber);
+      else if (status === 'TCAS TEST') opt('TCAS TEST');
       else if (status === 'TA ONLY') {
         opt('TFC');
         opt('TA ONLY');

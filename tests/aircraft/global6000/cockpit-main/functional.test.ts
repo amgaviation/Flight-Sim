@@ -168,7 +168,7 @@ describe('Global 6000 cockpit: controls drive the systems', () => {
     (ctl('g6k.side.ems1_r') as KeyPad).press('R5'); // LAMP TEST 1
     step(0.3);
     expect(r.vars.get('alert.annun_test')).toBe(1);
-    step(11);
+    step(21); // GX PTG 15-19: LAMP TEST about 20 s
     expect(r.vars.get('alert.annun_test')).toBe(0);
     // AP was engaged by the cruise state: FCP AP disengages, pressing again re-engages.
     expect(r.vars.get('ap.engaged')).toBe(1);

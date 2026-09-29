@@ -62,6 +62,12 @@ export interface FireZoneDef {
   /** Probability that one bottle extinguishes the fire with the fuel cut (default 0.9) / fuel still flowing (default 0.3). EST. */
   extinguishChance?: number;
   extinguishChanceFuelOn?: number;
+  /**
+   * Per-zone test override (additive): when given, this zone follows these test conditions instead of the
+   * system-wide `FireConfig.test` (e.g. the 737 cargo smoke detectors have their own TEST switch and are not
+   * part of the engine OVHT/FIRE test).
+   */
+  test?: { fire?: Binding; fault?: Binding };
 }
 
 export interface FireBottleDef {
@@ -119,6 +125,9 @@ class Zone {
   readonly fOvht: string;
   readonly fLoopA: string;
   readonly fLoopB: string;
+  /** Per-zone test override (null = system-wide test). */
+  readonly testFire: (() => boolean) | null;
+  readonly testFault: (() => boolean) | null;
   constructor(
     readonly def: FireZoneDef,
     vars: SimVars,
@@ -148,6 +157,8 @@ class Zone {
     this.fOvht = failVar(`fire.${def.id}.overheat`);
     this.fLoopA = failVar(`fire.${def.id}.loopa`);
     this.fLoopB = failVar(`fire.${def.id}.loopb`);
+    this.testFire = def.test ? compileCondition(vars, def.test.fire, false) : null;
+    this.testFault = def.test ? compileCondition(vars, def.test.fault, false) : null;
   }
 }
 
@@ -260,12 +271,14 @@ export class FireProtection implements Subsystem {
         else detect = aAlarm && bAlarm;
         fault = aFault && bFault;
       }
-      const fireWarn = (detect && z.fire) || tFire;
-      const ovht = (detect && !z.fire) || tFire;
+      const zFire = z.testFire ? z.testFire() : tFire;
+      const zFault = z.testFault ? z.testFault() : tFault;
+      const fireWarn = (detect && z.fire) || zFire;
+      const ovht = (detect && !z.fire) || zFire;
       if (fireWarn) bell = true;
       vars.set(z.o.warn, fireWarn ? 1 : 0);
       vars.set(z.o.ovht, ovht ? 1 : 0);
-      vars.set(z.o.fault, (fault && powered) || tFault ? 1 : 0);
+      vars.set(z.o.fault, (fault && powered) || zFault ? 1 : 0);
       vars.set(z.o.active, z.fire ? 1 : 0);
       vars.set(z.o.armed, armed ? 1 : 0);
       vars.set(z.o.agent, z.agent);

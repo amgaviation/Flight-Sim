@@ -165,7 +165,7 @@ describe('Global 6000 abnormal check-ride items', () => {
       peak = Math.max(peak, v.get('press.cabin_alt_ft'));
     });
     expect(posted(r)).toContain('warning:CABIN ALT');
-    expect(posted(r)).toContain('status:EMERG DEPRESS ON');
+    expect(posted(r)).toContain('caution:EMER DEPRESS'); // GX PTG 13-64: amber caution
     expect(v.get('press.pax_masks')).toBe(1);
     expect(v.get('oxy.pax_on')).toBe(1);
     expect(v.get('alert.master_warning')).toBe(1);

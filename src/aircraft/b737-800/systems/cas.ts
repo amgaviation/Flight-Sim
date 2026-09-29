@@ -26,6 +26,11 @@ export interface Annunciator extends CasMessageDef {
   group: SixPackGroup | null;
   /** Dedicated panel light var driven by the same condition (+ lights test). */
   light?: string;
+  /**
+   * Single fault in a redundant system: lights its system light but not MASTER CAUTION / the six-pack; the
+   * fault is stored and shown on RECALL only (FCOM 15.20 "Master caution recall").
+   */
+  recallOnly?: boolean;
 }
 
 const air = 'gear.air_ground == 0';
@@ -33,6 +38,7 @@ const gnd = 'gear.air_ground != 0';
 const eng = (i: 1 | 2) => `eng${i}.n2_pct > 50`;
 const pumpSide: Record<FuelPump, 1 | 2> = { l_aft: 1, l_fwd: 1, r_fwd: 2, r_aft: 2, c_l: 1, c_r: 2 };
 const pumpText: Record<FuelPump, string> = { l_aft: 'L AFT', l_fwd: 'L FWD', r_fwd: 'R FWD', r_aft: 'R AFT', c_l: 'CTR L', c_r: 'CTR R' };
+const lpCond = (p: FuelPump): string => `fuel.${p}_lowpress && (${air} || ${eng(pumpSide[p])} || ${B738.fuelPump(p)} != 0)`;
 const doorText: Record<Door, string> = {
   fwd_entry: 'FWD ENTRY',
   aft_entry: 'AFT ENTRY',
@@ -46,7 +52,7 @@ const doorText: Record<Door, string> = {
   flt_deck: 'FLT DECK',
 };
 
-function a(id: string, text: string, group: SixPackGroup | null, when: string, light?: string, extra: Partial<CasMessageDef> = {}): Annunciator {
+function a(id: string, text: string, group: SixPackGroup | null, when: string, light?: string, extra: Partial<CasMessageDef> & { recallOnly?: boolean } = {}): Annunciator {
   return { id, text, level: group ? 'caution' : 'warning', group, when, light, ...extra };
 }
 
@@ -69,6 +75,8 @@ export const B738_ANNUNCIATORS: Annunciator[] = [
   a('speed_trim_fail', 'SPEED TRIM FAIL', 'flt_cont', '!(elec.fcc_a_powered || elec.fcc_b_powered) || fail.b738.speed_trim', B738.lt.speedTrimFail),
   a('mach_trim_fail', 'MACH TRIM FAIL', 'flt_cont', '!(elec.fcc_a_powered || elec.fcc_b_powered) || fail.b738.mach_trim', B738.lt.machTrimFail),
   a('auto_slat_fail', 'AUTO SLAT FAIL', 'flt_cont', 'fail.slats.drive || (hyd.b_psi < 1300 && hyd.a_psi < 1300 && surf.flaps_deg > 0.5)', B738.lt.autoSlatFail, { delayS: 2 }),
+  // STBY RUD ON (amber): standby rudder system commanded on (FCOM 9.10; FLT CONT annunciator, FCOM 15.20).
+  a('stby_rud_on', 'STBY RUD ON', 'flt_cont', B738.stbyRudder, B738.lt.stbyRudOn),
   // YAW DAMPER light: yaw damper not engaged (FCOM 9.20).
   a('yaw_damper', 'YAW DAMPER', 'flt_cont', `${B738.ydSw} == 0 || yd.active == 0`, B738.lt.yawDamper),
 
@@ -82,10 +90,15 @@ export const B738_ANNUNCIATORS: Annunciator[] = [
   a('gps', 'GPS', 'irs', 'ac.b738.gps_installed && gps.powered && gps.valid == 0', undefined, { delayS: 90 }),
 
   // ================================================================ FUEL
+  // Main pump LOW PRESSURE also with the switch OFF; centre pumps only when ON. Six-pack only in flight or with the engine running (EST inhibit).
+  // FCOM 15.20 / b737studyguide "Main Tank LOW PRESSURE light": one main-tank LOW PRESSURE light gives MASTER CAUTION
+  // and FUEL on recall only; two LOW PRESSURE lights in the same tank light them. Centre tank: one LOW PRESSURE light
+  // for more than 10 s lights MASTER CAUTION (the panel light itself is immediate).
   ...FUEL_PUMPS.map((p) =>
-    // Main pump LOW PRESSURE also with the switch OFF; centre pumps only when ON. Six-pack only in flight or with the engine running (EST inhibit).
-    a(`fuel_lp_${p}`, `FUEL PUMP ${pumpText[p]} LOW PRESSURE`, 'fuel', `fuel.${p}_lowpress && (${air} || ${eng(pumpSide[p])} || ${B738.fuelPump(p)} != 0)`, B738.lt.fuelLowPress(p), { delayS: 1 }),
+    a(`fuel_lp_${p}`, `FUEL PUMP ${pumpText[p]} LOW PRESSURE`, 'fuel', lpCond(p), B738.lt.fuelLowPress(p), p.startsWith('c_') ? { delayS: 10 } : { delayS: 1, recallOnly: true }),
   ),
+  a('fuel_lp_tank1', 'FUEL TANK 1 PUMPS LOW PRESSURE', 'fuel', `(${lpCond('l_aft')}) && (${lpCond('l_fwd')})`, undefined, { delayS: 1 }),
+  a('fuel_lp_tank2', 'FUEL TANK 2 PUMPS LOW PRESSURE', 'fuel', `(${lpCond('r_fwd')}) && (${lpCond('r_aft')})`, undefined, { delayS: 1 }),
   a('filter_bypass1', 'FUEL FILTER BYPASS 1', 'fuel', 'fail.b738.fuel_filter1', B738.lt.filterBypass(1)),
   a('filter_bypass2', 'FUEL FILTER BYPASS 2', 'fuel', 'fail.b738.fuel_filter2', B738.lt.filterBypass(2)),
 
@@ -147,14 +160,17 @@ export const B738_ANNUNCIATORS: Annunciator[] = [
   a('reverser2', 'REVERSER 2', 'eng', 'ac.b738.rev_fault2', B738.lt.reverser(2), { delayS: 12 }),
   a('engine_control1', 'ENGINE CONTROL 1', 'eng', `${gnd} && (fail.fadec.eng1 || !(eng1.n2_pct > 15 || elec.eec1_alt_powered) && eng1.running)`, B738.lt.engineControl(1)),
   a('engine_control2', 'ENGINE CONTROL 2', 'eng', `${gnd} && (fail.fadec.eng2 || !(eng2.n2_pct > 15 || elec.eec2_alt_powered) && eng2.running)`, B738.lt.engineControl(2)),
-  a('eec_altn1', 'EEC 1 ALTN', 'eng', `${B738.eec(1)} == 0`),
-  a('eec_altn2', 'EEC 2 ALTN', 'eng', `${B738.eec(2)} == 0`),
+  // ALTN (amber): EEC in soft or hard alternate mode (FCOM 7.20; engines.ts B738Eec).
+  a('eec_altn1', 'EEC 1 ALTN', 'eng', `${B738.eecMode(1)} > 0`),
+  a('eec_altn2', 'EEC 2 ALTN', 'eng', `${B738.eecMode(2)} > 0`),
 
   // ================================================================ OVERHEAD
   a('equip_cool_supply', 'EQUIP COOLING SUPPLY OFF', 'overhead', `${B738.equipCoolSupply} == 0 && fail.b738.equip_cool_supply`, B738.lt.equipCoolOff('supply')),
   a('equip_cool_exhaust', 'EQUIP COOLING EXHAUST OFF', 'overhead', `${B738.equipCoolExhaust} == 0 && fail.b738.equip_cool_exhaust`, B738.lt.equipCoolOff('exhaust')),
   a('emer_exit_not_armed', 'EMERGENCY EXIT LIGHTS NOT ARMED', 'overhead', `${B738.emerExitLt} != 1`, B738.lt.emerExitNotArmed),
   a('fdr_off', 'FLT REC OFF', 'overhead', `${B738.fdrSw} == 0 && !(eng1.running || eng2.running) && ${gnd}`, B738.lt.fdrOff),
+  // PASS OXY ON (amber): passenger oxygen system activated (FCOM 1.20; OVERHEAD annunciator, FCOM 15.20).
+  a('pass_oxy_on', 'PASS OXY ON', 'overhead', 'oxy.pax_deployed', B738.lt.passOxyOn),
   a('pseu', 'PSEU', 'overhead', `${gnd} && (gear.disagree || fail.gear.squat1 || fail.gear.squat2)`, B738.lt.pseu),
 
   // ================================================================ AIR COND

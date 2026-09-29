@@ -275,3 +275,46 @@ export function buildShell(b: CockpitBuilder): void {
   b.seat('airline', SEAT_L);
   b.seat('airline', SEAT_R);
 }
+
+/**
+ * Windshield wipers (FCOM 3.20 "Windshield wipers"): one blade per No. 1 windshield, pivoting at the lower
+ * outboard part of the sill and parking along the sill toward the centre post; the blade sweeps up across the
+ * glass with `ac.b738.wiper_sweep{1,2}` (logic.ts: 0 parked .. 1 full sweep, AC motor powered). Pivot position,
+ * blade length (EST ~0.55 m) and sweep (EST ~65 deg) from 737NG photographs. Dynamic meshes (not merged).
+ */
+export function buildWipers(b: CockpitBuilder, vars: { get(n: string): number }): void {
+  const mat = b.env.materials.custom('paint', 0x1a1a1a, 0.5);
+  const L = 0.55;
+  const SWEEP = (65 * Math.PI) / 180;
+  const blades: { m: THREE.Mesh; piv: THREE.Vector3; park: THREE.Vector3; up: THREE.Vector3; v: string }[] = [];
+  for (const side of [1, -1] as const) {
+    // Right side (theta > 0) = F/O wiper 2, left = Captain wiper 1.
+    const th = side * 0.62;
+    const x = xAtZ(Math.abs(th), WS_SILL_Z) - 0.03;
+    const piv = F.point(x, th, -0.012);
+    const a = F.point(x, th - side * 0.05, -0.012).sub(piv).normalize(); // along the sill toward the centre post
+    const up = F.point(x + 0.05, th, -0.012).sub(piv);
+    up.addScaledVector(a, -up.dot(a)).normalize(); // up the glass, orthogonal to the sill direction
+    const geo = new THREE.BoxGeometry(L, 0.012, 0.008).translate(L / 2, 0, 0);
+    b.trackGeometry(geo);
+    const m = new THREE.Mesh(geo, mat);
+    m.name = `wiper_blade_${side > 0 ? 2 : 1}`;
+    b.addStructure(m, undefined, { occluder: false, static: false });
+    m.position.copy(piv);
+    blades.push({ m, piv, park: a, up, v: `ac.b738.wiper_sweep${side > 0 ? 2 : 1}` });
+  }
+  const X = new THREE.Vector3(1, 0, 0);
+  const dir = new THREE.Vector3();
+  const prev = [NaN, NaN];
+  b.onUpdate(() => {
+    for (let k = 0; k < blades.length; k++) {
+      const w = blades[k];
+      const s = vars.get(w.v);
+      if (s === prev[k]) continue;
+      prev[k] = s;
+      const ang = s * SWEEP;
+      dir.copy(w.park).multiplyScalar(Math.cos(ang)).addScaledVector(w.up, Math.sin(ang)).normalize();
+      w.m.quaternion.setFromUnitVectors(X, dir);
+    }
+  });
+}

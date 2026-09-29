@@ -90,6 +90,8 @@ export interface FlapsConfig {
     travelS: number;
     power?: Binding;
     autoSlat?: { condition: Binding; flapsRange: [number, number] };
+    /** Additive: command the slats to full extension (1) while true (e.g. 737 ALTERNATE FLAPS DOWN). */
+    fullExtend?: Binding;
   };
   iasVar?: string;
   /** Initial flap angle if surf.flaps_deg is unset. Default the first detent's angle. */
@@ -116,6 +118,7 @@ export class Flaps implements Subsystem {
   private readonly altPower: Evaluator;
   private readonly slatPower: Evaluator;
   private readonly autoSlat: () => boolean;
+  private readonly slatFull: () => boolean;
   private readonly iasVar: string;
   private readonly reliefActive: boolean[];
   private asym = false;
@@ -135,6 +138,7 @@ export class Flaps implements Subsystem {
     this.altPower = compileBinding(env.vars, cfg.alternate?.power, 1);
     this.slatPower = compileBinding(env.vars, cfg.slats?.power, 1);
     this.autoSlat = compileCondition(env.vars, cfg.slats?.autoSlat?.condition, false);
+    this.slatFull = compileCondition(env.vars, cfg.slats?.fullExtend, false);
     this.iasVar = cfg.iasVar ?? ADC.ias(1);
     this.reliefActive = (cfg.loadRelief ?? []).map(() => false);
     const v = env.vars;
@@ -271,6 +275,7 @@ export class Flaps implements Subsystem {
     if (s) {
       let slatCmd = interp1(s.schedule, cmd);
       if (s.autoSlat && cmd >= s.autoSlat.flapsRange[0] && cmd <= s.autoSlat.flapsRange[1] && this.autoSlat()) slatCmd = 1;
+      if (s.fullExtend !== undefined && this.slatFull()) slatCmd = 1;
       const sp = clamp01(this.slatPower());
       if (v.get(this.fSlat) === 0 && sp > 0.05 && s.travelS > 0) {
         const s0 = this.slats;

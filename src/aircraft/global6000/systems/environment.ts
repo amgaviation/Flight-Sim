@@ -45,9 +45,10 @@ export function createPneumatics(ctx: Pick<SimContext, 'vars'>): PneumaticSystem
   return new PneumaticSystem(ctx.vars, {
     ducts: ['l_duct', 'r_duct'],
     sources: [
-      // Engine PRSOVs, EST 45 psi regulation, 1.0 kg/s capacity; closed by the fire handle.
-      { id: 'eng1', duct: 'l_duct', pressure: 'eng1.bleed_press_psi', valve: V.engBleedCmd('l'), regulatedPsi: 45, maxFlowKgs: 1.0, engine: 1, hp },
-      { id: 'eng2', duct: 'r_duct', pressure: 'eng2.bleed_press_psi', valve: V.engBleedCmd('r'), regulatedPsi: 45, maxFlowKgs: 1.0, engine: 2, hp },
+      // Engine PRVs: FCOM CSP 700-6 02-10 (Global Express XRS) "supplied to 43 +/- 3 psig"; EST 1.0 kg/s capacity;
+      // closed by the fire handle (logic.ts BMC rules).
+      { id: 'eng1', duct: 'l_duct', pressure: 'eng1.bleed_press_psi', valve: V.engBleedCmd('l'), regulatedPsi: 43, maxFlowKgs: 1.0, engine: 1, hp },
+      { id: 'eng2', duct: 'r_duct', pressure: 'eng2.bleed_press_psi', valve: V.engBleedCmd('r'), regulatedPsi: 43, maxFlowKgs: 1.0, engine: 2, hp },
       // APU load control valve (GXAPU ~45 psi), EST 0.8 kg/s.
       { id: 'apu', duct: 'l_duct', pressure: 'apu.bleed_psi', valve: V.apuBleedCmd, regulatedPsi: 45, maxFlowKgs: 0.8 },
     ],
@@ -84,31 +85,58 @@ export function createPneumatics(ctx: Pick<SimContext, 'vars'>): PneumaticSystem
 }
 
 /**
- * Zone target temperature: the TEMPERATURE knob (16..30 degC); with TRIM AIR
- * OFF the zones follow the pack outlet (EST: target pulled toward 18 degC),
- * with the PACK CONTROL MAN TEMP knob out of AUTO the pack outlet demand is
- * the knob (COLD 2 degC .. HOT 70 degC) while PACK CONTROL is at MAN.
+ * Zone target temperature: the TEMPERATURE knob (16..30 degC) with TRIM AIR on. TRIM AIR OFF (GX PTG 13-29: the
+ * HASOVs and trim valves close, the zones are no longer trimmed individually): every zone receives the pack air
+ * controlled to the cockpit demand (EST: ACSC 2 / cockpit channel). PACK CONTROL MAN (V.packCtlMan, vision.ts): the
+ * L / R MAN TEMP HOT / COLD toggles position the pack temperature control valve (V.packManTemp 0 COLD .. 1 HOT ->
+ * outlet 2 .. 70 degC). AUX PRESS with both packs off (GX PTG 13-25): hot trim air only; the recirculation fans cool
+ * the supply ("the recirculation system should be selected ON to reduce the supply temperatures"): EST 30 degC with
+ * RECIRC, 45 degC without. Cockpit zone: EST -0.4 degC per fully open gasper.
  */
 function zoneTarget(z: 1 | 2 | 3, pack: 'l' | 'r'): string {
   const man = V.packManTemp(pack);
-  // PACK CONTROL at MAN (V.packCtlMan, vision.ts): the L / R MAN TEMP HOT / COLD toggles set the pack outlet demand.
-  // Cockpit zone: EST -0.4 degC per fully open gasper (the gaspers blow conditioned air at the crew stations and the
-  // cockpit temperature sensor; no published figure). AUX PRESS ON: hot trim air only (EST 30 degC supply) when both
-  // packs are off.
-  const base = `${V.packCtlMan} == 1 ? 2 + ${man} * 68 : (${V.trimAir} == 1 ? ${V.zoneTemp(z)} : 18)`;
+  const base = `${V.packCtlMan} == 1 ? 2 + ${man} * 68 : (${V.trimAir} == 1 ? ${V.zoneTemp(z)} : ${V.zoneTemp(1)})`;
   const aux = `${V.auxPress} == 1 && !${V.packCmd('l')} && !${V.packCmd('r')}`;
-  return `(${aux} ? 30 : (${base}))${z === 1 ? ` - 0.4 * ${V.gasperFlow}` : ''}`;
+  const auxT = `(${V.recircFan} == 1 && (elec.recirc_fan_l_powered || elec.recirc_fan_r_powered) ? 30 : 45)`;
+  return `(${aux} ? ${auxT} : (${base}))${z === 1 ? ` - 0.4 * ${V.gasperFlow}` : ''}`;
 }
 
 /** Cabin schedule (AOPA 4,500 ft at FL450; 5,680 ft at FL510 EST, PRESS_GLOBAL6000). */
 export const G6K_CABIN_SCHEDULE = PRESS_GLOBAL6000.schedule;
 
+/**
+ * Cabin pressure control (GX PTG 13-40 .. 13-62; FCOM CSP 700-6 02-10 with SB 700-21-034, the Global 6000
+ * standard: 10.33 psid maximum differential, 5,670 ft cabin at 51,000 ft, safety valves at 10.63 psid):
+ *  - AUTO (either CPC) / MAN (MAN ALT UP / DN drives both OFVs slowly through the manual channel, EST 60 s travel).
+ *  - RATE NORM (+500 / -300 fpm) / HIGH (up to 800 fpm descent) in AUTO.
+ *  - Cabin altitude limiters (14,500 ft) and the 3,000 fpm rate limiter override AUTO and MAN and close the OFVs
+ *    (logic.ts V.pressLimiter); the OFV travel limiter keeps each OFV <= 50 % open above 7 psid.
+ *  - EMER DEPRESS: fast depressurization in AUTO or MAN through the manual drive, limited by the cabin altitude
+ *    limiter (the rate limiter is inoperative).
+ *  - OUTFLOW VALVE 1 / 2 CLOSED: that OFV driven closed (the other keeps modulating: half the outflow area); both
+ *    closed = no outflow.
+ *  - DITCHING (below 15,000 ft): packs off (logic.ts), depressurize, then both OFVs closed (V.ditchSeq).
+ *  - Door open protection: OFVs driven open while the main entrance door is not closed and locked.
+ */
 export function createPressurization(ctx: Pick<SimContext, 'vars' | 'nav'>): Pressurization {
-  const closed = `(${V.outflowClosed(1)} == 1 && ${V.outflowClosed(2)} == 1) || ${V.ditching} == 1`;
+  const L = G6K_LIMITS;
+  const both = `(${V.outflowClosed(1)} == 1 && ${V.outflowClosed(2)} == 1)`;
+  const one = `(${V.outflowClosed(1)} == 1) != (${V.outflowClosed(2)} == 1)`;
+  const door = `${V.door('pax')} == 1`;
+  const close = `${V.pressLimiter} == 1 || ${V.ditchSeq} == 2 || ${both}`;
+  const open = `!(${close}) && ${door}`;
   return new Pressurization(ctx.vars, {
     ...PRESS_GLOBAL6000,
+    maxDiffPsi: L.maxDiffPsi,
+    reliefPsi: L.reliefPsi,
+    schedule: { x: [0, 45000, 51000], y: [0, L.cabinAtFl450Ft, 5670] }, // AOPA 4,500 ft at FL450; FCOM 5,670 ft at 51,000 ft
+    maxCabinDescentFpmBinding: `${V.pressRateHigh} == 1 ? ${L.pressRateHighDescFpm} : 300`,
+    outflowValve: { manualTravelS: 60 }, // EST: "both outflow valves open slowly" (GX PTG 13-54)
+    // Limiters / ditching close stage / both OFVs CLOSED force the OFVs shut (0); one OFV CLOSED halves the outflow area;
+    // the OFV travel limiter holds <= 50 % above 7 psid (GX PTG 13-59).
+    outflowLimit: `(${close}) ? 0 : min(${one} ? 0.5 : 1, press.diff_psi > ${L.ofvTravelLimitPsi} ? ${L.ofvTravelLimitPos} : 1)`,
     cabinVolumeM3: 75, // EST: 2,000 ft^3 cabin (Jetcraft / Conklin) + cockpit + baggage
-    negReliefPsi: 0.5,
+    negReliefPsi: 0.5, // GX PTG 13-61: negative relief at -0.5 psid
     flightAltitude: 'fms.crz_alt_ft',
     landingBiasFt: -250, // EST
     landingElevation: V.ldgElevFt,
@@ -122,20 +150,19 @@ export function createPressurization(ctx: Pick<SimContext, 'vars' | 'nav'>): Pre
     },
     // GX_01_018 placard: differential <= 0.1 psi during taxi, <= 1.0 psi at initial landing. EST 0.1 psi pre-pressurisation
     // on the take-off roll.
-    groundPrepress: { active: `${V.toThrust} && gear.air_ground && ${V.pressAutoMan} == 0`, psi: G6K_LIMITS.taxiDiffPsi },
-    inflowKgs: 'pneu.pack_flow_kgs + pneu.aux_press_flow_kgs', // packs + AUX PRESS trim air
-    // AUTO 0 / MAN 2 (MAN ALT toggle on the outflow valves); both OUTFLOW VALVE CLOSED or DITCHING -> manual, closing.
-    mode: `(${closed}) ? 2 : ${V.pressAutoMan}`,
-    manualCommand: `(${closed}) ? -1 : ${V.pressManAlt} * (0.3 + 0.7 * ${V.pressManRate})`,
-    // EMER DEPRESS drives the outflow valves open until the outflow valves' pneumatic cabin-altitude limiter takes
-    // over. EST: 14,500 ft (the Bombardier CRJ / Challenger FCOMs give EMER DEPRESS "cabin altitude limited to
-    // 14,500 ft"; 14 CFR 25.841(a)(2) keeps the cabin below 15,000 ft after any probable failure). Without the limiter
-    // the dump took the cabin to ~38,600 ft at FL410 (found by verify/abnormal.test.ts).
-    // The limiter anticipates with the cabin rate over the ~5 s outflow valve travel (EST) so the cabin does not
-    // overshoot while the valves close.
-    dump: `${V.emerDepress} == 1 && !(${V.ditching} == 1) && press.cabin_alt_ft + max(0, press.cabin_rate_fpm) * 5 / 60 < ${G6K_LIMITS.cabinLimiterFt}`,
-    cabinAltWarnFt: 10000, // EST: CABIN ALT warning at 10,000 ft (14 CFR 25.841(b)(6))
-    masksDeployFt: G6K_LIMITS.paxMaskFt,
+    groundPrepress: { active: `${V.toThrust} && gear.air_ground && ${V.pressAutoMan} == 0`, psi: L.taxiDiffPsi },
+    // Packs + AUX PRESS trim air + ram air (EST 0.05 kg/s of unpressurized ventilation through the ram air valve).
+    inflowKgs: `pneu.pack_flow_kgs + pneu.aux_press_flow_kgs + 0.05 * ${V.ramValveOpen}`,
+    // AUTO 0 / MAN 2; the door-open protection drives the OFVs open through the manual channel (mode 2).
+    mode: `(${open}) ? 2 : ${V.pressAutoMan}`,
+    manualCommand: `(${open}) ? 1 : ${V.pressManAlt}`,
+    // EMER DEPRESS (AUTO or MAN) and the ditching depressurization stage drive both OFVs open; the limiters, the
+    // ditching close stage and both OFVs CLOSED use the same override path (the valves move at the auto actuator rate in
+    // AUTO and MAN) with the outflow limit above forcing them shut.
+    dump: `${V.emerDepress} == 1 || ${V.ditchSeq} == 1 || ${close}`,
+    dumpAllModes: true,
+    cabinAltWarnFtBinding: V.cabAltWarnFt, // 9,000 ft (raised for high landing / take-off fields, logic.ts)
+    masksDeployFt: L.paxMaskFt,
     masksManual: `${V.paxOxy} == 2`,
     onGround: 'gear.air_ground',
     cabinTempC: 'pneu.zone2_temp_c',
@@ -172,7 +199,8 @@ export function createApu(ctx: Pick<SimContext, 'vars'>): Apu {
     starterNominalV: 25.2,
     starterPeakA: 500, // EST: RE220 starter inrush on the 42 Ah NiCd
     fuelAvailable: V.apuFuelOk, // fuel.apu_on with a 2 s changeover ride-through (logic.ts G6kPostLogic)
-    fire: 'fire.apu_warn || fire.apu_armed',
+    // FADEC immediate shutdown (logic.ts): ground fire 5 s, APU fire handle pulled, BATT MASTER OFF without AC power.
+    fire: V.apuFireShutdown,
     bleedLoad: 'clamp01(pneu.apu_flow_kgs / 0.8)',
     genLoad: 'clamp01(elec.apu_gen_load_pct / 100)',
     maxBleedPsi: G6K_LIMITS.apuBleedPsi,
@@ -219,17 +247,22 @@ export function createFire(ctx: Pick<SimContext, 'vars'>): FireProtection {
 }
 
 export function createOxygen(ctx: Pick<SimContext, 'vars'>): OxygenSystem {
-  // EST: crew bottle 115 ft^3 (3,256 L NTPD) at 1,850 psi; passenger bottles 2 x 115 ft^3 (gaseous system).
+  // EST: crew bottle 115 ft^3 (3,256 L NTPD) at 1,850 psi; passenger bottles 2 x 115 ft^3 (gaseous system). The GX PTG
+  // 8-4 gives four 50.1 ft^3 (1,418 L) bottles at 1,850 psi shared by crew and passengers; the split is kept (SCOPE).
   const ft3 = 28.3168;
   return new OxygenSystem(ctx.vars, {
     bottles: [
-      { id: 'crew', capacityL: 115 * ft3, fullPsi: 1850, lowPsi: 400, valve: `${V.crewOxy} == 1` },
+      // Crew supply: each side console has its OXYGEN SUPPLY LOWER DISCONNECT ON / OFF (GX PTG 15-10 side console
+      // drawing); the bottle feeds while either is ON, and each mask only with its own side's supply ON (below).
+      { id: 'crew', capacityL: 115 * ft3, fullPsi: 1850, lowPsi: 400, valve: `${V.crewOxy} == 1 || ${V.crewOxyR} == 1` },
       { id: 'pax', capacityL: 230 * ft3, fullPsi: 1850, lowPsi: 400, valve: `${V.paxOxy} >= 1` },
     ],
     crew: [
       // Each stowage box has its own N / 100 % regulator selector and RESET / TEST (FCOM 01-10-37 / -46).
-      { id: 'pilot', bottle: 'crew', inUse: V.oxyMask(1), mode: V.oxyMaskMode, test: `${V.oxyTest(1)} == 1` },
-      { id: 'copilot', bottle: 'crew', inUse: V.oxyMask(2), mode: V.oxyMaskModeR, test: `${V.oxyTest(2)} == 1` },
+      // Regulator N / 100 % lever and the EMERGENCY push (100 % oxygen, continuous positive pressure, GX PTG 8-4 / 8-7):
+      // mode 0 N, 1 100 %, 2 EMERGENCY.
+      { id: 'pilot', bottle: 'crew', inUse: `${V.oxyMask(1)} == 1 && ${V.crewOxy} == 1`, mode: `${V.oxyEmer(1)} == 1 ? 2 : ${V.oxyMaskMode}`, test: `${V.oxyTest(1)} == 1 && ${V.crewOxy} == 1` },
+      { id: 'copilot', bottle: 'crew', inUse: `${V.oxyMask(2)} == 1 && ${V.crewOxyR} == 1`, mode: `${V.oxyEmer(2)} == 1 ? 2 : ${V.oxyMaskModeR}`, test: `${V.oxyTest(2)} == 1 && ${V.crewOxyR} == 1` },
     ],
     pax: { kind: 'gaseous', deploy: `${V.paxOxy} == 2 || (${V.paxOxy} == 1 && press.pax_masks)`, bottle: 'pax', flowLpm: 60 },
   });

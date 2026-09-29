@@ -300,7 +300,7 @@ export function buildAftOverhead(c: B738CockpitContext, root: Panel): void {
           initial: 1,
           zone: OZ,
           segments: [
-            { text: 'ON', color: 'green', var: L.eecOn(i), style: 'legend' },
+            { text: 'ON', color: 'white', var: L.eecOn(i), style: 'legend' }, // FCOM 7.10: ON white, ALTN amber
             { text: 'ALTN', color: 'amber', var: L.eecAltn(i), style: 'legend' },
           ],
           layout: 'stack',

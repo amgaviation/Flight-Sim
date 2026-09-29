@@ -39,6 +39,9 @@ import { bl } from '../../cockpit/frame';
 import { FuselageProfile, loftFuselage, loftWing, type WingSection } from '../_test/loft';
 import { A_PILLAR, G6K_FUSELAGE as F, NOSE_X, SIDE_WINDOWS, TAIL_X, WINDSHIELD } from './cockpit/layout';
 import { GEAR_Z, HALF_TRACK, MAIN_X, NOSE_X as NOSE_GEAR_X } from './fdm';
+import { G6K_VARS } from './vars';
+
+const BEACON_RED = G6K_VARS.beaconRed;
 
 const D2R = Math.PI / 180;
 
@@ -567,6 +570,9 @@ export function createG6kExterior(vars: SimVars): G6kExterior {
   const wingR = lamp(0xfff2dd, [4.2, 1.3, -0.2], 0.035, lightsG);
   const logoL = lamp(0xfff2dd, [-13.6, -1.2, stabZ - 0.1], 0.035, lightsG);
   const logoR = lamp(0xfff2dd, [-13.6, 1.2, stabZ - 0.1], 0.035, lightsG);
+  // Wing-tip taxi lights (TAXI/RECOG WINGTIP, GX PTG 15-28): forward-facing in the wing tips, EST position.
+  const wtTaxiL = lamp(0xfff6e8, [tip.xLe + 0.05, -(TIP_Y - 0.1), tip.z + 0.06], 0.035, lightsG, 16);
+  const wtTaxiR = lamp(0xfff6e8, [tip.xLe + 0.05, TIP_Y - 0.1, tip.z + 0.06], 0.035, lightsG, 16);
   const emerL = lamp(0xfff2dd, [8.3, -1.3, 0.3], 0.03, lightsG);
   const emerR = lamp(0xfff2dd, [2.6, 1.32, 0.3], 0.03, lightsG);
   const spot = (pos: [number, number, number], target: [number, number, number], angle: number, parent: THREE.Object3D) => {
@@ -607,6 +613,7 @@ export function createG6kExterior(vars: SimVars): G6kExterior {
   };
   const fanAngle = [0, 0];
   const wheelAngle = [0, 0, 0];
+  let beaconRedNow = true;
   const setLamp = (l: Lamp, level: number) => {
     const x = level < 0 ? 0 : level > 1 ? 1 : level;
     l.m.color.copy(l.color).multiplyScalar(0.06 + 0.94 * x);
@@ -665,8 +672,20 @@ export function createG6kExterior(vars: SimVars): G6kExterior {
     setLamp(strobeL, st1);
     setLamp(strobeR, st1);
     setLamp(strobeT, v.get('light.strobe_tail'));
+    // BEACON RED / WHT (GX PTG 15-29): lamp colour from the switch (lighting.ts V.beaconRed).
+    const red = v.get(BEACON_RED, 1) !== 0;
+    if (red !== beaconRedNow) {
+      beaconRedNow = red;
+      for (const b of [beaconTop, beaconBot]) {
+        b.color.setHex(red ? 0xff2200 : 0xffffff);
+        b.halo.color.setHex(red ? 0xff2200 : 0xffffff);
+      }
+    }
     setLamp(beaconTop, v.get('light.beacon'));
     setLamp(beaconBot, v.get('light.beacon_lower'));
+    const wt = v.get('light.wingtip_taxi');
+    setLamp(wtTaxiL, wt);
+    setLamp(wtTaxiR, wt);
     const ll = v.get('light.landing_l');
     const lr = v.get('light.landing_r');
     setLamp(ldgL, ll);

@@ -618,7 +618,7 @@ describe('737-800 line check KLAX -> KSFO (full normal procedure)', () => {
       let maxIasBelow10kDes = 0;
       let maxVsDes = 0;
       let sbUsed = false;
-      let intv = false;
+      let maxVnavTgtBelow10k = 0;
       r.run(3600, () => {
         const alt = v.get(FDM.altMsl);
         if (Number.isNaN(desStart) && v.get(FDM.vs) < -500) desStart = distTo(r, rw28r.lat, rw28r.lon);
@@ -629,17 +629,10 @@ describe('737-800 line check KLAX -> KSFO (full normal procedure)', () => {
         }
         if (alt < 9800) maxIasBelow10kDes = Math.max(maxIasBelow10kDes, v.get(FDM.ias));
         maxVsDes = Math.min(maxVsDes, v.get(FDM.vs));
-        // 250 kt below 10,000 ft: the crew intervenes at 12,000 ft (SPD INTV 240 kt, FCOM DES page SPD REST) if the
-        // VNAV target is still higher, and uses the speedbrake when > 10 kt fast (FCTM "Descent", DRAG REQUIRED).
-        if (alt < 12000 && !intv && v.get('fms.vnav_tgt_speed_kt', 999) > 250) {
-          r.events.emit('ac.mcp.spd_intv');
-          intv = true;
-        }
-        if (intv && v.get(AP.selSpeed) !== 240) {
-          const d = 240 - Math.round(v.get(AP.selSpeed));
-          r.events.emit(`ac.mcp.spd_${d > 0 ? 'inc' : 'dec'}`, Math.abs(d));
-        }
-        speedbrakeStep(r, intv ? v.get(AP.selSpeed) : v.get('fms.vnav_tgt_speed_kt', 999));
+        // 250 kt below 10,000 ft (FCOM 11.31 DES page SPD REST 250/10000): VNAV decelerates ahead of 10,000 ft by
+        // itself (no crew speed intervention); the crew uses the speedbrake when > 10 kt fast (FCTM "Descent").
+        if (alt < 10000) maxVnavTgtBelow10k = Math.max(maxVnavTgtBelow10k, v.get('fms.vnav_tgt_speed_kt', 0));
+        speedbrakeStep(r, v.get('fms.vnav_tgt_speed_kt', 999));
         if (v.get(B738.speedbrake) > 0.1) sbUsed = true;
         if (Math.round(r.t * 60) % 7200 === 0) log(r, `desc ${distTo(r, rw28r.lat, rw28r.lon).toFixed(0)} nm, VNAV tgt ${v.get('fms.vnav_tgt_speed_kt').toFixed(0)} kt, SB ${v.get(B738.speedbrake).toFixed(2)}`);
         return distTo(r, rw28r.lat, rw28r.lon) < 26;
@@ -649,6 +642,7 @@ describe('737-800 line check KLAX -> KSFO (full normal procedure)', () => {
       expect(desStart).toBeGreaterThan(80);
       expect(desStart).toBeLessThan(140);
       expect(maxIasBelow10kDes).toBeLessThan(262);
+      expect(maxVnavTgtBelow10k).toBeLessThanOrEqual(250); // PROC-24: VNAV observes the 250 / 10,000 restriction
       // ILS 28R: NAV 1 / 2 standby, transfer; course on both MCP course selectors (FCOM NP.21 "Descent").
       const crsMag = Math.round(ils.courseTrue - v.get('gps.mag_var_deg'));
       for (const i of [1, 2] as const) {
@@ -663,10 +657,8 @@ describe('737-800 line check KLAX -> KSFO (full normal procedure)', () => {
       expect(v.get(NAV.activeFreq(1))).toBeCloseTo(ils.freqMhz, 2);
       expect(v.get(AP.selCourse(1))).toBe(crsMag);
       // Speed intervention (SPD INTV) for the approach: the crew flies the flap schedule on the MCP speed.
-      if (!intv) {
-        r.events.emit('ac.mcp.spd_intv');
-        r.run(0.3);
-      }
+      r.events.emit('ac.mcp.spd_intv');
+      r.run(0.3);
       mcpKnob(r, 'spd', Math.round(flapManeuverSpeed(0, gw())));
       let appArmed = false;
       let gsCaptured = false;

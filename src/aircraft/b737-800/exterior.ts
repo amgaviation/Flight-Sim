@@ -557,6 +557,17 @@ export function createB738Exterior(vars: SimVars): B738Exterior {
   const wingSL = lamp(0xfff2dd, [5.2, -1.86, -0.3], 0.04, lightsG);
   const wingSR = lamp(0xfff2dd, [5.2, 1.86, -0.3], 0.04, lightsG);
   const wellLt = lamp(0xfff2dd, [MAIN_GEAR_X, 0, 1.2], 0.04, lightsG);
+  // Exterior emergency lights (FCOM 1.40 "Emergency lighting"): escape-slide lights aft of the L1 / R1 and L2 / R2
+  // doors and the overwing escape-route lights aft of the overwing exits, lit with the emergency lights
+  // (ac.b738.emer_lts_on, logic.ts). Positions EST from the door seams above.
+  const emerLamps: Lamp[] = [];
+  for (const side of [-1, 1]) {
+    for (const x of [10.95, -12.85, -0.25]) {
+      const th = side * 1.8;
+      const [yy, zz] = F.bodyYZ(x, th);
+      emerLamps.push(lamp(0xfff4e0, [x, yy, zz], 0.03, lightsG, 12));
+    }
+  }
   const spot = (pos: [number, number, number], target: [number, number, number], angle: number, parent: THREE.Object3D) => {
     const s = new THREE.SpotLight(0xfff4e6, 0, 1500, angle * D2R, 0.4, 2);
     s.position.copy(bl(...pos));
@@ -678,6 +689,8 @@ export function createB738Exterior(vars: SimVars): B738Exterior {
     setLamp(wingSL, v.get('light.wing'));
     setLamp(wingSR, v.get('light.wing'));
     setLamp(wellLt, v.get('light.wheel_well'));
+    const emer = v.get('ac.b738.emer_lts_on');
+    for (const l of emerLamps) setLamp(l, emer);
     const taxi = v.get('light.taxi');
     taxiLamp.color.setRGB(0.06 + 0.94 * taxi, 0.06 + 0.94 * taxi, 0.06 + 0.9 * taxi);
     // EST: 600 W PAR-64 class landing lights ~400,000 cd each (fixed + retractable per side combined), taxi ~150,000 cd,

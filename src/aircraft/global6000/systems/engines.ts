@@ -144,7 +144,10 @@ export function createEngines(ctx: SimContext): G6kEngines {
       // Start valve solenoid on the DC ESS / BATT bus: available above the relay drop-out (QA lesson: >= 7 V, not "powered").
       starterAvailable: `elec.${i === 1 ? 'dc_ess' : 'batt_bus'}_v >= 7`,
       ignitionPower: `elec.ign${i}_powered`,
-      continuousIgnition: `${V.ignition} == 1`,
+      // IGNITION PBA ON = continuous ignition; in AUTO the FADEC fires the igniters for starts and auto relight (the
+      // controller's in-flight flameout relight: RUN selected, N2 above the windmill threshold) and the SPC commands
+      // continuous ignition at high angle of attack (GX PTG 10-61, logic.ts V.spcIgn).
+      continuousIgnition: `${V.ignition} == 1 || ${V.spcIgn} == 1`,
     });
   });
   const at = new Autothrottle(ctx, {

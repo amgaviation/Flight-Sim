@@ -262,7 +262,7 @@ export function setB738Switches(ctx: Pick<SimContext, 'vars'>, s: InitialState):
   v.set(B738.wxrMode, 0);
   v.set(B738.wxrGain, 0.5);
   v.set(B738.wxrTilt, s === 'cruise' ? -1 : 4);
-  v.set(B738.wxrPower, moving ? 1 : 0);
+  v.set(B738.wxrPower, 0); // SCOPE: legacy var, no switch on the NG panel (the EFIS WXR selection turns the radar on)
   v.set(B738.pedestalPanelLt, powered && night ? 0.6 : powered ? 0.3 : 0);
   v.set(B738.pedestalFlood, powered && night ? 0.2 : 0);
   // ------------------------------------------------ ground services
@@ -314,6 +314,8 @@ export function applyB738State(ctx: SimContext, sys: B738Systems, s: InitialStat
     // Air/ground state before the suite reset: otherwise the A/T touchdown bookkeeping sees a landing at the
     // first update and disarms an A/T ARM set during the preflight 2 s later (the post-touchdown disengage).
     sys.gear.update(1 / 60);
+    // Brakes: the seeded weight-on-wheels is not a touchdown (else RTO would read as 'selected on landing').
+    sys.brakes.resetTouchdown();
     sys.suite.applyState(s);
     sys.press.settle();
     sys.pneu.snap(15);
@@ -383,6 +385,8 @@ export function applyB738State(ctx: SimContext, sys: B738Systems, s: InitialStat
   sys.isfdAhrs.reset(true);
   // Air/ground state before the suite reset: the A/T touchdown bookkeeping reads gear.air_ground on reset.
   sys.gear.update(1 / 60);
+  // Brakes: the seeded weight-on-wheels is not a touchdown (else RTO would read as 'selected on landing').
+  sys.brakes.resetTouchdown();
   sys.suite.applyState(s);
   sys.press.settle();
   sys.pneu.snap(22);

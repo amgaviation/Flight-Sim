@@ -92,7 +92,9 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): ElectricalNetwo
     ac('win_heat_r_side', 'xfr2', 1800, { enabled: onW(B738.windowHeat('r_side')), model: 'resistive' }, 20),
     ac('pack_ctl_r', 'xfr2', 80, {}, 5),
     ac('recirc_r', 'xfr2', 700, { enabled: onW(B738.recircFan(2)) }, 10),
-    ac('wxr', 'xfr2', 200, { enabled: onW(B738.wxrPower) }, 5),
+    // Weather radar transceiver: transmits (full load) while the radar is active (WXR selected on an EFIS control
+    // panel, logic.ts `wxr.active`); there is no separate radar on/off switch on the NG panel (FCOM 15 / 11.30).
+    ac('wxr', 'xfr2', '20 + 180 * wxr.active', {}, 5),
     ac('wiper_r', 'xfr2', `${B738.wiper(2)} * 60`, {}, 5),
     ac('eec2_alt', 'xfr2', 30, {}, 5),
     ac('tcas', 'xfr2', 120, {}, 5),
@@ -178,7 +180,11 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): ElectricalNetwo
     dc('flood_lts', 'dc2', `2 * (${B738.backgroundLt} + ${B738.glareshieldFlood} + ${B738.pedestalFlood} + ${B738.afdsFlood})`, { model: 'resistive' }, 10),
     dc('dome_lt', 'batt_bus', `${B738.domeLt} * 1.5`, { model: 'resistive' }, 5),
     dc('annun_lts', 'dc1', 2, {}, 5), // master dim & test
-    dc('emer_lts', 'dc_stby', `(${B738.emerExitLt} == 2) * 4`, {}, 5),
+    // Emergency lights: their own NiCd battery packs, charged from DC bus 1 unless the switch is OFF (FCOM 1.40);
+    // the lights run on the packs (logic.ts `emer_lts_on`). EST charging current 0.5 A.
+    dc('emer_lts', 'dc1', `(${B738.emerExitLt} != 0) * 0.5`, {}, 5),
+    // Flight deck door lock (electric strike, FCOM 1.40): EST 0.3 A continuous, DC bus 1 (EST wiring).
+    dc('fd_door_lock', 'dc1', 0.3, {}, 3),
   ];
 
   return new ElectricalNetwork(ctx.vars, {

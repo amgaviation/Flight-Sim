@@ -48,10 +48,13 @@ import { createFuel } from './systems/fuel';
 import { createHydraulics, hydFrac } from './systems/hydraulic';
 import { createPneumatics, createPressurization, createIce, createApu, createFire, createOxygen } from './systems/environment';
 import { createEngines, TLA } from './systems/engines';
-import { G6kLogic, G6kPostLogic } from './systems/logic';
+import { G6kLogic, G6kPostLogic, HORN_TO_INHIBIT, FUEL_SOV_OPEN } from './systems/logic';
+import { G6kReversion } from './systems/reversion';
+import { G6kAudioControl } from './systems/audioControl';
+import { G6kFlightControlExtras } from './systems/flightControlExtras';
 import { G6kVisionLogic } from './systems/vision';
 import { G6K_CAS } from './systems/cas';
-import { createLighting } from './systems/lighting';
+import { createLighting, G6kLightingLogic } from './systems/lighting';
 import { G6kCockpitInputs } from './systems/cockpitInputs';
 import { G6K_CHECKLISTS, G6K_CAS_CHECKLISTS } from './checklists';
 
@@ -66,6 +69,8 @@ export interface G6kSystems {
   list: Subsystem[];
   failures: FailureManager;
   logic: G6kLogic;
+  /** ACP receiver audio (NAV / ADF ident, marker tones, keying). */
+  acp: G6kAudioControl;
   post: G6kPostLogic;
   selectors: SourceSelector[];
   elec: ElectricalNetwork;
@@ -223,6 +228,8 @@ export function createSystems(ctx: SimContext, opts: G6kSystemsOptions = {}): G6
   const tla1 = V.tla(1);
   const tla2 = V.tla(2);
   const raOk = '(ra1.valid || ra2.valid)';
+  const sec = `(!${raOk} && adc1.alt_ft < 16500 && !${HORN_TO_INHIBIT})`;
+  const low = '(adc1.alt_ft - press.ldg_elev_ft < 1000)';
   const gear = new LandingGear(ctx, {
     legs: [
       { index: 0, name: 'Nose', extendS: 7, retractS: 7 }, // EST
@@ -243,9 +250,17 @@ export function createSystems(ctx: SimContext, opts: G6kSystemsOptions = {}): G6
         { when: `${raOk} && ra1.alt_ft < 500 && (${tla1} < 0.55 || ${tla2} < 0.55)`, silenceable: false, label: 'GEAR' },
         { when: `${raOk} && ra1.alt_ft < 1000 && ${V.flapLever} > 3.5`, silenceable: false, label: 'FLAPS' },
         { when: `${raOk} && ra1.alt_ft < 500 && adc1.vs_fpm < -400`, silenceable: false, label: 'SINK' },
-        // Secondary mode (no serviceable RA): below 16,500 ft with both throttles idle below 165 kt, or flaps 30; HORN MUTED
-        // (logic.ts, effective only without RA) silences it.
-        { when: `!${raOk} && adc1.alt_ft < 16500 && ((adc1.ias_kt < 165 && ${V.idleBoth}) || ${V.flapLever} > 3.5) && !${V.hornMuteEff}`, silenceable: false, label: 'GEAR' },
+        // Secondary mode (no serviceable RA, GX PTG 14-17 GX_14_015), below 16,500 ft, inhibited for 2 min after take-off:
+        // flaps 0 below 165 kt with both throttles idle (not mutable) or below 191 kt with one idle (mutable); below 1,000 ft
+        // (EST: barometric height above the landing elevation) with flaps > 0 and both idle (not mutable) or one idle
+        // (mutable); flaps 30 commanded (not mutable); > 400 fpm descent below 1,000 ft (not mutable). "Mutable" rules are
+        // silenced by HORN MUTED (logic.ts V.hornMuteEff).
+        { when: `${sec} && ${V.flapLever} < 1.5 && adc1.ias_kt < 165 && ${V.idleBoth}`, silenceable: false, label: 'GEAR' },
+        { when: `${sec} && ${V.flapLever} < 1.5 && adc1.ias_kt < 191 && ${V.idleAny} && !${V.hornMuteEff}`, silenceable: false, label: 'GEAR' },
+        { when: `${sec} && ${low} && ${V.flapLever} >= 1.5 && ${V.idleBoth}`, silenceable: false, label: 'GEAR' },
+        { when: `${sec} && ${low} && ${V.flapLever} >= 1.5 && ${V.idleAny} && !${V.hornMuteEff}`, silenceable: false, label: 'GEAR' },
+        { when: `${sec} && ${V.flapLever} > 3.5`, silenceable: false, label: 'FLAPS' },
+        { when: `${sec} && ${low} && adc1.vs_fpm < -400`, silenceable: false, label: 'SINK' },
       ],
     },
     lights: { power: 'elec.lgecu_a_powered || elec.lgecu_b_powered' },
@@ -292,8 +307,8 @@ export function createSystems(ctx: SimContext, opts: G6kSystemsOptions = {}): G6
           'fuel.ctr_xfer2.on': 'fuel.ctr_xfer2_active',
           'fuel.aft_xfer1.on': 'fuel.aft_xfer1_active',
           'fuel.aft_xfer2.on': 'fuel.aft_xfer2_active',
-          'fuel.sov1.open': `!${V.fireHandle('l')}`,
-          'fuel.sov2.open': `!${V.fireHandle('r')}`,
+          'fuel.sov1.open': FUEL_SOV_OPEN[1],
+          'fuel.sov2.open': FUEL_SOV_OPEN[2],
           'fuel.eng1.temp': 'fuel.l_main_temp_c',
           'fuel.eng2.temp': 'fuel.r_main_temp_c',
           'brk.ob.psi': 'max(hyd.sys2_psi, brakes.accum_psi)',
@@ -348,8 +363,9 @@ export function createSystems(ctx: SimContext, opts: G6kSystemsOptions = {}): G6
     altvBoundBySel: true,
     disconnect: {
       ...AFCS_PROLINE_FUSION.disconnect,
-      // Stick pusher activation disconnects the AP (EST, standard SPS logic); EST 200 ft AGL minimum engage.
-      auto: 'stall.pusher_active',
+      // GX PTG 10-61: "If the angle of attack continues to increase: the stick shakers are activated, autopilot
+      // disengages, and the voice advisory sounds" (the shaker stage disconnects the AP); EST 200 ft AGL minimum engage.
+      auto: 'stall.warning || stall.pusher_active',
       engageInhibit: `(gear.air_ground == 0 && ra1.valid && ra1.alt_ft < 200)`,
     },
     // EST alphaTauS 4 s (default 2 s): with the AoA feed-forward filtered at 2 s the pitch / path loops fought the slow
@@ -371,6 +387,8 @@ export function createSystems(ctx: SimContext, opts: G6kSystemsOptions = {}): G6
   // ground or below 70 KCAS; PUSHER switches OFF or AP/SP DISC held disable the pusher. EST trip points.
   const stall = new StallWarning(ctx, {
     kind: 'aoa',
+    // SPC angle of attack after the STALL WARN ADVANCE factor (logic.ts V.aoaEff = adc1.aoa_deg / 0.9 when advanced).
+    aoaVar: V.aoaEff,
     alphaStall: STALL_CFG_ALPHA,
     flapsVar: V.stallCfg,
     shakerNorm: 0.8,
@@ -397,7 +415,8 @@ export function createSystems(ctx: SimContext, opts: G6kSystemsOptions = {}): G6
     range: [0, G6K_LIMITS.stabUnitsMax],
     neutral: 7,
     electric: {
-      power: `(elec.stab_trim1_powered && ${V.stabCh(1)} == 0) || (elec.stab_trim2_powered && ${V.stabCh(2)} == 0)`,
+      // STAB TRIM CH 1 (AC 1) / CH 2 (AC ESS); inoperative during the ~20 s SPLRS/STAB IN TEST (GX PTG 10-27).
+      power: `((elec.stab_trim1_powered && ${V.stabCh(1)} == 0) || (elec.stab_trim2_powered && ${V.stabCh(2)} == 0)) && !${V.splrStabTest}`,
       enable: `input.ap_disc == 0 && ${V.discHeld} == 0`,
       // Hardware / keyboard trim (input.pitch_trim_rate) and the 3D control-wheel switches (cockpitInputs.ts).
       switchVars: ['input.pitch_trim_rate', V.yokeTrimCmd],
@@ -413,20 +432,21 @@ export function createSystems(ctx: SimContext, opts: G6kSystemsOptions = {}): G6
   const ailTrim = new TrimAxis(ctx, {
     axis: 'roll',
     range: [-1, 1],
-    electric: { power: `elec.fcu1_powered && ${anyHyd}`, switchVars: [V.ailTrimSw], rate: 0.1 },
+    electric: { power: `elec.ail_trim_powered && ${anyHyd}`, switchVars: [V.ailTrimSw], rate: 0.1 }, // AILERON TRIM on DC 2 (GX PTG 10-71)
     manual: { enable: 0 },
     takeoffBand: [-0.2, 0.2],
   });
   const rudTrim = new TrimAxis(ctx, {
     axis: 'yaw',
     range: [-1, 1],
-    electric: { power: `elec.fcu2_powered && ${anyHyd}`, switchVars: [V.rudTrimSw], rate: 0.1 },
+    electric: { power: `elec.rud_trim_powered && ${anyHyd}`, switchVars: [V.rudTrimSw], rate: 0.1 }, // RUDDER TRIM on DC ESS
     manual: { enable: 0 },
     takeoffBand: [-0.2, 0.2],
   });
-  // Slats / flaps (GXFC): SFCU 1 / 2 each drive one DC motor per PDU (half speed on one); slats extend first, flaps
-  // retract first. EST full-travel times: slats 8 s, flaps 0 -> 30 in 20 s.
-  const sfcu = '((elec.sfcu1_powered ? 0.5 : 0) + (elec.sfcu2_powered ? 0.5 : 0))';
+  // Slats / flaps (GXFC): SFCU 1 / 2 (SLAT/FLAP CTLR 1 on BATT, 2 on DC ESS) each run one PDU motor (SLAT/FLAP PWR 1 on
+  // AC 1, PWR 2 on AC ESS; GX PTG 10-71) - half speed on one; slats extend first, flaps retract first. EST full-travel
+  // times: slats 8 s, flaps 0 -> 30 in 20 s.
+  const sfcu = '((elec.sfcu1_powered && elec.slat_flap_pwr1_powered ? 0.5 : 0) + (elec.sfcu2_powered && elec.slat_flap_pwr2_powered ? 0.5 : 0))';
   const flaps = new Flaps(ctx, {
     leverVar: V.flapLever,
     detents: FLAP_DETENTS.map((d) => ({ lever: d.lever, flapDeg: d.flapDeg, label: d.label, vfe: d.flapDeg > 0 ? d.vfe : undefined })),
@@ -446,7 +466,8 @@ export function createSystems(ctx: SimContext, opts: G6kSystemsOptions = {}): G6
     flightDetent: 1,
     groundArm: V.gldArmed,
     speedbrake: 'spoilers',
-    roll: { deadband: 0.1, gain: 0.8 },
+    // Roll assist from the FCU roll command after the ROLL SPLRS priority logic (flightControlExtras.ts).
+    roll: { deadband: 0.1, gain: 0.8, aileronVar: V.mfsRollCmd },
     auto: { thrustIdle: V.idleBoth, spinupKt: G6K_LIMITS.gldWheelKt, raVar: 'ra1.alt_ft', raFt: G6K_LIMITS.gldRaFt, leverBackdrive: false },
     flightPower: `max(${hydFrac(1)}, ${hydFrac(2)})`,
     groundPower: `max(${hydFrac(1)}, ${hydFrac(3)})`,
@@ -499,16 +520,19 @@ export function createSystems(ctx: SimContext, opts: G6kSystemsOptions = {}): G6
     inhibits: { terrain: V.terrOff, flapOverride: V.flapOvrd },
   });
   const tcas = new Tcas(ctx, { power: 'elec.tcas_powered' });
+  // GX PTG 10-26 / 14: one "NO TAKEOFF" voice with the red CONFIG message and no separate horn: the CAS messages
+  // (cas.ts) carry the voice; this block only drives alert.config_warning (tone '' and no voice).
   const tocw = new TakeoffConfigWarning(ctx, {
+    tone: '',
     armed: `${V.toThrust} && gear.air_ground`,
     power: 'elec.dc_ess_powered || elec.batt_bus_powered',
     checks: [
-      { id: 'flaps', bad: `${V.flapLever} < 1.5 || ${V.flapLever} > 3.5`, text: 'CONFIG FLAPS', voice: 'No takeoff' },
-      { id: 'stab', bad: 'trim.pitch_to_ok == 0', text: 'CONFIG STAB TRIM', voice: 'No takeoff' },
-      { id: 'ail', bad: 'trim.roll_to_ok == 0', text: 'CONFIG AIL TRIM', voice: 'No takeoff' },
-      { id: 'rud', bad: 'trim.yaw_to_ok == 0', text: 'CONFIG RUD TRIM', voice: 'No takeoff' },
-      { id: 'spoilers', bad: `${V.flightSpoiler} > 0.05`, text: 'CONFIG SPOILERS', voice: 'No takeoff' },
-      { id: 'park', bad: `${V.parkBrake} > 0.05`, text: 'PARK BRAKE ON', voice: 'No takeoff' },
+      { id: 'flaps', bad: `${V.flapLever} < 1.5 || ${V.flapLever} > 3.5`, text: 'CONFIG SLAT/FLAP' },
+      { id: 'stab', bad: 'trim.pitch_to_ok == 0', text: 'CONFIG STAB TRIM' },
+      { id: 'ail', bad: 'trim.roll_to_ok == 0', text: 'CONFIG AIL TRIM' },
+      { id: 'rud', bad: 'trim.yaw_to_ok == 0', text: 'CONFIG RUD TRIM' },
+      { id: 'spoilers', bad: `${V.flightSpoiler} > 0.05`, text: 'CONFIG SPOILERS' },
+      { id: 'park', bad: `${V.parkBrake} > 0.05`, text: 'PARK BRAKE ON' },
     ],
   });
   // IAC 1 / IAC 2 aural warning channels (GXAG: two integrated avionics computers each hold an aural warning generator).
@@ -533,7 +557,11 @@ export function createSystems(ctx: SimContext, opts: G6kSystemsOptions = {}): G6
   });
   const disc = new DisconnectAlerts(ctx, { apToneMaxS: 1.5 });
   const post = new G6kPostLogic(v, ctx.events ?? null);
+  const reversion = new G6kReversion(v);
+  const acp = new G6kAudioControl(v, ctx.audio);
+  const fcx = new G6kFlightControlExtras(v, stab, ctx.audio);
   const cockpitInputs = new G6kCockpitInputs(v, ctx.events ?? null);
+  const lightLogic = new G6kLightingLogic(v);
   const lights = createLighting(ctx);
 
   const list: Subsystem[] = [
@@ -559,7 +587,9 @@ export function createSystems(ctx: SimContext, opts: G6kSystemsOptions = {}): G6
     radioPower,
     radios,
     fms,
+    reversion, // pedestal reversion panel DISPLAYS / TUNE -> Fusion RSP vars (before the suite reads them)
     ...(suite ? [suite.system] : []),
+    acp, // ACP 1 / 2 receiver audio (NAV / ADF ident, marker)
     cockpitInputs,
     eng.ratings,
     afcs,
@@ -570,6 +600,7 @@ export function createSystems(ctx: SimContext, opts: G6kSystemsOptions = {}): G6
     yd,
     stall,
     fcs,
+    fcx, // ROLL SPLRS priority (MFS roll command), Mach trim, stab-in-motion clacker, STALL voice
     stab,
     ailTrim,
     rudTrim,
@@ -586,6 +617,7 @@ export function createSystems(ctx: SimContext, opts: G6kSystemsOptions = {}): G6
     cas,
     disc,
     post,
+    lightLogic,
     lights,
   ];
   for (const s of list) {
@@ -600,12 +632,17 @@ export function createSystems(ctx: SimContext, opts: G6kSystemsOptions = {}): G6
     { id: 'fire.apu', name: 'APU fire', category: 'fire' },
     { id: 'fire.mlg', name: 'Main gear bay overheat', category: 'fire' },
     { id: 'elec.dcpc', name: 'DC power center (DCPC) control failure', category: 'electrical' },
+    { id: 'hyd.sov1', name: 'Left hydraulic SOV jammed', category: 'hydraulic', description: 'The L HYD SOV does not follow its command (L HYD SOV FAIL).' },
+    { id: 'hyd.sov2', name: 'Right hydraulic SOV jammed', category: 'hydraulic', description: 'The R HYD SOV does not follow its command (R HYD SOV FAIL).' },
+    { id: 'fcs.roll_disconnect', name: 'Aileron jam / roll disconnect', category: 'flight controls', description: 'The control wheels are disconnected after a jammed aileron circuit: MFS roll assist averages both wheels until a ROLL SPLRS priority is selected; ROLL SELECT after 30 s.' },
+    { id: 'fcs.mach_trim', name: 'Mach trim failure', category: 'flight controls', description: 'MACH TRIM FAIL: no Mach trim compensation.' },
   ]);
 
   return {
     list,
     failures,
     logic,
+    acp,
     post,
     selectors: elecPkg.selectors,
     elec,

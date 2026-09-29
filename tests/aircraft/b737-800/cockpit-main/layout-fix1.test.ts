@@ -223,13 +223,24 @@ describe('737-800 functions added with the layout fixes', () => {
     build.dispose?.();
   });
 
-  it('clock: TIME/DATE cycles UTC / MAN time / date, SET + "+" adjust the MAN hours, RESET zeroes ET, ET HLD stops it', () => {
+  it('clock: TIME/DATE cycles UTC / MAN time / date, SET + "+" adjust the MAN hours, ET RESET zeroes ET (spring to HLD), RESET push zeroes CHR, ET HLD stops it', () => {
     const { r, get, press, build } = setup(true);
     const v = r.vars;
     r.run(2);
     expect(v.get(B738.lt.clockEtS(1))).toBeGreaterThan(1);
+    // RESET push: chronograph (not the ET) to zero.
+    press(get('b738.mip1.chr'));
+    r.run(1);
+    expect(v.get(B738.lt.clockChrS(1))).toBeGreaterThan(0.5);
     press(get('b738.mip1.reset'));
-    expect(v.get(B738.lt.clockEtS(1))).toBeLessThan(0.25);
+    expect(v.get(B738.lt.clockChrS(1))).toBe(0);
+    expect(v.get(B738.lt.clockEtS(1))).toBeGreaterThan(1);
+    // ET switch RESET (held) zeroes the ET and springs back to HLD (FCOM 10.10).
+    v.set(B738.clockEt(1), 1);
+    r.run(0.2);
+    expect(v.get(B738.lt.clockEtS(1))).toBe(0);
+    v.set(B738.clockEt(1), 0);
+    r.run(0.1);
     // ET HLD holds the elapsed time.
     const et = get('b738.mip1.et');
     et.onWheel?.(-1, P(et.hitTargets[0]));

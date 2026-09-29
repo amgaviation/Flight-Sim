@@ -28,6 +28,7 @@ import { FuelSystem } from '../../../systems/fuel';
 import { LB, G6K_LIMITS } from '../data';
 import { GLOBAL6000_FDM } from '../fdm';
 import { G6K_VARS as V } from '../vars';
+import { FUEL_SOV_OPEN, RECIRC_L, RECIRC_R } from './logic';
 
 export const FUEL_LOW_KG = G6K_LIMITS.lowFuelLb * LB;
 /** Tank ids (FuelSystem) in FDM index order: 0 left main, 1 centre, 2 right main, 3 aft (Fusion GLOBAL6000_AIRFRAME.tanks). */
@@ -62,8 +63,9 @@ export function createFuel(ctx: Pick<SimContext, 'vars'>): FuelSystem {
       // Engine fuel SOV (DC EMER, GXFU CB) closed by the fire handle; FADEC fuel command from the ENG RUN switch.
       // `fail.eng<n>.flameout` (registered in createSystems.ts) is the instructor's engine failure: the combustor
       // flames out with the ENG RUN switch at RUN, so the FADEC latch posts L / R ENG FLAMEOUT (logic.ts).
-      { id: 'eng1', node: 'l_feed', flowPph: 'eng1.ff_pph', engine: 1, run: `fadec.eng1.fuel_cmd && !${V.fireHandle('l')} && elec.eng_sov1_powered && !fail.eng1.flameout`, suction: { tank: 'l_main', ceilingFt: 20000 } },
-      { id: 'eng2', node: 'r_feed', flowPph: 'eng2.ff_pph', engine: 2, run: `fadec.eng2.fuel_cmd && !${V.fireHandle('r')} && elec.eng_sov2_powered && !fail.eng2.flameout`, suction: { tank: 'r_main', ceilingFt: 20000 } },
+      // The SOV is a motor-driven valve (DC EMER): it holds its position without power (logic.ts FUEL_SOV_OPEN).
+      { id: 'eng1', node: 'l_feed', flowPph: 'eng1.ff_pph', engine: 1, run: `fadec.eng1.fuel_cmd && ${FUEL_SOV_OPEN[1]} && !fail.eng1.flameout`, suction: { tank: 'l_main', ceilingFt: 20000 } },
+      { id: 'eng2', node: 'r_feed', flowPph: 'eng2.ff_pph', engine: 2, run: `fadec.eng2.fuel_cmd && ${FUEL_SOV_OPEN[2]} && !fail.eng2.flameout`, suction: { tank: 'r_main', ceilingFt: 20000 } },
       // APU from the right feed line through the APU fire SOV (DC EMER); boost pressure required (GXAPU).
       { id: 'apu', node: 'r_feed', flowPph: 'apu.ff_pph', run: `(apu.fuel_cmd || (apu.state >= 1 && apu.state <= 4)) && !${V.fireHandle('apu')} && elec.apu_fire_sov_powered`, minPressPsi: 5 },
     ],
@@ -79,6 +81,8 @@ export function createFuel(ctx: Pick<SimContext, 'vars'>): FuelSystem {
       { id: 'wing_rl', from: 'r_main', to: 'l_main', kind: 'pumped', ratePph: 3000, active: `${V.wingXferCmd('rl')} && fuel.aux_r_on` },
     ],
     balance: { left: 'l_main', right: 'r_main', alertKg: G6K_LIMITS.imbalanceFlightLb * LB },
-    temperature: { skin: 'fdm.tat_c', tauFullS: 14400, initialC: 15 },
+    // Fuel recirculation (FCOC return, per side, logic.ts RECIRC_L / RECIRC_R) warms the wing tanks: EST +8 degC on the
+    // tank "skin" temperature per recirculating side (averaged: one model temperature drives both tanks, SCOPE).
+    temperature: { skin: `fdm.tat_c + 4 * (${RECIRC_L} + ${RECIRC_R})`, tauFullS: 14400, initialC: 15 },
   });
 }

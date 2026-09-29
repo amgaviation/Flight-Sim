@@ -342,7 +342,9 @@ when light.
 - **Schedule:** 4,500 ft cabin at FL450 (AOPA); 10.33 psid maximum (EST).
 - **Modes:**
   - AUTO uses the FMS landing elevation.
-  - MAN drives the outflow valves with MAN ALT UP / DN at the MAN RATE setting.
+  - MAN drives the outflow valves with MAN ALT UP / DN (both OFVs, slowly: EST 60 s full travel).
+  - RATE NORM / HIGH sets the AUTO cabin descent limit, 300 / 800 fpm (GX PTG 13-57).
+  - Limiters, ditching sequence and OFV travel limit: §19.
 - **Other controls:** OUTFLOW VALVE 1 / 2 CLOSED, EMERG DEPRESS and DITCHING (guarded).
 - **Placard limits:** 0.1 psi taxi and 1.0 psi landing differential (GX_01_018).
 
@@ -356,8 +358,8 @@ when light.
 ### 5.9 Fire (GXFP)
 
 - **Detection:** FIDEEX dual loops on the engines and APU; single loops in the main wheel wells (MLG BAY OVHT).
-- **Extinguishing:** two bottles, each able to discharge into either engine or the APU (DISCH 1 → bottle 1,
-  DISCH 2 → bottle 2).
+- **Extinguishing:** two bottles, each able to discharge into either engine or the APU. The pulled handle is
+  rotated and held ≥ 1 s: left → bottle 1, right → bottle 2 (GX PTG 9-12 .. 9-14; §19).
 - **Fire handles:** pulling a handle arms the squibs and closes:
   - the engine fuel SOV (`fuelCut`);
   - the hydraulic SOV (`hyd.sovN_open`);
@@ -534,8 +536,8 @@ In the headless start test (`start.test.ts`):
 | GEAR AND BRAKES column | y +0.215, upper row | 0.09 × 0.27 m | NOSE STEER, HORN, BTMS OVHT WARN RESET; LDG GEAR handle (UP arrow); DN LCK RELEASE; AUTOBRAKE; STATIC GROUND OPERATION placard |
 | Main-panel wings | y ∓0.61 … ∓0.93, turned 14° toward each pilot | 0.325 × 0.305 m | STALL PUSHER plate, gasper, EMS CDU 1 / 2 (0.27 × 0.15 m landscape) |
 | Pedestal forward (top) | 0.45–0.6 m ahead of the eye, 0.81 m below it | 0.54 m wide | MKP 1 / MKP 2 at y ∓0.17 beside the ~0.14 m throttle quadrant (FLIGHT SPOILER slot, two drum-grip thrust levers, MAX THRUST gate, IDLE REV / MAX REV, EVENT) |
-| Pedestal centre | | | CCP 1 / CCP 2 palm rests aft of the MKPs, ENGINE RUN at the aft end of the quadrant; ACP row (not modelled); display dimmers (left), PARK/EMER BRAKE gate and SLAT/FLAP lever (centre), COCKPIT LIGHTS (right) |
-| Pedestal aft (EST, not photographed) | | | STAB CH 1 / 2, AIL / RUD trim, GLD MAN ARM / OFF, IRS 1 / 2 / 3; RAT and gear manual release handles on the aft face |
+| Pedestal centre | | | CCP 1 / CCP 2 palm rests aft of the MKPs, ENGINE RUN at the aft end of the quadrant; ACP 1 / 2 (fix round 2); reversion panel and display dimmers (left), PARK/EMER BRAKE gate and SLAT/FLAP lever (centre), COCKPIT LIGHTS (right) |
+| Pedestal aft (EST, not photographed) | | | STAB CH 1 / 2, AIL / RUD trim, GND LIFT DUMPING MANUAL ARM / AUTO / OFF, IRS 1 / 2 / 3; RAT and gear manual release handles on the aft face |
 | Overhead | from 0.25 m ahead to 0.35 m behind the eye, 0.50–0.60 m above it, sloping down forward | 0.80 m wide | GX_01_018 layout (§12.1): forward edge L ENG FIRE / APU FIRE / R ENG FIRE handles, then ELECTRICAL, HYDRAULIC, FUEL, BLEED / AIR COND, ANTI-ICE, PRESSURIZATION, ENGINE / APU, EXTERNAL LIGHTS, PASS SIGNS |
 | Side consoles | outboard of each seat (tan leather) | 0.24 m wide | oxygen mask stowage, headset jacks, crew oxygen / PASSENGER OXYGEN, NOSE STEER tiller (pilot side, flush hub at the forward end) |
 | Control wheels | hub 0.50 m ahead of and 0.37 m below each eye (overlays the lower third of the PFD from the eye) | 0.36 m wide | MSTR DISC, NOSE DN / NOSE UP trim, TCS, FPV CAGE, R/T / IC rocker |
@@ -575,18 +577,19 @@ In the headless start test (`start.test.ts`):
 
 | Panel | Label | Type | Positions (value) | Spring / guard | Lighting | Var | Location / size |
 |---|---|---|---|---|---|---|---|
-| FIRE | L ENG FIRE / APU FIRE / R ENG FIRE handles | T-handle, pull | 0 stowed / 1 pulled | — | red FIRE in the handle | `V.fireHandle('l'/'apu'/'r')` = `ac.g6k.fire.<z>_handle` | forward edge, left / centre / right, 80 × 30 mm handles |
-| FIRE | DISCH 1 / DISCH 2 (under each handle) | PBA | momentary 1 | armed only with the handle pulled | DISCH amber when the bottle is empty | `V.fireDisch(z, 1/2)` | under each handle, 20 mm squares |
+| FIRE | L ENG FIRE / APU FIRE / R ENG FIRE handles | T-handle: pull, then rotate | 0 stowed / 1 pulled; rotation −1 left (bottle 1) / +1 right (bottle 2), held ≥ 1 s discharges (GX PTG 9-12 .. 9-14) | solenoid-locked unless that zone's FIRE warning is on | red FIRE in the handle | `V.fireHandle(z)`, rotation `V.fireRot(z)`, unlock `V.fireUnlock(z)` → `V.fireDisch(z, 1/2)` (logic.ts) | forward edge, left / centre / right; engraved "1" / "2" either side |
+| FIRE | FIRE HANDLE MANUAL OVERRIDE (one per handle) | round push | momentary 1 | — | — | `V.fireOvrd(z)`: releases the solenoid lock without a warning | beside each handle |
+| FIRE | APU bottle lockout release pin | toggle LOCK / REL | 0 / 1 | — | — | `V.fireApuPin`: the APU handle turns right (bottle 2 into the APU) only with the pin released | beside the APU handle |
 | ELECTRICAL | EXT AC | PBA | 1 ON | — | AVAIL (cart) / ON | `ac.elec.ext_ac_sw` (cart `V.extAcAvail`) | top-left group, 20 mm squares |
 | ELECTRICAL | GEN 1 / GEN 2 / GEN 3 / GEN 4 | PBA | 1 normal / 0 OFF (OFF → ON resets the GCU) | — | OFF white, FAIL amber | `ac.elec.gen{n}_sw` | row of four |
 | ELECTRICAL | APU GEN | PBA | 1 normal / 0 OFF | — | OFF / FAIL | `ac.elec.apu_gen_sw` | centre |
-| ELECTRICAL | RAT GEN | PBA | 1 normal / 0 OFF | clear flip guard (`V.ratGenGuard`) | OFF / FAIL | `ac.elec.rat_gen_sw` | lower right (photo e_elec_eng) |
+| ELECTRICAL | RAT GEN | PBA | 1 normal / 0 OFF | clear flip guard (`V.ratGenGuard`) | ON green (RAT generator on line) / OFF white (GX PTG 6-8; no FAIL legend) | `ac.elec.rat_gen_sw` | lower right (photo e_elec_eng) |
 | ELECTRICAL | EMER DC PWR | PBA | 1 OVRD | red guard (`V.dcEmerOvrdGuard`) | OVRD amber | `V.dcEmerOvrd` | below GEN 1, left of APU GEN (photo e_elec_eng; was on the pedestal) |
 | ELECTRICAL | EXT DC | PBA | 1 ON | — | AVAIL / ON | `ac.elec.ext_dc_sw` (unit `V.extDcAvail`) | |
-| ELECTRICAL | BATT MASTER | toggle | 1 ON / 0 OFF | — | — | `ac.elec.batt_master_sw` | lower left, 15 mm lever |
+| ELECTRICAL | BATT MASTER | 3-position toggle | 0 OFF / 1 EMS / 2 ON (GX PTG 6-8: EMS powers only the EMS CDUs from the AV BATT DIR bus, battery bus isolated) | — | — | `V.battMasterSel`; `ac.elec.batt_master_sw` (`V.battMaster`) = 1 only at ON, synced both ways (logic.ts) | lower left, 15 mm lever |
 | CABIN SYSTEMS | CABIN POWER | PBA | 1 ON | — | OFF white | `ac.elec.cabin_pwr_sw` | aft-left module above AURAL WARNING (photo e_ovhd); also the EMS CDU SWITCH CONTROL page |
 | CABIN SYSTEMS | CABIN OUTLETS | PBA | 1 ON | — | OFF white | `V.cabinOutlets` = `ac.elec.cabin_outlets_sw` (1,000 VA EST on AC BUS 3, shed on a single generator) | beside CABIN POWER |
-| EMS CDU 1 / 2 (EMER CNTL page) | AC BUS 1–4 / DC BUS 1, 2, DC ESS, BATT BUS MAN OFF | soft keys | 1 isolated | — | MAN OFF on the page, status CAS | `ac.elec.ac_bus{n}_isol`, `ac.elec.<bus>_isol` | EMS CDUs in the main-panel wings (§12.3) |
+| EMS CDU 1 / 2 (EMER CNTL page) | AC BUS 1–4 (at most three: "MAX 3 AC BUSES MAN OFF", GX PTG 6-15) / DC BUS 1, 2, DC ESS, BATT BUS MAN OFF | soft keys | 1 isolated | — | MAN OFF on the page, status CAS | `ac.elec.ac_bus{n}_isol`, `ac.elec.<bus>_isol` | EMS CDUs in the main-panel wings (§12.3) |
 | WINDSHIELD HEAT | L / R | rotary | 1 ON / 0 OFF/RESET | — | none (status on the synoptic / CAS) | `ac.ice.wshld_l_sw`, `ac.ice.wshld_r_sw` | photo e_press_lts |
 | HYDRAULIC | L / R HYD SOV | PBA | 0 open / 1 CLOSED | — | CLOSED white | `ac.hyd.sov_l_sw`, `ac.hyd.sov_r_sw` | |
 | HYDRAULIC | PUMP 1B / 2B / 3B | rotary | 0 OFF / 1 AUTO / 2 ON | — | — | `ac.hyd.pump1b_sw` / `2b` / `3b` | 25 mm knobs |
@@ -595,7 +598,8 @@ In the headless start test (`start.test.ts`):
 | FUEL | L / R PRI PUMPS | PBA | 1 normal / 0 OFF | — | OFF / FAIL | `ac.fuel.pri_l_sw`, `ac.fuel.pri_r_sw` | |
 | FUEL | L / R AUX PUMP | PBA | 1 normal / 0 OFF | — | ON / FAIL | `ac.fuel.aux_l_sw`, `ac.fuel.aux_r_sw` | |
 | FUEL | XFEED | PBA | 1 OPEN | — | OPEN | `ac.fuel.xfeed_sw` | |
-| FUEL | L / R RECIRC | PBA | 1 normal / 0 OFF | — | OFF | `ac.fuel.recirc_l_sw`, `ac.fuel.recirc_r_sw` | |
+| FUEL | L / R RECIRC | PBA | 1 normal / 0 OFF (per side, status L / R FUEL RECIRC OFF) | — | OFF | `ac.fuel.recirc_l_sw`, `ac.fuel.recirc_r_sw` | |
+| FUEL | L / R WING FEED INHIBIT | annunciator | lit with that side's PRI and AUX pumps both off (GX PTG 11-10) | — | white | `ac.g6k.ck.oh.wing_feed_l/_r` | beside the pump PBAs |
 | FUEL | AFT XFER | rotary | 0 OFF / 1 AUTO / 2 ON | — | — | `ac.fuel.aft_xfer_sw` | |
 | FUEL | WING XFER | rotary | 0 OFF / 1 AUTO / 2 L→R / 3 R→L | — | — | `ac.fuel.wing_xfer_sw` | |
 | BLEED / AIR COND | L / R ENG BLEED | rotary | 0 OFF / 1 AUTO / 2 ON | — | — | `ac.bleed.l_sw`, `ac.bleed.r_sw` | |
@@ -613,7 +617,7 @@ In the headless start test (`start.test.ts`):
 | ANTI-ICE | WING XBLEED | PBA | 1 ON | — | ON | `V.wingXbleed` | |
 | PRESSURIZATION | AUTO / MAN | PBA | 0 AUTO / 2 MAN | — | MAN | `ac.press.mode_sw` | |
 | PRESSURIZATION | MAN ALT | toggle | −1 DN / 0 / +1 UP | spring to centre | — | `ac.press.manual_cmd` | |
-| PRESSURIZATION | MAN RATE | knob | 0 LOW … 1 HIGH | — | — | `V.pressManRate` | |
+| PRESSURIZATION | RATE | toggle | 0 NORM / 1 HIGH | — | status HIGH PRESS RATE | `V.pressRateHigh`: AUTO cabin descent limit 300 → 800 fpm (GX PTG 13-57) | |
 | PRESSURIZATION | LDG ELEV MAN / FMS, LDG ELEV UP / DN | toggle + spring toggle | 1 FMS / 0 MAN; slew −1,000 … 14,000 ft | UP / DN spring to centre | — | `V.ldgElevFms`, `V.ldgElevSlew` → `ac.press.ldg_elev_ft` | order AUTO/MAN, MAN ALT, LDG ELEV MAN/FMS + UP/DN, RATE (photo e_press_lts) |
 | PRESSURIZATION | OUTFLOW VALVE 1 / 2 CLOSED | PBA | 1 closed | — | CLOSED | `V.outflowClosed(1/2)` | |
 | PRESSURIZATION | EMERG DEPRESS | PBA | 1 ON | yellow guard (`V.emerDepressGuard`) | ON | `ac.press.dump_sw` | |
@@ -629,7 +633,6 @@ In the headless start test (`start.test.ts`):
 | PASS SIGNS | NO SMKG / SEAT BLTS | toggles | 0 OFF / 1 AUTO / 2 ON | — | — | `ac.cabin.nosmoke_sw`, `ac.cabin.seatbelt_sw` | |
 | EMER LIGHTS | EMER LIGHTS | toggle | 0 OFF / 1 ARM / 2 ON | guarded at ARM | — | `ac.light.emer_sw` | |
 | ELT | ELT | toggle | 0 ARM / 1 ON | guarded | — | `V.elt` | |
-| COCKPIT | DOME | toggle | 1 ON | — | — | `ac.light.dome_sw` | aft fire-handle strip (EST position) |
 | Forward fitting strip | READING LIGHT (pilot / copilot) | toggles | 1 ON | — | lamp head beside it | `V.ltMap(1/2)` | forward corners above the windshield (photo N835GL) |
 | Forward fitting strip | STANDBY COMPASS | pull-down housing | 1 open | — | — | `V.compassOpen`; card `V.compassHdg` (magnetic heading, EST deviation / damping) | centre, "PULL DOWN TO OPEN" |
 | Forward fitting strip | NO SMOKING sign | lit sign | — | — | lit with the NO SMKG logic | `ac.light.no_smoking` | below the compass |
@@ -648,6 +651,7 @@ Global Vision layout (photo N835GL, crops c_gs_l / c_gs_r); hardware `src/avioni
 | HUD knob | knob DIM – BRT, PUSH/MODE | 0 … 1; push cycles the mode | — | — | `V.hudBrt`, `V.hudModeBtn` → `V.hudMode` | pilot's end |
 | EVS knob | knob MIN – MAX, PUSH/EVS CAL | 0 … 1; push 10 s calibration (EST) | — | — | `V.evsGain`, `V.evsCal` | pilot's end, outboard |
 | HUD combiner | PUSH latch | 1 stowed / 0 deployed | — | symbology while `V.hudOn` | `V.hudStow` | ceiling ahead of the pilot |
+| ROLL SPLRS PLT CONT / CPLT CONT | Korry switchlights (one per side) | toggle: 1 = that pilot's wheel commands the roll spoilers | — | ROLL SEL amber (roll disconnect, no priority selected), PLT ROLL / CPLT ROLL white (selected) | `V.rollSplr(1/2)` → `V.rollPriority` (systems/flightControlExtras.ts; GX PTG 10-48) | between the CTP and the HUD knob, each side |
 
 ### 12.3 Main instrument panel
 
@@ -670,7 +674,7 @@ Global Vision layout (photo N835GL, crops c_centre / c_lwing / c_rwing).
 | Gear position | — | — | no three-green lights on the Vision panel: gear status on the EICAS / synoptic | — |
 | Wings: STALL PUSHER ON / OFF | toggle | 1 ON / 0 OFF | `V.pusher(1/2)` | outboard top plate |
 | Wings: gasper | eyeball | 0 … 1 | `V.gasper('wing_l'/'wing_r')` | inboard top, beside the PFD |
-| Wings: EMS CDU 1 / 2 | landscape CDU: 6 + 6 line keys, STAT, SYS, BUS, PREV / NEXT PAGE, CNTL, TEST, EMER CNTL (red border), BRT ▲ ▼ | — | `side/emsCdu.ts` (SSPC pages, TEST: FIRE / STALL / AURAL / LAMP TEST 1 / 2, EMER CNTL) | below the STALL PUSHER plate |
+| Wings: EMS CDU 1 / 2 | landscape CDU: 6 + 6 line keys, STAT, SYS, BUS, PREV / NEXT PAGE, CNTL, TEST, EMER CNTL (red border), BRT ▲ ▼ | — | `side/emsCdu.ts` (SSPC pages; SWITCH CONTROL 1/2 SLAT/FLAP RESET, STALL WARN ADVANCE NORM / REV, L / R FOOTWARMER, 2/2 CABIN PWR; TEST 1/2 FIRE / STALL / AURAL / LAMP TEST 1 / 2 (20 s), 2/2 RAT TEST; EMER CNTL (max 3 AC buses MAN OFF); units linked M / S; brightness × L / R DISPLAY knob) | below the STALL PUSHER plate |
 
 ### 12.4 Pedestal
 
@@ -682,26 +686,27 @@ Global Vision layout (photos N835GL c_ped, EB190582 e_ped_mid / e_ped_aft / e_pe
 | Reverse levers (piggy-back) | levers | 0 stowed … 1 MAX REV (IDLE REV about 0.1); only at IDLE on the ground | — | `V.revLever(1/2)` | IDLE REV / MAX REV marks |
 | A/T disconnect, TO/GA | buttons on the grips | momentary | spring | `at.disc`, `ap.toga` | drum ends / fronts |
 | EVENT | button | momentary 1 | — | `V.fdrEvent` → `V.fdrEventCount` (SCOPE: no recorder) | forward end of the quadrant |
-| FLIGHT SPOILER lever | lever | 0 / 0.25 1/4 / 0.5 1/2 / 0.8 FULL / 1.0 MAX | detents | `V.flightSpoiler` | own slot at the left edge of the quadrant, RETRACT arrow |
+| FLIGHT SPOILER lever | lever | 0 (gate) / 0.25 1/4 / 0.5 1/2 / 0.75 3/4 / 0.9 FULL / 1.0 MAX (gate) | detents | `V.flightSpoiler` | own slot at the left edge of the quadrant, RETRACT arrow |
 | ENGINE RUN L / R | toggles (lift to move) | 1 ON / 0 OFF | lift-lock | `V.engRun(1/2)` | aft end of the quadrant |
 | MKP 1 / 2 | keyboards + scratchpad strip | Vision key set (ROUTE, FMS, DEP/ARR, CNCL, EXEC, letters, digits, CAS, CNS, CHART, ECL/EXT, arrows, PREV, NEXT) | — | `fusion.mkp{s}.key` | forward, y ∓0.17 |
 | CCP 1 / 2 | palm-rest cursor device, DSPL SEL < > ∨, ESC, DATA knob, PTT buttons | — | — | `fusion.ccp{s}.*`; PTT `V.yokePtt(s)` | aft of the MKPs |
-| Display dimmers L / CTR / R DSPL | knobs | 0 … 1 | — | `V.ltDisplay(z)` | left, reversion-panel position |
+| Reversion panel: DISPLAYS NORM / REV, TUNE VHF / NORM / DSPL, L PFD ADC / IRS, AFCS 1/2, R PFD ADC / IRS | rotaries + Korry keys | DISPLAYS 0 / 1; TUNE 1 VHF / 0 NORM / 2 DSPL; keys toggle | — | `V.displaysRev`, `V.tuneSel` → `V.tuneSrc`, `V.rspAdc(s)`, `V.rspAtt(s)`, `V.rspAfcs` → Fusion `fusion.rsp{s}.adc/att/dspl`, `fusion.rsp.afcs` (systems/reversion.ts; GX PTG 16) | left, forward of the dimmers |
+| Display dimmers L / CTR / R DSPL, LWR DSPL | knobs | 0 … 1 | — | `V.ltDisplay(z)` (L / R also dim EMS CDU 1 / 2), `V.ltDisplayLwr` (AFD 3) | left, below the reversion keys |
+| ACP 1 / 2 | audio control panels: 7 transmitter keys (VHF1..3, HF1 / 2, SAT, PA), 14 receiver knobs (push in off / pull out on, turn volume: VHF1..3, HF1 / 2, SAT, PA, NAV1 / 2, ADF1 / 2, MKR, DME1 / 2), R/T - IC toggle, ID / BOTH / VOICE, MKR HI / LO, MASK / BOOM, SPKR | keys / push-pull knobs / toggles | — | spring R/T and IC to centre | `V.acpMic(s)`, `V.acpSel(s, ch)`, `V.acpVol(s, ch)`, `V.acpRtIc(s)`, `V.acpFilter(s)`, `V.acpMkrHi(s)`, `V.acpMask(s)`, `V.acpSpkr(s)` (systems/audioControl.ts: NAV / ADF Morse idents, marker tones, keyed radio) | either side of the park brake, aft of the CCPs (photo e_acp) |
 | PARK/EMER BRAKE | handle (black grip, red band, chrome base) | 0 stowed … 1 locked (proportional below the lock) | gate | `V.parkBrake` | centre, recessed gate, captions both sides |
 | SLAT/FLAP lever | lever | 0 (SLAT IN / FLAP 0) / 1 (OUT / 0) / 2 (OUT / 6) / 3 (OUT / 16) / 4 (OUT / 30) | gates at 0 OUT and 6 | `ac.flap_lever` | aft of ENGINE RUN, right of the park brake |
 | COCKPIT LIGHTS: AREA, OVHD / CB / L / CTR / R INTEG | knobs | 0 … 1 | — | `V.ltArea`, `V.ltIntegral(z)` | right |
 | COCKPIT LIGHTS: PBA DIM / BRT, EYE REF, MASTER INTEG, FOOT | toggles | 0 DIM / 1 BRT; 1 ON; 0 OFF / 1 AUTO / 2 ON; 1 ON | — | `V.ltPbaDim`, `V.ltEyeRef`, `V.ltMaster`, `V.ltFoot` | right, bottom row |
-| STAB CH 1 / CH 2 | PBAs | 1 = disconnected | guarded | `V.stabCh(1/2)` | aft (EST) |
+| STAB CH 1 / CH 2 | PBAs, PUSH OFF/RESET | 1 = disconnected (OFF white legend, status STAB CH n OFF) | unguarded (GX PTG 10-24) | `V.stabCh(1/2)` | aft (EST) |
 | AIL trim | split switch | −1 LWD / 0 / +1 RWD | spring to centre | `V.ailTrimSw` | aft (EST) |
 | RUD trim | rotary | −1 NL / 0 / +1 NR | spring to centre | `V.rudTrimSw` | aft (EST) |
-| GND LIFT DUMPING MAN ARM / OFF | PBAs | 1 | — | `V.gldManArm`, `V.gldOff` | aft (EST) |
+| GND LIFT DUMPING | 3-position toggle | MANUAL ARM (up, 1) / AUTO (0) / OFF (down, 2) (GX PTG 10-50) | — | `V.gldSw` → `V.gldManArm`, `V.gldOff` (logic.ts); statuses GLD MANUAL ARM / GND LIFT DUMP OFF | aft (EST) |
 | IRS 1 / 2 / 3 | rotaries | 0 OFF / 1 ALN / 2 NAV / 3 ATT | — | `ac.irs1_mode` … `ac.irs3_mode` | aft (EST) |
 | RAT manual deploy, LDG GEAR manual release | T-handles | 1 pulled | latched | `V.ratDeploy`, `V.gearManRelease` | aft face |
 
 Moved off the pedestal by the Vision layout: EPR / N1 (overhead MODE), EMER DC PWR (overhead ELECTRICAL), TAWS
 (main panel), AUTOBRAKE (GEAR AND BRAKES), EMS CDU (main-panel wings; the pedestal unit was removed). LAMP TEST 1 / 2
-are EMS CDU TEST CONTROL entries (GX PTG 15-19). SCOPE: the ACPs (no audio routing model) and the DISPLAYS / TUNE
-reversion knobs and L / R PFD ADC / IRS / AFCS keys of the left reversion panel are not built on the pedestal.
+are EMS CDU TEST CONTROL entries (GX PTG 15-19). The ACPs and the reversion panel were added in fix round 2 (§19).
 
 ### 12.5 Side panels, control wheels, others
 
@@ -709,8 +714,8 @@ reversion knobs and L / R PFD ADC / IRS / AFCS keys of the left reversion panel 
 |---|---|---|---|---|
 | STALL PUSHER (pilot / copilot) | toggle | 1 ON / 0 OFF | `V.pusher(1/2)` | main-panel wings (§12.3) |
 | RSP 1 / 2 (ADC, ATT/HDG, DSPL, AFCS) | switches | Fusion RSP | Fusion RSP vars | side panels |
-| Oxygen masks | stowage box | 1 in use | `V.oxyMask(1/2)`, regulator `V.oxyMaskMode` (0 N / 1 100 % / 2 EMER) | outboard |
-| Crew oxygen supply | valve | 1 ON | `ac.oxy.crew_sw` | side panel |
+| Oxygen masks | stowage box | 1 in use | `V.oxyMask(1/2)`, regulator `V.oxyMaskMode` (0 N / 1 100 %); EMERGENCY push `V.oxyEmer(1/2)` (mode 2, overpressure) | outboard |
+| OXYGEN SUPPLY LOWER DISCONNECT (pilot / copilot) | toggle | 1 ON / 0 OFF (each gates its own mask) | `ac.oxy.crew_sw` (`g6k.side.crew_oxy`), `ac.oxy.crew_r_sw` (`g6k.side.crew_oxy_r`) | each side console (GX PTG 15-10) |
 | PASSENGER OXYGEN | rotary | 0 CLOSED / 1 NORMAL / 2 OVERRIDE | `ac.oxy.pax_sw` | side panel |
 | NOSE STEER tiller | D-loop crank on a flush hub | ±75° | `V.tiller3d` → `V.tillerCmd` | forward end of the pilot's tan side console |
 | HUD power (optional) | — | 1 ON | `V.hudPower` (no cockpit switch on the Vision deck; set with aircraft power) | — |
@@ -825,7 +830,8 @@ upper / lower beacons, wing-root landing lights and nose-gear landing lights (re
 - BEACON is RED / OFF / WHT (`V.ltBeacon` 1 / 0 / 2); lighting.ts treats both as on. SCOPE: one beacon colour is rendered.
 - PACK CONTROL NORM / MAN (`V.packCtlMan`, new): the L / R MAN TEMP knobs act only in MAN (environment.ts).
 - LDG ELEV is a spring-loaded UP / DN toggle (`V.ldgElevSlew`, new; logic.ts slews 500 ft/s EST and selects MAN) plus
-  the LDG ELEV FMS / MAN switchlight; RATE is NORM / HIGH (`V.pressManRate` 0.5 / 1).
+  the LDG ELEV FMS / MAN switchlight; RATE is NORM / HIGH (`V.pressRateHigh` since fix round 2; `V.pressManRate` is no
+  longer driven by a control).
 - Each crew mask has its own N / 100 % regulator (`V.oxyMaskModeR` for the copilot, new) and RESET / TEST
   (`V.oxyTest(n)`, new; OxygenSystem mask test flow).
 - CABIN PWR is on the EMS CDU SWITCH CONTROL page (07-20-39) and, on the Vision deck, the CABIN POWER PBA of the
@@ -1010,3 +1016,164 @@ SYSTEMS, PULSE, WINGTIP, EMER DC PWR / RAT GEN guards, WINDSHIELD HEAT, MODE, co
 engage); `fidelity/procedures.test.ts` (START AUTO + ENGINE RUN, L CRANK); `fidelity/probes.test.ts` (MASTER INTEG);
 coverage / inventory / functional tests updated for the moved controls.
 
+
+## 19. Function fix round 2
+
+This round goes through the function-lens audit (gaps G6K-L01 .. L51 and G6K-F-01 .. F-37). It follows the GX pilot
+training guide (GX PTG) chapters 4, 6, 9 .. 16 and 18, and the FCOM CSP 700-6 with SB 700-21-034. The control
+inventory is §12; the procedures are §7 and `checklists.ts`.
+
+**New cockpit controls**
+
+The table conventions are those of §12.
+
+- Pedestal reversion panel (GX PTG 16):
+  - DISPLAYS NORM / REV and TUNE VHF / NORM / DSPL.
+  - L / R PFD ADC and IRS keys, and the AFCS 1/2 key.
+  - These drive the Fusion RSP vars in `systems/reversion.ts`, which runs before the suite.
+  - LWR DSPL dimmer for AFD 3.
+- ACP 1 / 2 (`systems/audioControl.ts`), details in §12.4:
+  - NAV1 / 2 and ADF1 / 2 Morse idents, gated by the knob pulled out, the volume and ID / BOTH / VOICE (VOICE removes
+    the NAV ident).
+  - Marker tones, with MKR HI / LO setting `nav.marker_hi_sens`.
+  - The keyed radio: `ac.g6k.acp.tx_radio`, `ic`, `mic_src`.
+  - Per-receiver monitored levels: `ac.g6k.acp.level_<ch>`. SCOPE: no voice audio is synthesised.
+- Glareshield ROLL SPLRS PLT CONT / CPLT CONT (GX PTG 10-48; `systems/flightControlExtras.ts`):
+  - With the roll disconnect and no priority selected, the MFS roll command is the average of both wheels (half
+    authority from one wheel).
+  - ROLL SEL amber shows, and the ROLL SELECT caution posts after 30 s.
+  - A priority switch gives full authority to that wheel.
+- Fire handles (GX PTG 9-12 .. 9-14):
+  - The handle is pulled, then rotated.
+  - Rotated left and held ≥ 1 s discharges bottle 1; right discharges bottle 2.
+  - The handle is solenoid-locked unless its FIRE warning is on. The MANUAL OVERRIDE push releases it.
+  - The APU handle turns right only with the lockout pin released.
+  - The separate DISCH push-buttons were removed.
+- BATT MASTER OFF / EMS / ON:
+  - EMS feeds only the EMS CDUs from the AV BATT DIR bus.
+  - BATT MASTER OFF with no AC power shuts the APU down at once (GX PTG 4-18).
+- Other overhead changes:
+  - RATE NORM / HIGH replaces the MAN RATE knob.
+  - L / R WING FEED INHIBIT legends.
+  - RAT GEN legends are ON / OFF.
+  - GEN FAIL lights with the fire handle pulled.
+  - DOME toggle removed; the dome is on AREA.
+- Pedestal changes:
+  - GND LIFT DUMPING is one MANUAL ARM / AUTO / OFF switch.
+  - STAB CH 1 / 2 are unguarded PUSH OFF/RESET PBAs.
+  - FLIGHT SPOILER detents are 0 / 1/4 / 1/2 / 3/4 / FULL / MAX.
+- Side consoles: per-side OXYGEN SUPPLY LOWER DISCONNECT, and the crew mask EMERGENCY push (regulator mode 2).
+- EMS CDU (GX PTG 10-62, 15-19, 6-15):
+  - SWITCH CONTROL 1/2: SLAT/FLAP RESET, STALL WARN ADVANCE NORM / REV, L / R FOOTWARMER. 2/2: CABIN PWR.
+  - TEST 2/2: RAT TEST (EST 10 s ground BIT).
+  - LAMP TEST lasts 20 s.
+  - The two units are linked (M / S).
+  - Brightness is the BRT keys × the L / R DISPLAY knob.
+  - EMER CNTL refuses a fourth AC bus.
+
+**Systems changes**
+
+- Pressurization (GX PTG 13-57 .. 13-66). The shared library change is additive: the optional `outflowLimit` and
+  `maxCabinDescentFpmBinding` bindings.
+  - RATE HIGH raises the AUTO descent limit to 800 fpm.
+  - EMER DEPRESS works in AUTO and MAN.
+  - Cabin altitude limiter: 14,500 ft with a 5 s anticipation, EST.
+  - 3,000 fpm rate limiter: MAN only, EST.
+  - OFV travel limiter: ≤ 50 % above 7 psid.
+  - OUTFLOW VALVE n CLOSED halves the outflow area; both closed shuts it.
+  - DITCHING sequence: inhibited above 15,000 ft; packs off, dump to < 0.1 psid, then both OFVs closed.
+  - The limiters, the ditching close stage and both-closed use the override path at the auto valve rate in either
+    mode.
+  - Door-open protection.
+  - Relief 10.63 psid; CABIN DELTA P > 10.85 psid.
+  - CABIN ALT caution 8,200 ft and warning 9,000 ft, raised for fields ≥ 7,230 ft (CAB ALT LEVEL HI).
+  - Passenger masks at 14,500 ft.
+  - Messages: AUTO PRESS FAIL / FAULT, MAN PRESS CONTROL, HIGH PRESS RATE, LDG ELEV MAN, SET LDG ELEV, OUTFLOW VLV n
+    CLSD / FAIL, SAFETY VALVE OPEN, EMER DEPRESS.
+  - The cabin is settled at the published zone temperature on a state load. The stale 0 °C used before gave a
+    ~1,500 ft transient.
+- Air conditioning:
+  - RAM AIR no longer shuts the packs. The ram valve opens only with both packs off, below 15,000 ft and airborne.
+  - TRIM AIR OFF: every zone gets the cockpit-zone supply.
+  - Recirculation fans on AC 1 / AC 4. The recirculation state sets the AUX PRESS supply temperature.
+  - Statuses RECIRC FAN OFF and TRIM AIR OFF; cautions RECIRC FAN FAIL and L / R PACK TEMP.
+- Bleed (GX PTG 13-5 / 13-9, 4-13):
+  - ENG BLEED AUTO vs ON: AUTO closes the starting side's PRV; ON keeps it open. PRV regulation at 43 psi.
+  - XBLEED OPEN closes one PRV; both engine bleeds manually ON with XBLEED OPEN gives BLEED MISCONFIG.
+  - LCV interlocks.
+  - The fire handle closes the PRV.
+  - Messages: L / R BLEED SYS FAIL, XBLEED FAIL, XBLEED OPEN / CLOSED.
+- Hydraulics (GX PTG 12-23 .. 12-29):
+  - ACMP priority on the APU generator alone: 3A, 3B, 2B, 1B.
+  - Per-system LO QTY levels, HYD 3 LO QTY with the gear uplocked, HYD 3 OVERFILLED.
+  - L / R HYD SOV FAIL; HYD PUMP n OFF / ON statuses.
+- Fuel (GX PTG 11):
+  - Per-side recirculation.
+  - Wing transfer inhibited while that side's AUX pump backs up the PRI pumps.
+  - ENG FUEL SOV caution on a commanded / actual mismatch. The SOV holds its position unpowered.
+  - L / R FUEL RECIRC FAIL, FUEL XFER FAIL, FUEL COMPUTR FAIL, AFT XFER OFF SCHED, APU FUEL SOV.
+- Fire / APU (GX PTG 9-20, 4-16):
+  - On the ground the FADEC shuts the APU down after a 5 s fire signal; the APU handle shuts it down immediately.
+  - In flight there is no automatic shutdown.
+  - A pulled engine fire handle trips that side's VFGs.
+- Flight controls (GX PTG 10-24 .. 10-69):
+  - Spoiler schedule with FULL at 0.9.
+  - SPLRS/STAB IN TEST for 20 s after hydraulic power-up; stab trim is inhibited during it.
+  - Mach trim (`systems/flightControlExtras.ts`): nose-up with Mach, AP off. The FDM Cm_mach tuck was re-fitted to
+    it.
+  - SLAT/FLAP fault latches, cleared by the EMS SLAT/FLAP RESET. They latch after 2 s with a powered SFCU; the
+    flap-waits-for-slats sequencing is excluded.
+  - STAB CH n FAIL / OFF; STAB TRIM after the MASTER DISC is held > 5 s; FLT SPLR DEPLOYED.
+- Stall protection (GX PTG 10-55 .. 10-63):
+  - STALL WARN ADVANCE (EMS REV): trips advanced, factor 0.9 EST.
+  - SPC continuous ignition at high AoA (EST 0.75 of the shaker scale) and with the shaker.
+  - The shaker or pusher disconnects the AP.
+  - STALL PROTECT FAIL after the MASTER DISC is held about 12 s.
+  - SCOPE: the stall-test pusher sequence is the existing EMS STALL TEST only.
+- Electrical (EMS breaker lists, GX PTG 6, 10-71, 15-41):
+  - Stab trim CH 1 on AC 1 and CH 2 on AC ESS.
+  - SLAT/FLAP PWR 1 on AC 1 and PWR 2 on AC ESS.
+  - SFCU 1 on BATT and SFCU 2 on DC ESS.
+  - Ail trim on DC 2 and rud trim on DC ESS.
+  - Ram air, engine bleed and crossbleed valves on DC ESS / BATT.
+  - NAV lights on BATT, strobe on DC 1, beacon on DC 2.
+  - Landing / taxi lights and footwarmers split AC 1 / AC 4.
+  - Battery chargers on AC 3 / AC 2; area lights on AV BATT DIR.
+  - Emergency lights draw charging current only.
+  - RAT GEN FAIL is posted on the ground only.
+- Warnings and aurals:
+  - One NO TAKEOFF voice (the CAS). The take-off configuration monitor has no horn of its own.
+  - CONFIG SLAT/FLAP.
+  - Gear horn secondary mode (no RA): mutable, and the mute is cancelled by gear down.
+  - Autobrake selector springs back to OFF on the ground.
+- Lighting:
+  - PASS SIGNS AUTO: gear down, flaps, or cabin > 8,000 ft.
+  - Beacon RED / WHT colour on the exterior.
+  - Wing-tip taxi lamps.
+  - EMER LIGHTS OFF caution (engines running, EST colour) and EMER LIGHTS ON status.
+- Checklists (`checklists.ts`):
+  - Fire items are "PULL, ROTATE LEFT (bottle 1)"; the APU fire item includes the lockout pin.
+  - BATT MASTER and GND LIFT DUMPING checks follow the new switches.
+  - An ACP item was added to APPROACH.
+  - New CABIN ALT, EMER DEPRESS and ROLL SELECT checklists.
+
+**Not done, or kept as SCOPE**
+
+- G6K-F-37 (AP engagement in TO mode, FMS duplicate idents): shared Fusion FMS / AFCS code outside this module;
+  unchanged.
+- G6K-F-24: auto relight uses the shared start controller, which is on by default, and the SPC ignition is added.
+  The TCDS 850 °C air-start ITT limit is not modelled, because the shared controller has one hot-start limit.
+- G6K-F-19: WING TO CTR LEAK, L / R WING FULL and XFER VALVE OPEN are not modelled; there is no leak or level-switch
+  model.
+- G6K-F-09: MAN PRESS FAULT is not modelled.
+- G6K-F-12: recirculation affects only the AUX PRESS supply temperature, not full zone mixing.
+
+**Tests**
+
+- `fidelity/probes.test.ts`: 22 function-fix tests (hydraulics, bleed, ECS, pressurization, fire, APU, electrical,
+  flight controls, gear horn).
+- `fidelity/round2-systems.test.ts`: status messages, load buses, SPC ignition, MASTER DISC hold, single NO TAKEOFF
+  voice, PASS SIGNS AUTO, ENG BLEED AUTO vs ON.
+- `cockpit-main/round2.test.ts`: reversion panel, ACP, ROLL SPLRS, GND LIFT DUMPING, 3/4 detent, EMS CDU pages,
+  linking, 4th-bus refusal, RAT TEST, dimming, oxygen.
+- Coverage, inventory, flows, failures, states and abnormal tests were updated for the new controls.

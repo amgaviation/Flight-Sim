@@ -33,6 +33,8 @@ describe('Global 6000 overhead / side consoles / CCBP: control coverage', () => 
       'g6k.side.pax_on': ['oxy.pax_on'],
       'g6k.side.pax_low': ['oxy.pax_low'],
       'g6k.ovhd.no_smoking_sign': ['ac.light.no_smoking'],
+      'g6k.ovhd.wing_feed_l': ['ac.g6k.ck.oh.wing_feed_l'],
+      'g6k.ovhd.wing_feed_r': ['ac.g6k.ck.oh.wing_feed_r'],
     };
     // Operating conditions some controls need before a system looks at them (the systems read these vars only then).
     const PRECONDITION: Record<string, () => void> = {
@@ -41,7 +43,13 @@ describe('Global 6000 overhead / side consoles / CCBP: control coverage', () => 
       'g6k.ovhd.man_temp_l': () => r.vars.set(V.packFlowSel, 3), // PACK CONTROL MAN
       'g6k.ovhd.man_temp_r': () => r.vars.set(V.packFlowSel, 3),
       'g6k.side.oxy_mode1': () => (r.vars.set(V.oxyMask(1), 1), r.vars.set(V.crewOxy, 1)), // mask out of the box, supply open: regulator in use
-      'g6k.side.oxy_mode2': () => (r.vars.set(V.oxyMask(2), 1), r.vars.set(V.crewOxy, 1)),
+      'g6k.side.oxy_mode2': () => (r.vars.set(V.oxyMask(2), 1), r.vars.set(V.crewOxyR, 1)),
+      // Fire handles: solenoid unlocked (DAU fire warning / override, logic.ts V.fireUnlock).
+      'g6k.ovhd.fire_l': () => r.vars.set(V.fireUnlock('l'), 1),
+      'g6k.ovhd.fire_apu': () => r.vars.set(V.fireUnlock('apu'), 1),
+      'g6k.ovhd.fire_r': () => r.vars.set(V.fireUnlock('r'), 1),
+      'g6k.side.oxy_emer1': () => (r.vars.set(V.oxyMask(1), 1), r.vars.set(V.crewOxy, 1)),
+      'g6k.side.oxy_emer2': () => (r.vars.set(V.oxyMask(2), 1), r.vars.set(V.crewOxyR, 1)),
     };
     // Vars consumed inside closures that run only while an aural plays (createSystems.ts casAudio: IAC 1 / 2 mute gating).
     const CLOSURE_CONSUMED = new Set([V.auralMute(1), V.auralMute(2)]);

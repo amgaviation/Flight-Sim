@@ -482,7 +482,9 @@ function buildClock(c: B738CockpitContext, p: Panel, s: 1 | 2, u: number, v: num
   push('set', 'SET', B738.clockSet(s), 0.037, 0.012, 'SET', 0.037, 0.02);
   push('plus', '+', B738.clockPlus(s), 0.037, -0.012, '+', 0.037, -0.005);
   push('minus', '-', B738.clockMinus(s), 0.034, -0.034, '-', 0.025, -0.039);
-  toggle(env, bz, { id: `${pfx}.et`, label: `CLOCK ${s} ET RUN/HLD`, var: B738.clockEt(s), positions: ['HLD', 'RUN'], values: [-1, 0], initial: 1, scale: 0.5, labels: { name: false, positions: false, height: 0.0019 } }, -0.034, -0.032);
+  // ET switch RESET / HLD / RUN, RESET spring-loaded to HLD (FCOM 10.10 clock: "RESET (spring-loaded to HLD) -
+  // returns the ET display to zero"); the RESET push button resets the chronograph.
+  toggle(env, bz, { id: `${pfx}.et`, label: `CLOCK ${s} ET RESET/HLD/RUN`, var: B738.clockEt(s), positions: ['RESET', 'HLD', 'RUN'], values: [1, -1, 0], initial: 2, springs: { 0: 1 }, scale: 0.5, labels: { name: false, positions: false, height: 0.0019 } }, -0.034, -0.032);
   bz.label('ET', -0.04, -0.02, { height: 0.0019 });
-  bz.label('RUN\nHLD', -0.026, -0.02, { height: 0.0017, lineHeight: 1.1 });
+  bz.label('RUN\nHLD\nRESET', -0.024, -0.024, { height: 0.0015, lineHeight: 1.1 });
 }

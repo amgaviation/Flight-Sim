@@ -15,8 +15,11 @@
  * pilot and stows up with its PUSH latch (`V.hudStow`); the symbology shows
  * while `V.hudOn` (systems/vision.ts). SCOPE: minimal conformal symbology
  * (horizon line, flight-path marker and boresight); no EVS image.
- * SCOPE: the ROLL SPLRS PLT CONT / CPLT CONT switchlights (roll-disconnect
- * control) are not modelled (no roll-disconnect in the flight-control model).
+ * ROLL SPLRS PLT CONT / CPLT CONT (GX PTG 10-48 / 10-49): released / pressed
+ * switchlights between the MASTER WARNING/CAUTION and the HUD knob (pilot)
+ * and at the copilot's end, split legend amber ROLL SEL over white PLT ROLL
+ * (CPLT ROLL); pressing one gives that wheel's roll sensor priority for the
+ * MFS roll assist after a roll disconnect (systems/flightControlExtras.ts).
  * The glareshield face is charcoal with a tan-leather lower lip (photo).
  */
 import * as THREE from 'three';
@@ -29,7 +32,7 @@ import { EYE_L, GLARE_FACE } from './layout';
 import { g6kFinish } from './finish';
 
 /** Horizontal positions (u) on the glareshield face. */
-export const GS_X = { ctp: 0.47, mwc: 0.61, hud: 0.685, evs: 0.74 };
+export const GS_X = { ctp: 0.47, mwc: 0.58, roll: 0.632, hud: 0.685, evs: 0.74 };
 
 export function buildGlareshield(c: G6kCockpitContext): void {
   const { b, env, suite } = c;
@@ -69,6 +72,28 @@ export function buildGlareshield(c: G6kCockpitContext): void {
     );
     face.label('MASTER', side * GS_X.mwc, 0.02, { height: 0.0021, zone });
     face.label('WARNING/CAUTION', side * GS_X.mwc, 0.0165, { height: 0.0019, zone });
+    // ROLL SPLRS PLT CONT / CPLT CONT (photo c_gs_l / c_gs_r).
+    const n = side < 0 ? 1 : 2;
+    face.add(
+      new PushButton(env, {
+        id: `g6k.gs.roll_splr${n}`,
+        label: `ROLL SPLRS ${n === 1 ? 'PLT' : 'CPLT'} CONT`,
+        var: V.rollSplr(n),
+        mode: 'toggle',
+        style: 'korry',
+        width: 0.019,
+        height: 0.019,
+        layout: 'stack',
+        segments: [
+          { text: ['ROLL', 'SEL'], color: 'amber', var: V.rollSelReq },
+          { text: [n === 1 ? 'PLT' : 'CPLT', 'ROLL'], color: 'white', var: V.rollPriority, test: (x: number) => x === n },
+        ],
+      }),
+      side * GS_X.roll,
+      -0.003,
+    );
+    face.label('ROLL SPLRS', side * GS_X.roll, 0.0165, { height: 0.0019, zone });
+    face.label(n === 1 ? 'PLT CONT' : 'CPLT CONT', side * GS_X.roll, -0.0185, { height: 0.0019, zone });
   }
   // EVS and HUD knobs, pilot's end (photo c_gs_l).
   const zl = ZONE.left;

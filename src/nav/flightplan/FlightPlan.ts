@@ -442,6 +442,10 @@ export class FlightPlan {
     if (this.style === 'boeing') {
       for (let k = i; k < this.legs.length; k++) {
         if (sameFix(this.legs[k].fix, wpt) && this.legs[k].type !== 'DISCO') {
+          // Entering a downstream fix (e.g. into a ROUTE DISCONTINUITY box) connects the route to it: an initial
+          // fix (the approach IF) becomes a TF leg so normalize() does not put the discontinuity back
+          // (FCOM 11.42 "Remove a route discontinuity").
+          if (this.legs[k].type === 'IF' && k > i) this.legs[k].type = 'TF';
           this.legs.splice(i, k - i);
           this.normalize();
           return this.legs[i];

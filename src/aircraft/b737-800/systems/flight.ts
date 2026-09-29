@@ -15,7 +15,8 @@
  *    trim that opposes the column unless the STAB TRIM override switch is at
  *    OVERRIDE (FCOM 9.20). 0-17 units, green band per data.ts.
  *  - Aileron trim (two switches moved together) and rudder trim (knob).
- *  - Yaw damper (system B, FCC/SMYD): YAW DAMPER switch (held; trips off).
+ *  - Yaw damper (system B, SMYD 1; standby yaw damper on the standby rudder
+ *    PCU through SMYD 2 with STBY RUD on): YAW DAMPER switch (held; trips off).
  *  - TE flaps (system B hydraulic motor; ALTERNATE FLAPS electric motor),
  *    load relief at flaps 30/40 (FCOM), LE flaps and slats (B, PTU backup,
  *    standby for alternate extension) with the auto-slat function in flaps 1-5.
@@ -107,8 +108,13 @@ export function createFlightControls(ctx: SimContext): FlightControlBlocks {
 
   const yd = new YawDamper(ctx, {
     engagedVar: B738.ydSw,
-    // Main yaw damper: SMYD on DC, actuator on hydraulic system B with FLT CONTROL B ON (FCOM 9.20).
-    power: `${POWER.yd} && hyd.b_psi > 1000 && ${B738.fltCtl('b')} == 1`,
+    // Main yaw damper: SMYD 1 on DC, main rudder PCU on hydraulic system B with FLT CONTROL B ON (FCOM 9.20).
+    // Standby yaw damper: with the standby rudder system on (STBY RUD), SMYD 2 drives the standby rudder PCU
+    // through its yaw damper solenoid valve on standby hydraulics, powered from the AC standby bus (stby_yd
+    // breaker) (737NG AMM 22-23 "Yaw damper"; b737-sunny "Rudder system"). Reduced authority (EST 0.5). The
+    // standby pump running counts as available while the pressure builds (no trip during the ~1 s transfer, EST).
+    power: `(${POWER.yd} && hyd.b_psi > 1000 && ${B738.fltCtl('b')} == 1) || (${B738.stbyRudder} && (hyd.stby_psi > 1000 || (${B738.stbyPumpCmd} && elec.hyd_stby_powered && hyd.stby_qty > 0.2)) && elec.stby_yd_powered)`,
+    authorityScale: `hyd.b_psi > 1000 && ${B738.fltCtl('b')} == 1 ? 1 : 0.5`,
     rateVar: 'ahrs1.r_dps',
     rateValid: 'ahrs1.att_valid',
     nyVar: 'ahrs1.ny_g',
@@ -137,6 +143,9 @@ export function createFlightControls(ctx: SimContext): FlightControlBlocks {
       power: `max(${HYD_B}, ${B738.altFlapsArm} * ${HYD_STBY})`,
       // Auto-slat: slats to FULL EXTEND near the stall warning with flaps 1-5 (FCOM 9.20).
       autoSlat: { condition: 'stall.aoa_norm > 0.8', flapsRange: [0.5, 5.5] },
+      // ALTERNATE FLAPS ARM + DOWN: all LE flaps and slats to FULL EXTEND on standby hydraulics; they cannot be
+      // retracted by the alternate system (FCOM 9.20). Latched in logic.ts until system B is restored with ARM off.
+      fullExtend: 'ac.b738.le_alt_full',
     },
     iasVar: 'adc1.ias_kt',
   });
@@ -152,7 +161,18 @@ export function createFlightControls(ctx: SimContext): FlightControlBlocks {
     // Flight spoilers rise on the down-going wing beyond ~10 deg of control wheel (EST deadband).
     roll: { deadband: 0.12, gain: 1.2 },
     groundSpoilers: true,
-    auto: { thrustIdle: THRUST_IDLE, thrustAdvanced: THRUST_ADVANCED, spinupKt: 60, raFt: 10, rto: { speedKt: 60 }, leverBackdrive: true },
+    // FCOM 9.20 auto speedbrakes: landing (ARMED, idle, wheel spin-up or ground mode); with the lever DOWN, raising
+    // both reverse thrust levers on the ground deploys them; RTO above 60 kt with both levers retarded, armed by a
+    // take-off thrust advance on the ground (logic.ts `rto_sb_armed`).
+    auto: {
+      thrustIdle: THRUST_IDLE,
+      thrustAdvanced: THRUST_ADVANCED,
+      spinupKt: 60,
+      raFt: 10,
+      rto: { speedKt: 60, enable: 'ac.b738.rto_sb_armed' },
+      reverse: `${B738.revLever(1)} > 0.1 && ${B738.revLever(2)} > 0.1`,
+      leverBackdrive: true,
+    },
     flightPower: `max(${spA}, ${spB})`,
     groundPower: spA,
     travelS: 1.2,
@@ -204,6 +224,8 @@ export function createFlightControls(ctx: SimContext): FlightControlBlocks {
       speedbrakeDown: `${B738.speedbrake} < 0.02`,
       pedalDisarm: 0.25,
       rtoSpeedKt: 90,
+      // FCOM 14.20: selecting RTO on the ground runs a self test, AUTO BRAKE DISARM lit for 1-2 s.
+      rtoSelfTestS: 1.5,
     },
     // Carbon brakes: ~300 kg of heat sink per wheel (EST) -> ~2 x 300 kg x 1,200 J/kgK per side.
     temperature: { heatCapacityJPerK: 7.2e5, coolingTauS: 2400 },

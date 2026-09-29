@@ -27,10 +27,15 @@
  *
  *  - AURAL WARNING TEST 1 / 2 (03-10-16): the IAC 1 / IAC 2 aural generator
  *    plays its tone / voice sequence (auralTest.ts).
- * SCOPE: RAT TEST (maintenance BIT) is not on the page; SWITCH CONTROL has only CABIN PWR (no
- * humidifier / footwarmer / STALL WARN ADVANCE model); the two units are not
- * linked (each keeps its own page, both show "M"); LOCKED (maintenance)
- * breakers are not modelled. Screen colours and fonts are EST.
+ *  - SWITCH CONTROL 1/2 (GX PTG 10-62): SLAT/FLAP RESET, STALL WARN ADVANCE
+ *    NORM / REV (the SPC advance, logic.ts), L / R FOOTWARMER; 2/2 CABIN PWR.
+ *  - TEST CONTROL 2/2: RAT TEST (ground BIT, EST 10 s, PASS / FAIL).
+ *  - The units are linked: the one operated is the master ("M"), the other
+ *    mirrors its page ("S"). Brightness = the BRT keys x the L / R DISPLAY
+ *    knob (GX PTG 15-6).
+ *  - EMER CNTL refuses a fourth AC bus MAN OFF (GX PTG 6-15).
+ * SCOPE: LOCKED (maintenance) breakers are not modelled. Screen colours and
+ * fonts are EST.
  */
 import * as THREE from 'three';
 import type { SimVars } from '../../../../core/SimVars';
@@ -54,7 +59,10 @@ const ROWS = 6;
 const IDLE_OFF_S = 120;
 const FIRE_TEST_S = 10;
 const STALL_TEST_S = 20;
-const LAMP_TEST_S = 10; // EST
+const LAMP_TEST_S = 20; // GX PTG 15-19: LAMP TEST 1 / 2 about 20 s
+const RAT_TEST_S = 10; // EST: RAT generator BIT (FCOM CSP 700-5000-6 07-10-36 RAT TEST)
+/** SWITCH CONTROL page 1/2 rows (GX PTG 10-62 GX_10_061) and page 2/2 (CABIN PWR, FCOM 07-20-39). */
+const CNTL_ROWS = [['SLAT/FLAP RESET', 'STALL WARN ADVANCE', 'LEFT FOOTWARMER', 'RIGHT FOOTWARMER'], ['CABIN PWR']] as const;
 
 const AC_ISOL = ([1, 2, 3, 4] as const).map((n) => V.acBusIsol(n));
 const DC_ISOL = (['dc_bus1', 'dc_bus2', 'dc_ess', 'batt_bus'] as const).map((b) => V.dcBusIsol(b));
@@ -67,8 +75,10 @@ const TEST_ROWS = ['FIRE TEST', 'STALL TEST', 'AURAL WARNING TEST 1', 'AURAL WAR
  */
 export class EmsShared {
   readonly entries: { e: CbEntry; vIn: string; vTrip: string; lastTrip: number }[];
-  /** Test timers (s left; 0 = off): FIRE, STALL, LAMP 1, LAMP 2. */
-  readonly tests = [0, 0, 0, 0];
+  /** Test timers (s left; 0 = off): FIRE, STALL, LAMP 1, LAMP 2, RAT. */
+  readonly tests = [0, 0, 0, 0, 0];
+  /** RAT TEST result: 0 none, 1 PASS, -1 FAIL. */
+  ratResult = 0;
   /** Index into `entries` of the most recent trip (-1 = none since the last look). */
   newTrip = -1;
   private tripSeq = 0;
@@ -118,7 +128,9 @@ export class EmsShared {
       return;
     }
     if (k === 1 && v.get('gear.air_ground') === 0) return; // STALL TEST on the ground only (07-20-42)
-    this.tests[k] = k === 0 ? FIRE_TEST_S : k === 1 ? STALL_TEST_S : LAMP_TEST_S;
+    if (k === 4 && v.get('gear.air_ground') === 0) return; // RAT TEST: ground maintenance BIT (EST)
+    this.tests[k] = k === 0 ? FIRE_TEST_S : k === 1 ? STALL_TEST_S : k === 4 ? RAT_TEST_S : LAMP_TEST_S;
+    if (k === 4) this.ratResult = 0;
     this.apply();
   }
 
@@ -141,10 +153,13 @@ export class EmsShared {
   tick(dt: number): void {
     this.aural.tick(dt);
     let changed = false;
-    for (let k = 0; k < 4; k++) {
+    for (let k = 0; k < 5; k++) {
       if (this.tests[k] > 0) {
         this.tests[k] = Math.max(0, this.tests[k] - dt);
-        if (this.tests[k] === 0) changed = true;
+        if (this.tests[k] === 0) {
+          changed = true;
+          if (k === 4) this.ratResult = this.vars.get('fail.elec.rat_gen') !== 0 ? -1 : 1;
+        }
       }
     }
     if (changed) this.apply();
@@ -175,6 +190,14 @@ export class EmsCduUnit {
   list: number[] = [];
   private seenTrips = 0;
   private readonly offs: (() => void)[] = [];
+  /** DISPLAY L / R knob dimming factor (GX PTG 15-6), set by the side builder. */
+  dim = 1;
+  /** Own BRT key level (0.1 .. 1). */
+  keyBrt = 0.8;
+  /** The other EMS CDU: the two units are linked (FCOM 07-10-11 "M" / "S"): a page selection is mirrored. */
+  partner: EmsCduUnit | null = null;
+  /** 1 = this unit is the master (last one operated), 0 = slave. */
+  master = 1;
   readonly awakeVar: string;
   readonly brtVar: string;
   /** Screen power (bus power and not blanked), written by the side-console hook. */
@@ -191,7 +214,9 @@ export class EmsCduUnit {
     this.onVar = `ac.g6k.ck.ems${n}_on`;
     const v = shared.vars;
     v.set(this.awakeVar, 1);
-    if (!v.has(this.brtVar)) v.set(this.brtVar, 0.8);
+    if (v.has(this.brtVar)) this.keyBrt = v.get(this.brtVar);
+    v.set(this.brtVar, this.keyBrt);
+    this.master = n === 1 ? 1 : 0;
     this.offs.push(events.on(EMS_SIDE_EVENTS.key(n), (id) => this.press(String(id))));
   }
 
@@ -205,6 +230,9 @@ export class EmsCduUnit {
         return Math.ceil(EMS_SYSTEMS.length / (2 * ROWS));
       case 'BUS':
         return 1;
+      case 'CNTL':
+      case 'TEST':
+        return 2;
       case 'SYSCB':
       case 'BUSCB':
       case 'STAT':
@@ -221,6 +249,7 @@ export class EmsCduUnit {
     this.sel = -1;
     this.message = '';
     this.rebuild();
+    this.link();
   }
 
   private rebuild(): void {
@@ -264,22 +293,39 @@ export class EmsCduUnit {
       case 'NEXT':
         this.pageNo = (this.pageNo + 1) % this.pages();
         this.sel = -1;
+        this.link();
         return;
       case 'PREV':
         this.pageNo = (this.pageNo + this.pages() - 1) % this.pages();
         this.sel = -1;
+        this.link();
         return;
       case 'BRT+':
-        v.set(this.brtVar, Math.min(1, v.get(this.brtVar, 0.8) + 0.1));
+        this.keyBrt = Math.min(1, this.keyBrt + 0.1);
         return;
       case 'BRT-':
-        v.set(this.brtVar, Math.max(0.1, v.get(this.brtVar, 0.8) - 0.1));
+        this.keyBrt = Math.max(0.1, this.keyBrt - 0.1);
         return;
     }
     const side = id[0];
     const row = Number(id.slice(1)) - 1;
     if ((side !== 'L' && side !== 'R') || !(row >= 0 && row < ROWS)) return;
     this.lineKey(side, row);
+    this.link();
+  }
+
+  /** Linked CDUs: the unit operated becomes the master and the other mirrors its page ("M" / "S"). */
+  private link(): void {
+    const o = this.partner;
+    if (!o) return;
+    this.master = 1;
+    o.master = 0;
+    o.page = this.page;
+    o.pageNo = this.pageNo;
+    o.group = this.group;
+    o.sel = this.sel;
+    o.list = this.list;
+    o.message = this.message;
   }
 
   private lineKey(side: 'L' | 'R', row: number): void {
@@ -309,17 +355,32 @@ export class EmsCduUnit {
         if (!s.toggle(this.list[k])) this.message = 'THERM CB CANT BE CHANGED FROM CDU';
         return;
       }
-      case 'CNTL':
-        if (row === 0 && side === 'R') v.set(V.cabinPwr, v.get(V.cabinPwr) !== 0 ? 0 : 1);
+      case 'CNTL': {
+        // SWITCH CONTROL (GX PTG 10-62): page 1/2 SLAT/FLAP RESET, STALL WARN ADVANCE NORM / REV, L / R FOOTWARMER;
+        // page 2/2 CABIN PWR (FCOM 07-20-39). Activation keys (right) change the item.
+        if (side !== 'R') return;
+        if (this.pageNo === 0) {
+          if (row === 0) {
+            v.set(V.slatFlapReset, 1);
+            this.resetPulse = 0.5;
+          } else if (row === 1) v.set(V.stallAdvSel, v.get(V.stallAdvSel) !== 0 ? 0 : 1);
+          else if (row === 2) v.set(V.footWarmer('l'), v.get(V.footWarmer('l')) !== 0 ? 0 : 1);
+          else if (row === 3) v.set(V.footWarmer('r'), v.get(V.footWarmer('r')) !== 0 ? 0 : 1);
+        } else if (row === 0) v.set(V.cabinPwr, v.get(V.cabinPwr) !== 0 ? 0 : 1);
         return;
+      }
       case 'TEST': {
         if (side !== 'R') {
           this.sel = row;
           return;
         }
+        this.sel = row;
+        if (this.pageNo === 1) {
+          if (row === 0) s.startTest(4); // RAT TEST (page 2/2)
+          return;
+        }
         const map = [0, 1, -1, -1, 2, 3];
         const t = map[row];
-        this.sel = row;
         if (t >= 0) s.startTest(t);
         else s.aural.toggle(row === 2 ? 1 : 2);
         return;
@@ -327,14 +388,31 @@ export class EmsCduUnit {
       case 'EMER': {
         if (row >= 4) return;
         const name = side === 'L' ? AC_ISOL[row] : DC_ISOL[row];
-        v.set(name, v.get(name) !== 0 ? 0 : 1);
+        const on = v.get(name) !== 0;
+        // GX PTG 6-15: "A maximum of 3 busses only can be manually isolated concurrently" (AC buses).
+        if (side === 'L' && !on) {
+          let n = 0;
+          for (let i = 0; i < AC_ISOL.length; i++) if (v.get(AC_ISOL[i]) !== 0) n++;
+          if (n >= 3) {
+            this.message = 'MAX 3 AC BUSES MAN OFF';
+            return;
+          }
+        }
+        v.set(name, on ? 0 : 1);
         return;
       }
     }
   }
 
+  private resetPulse = 0;
+
   tick(dt: number): void {
     const v = this.shared.vars;
+    v.set(this.brtVar, this.keyBrt * this.dim);
+    if (this.resetPulse > 0) {
+      this.resetPulse -= dt;
+      if (this.resetPulse <= 0) v.set(V.slatFlapReset, 0);
+    }
     if (!this.powered) return;
     // Auto STATUS page on a new trip, most recent trip highlighted.
     if (this.shared.tripCount !== this.seenTrips) {
@@ -445,13 +523,42 @@ export class EmsCduScreen extends CanvasDisplay {
       }
       case 'CNTL': {
         hdr('SWITCH CONTROL');
-        const on = s.vars.get(V.cabinPwr) !== 0;
-        text('CABIN PWR', 8, EMS_ROW_Y(0), C.white);
-        text(on ? 'ON' : 'OFF', W - 8, EMS_ROW_Y(0), on ? C.green : C.white, 'right', 16);
+        const rows = CNTL_ROWS[u.pageNo] ?? CNTL_ROWS[0];
+        for (let i = 0; i < rows.length; i++) {
+          const y = EMS_ROW_Y(i);
+          text(rows[i], 8, y, C.white);
+          let st = '';
+          let col = C.white;
+          if (u.pageNo === 0) {
+            if (i === 0) st = s.vars.get(V.slatFlapReset) !== 0 ? 'RESET' : '';
+            else if (i === 1) {
+              const rev = s.vars.get(V.stallAdvSel) !== 0;
+              st = rev ? 'REV' : 'NORM';
+              col = rev ? C.cyan : C.green;
+              if (s.vars.get(V.stallAdvance) !== 0) text('ADVANCE', W / 2 + 40, y + 12, C.cyan, 'center', 11);
+            } else {
+              const on = s.vars.get(V.footWarmer(i === 2 ? 'l' : 'r')) !== 0;
+              st = on ? 'ON' : 'OFF';
+              col = on ? C.green : C.white;
+            }
+          } else {
+            const on = s.vars.get(V.cabinPwr) !== 0;
+            st = on ? 'ON' : 'OFF';
+            col = on ? C.green : C.white;
+          }
+          text(st, W - 8, y, col, 'right', 16);
+        }
         break;
       }
       case 'TEST': {
         hdr('TEST CONTROL');
+        if (u.pageNo === 1) {
+          const run = s.tests[4] > 0;
+          text('RAT TEST', 8, EMS_ROW_Y(0), C.white);
+          text(run ? 'TEST' : s.ratResult > 0 ? 'PASS' : s.ratResult < 0 ? 'FAIL' : 'OFF', W - 8, EMS_ROW_Y(0), run ? C.green : s.ratResult < 0 ? C.amber : C.white, 'right', 16);
+          if (u.sel === 0) hi(0);
+          break;
+        }
         for (let i = 0; i < ROWS; i++) {
           const map = [0, 1, -1, -1, 2, 3];
           const t = map[i];
@@ -477,7 +584,7 @@ export class EmsCduScreen extends CanvasDisplay {
       }
     }
     if (u.message) text(u.message, W / 2, EMS_ROW_Y(ROWS) - 6, C.amber, 'center', 13);
-    text('M', 8, H - 10, C.white, 'left', 13);
+    text(u.master ? 'M' : 'S', 8, H - 10, C.white, 'left', 13);
   }
 
   protected override drawBoot(ctx: Ctx2D, p: number): void {

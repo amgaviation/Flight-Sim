@@ -48,6 +48,11 @@ const EXEMPT = new Set<string>([
   V.fireTest,
   V.ldgElevFt, // FCOM 01-10-41: set through the spring-loaded LDG ELEV UP / DN slew switch (V.ldgElevSlew), logic.ts
   V.stallTest,
+  // EMS CDU SWITCH CONTROL page entries (cockpit-overhead/flows.test.ts).
+  V.stallAdvSel,
+  V.slatFlapReset,
+  V.footWarmer('l'),
+  V.footWarmer('r'),
   ...(['pax', 'emer', 'bag', 'aft_eqpt', 'svc_large', 'svc_small'] as const).map((d) => V.door(d)),
 ]);
 
@@ -64,6 +69,8 @@ describe('Global 6000 control inventory', () => {
       }
     };
     r.vars.set('gear.handle_lock', 0);
+    // Fire handles are solenoid-locked without a fire warning (logic.ts V.fireUnlock): unlocked for the sweep.
+    for (const z of ['l', 'apu', 'r'] as const) r.vars.set(V.fireUnlock(z), 1);
     // Two passes: guards (separate controls) opened in the first pass let their switches act in the second.
     for (const c of [...build.controls, ...build.controls]) {
       const targets = c.hitTargets.length ? c.hitTargets : [c.object];

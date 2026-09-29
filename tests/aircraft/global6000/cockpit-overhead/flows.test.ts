@@ -45,12 +45,28 @@ describe('Global 6000 overhead flows', () => {
     const k = setupFull('cold_dark');
     const { r, step, click, ctl } = k;
     const v = r.vars;
+    // Upward flick of a 3-position toggle: the pointer lands above the pivot (ToggleSwitch picks the direction from it).
+    const up = (id: string) => {
+      const c = ctl(id);
+      c.object.updateWorldMatrix(true, false);
+      const pt = c.object.localToWorld(new THREE.Vector3(0, 0.01, 0));
+      c.onPointerDown?.(pointer(c.object, 0, { point: pt }));
+      c.onPointerUp?.(pointer(c.object, 0, { point: pt }));
+    };
     step(1);
     expect(v.get('elec.dc_ess_powered')).toBe(0);
 
-    // BATT MASTER ON: batteries on the BATT BUS and, through the ETC, DC ESS; no AC yet.
-    click('g6k.ovhd.batt_master');
+    // BATT MASTER OFF -> EMS (GX PTG 6-8: batteries to the EMS only, battery bus still isolated) -> ON: batteries on the
+    // BATT BUS and, through the ETC, DC ESS; no AC yet.
+    up('g6k.ovhd.batt_master');
+    step(1);
+    expect(v.get(V.battMasterSel)).toBe(1);
+    expect(v.get(V.battMaster)).toBe(0);
+    expect(v.get('elec.batt_bus_powered')).toBe(0);
+    expect(v.get('ac.g6k.ck.ems1_pwr')).toBe(1); // EMS CDU 1 on the AV BATT DIR bus
+    up('g6k.ovhd.batt_master');
     step(2);
+    expect(v.get(V.battMasterSel)).toBe(2);
     expect(v.get(V.battMaster)).toBe(1);
     expect(v.get('elec.batt_bus_powered')).toBe(1);
     expect(v.get('elec.dc_ess_powered')).toBe(1);
@@ -173,18 +189,29 @@ describe('Global 6000 overhead flows', () => {
       AUDIO.callout = orig;
     }
 
-    // L ENG fire handle pulled: fuel, hydraulic and bleed SOVs close; DISCH 1 fires bottle 1 (lit on every handle).
+    // L ENG fire handle (GX PTG 9-12 .. 9-14): solenoid-locked without a fire warning; with the manual override button
+    // held it pulls: fuel, hydraulic and bleed SOVs close. Turned left and held >= 1 s: bottle 1. There are no DISCH
+    // push-buttons.
+    expect(() => ctl('g6k.ovhd.fire_l_disch1')).toThrow();
     click('g6k.ovhd.fire_l');
+    step(0.5);
+    expect(v.get(V.fireHandle('l'))).toBe(0); // locked
+    const ov = ctl('g6k.ovhd.fire_l_ovrd');
+    const ovT = ov.hitTargets[0] ?? ov.object;
+    ov.onPointerDown?.(pointer(ovT, 0));
+    step(0.2);
+    click('g6k.ovhd.fire_l');
+    ov.onPointerUp?.(pointer(ovT, 0));
     step(2);
     expect(v.get(V.fireHandle('l'))).toBe(1);
     expect(v.get(V.sovOpen(1))).toBe(0);
     expect(r.sys.cas.isActive('l_eng_sov_clsd')).toBe(true);
-    hold(k, 'g6k.ovhd.fire_l_disch1', 0.2);
+    // Turn left (press on the left half of the grip) and hold 1.5 s.
+    hold(k, 'g6k.ovhd.fire_l', 1.5, new THREE.Vector3(-0.012, 0, 0.03));
     step(3);
     expect(v.get('fire.bottle1_discharged')).toBe(1);
-    expect(lit(ctl('g6k.ovhd.fire_l_disch1'))).toBe('1');
-    expect(lit(ctl('g6k.ovhd.fire_r_disch1'))).toBe('1');
-    expect(lit(ctl('g6k.ovhd.fire_l_disch2'))).toBe('');
+    expect(v.get('fire.bottle2_discharged')).toBe(0);
+    expect(v.get(V.fireRot('l'))).toBe(0); // spring back to centre
   });
 
   it('pressurization LDG ELEV slew selects MAN; AUTO/MAN; lamp test and INTEGRAL OVHD back-lighting', { timeout: 120_000 }, () => {
@@ -228,7 +255,7 @@ describe('Global 6000 overhead flows', () => {
     // Every legend of a dark (normal) switchlight glows during the test.
     expect(glow(ctl('g6k.ovhd.gen1'))).toBeGreaterThan(0.3);
     expect(glow(ctl('g6k.ovhd.hyd_sov_l'))).toBeGreaterThan(0.3);
-    step(11);
+    step(21); // GX PTG 15-19: about 20 s
     expect(glow(ctl('g6k.ovhd.gen1'))).toBeLessThan(0.05);
     expect(v.get('alert.annun_test')).toBe(0);
   });

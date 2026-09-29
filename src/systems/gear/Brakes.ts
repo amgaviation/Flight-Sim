@@ -116,6 +116,12 @@ export interface AutobrakeConfig {
   armAfterTouchdownKt?: number;
   /** Max pressure the autobrake may apply (psi). Default maxPsi. */
   maxPsi?: number;
+  /**
+   * Additive: RTO self test. Selecting an RTO level on the ground lights the DISARM light for this many seconds
+   * (737NG FCOM 14.20: "AUTO BRAKE DISARM light illuminates for one to two seconds then extinguishes"). Default
+   * 0 (off).
+   */
+  rtoSelfTestS?: number;
 }
 
 export interface BrakeConfig {
@@ -194,6 +200,8 @@ export class Brakes implements Subsystem {
   private wasGround = true;
   private tdProtect = 0;
   private disarmFlash = 0;
+  /** Self-test suppression after `resetTouchdown` (state loads), s. */
+  private selfTestInhibit = 0;
   private abLevel = -1;
   /** Landing setting selected on the ground at low speed: arms once airborne. */
   private abPending = false;
@@ -262,6 +270,18 @@ export class Brakes implements Subsystem {
       s.asFactor = 1;
       s.psi = 0;
     }
+  }
+
+  /**
+   * Additive: re-initialise the touchdown bookkeeping from the current air/ground state (state loads that seed
+   * the weight-on-wheels vars must not look like a touchdown), and suppress the RTO self test for the selector
+   * value the state load sets.
+   */
+  resetTouchdown(): void {
+    this.touchdownT = -1;
+    this.tdProtect = 0;
+    this.wasGround = this.ground();
+    this.selfTestInhibit = 0.5;
   }
 
   update(dt: number): void {
@@ -429,7 +449,9 @@ export class Brakes implements Subsystem {
     let disarm = false;
     if (this.disarmFlash > 0) this.disarmFlash = Math.max(0, this.disarmFlash - dt);
     const selChanged = sel !== this.prevSel;
+    const prevSel = this.prevSel;
     this.prevSel = sel;
+    if (this.selfTestInhibit > 0) this.selfTestInhibit = Math.max(0, this.selfTestInhibit - dt);
 
     // ---- arming
     if (!lv || failed) {
@@ -440,6 +462,8 @@ export class Brakes implements Subsystem {
       // Re-arm on selection: landing modes arm in the air (or on the ground above the arm speed), RTO on the ground.
       const canLandArm = !onGround || ref > (ab.armAfterTouchdownKt ?? 30);
       this.abArmed = lv.rto ? onGround : canLandArm;
+      // RTO self test on selection on the ground (optional).
+      if (lv.rto && onGround && (ab.rtoSelfTestS ?? 0) > 0 && Number.isFinite(prevSel) && this.selfTestInhibit <= 0) this.disarmFlash = ab.rtoSelfTestS ?? 0;
       this.abPending = !lv.rto && !canLandArm;
       this.abActive = false;
       this.abLevel = level;

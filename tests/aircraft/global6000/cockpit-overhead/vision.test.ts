@@ -140,7 +140,7 @@ describe('Global 6000 Global Vision layout: controls drive the systems', () => {
     taxi.onWheel?.(1, pointer(taxi.hitTargets[0]));
     step(0.5);
     expect(v.get(V.ltTaxi)).toBe(2); // WINGTIP
-    expect(v.get('light.recognition')).toBeGreaterThan(0.5);
+    expect(v.get('light.wingtip_taxi')).toBeGreaterThan(0.5); // wing-tip taxi lights
     expect(v.get('light.taxi')).toBe(0);
   });
 

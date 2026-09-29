@@ -29,7 +29,7 @@ import type { B738Systems } from '../createSystems';
 import { B738 } from '../vars';
 import { CK, type B738CockpitContext } from './context';
 import { EYE_L, EYE_R, GLARE, MOUNTS } from './layout';
-import { buildShell } from './shell';
+import { buildShell, buildWipers } from './shell';
 import { buildMainPanel } from './mainPanel';
 import { buildGlareshield } from './glareshield';
 import { buildPedestal } from './pedestal';
@@ -137,6 +137,7 @@ export function buildB738Cockpit(ctx: SimContext, sys: B738Systems, o: B738Cockp
   env.lighting.addDomeLight('dome', 'dome', [13.2, 0, -1.2], b.root, 6);
 
   buildShell(b);
+  buildWipers(b, ctx.vars);
   // AFDS flood strip under the glareshield brow (lights the MCP face).
   const strip = new THREE.MeshStandardMaterial({ color: 0x151515, emissive: 0xffe2b8, emissiveIntensity: 0, roughness: 0.6 });
   env.materials.track(strip);

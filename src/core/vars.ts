@@ -109,6 +109,15 @@ export const ENG = {
   roughness: (i: number) => `eng${i}.rough`,
   /** Piston: brake horsepower delivered to the propeller (hp). */
   powerHp: (i: number) => `eng${i}.power_hp`,
+  // --- appended (b737-800 engine failures; turbofan inputs, default 0 / 1 when unset)
+  /** Turbofan: 1 = core seized (severe damage): no combustion, N1 / N2 run down to ~0 with no windmilling. */
+  seized: (i: number) => `eng${i}.seized`,
+  /** Turbofan: extra vibration (units) added to vib_n1 / vib_n2 (damage, surge). */
+  vibAdd: (i: number) => `eng${i}.vib_add`,
+  /** Turbofan: multiplier on the oil pressure output (oil loss / pump failure), default 1. */
+  oilPressFactor: (i: number) => `eng${i}.oil_press_factor`,
+  /** Turbofan: extra EGT (degC) added to the running ITT / EGT target (surge / stall), default 0. */
+  ittAdd: (i: number) => `eng${i}.itt_add_c`,
 } as const;
 
 /** Written by aircraft fuel system. Read by FDM (mass) and engines. kg per tank, 0-based. */

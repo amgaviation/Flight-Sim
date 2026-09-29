@@ -20,7 +20,7 @@ import type { Subsystem } from '../../aircraft/types';
 import type { FailureDef } from '../failures/FailureManager';
 import type { SimVars } from '../../core/SimVars';
 import { ADC, AP } from '../../core/vars';
-import { compileCondition, type Binding } from '../util/binding';
+import { compileBinding, compileCondition, type Binding, type Evaluator } from '../util/binding';
 import { failVar } from '../util/ids';
 import { Washout, sched, type BlockEnv, type Schedule } from '../autopilot/lib';
 import { SENSOR_VARS } from '../sensors/vars';
@@ -45,6 +45,11 @@ export interface YawDamperConfig {
   washoutS?: number;
   /** Max |command| (normalized). Default 0.15 (EST: series YD authority a few degrees). */
   authority?: number;
+  /**
+   * Additive: authority multiplier 0..1 (e.g. a standby yaw damper channel with reduced authority driving a
+   * standby actuator). Default 1.
+   */
+  authorityScale?: Binding;
   /** IAS var for schedules. Default adc1.ias_kt. */
   iasVar?: string;
   /** Output var. Default fcs.yd_cmd. */
@@ -58,6 +63,7 @@ export class YawDamper implements Subsystem {
   private readonly cfg: YawDamperConfig;
   private readonly engagedVar: string;
   private readonly power: () => boolean;
+  private readonly authScale: Evaluator;
   private readonly valid: () => boolean;
   private readonly rateVar: string;
   private readonly nyVar: string;
@@ -71,6 +77,7 @@ export class YawDamper implements Subsystem {
     this.cfg = cfg;
     this.engagedVar = cfg.engagedVar ?? AP.yd;
     this.power = compileCondition(env.vars, cfg.power, true);
+    this.authScale = compileBinding(env.vars, cfg.authorityScale, 1);
     this.valid = compileCondition(env.vars, cfg.rateValid ?? SENSOR_VARS.attValid(1), true);
     this.rateVar = cfg.rateVar ?? SENSOR_VARS.r(1);
     this.nyVar = cfg.nyVar ?? SENSOR_VARS.ny(1);
@@ -104,7 +111,7 @@ export class YawDamper implements Subsystem {
       // Oppose yaw rate: positive (nose-right) rate -> left rudder.
       cmd = -sched(this.cfg.gain, ias) * hp;
       if (this.cfg.nyGain !== undefined) cmd -= sched(this.cfg.nyGain, ias) * v.get(this.nyVar);
-      const a = this.cfg.authority ?? 0.15;
+      const a = (this.cfg.authority ?? 0.15) * Math.max(0, Math.min(1, this.authScale()));
       cmd = cmd > a ? a : cmd < -a ? -a : cmd;
     }
     this.command = cmd;

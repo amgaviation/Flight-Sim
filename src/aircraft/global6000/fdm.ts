@@ -289,7 +289,9 @@ export const GLOBAL6000_FDM: FdmConfig = {
     Cm_flap: { x: [0, 6, 16, 30], y: [0, -0.025, -0.05, -0.1] },
     Cm_gear: 0.004,
     Cm_spoiler: 0.012,
-    Cm_mach: { x: [0, 0.82, 0.86, 0.9, 0.95], y: [0, 0, -0.004, -0.018, -0.045] }, // Mach tuck (the FCUs' Mach trim, GXFC)
+    // Mach tuck, EST to match the FCU Mach trim authority that compensates it (GX PTG 10-25: 0.5 deg NU at M0.85 to
+    // 1.8 deg NU at M0.90; 0.05 Cm per degree of stabilizer from Cm_trim below): -0.025 at M0.85, -0.09 at M0.90.
+    Cm_mach: { x: [0, 0.8, 0.85, 0.9, 0.95], y: [0, 0, -0.025, -0.09, -0.16] },
     Cn_beta: 0.13,
     Cn_p: -0.02,
     Cn_r: -0.2,

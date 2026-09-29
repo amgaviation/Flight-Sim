@@ -283,6 +283,12 @@ export interface AfcsConfig {
      * use it; it goes invalid on the ground), so the status holds through the rollout. Default false.
      */
     holdStatusInFlare?: boolean;
+    /**
+     * Additive: when the autopilot is disconnected on the ground after an autoland, the ROLLOUT / FLARE modes are
+     * cleared (F/D bars retract, FMA blank) until TO/GA or a new mode selection (737NG FCOM 4.20: the F/D gives
+     * no rollout guidance). Default false.
+     */
+    clearOnGroundDisconnect?: boolean;
   };
   /** FD comes on with the AP. Default true. */
   fdAutoOn?: boolean;

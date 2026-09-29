@@ -102,6 +102,13 @@ export interface B737DisplayVars {
   windshear: string;
   /** TAWS / TCAS / WXR test flags. */
   tawsInop: string;
+  /**
+   * Optional weather radar annunciation vars (additive): string var with the mode line shown under 'WXR' on the ND
+   * (e.g. 'WX+T', 'MAP', 'TEST', or 'WXR FAIL' / 'WXR OFF' in amber when it starts with 'WXR'), and the numeric
+   * antenna tilt (deg). When absent the ND shows 'WXR' and '+0' as before.
+   */
+  wxrModeText?: string;
+  wxrTiltDeg?: string;
 }
 
 export interface B737AfdsConfig {

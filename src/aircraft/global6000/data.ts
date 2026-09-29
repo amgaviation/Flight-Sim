@@ -189,11 +189,35 @@ export const G6K_LIMITS = {
   // ---------------- pressurization (EST from AOPA / the systems-power preset)
   cabinAtFl450Ft: 4500, // AOPA: 4,500 ft cabin at FL450
   cabinAtFl510Ft: 5680, // EST (PRESS_GLOBAL6000 preset)
-  maxDiffPsi: 10.33, // EST derived (systems-power PRESS_GLOBAL6000)
+  maxDiffPsi: 10.33, // FCOM CSP 700-6 02-10 (SB 700-21-034, Global 6000 standard): maximum differential 10.33 psid, 5,670 ft cabin at 51,000 ft
   taxiDiffPsi: 0.1, // GX_01_018 placard: "pressure differential shall not exceed 0.1 psi during taxi"
   landingDiffPsi: 1.0, // "... and 1.0 psi upon initial landing"
-  paxMaskFt: 14000, // EST: Part 25 typical (25.1447)
-  cabinLimiterFt: 14500, // EST: outflow-valve cabin altitude limiter (Bombardier CRJ / Challenger EMER DEPRESS figure; 25.841(a)(2))
+  paxMaskFt: 14500, // GX PTG 8-4: "All oxygen compartment doors will open ... if cabin altitude reaches approximately 14,500 feet"
+  cabinLimiterFt: 14500, // GX PTG 13-58: dual cabin altitude limiters close the OFVs at 14,500 +/- 500 ft (AUTO and MAN)
+  cabinRateLimiterFpm: 3000, // GX PTG 13-58: cabin rate limitation 3,000 ft/min (not in EMER DEPRESS / DITCHING)
+  ofvTravelLimitPsi: 7, // GX PTG 13-59: OFV travel limiter, <= 50 % open above 7 +/- 0.5 psid
+  ofvTravelLimitPos: 0.5,
+  cabAltCautionFt: 8200, // GX PTG 13-51 / FCOM 02-10-49: CABIN ALT caution 8,200 ft
+  cabAltWarnFt: 9000, // ... CABIN ALT warning 9,000 ft (raised with a landing field >= 7,230 ft, max 14,500 ft)
+  reliefPsi: 10.63, // FCOM CSP 700-6 02-10 (SB 700-21-034 cabin altitude reduction, the Global 6000 standard): safety valve opens at 10.63 +/- 0.1 psid
+  cabinDeltaPWarnPsi: 10.85, // ... "at 10.85 psi CABIN DELTA P will be displayed on EICAS"
+  pressRateHighDescFpm: 800, // GX PTG 13-57: RATE HIGH "0 to 800 ft/min descent"
+  // ---------------- fire (GX PTG 9-13 / 9-20)
+  fireHandleHoldS: 1, // "the handle must be turned fully and held (at least one second)"
+  apuFireAutoShutdownS: 5, // ground: FADEC shuts the APU down after a 5 s fire signal with the handle not pulled
+  // ---------------- stall protection (GX PTG 10-61 / 10-62)
+  stallAdvanceFactor: 0.9, // EST: advanced shaker / pusher angles at 90 % of normal (no public SPC figure)
+  spcIgnNorm: 0.75, // EST: SPC continuous ignition ahead of the shaker (0.8 of the stall angle)
+  // ---------------- flight controls (GX PTG 10-25 .. 10-27, 10-41)
+  machTrimMach: [0.85, 0.9] as [number, number], // Mach trim authority 0.5 deg NU at M0.85 .. 1.8 deg NU at M0.90
+  machTrimDeg: [0.5, 1.8] as [number, number],
+  machTrimRateDps: [0.06, 0.03] as [number, number], // trim rate 0.06 .. 0.03 deg/s as Mach increases
+  splrStabTestS: 20, // SPLRS/STAB IN TEST ~20 s after hydraulic power-up
+  rollSelectDelayS: 30, // ROLL SELECT 30 s after a roll disconnect without a ROLL SPLRS selection (GX PTG 10-48)
+  // ---------------- hydraulics (GX PTG 12-26): LO QTY lower limits of the reservoir level
+  hydLoQty: [0.34, 0.32, 0.2] as [number, number, number],
+  hydLoQty3UpLocked: 0.28,
+  hydOverfill3: 0.7, // HYD 3 OVERFILLED: > 70 % pressurized on the ground
   // ---------------- crosswind
   maxDemoCrosswindKt: 29, // EST: Global AFM demonstrated crosswind (not in a public source); common operator figure
 } as const;

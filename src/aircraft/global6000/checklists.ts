@@ -24,7 +24,7 @@ export const G6K_CHECKLISTS: Checklist[] = [
     title: 'COCKPIT PREPARATION',
     phase: 'Preflight',
     items: [
-      { challenge: 'BATT MASTER', response: 'ON', check: on(V.battMaster) },
+      { challenge: 'BATT MASTER', response: 'ON', check: (v) => v.get(V.battMaster) === 1 && v.get(V.battMasterSel) === 2 },
       { challenge: 'DC EMER / BATT / DC ESS buses', response: 'POWERED', check: (v) => v.get('elec.dc_ess_powered') !== 0 && v.get('elec.dc_emer_powered') !== 0 },
       { challenge: 'EMER LIGHTS', response: 'ARM', check: is(V.emerLights, 1) },
       { challenge: 'PARK/EMER BRAKE', response: 'SET', check: (v) => v.get(V.parkSet) !== 0 },
@@ -93,7 +93,7 @@ export const G6K_CHECKLISTS: Checklist[] = [
       { challenge: 'Slats / flaps', response: '6 (or 16)', check: (v) => (v.get(V.flapLever) === 2 || v.get(V.flapLever) === 3) && Math.abs(v.get(SURF.flapsDeg) - (v.get(V.flapLever) === 2 ? 6 : 16)) < 1 },
       { challenge: 'Trims (STAB / AIL / RUD)', response: 'SET', check: (v) => trimInBand(v) && v.get('trim.roll_to_ok') !== 0 && v.get('trim.yaw_to_ok') !== 0 },
       { challenge: 'FLIGHT SPOILER lever', response: 'RETRACT', check: (v) => v.get(V.flightSpoiler) < 0.05 },
-      { challenge: 'GND LIFT DUMPING', response: 'NORMAL (not OFF)', check: off(V.gldOff) },
+      { challenge: 'GND LIFT DUMPING', response: 'AUTO', check: is(V.gldSw, 0) },
       { challenge: 'Transponder', response: 'TA/RA' },
       { challenge: 'STROBE / landing lights', response: 'ON (STEADY / PULSE)', check: (v) => v.get(V.ltStrobe) === 1 && v.get(V.ltLdgL) !== 0 && v.get(V.ltLdgR) !== 0 },
       { challenge: 'PARK/EMER BRAKE', response: 'RELEASED', check: (v) => v.get(V.parkBrake) < 0.05 },
@@ -128,7 +128,8 @@ export const G6K_CHECKLISTS: Checklist[] = [
       { challenge: 'Altimeters', response: 'SET (QNH)', check: (v) => Math.abs(v.get('adc1.baro_inhg', 29.92) - v.get('env.qnh_inhg', 29.92)) < 0.02 && v.get('adc1.baro_std') === 0 },
       { challenge: 'NAV source', response: 'SET (APPR for ILS)' },
       { challenge: 'AUTOBRAKE', response: 'AS REQUIRED' },
-      { challenge: 'GND LIFT DUMPING', response: 'NORMAL', check: off(V.gldOff) },
+      { challenge: 'GND LIFT DUMPING', response: 'AUTO', check: is(V.gldSw, 0) },
+      { challenge: 'ACP', response: 'NAV / MKR AUDIO SET (ident checked)', check: (v) => v.get(V.acpSel(1, 'nav1')) === 1 || v.get(V.acpSel(2, 'nav2')) === 1 },
     ],
   },
   {
@@ -163,7 +164,7 @@ export const G6K_CHECKLISTS: Checklist[] = [
       { challenge: 'IRS', response: 'OFF', check: (v) => v.get(V.irsMode(1)) === 0 && v.get(V.irsMode(2)) === 0 && v.get(V.irsMode(3)) === 0 },
       { challenge: 'APU', response: 'OFF', check: off(V.apuSw) },
       { challenge: 'EMER LIGHTS', response: 'OFF', check: off(V.emerLights) },
-      { challenge: 'BATT MASTER', response: 'OFF', check: off(V.battMaster) },
+      { challenge: 'BATT MASTER', response: 'OFF', check: (v) => v.get(V.battMaster) === 0 && v.get(V.battMasterSel) === 0 },
     ],
   },
   // ------------------------------------------------------------------ non-normal (CAS-linked in the ECL)
@@ -174,8 +175,9 @@ export const G6K_CHECKLISTS: Checklist[] = [
       { challenge: 'L thrust lever', response: 'IDLE', check: (v) => v.get(V.tla(1)) < 0.03 },
       { challenge: 'L ENG RUN switch', response: 'OFF', check: off(V.engRun(1)) },
       { challenge: 'L FIRE handle', response: 'PULL', check: on(V.fireHandle('l')) },
-      { challenge: 'L DISCH 1', response: 'PUSH', check: (v) => v.get('fire.bottle1_discharged') !== 0 },
-      { challenge: 'If fire persists after 30 s: L DISCH 2', response: 'PUSH' },
+      // GX PTG 9-13: the pulled handle is turned and held >= 1 s: counter-clockwise = bottle 1, clockwise = bottle 2.
+      { challenge: 'L FIRE handle', response: 'ROTATE LEFT (bottle 1), hold 1 s', check: (v) => v.get('fire.bottle1_discharged') !== 0 },
+      { challenge: 'If fire persists after 30 s: L FIRE handle', response: 'ROTATE RIGHT (bottle 2)' },
     ],
   },
   {
@@ -185,17 +187,19 @@ export const G6K_CHECKLISTS: Checklist[] = [
       { challenge: 'R thrust lever', response: 'IDLE', check: (v) => v.get(V.tla(2)) < 0.03 },
       { challenge: 'R ENG RUN switch', response: 'OFF', check: off(V.engRun(2)) },
       { challenge: 'R FIRE handle', response: 'PULL', check: on(V.fireHandle('r')) },
-      { challenge: 'R DISCH 1', response: 'PUSH', check: (v) => v.get('fire.bottle1_discharged') !== 0 },
-      { challenge: 'If fire persists after 30 s: R DISCH 2', response: 'PUSH' },
+      { challenge: 'R FIRE handle', response: 'ROTATE LEFT (bottle 1), hold 1 s', check: (v) => v.get('fire.bottle1_discharged') !== 0 },
+      { challenge: 'If fire persists after 30 s: R FIRE handle', response: 'ROTATE RIGHT (bottle 2)' },
     ],
   },
   {
     title: 'APU FIRE',
     phase: 'Emergency',
     items: [
+      // GX PTG 4-16 / 9-14: pulling the handle shuts the APU down at once; the second APU shot needs the lockout pin.
       { challenge: 'APU FIRE handle', response: 'PULL', check: on(V.fireHandle('apu')) },
-      { challenge: 'APU DISCH 1', response: 'PUSH' },
+      { challenge: 'APU FIRE handle', response: 'ROTATE LEFT (bottle 1), hold 1 s', check: (v) => v.get('fire.bottle1_discharged') !== 0 },
       { challenge: 'APU rotary', response: 'OFF', check: off(V.apuSw) },
+      { challenge: 'If fire persists: lockout pin', response: 'SLIDE, handle ROTATE RIGHT (bottle 2)' },
     ],
   },
   {
@@ -235,6 +239,31 @@ export const G6K_CHECKLISTS: Checklist[] = [
       { challenge: 'Nosewheel steering / inboard brakes', response: 'INOPERATIVE' },
     ],
   },
+  {
+    title: 'CABIN ALT',
+    phase: 'Emergency',
+    items: [
+      { challenge: 'Crew oxygen masks', response: 'DON, 100 %', check: (v) => v.get(V.oxyMask(1)) === 1 && v.get(V.oxyMask(2)) === 1 },
+      { challenge: 'Crew communication', response: 'ESTABLISH (ACP MASK)', check: (v) => v.get(V.acpMask(1)) === 1 || v.get(V.acpMask(2)) === 1 },
+      { challenge: 'PASSENGER OXYGEN', response: 'OVERRIDE if cabin > 14,500 ft', check: (v) => v.get('press.cabin_alt_ft') < 14000 || v.get(V.paxOxy) === 2 || v.get('oxy.pax_on') !== 0 },
+      { challenge: 'Emergency descent', response: 'AS REQUIRED (EDM)' },
+    ],
+  },
+  {
+    title: 'EMER DEPRESS',
+    phase: 'Caution',
+    items: [
+      { challenge: 'EMER DEPRESS', response: 'OFF when no longer required', check: off(V.emerDepress) },
+    ],
+  },
+  {
+    title: 'ROLL SELECT',
+    phase: 'Caution',
+    items: [
+      { challenge: 'Autopilot', response: 'DISCONNECT' },
+      { challenge: 'ROLL SPLRS (free side)', response: 'PRESS (PLT CONT / CPLT CONT)', check: (v) => v.get(V.rollPriority) !== 0 },
+    ],
+  },
 ];
 
 /** CAS id -> checklist title (Fusion CAS-linked ECL). */
@@ -246,4 +275,7 @@ export const G6K_CAS_CHECKLISTS: Readonly<Record<string, string>> = {
   hyd1_lo_press: 'HYD 1 LO PRESS',
   hyd2_lo_press: 'HYD 2 LO PRESS',
   hyd3_lo_press: 'HYD 3 LO PRESS',
+  cabin_alt: 'CABIN ALT',
+  emer_depress: 'EMER DEPRESS',
+  roll_select: 'ROLL SELECT',
 };

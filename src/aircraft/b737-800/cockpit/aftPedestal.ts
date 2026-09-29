@@ -22,8 +22,7 @@
  * publish mixer levels / keying state only (no audio routing). HF panels:
  * state only (no HF propagation; `HF_FITTED` = operator option). SELCAL:
  * push-to-reset lights; no ground-station calls are generated. The VHF COMM
- * TEST, WXR IDNT / STAB and the cargo DETECTOR FAULT light of the drawing
- * are not modelled. The radio panels keep an active / standby window pair.
+ * TEST and WXR IDNT / STAB of the drawing are not modelled. The radio panels keep an active / standby window pair.
  */
 import { GuardedButton, GuardedSwitch, PushButton, RotaryKnob, SelectorKnob, TBarHandle } from '../../../cockpit/controls';
 import type { Panel } from '../../../cockpit/CockpitBuilder';
@@ -271,7 +270,7 @@ export function buildAftPedestal(c: B738CockpitContext): void {
       ['fwd', -0.02],
       ['aft', 0.01],
     ] as const) {
-      toggle(env, p, { id: `b738.aft.cargo_det_${z}`, label: `CARGO DET SELECT ${z.toUpperCase()}`, var: B738.cargoDetSel(z), positions: ['A', 'ORM', 'B'], values: [-1, 0, 1], initial: 1, orientation: 'horizontal', scale: 0.5, labels: { name: z.toUpperCase(), positions: false, height: 0.0019 } }, x, 0.016);
+      toggle(env, p, { id: `b738.aft.cargo_det_${z}`, label: `CARGO DET SELECT ${z.toUpperCase()}`, var: B738.cargoDetSel(z), positions: ['A', 'NORM', 'B'], values: [-1, 0, 1], initial: 1, orientation: 'horizontal', scale: 0.5, labels: { name: z.toUpperCase(), positions: false, height: 0.0019 } }, x, 0.016);
       p.add(
         new PushButton(env, {
           id: `b738.aft.cargo_arm_${z}`,
@@ -309,6 +308,14 @@ export function buildAftPedestal(c: B738CockpitContext): void {
     );
     p.add(new PushButton(env, { id: 'b738.aft.cargo_test', label: 'CARGO FIRE TEST', style: 'round', width: 0.009, height: 0.009, mode: 'momentary', var: B738.cargoTest, capMaterial: 'plasticBlack' }), -0.05, -0.016);
     p.label('TEST', -0.05, -0.005, { height: 0.0019 });
+    // DETECTOR FAULT (amber) and the two EXTINGUISHER squib test lights (green), FCOM 8.10 cargo fire panel.
+    annunciator(env, p, 'b738.aft.cargo_det_fault', 'CARGO DETECTOR FAULT', [seg.on(['DETECTOR', 'FAULT'], 'amber', B738.lt.cargoDetFault)], 0.043, 0.02, 0.022, 0.011);
+    for (const [z, x] of [
+      ['fwd', 0.036],
+      ['aft', 0.05],
+    ] as const)
+      annunciator(env, p, `b738.aft.cargo_squib_${z}`, `CARGO EXTINGUISHER ${z.toUpperCase()} squib test`, [seg.on('', 'green', B738.lt.cargoSquib(z))], x, -0.026, 0.008, 0.008);
+    p.label('EXTINGUISHER', 0.043, -0.033, { height: 0.0015 });
   }
   {
     const r = rowC(2);
@@ -336,7 +343,8 @@ export function buildAftPedestal(c: B738CockpitContext): void {
     p.label('GAIN', -0.042, -0.02, { height: 0.0021 });
     p.add(new RotaryKnob(env, { id: 'b738.aft.wxr_tilt', label: 'WXR TILT', cap: 'fluted', diameter: 0.016, outer: { var: B738.wxrTilt, min: -15, max: 15, step: 0.5, initial: 0, angleRange: [-140, 140], label: 'TILT', format: (x) => `${x >= 0 ? 'UP' : 'DN'} ${Math.abs(x).toFixed(1)}°` } }), 0.042, -0.006);
     p.label('TILT', 0.042, -0.02, { height: 0.0021 });
-    toggle(env, p, { id: 'b738.aft.wxr_pwr', label: 'WXR POWER', var: B738.wxrPower, positions: ['OFF', 'ON'], values: [0, 1], initial: 0, scale: 0.5, labels: { name: false, positions: true, height: 0.0017 } }, 0, -0.022);
+    // No radar on/off switch on the NG panel: the radar transmits while WXR is selected on an EFIS control panel
+    // (FCOM 11.30); the former power toggle is not fitted.
   }
   // ---------------------------------------------------------------- SELCAL (push-to-reset lights), row 3 centre
   {
@@ -577,5 +585,7 @@ export function buildAftPedestal(c: B738CockpitContext): void {
       -0.01,
     );
     annunciator(env, p, 'b738.aft.lock_fail', 'LOCK FAIL', [seg.on(['LOCK', 'FAIL'], 'amber', B738.lt.lockFail)], 0.058, -0.004, 0.02, 0.011);
+    // AUTO UNLK (amber): emergency access code entered, auto unlock pending (FCOM 1.40 flight deck door).
+    annunciator(env, p, 'b738.aft.auto_unlk', 'AUTO UNLK', [seg.on(['AUTO', 'UNLK'], 'amber', B738.lt.autoUnlk)], 0.058, -0.018, 0.02, 0.011);
   }
 }

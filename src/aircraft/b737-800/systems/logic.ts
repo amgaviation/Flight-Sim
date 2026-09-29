@@ -12,6 +12,7 @@ import type { Subsystem } from '../../types';
 import type { FailureDef } from '../../../systems/failures';
 import type { CasManager } from '../../../systems/warning';
 import { NAV } from '../../../core/vars';
+import { B737_VARS } from '../../../avionics/boeing-737/vars';
 import { EdgeDetector, compileCondition, compileBinding, type Evaluator } from '../../../systems/util';
 import { B738, ACP_RECEIVERS, SIX_PACK_GROUPS, FUEL_PUMPS, HYD_PUMP_SWITCHES, WINDOW_HEATS, XPDR_SEL, type SixPackGroup, type Side } from '../vars';
 import { B738_ANNUNCIATORS } from './cas';
@@ -27,6 +28,7 @@ const ACP_TABLE = ([1, 2, 3] as const).map((a) => ({
   micSrc: `ac.b738.acp${a}.mic_mask`,
   rx: ACP_RECEIVERS.map((rx) => ({ on: rx === 'spkr' ? null : B738.acpRxOn(a, rx), vol: B738.acpRxVol(a, rx), lvl: `ac.b738.acp${a}.lvl_${rx}`, isMkr: rx === 'mkr' })),
 }));
+const EFIS_WXR = [B737_VARS.efisMapButton(1, 'wxr'), B737_VARS.efisMapButton(2, 'wxr')] as const;
 const COM_TX = ['ac.b738.com1.transmitting', 'ac.b738.com2.transmitting'] as const;
 const COM_POWERED = ['com1.powered', 'com2.powered'] as const;
 
@@ -54,6 +56,7 @@ export class B738Logic implements Subsystem {
     isfdRst: new EdgeDetector(),
     grdCall: new EdgeDetector(),
     attendCall: new EdgeDetector(),
+    cvrTest: new EdgeDetector(),
   };
   /** Cabin attendant answering an ATTEND call (s until the call-back, -1 = none). */
   private attendT = -1;
@@ -62,6 +65,19 @@ export class B738Logic implements Subsystem {
   /** Incoming call from the ground crew (s remaining). */
   private crewCallT = 0;
   private cvrEraseT = 0;
+  private rtoSbArmed = false;
+  private leAltFull = false;
+  /** Wiper sweep phase (0..1 per stroke cycle) and INT dwell timer per side. */
+  private readonly wiperPh = [0, 0];
+  private readonly wiperWait = [7, 7];
+  /** Emergency light battery pack charge (0..1). */
+  private emerPack = 1;
+  /** Previous cabin sign state (bit 0 NO SMOKING, bit 1 FASTEN BELTS), -1 = unknown. */
+  private prevSigns = -1;
+  /** Flight deck door emergency access: request pending, delay timer (s, -1 = none), unlock timer (s). */
+  private doorReq = false;
+  private doorAccessT = -1;
+  private doorUnlockT = 0;
   /** ISFD ATT RST action (createSystems wires it to the ISFD attitude re-alignment). */
   isfdReset: (() => void) | null = null;
   private batDisch = [0, 0, 0];
@@ -85,12 +101,15 @@ export class B738Logic implements Subsystem {
    */
   pendingApEngage = false;
 
-  constructor(private readonly ctx: Pick<SimContext, 'vars' | 'events'>) {
+  constructor(private readonly ctx: Pick<SimContext, 'vars' | 'events'> & Partial<Pick<SimContext, 'audio'>>) {
     // SELCAL call received on channel k (0 VHF 1 .. 4 HF 2): lights the SELCAL light until it is pushed.
     // SCOPE: no ground-station model emits calls; scenarios / instructors can emit the event.
     ctx.events.on('b738.selcal.call', (k) => {
       const i = Number(k);
       if (i >= 0 && i < 5) this.selcalLit[i] = 1;
+    });
+    ctx.events.on('b738.door.emer_access', () => {
+      this.doorReq = true;
     });
   }
 
@@ -108,6 +127,14 @@ export class B738Logic implements Subsystem {
       // REVERSER light condition: sleeve unlocked / deployed without a reverse command (EST).
       v.set(`ac.b738.rev_fault${i}`, (v.get(`fadec.eng${i}.rev_unlocked`) !== 0 || v.get(`eng${i}.reverser_pos`) > 0.05) && rev < 0.02 ? 1 : 0);
     }
+
+    // ---- RTO auto speedbrake arming: a take-off thrust advance on the ground (either lever beyond ~60 %, as the
+    // take-off configuration warning); cleared in the air and once slowed below 20 kt with the levers at idle.
+    const tlaMax = Math.max(v.get(B738.tla(1)), v.get(B738.tla(2)));
+    if (air) this.rtoSbArmed = false;
+    else if (tlaMax > 0.6) this.rtoSbArmed = true;
+    else if (tlaMax < 0.05 && v.get('gear.wheel_speed1_kt') < 20 && v.get('gear.wheel_speed2_kt') < 20) this.rtoSbArmed = false;
+    v.set('ac.b738.rto_sb_armed', this.rtoSbArmed ? 1 : 0);
 
     // ---- Tiller: hardware axis and the 3D cockpit handle (whichever is deflected more) -> nose-wheel steering.
     const tHw = v.get('input.tiller');
@@ -132,8 +159,10 @@ export class B738Logic implements Subsystem {
     v.set(B738.stbyPumpCmd, stbyRudSw || autoStby || v.get(B738.altFlapsArm) !== 0 ? 1 : 0);
     // PTU: airborne, B engine-driven pump pressure low, flaps extended but less than 15 (FCOM 13.20).
     v.set(B738.ptuCmd, air && v.get('hyd.edp_b_lowpress') !== 0 && flaps > 0.5 && flaps < 14.5 ? 1 : 0);
-    // Landing gear transfer unit: airborne, gear lever UP, engine 1 N2 below ~50 % (EST limit), B available.
-    v.set(B738.gearXferUnit, air && v.get(B738.gearLever) < 0.25 && v.get('eng1.n2_pct') < 50 && v.get('hyd.b_psi') > 1000 ? 1 : 0);
+    // Landing gear transfer unit: airborne, gear lever UP, engine 1 N2 below ~50 % (EST limit), either main gear
+    // not up and locked, B available (FCOM 14.20 / 13.20).
+    const mainsUp = v.get('gear.pos1') < 0.01 && v.get('gear.pos2') < 0.01;
+    v.set(B738.gearXferUnit, air && v.get(B738.gearLever) < 0.25 && v.get('eng1.n2_pct') < 50 && !mainsUp && v.get('hyd.b_psi') > 1000 ? 1 : 0);
 
     // ---- Wing anti-ice: switch trips OFF at lift-off; on the ground the valves close with take-off thrust (FCOM 3.20).
     if (this.e.air.update(air) === 1 && v.get(B738.wingAi) !== 0) v.set(B738.wingAi, 0);
@@ -201,14 +230,20 @@ export class B738Logic implements Subsystem {
     }
     // ---- ATC / TCAS panel.
     const sel = v.get(B738.xpdrModeSel);
-    const xpdrOn = v.get(v.get(B738.xpdrAtc) >= 1.5 ? 'elec.xpdr2_powered' : 'elec.xpdr_powered') !== 0;
+    // ATC 1 / 2 selects the active transponder (the other is in standby), each with its own power and failure
+    // (FCOM 15.20); the selected unit feeds xpdr.mode and the TCAS.
+    const atcSel2 = v.get(B738.xpdrAtc) >= 1.5;
+    const xpdrOn = v.get(atcSel2 ? 'elec.xpdr2_powered' : 'elec.xpdr_powered') !== 0 && v.get(atcSel2 ? 'fail.b738.xpdr2' : 'fail.b738.xpdr1') === 0;
     const mode = !xpdrOn ? 0 : sel <= XPDR_SEL.stby ? 1 : sel === XPDR_SEL.altOff ? 2 : sel === XPDR_SEL.xpndr ? 3 : sel === XPDR_SEL.taOnly ? 4 : 5;
     if (sel !== XPDR_SEL.test) v.set(NAV.xpdrMode, mode);
     if (this.e.ident.rising(v.get(B738.xpdrIdentBtn) !== 0)) v.set(NAV.xpdrIdent, 1);
-    // TCAS display altitude band (ABOVE / NORM / BELOW, EST +/-2,700 ft normal, +7,000 / -2,700 ABOVE, +2,700 / -7,000 BELOW).
+    // TCAS display altitude band (FCOM 15.20 TCAS): NORM +/-2,700 ft; ABOVE +9,900 / -2,700 ft; BELOW +2,700 /
+    // -9,900 ft. Read by the TCAS display filter (surveillance.ts); TAs and RAs are always shown.
     const band = v.get(B738.tcasRange);
-    v.set('tcas.band_above_ft', band > 0.5 ? 7000 : 2700);
-    v.set('tcas.band_below_ft', band < -0.5 ? 7000 : 2700);
+    v.set('tcas.band_above_ft', band > 0.5 ? 9900 : 2700);
+    v.set('tcas.band_below_ft', band < -0.5 ? 9900 : 2700);
+    // TEST position of the mode selector (spring-loaded): runs the TCAS / transponder self test (surveillance.ts).
+    v.set('ac.b738.tcas_test_sw', sel === XPDR_SEL.test && xpdrOn ? 1 : 0);
 
     // ---- Battery discharge detection (FCOM 6.20: > 5 A for 95 s, > 15 A for 25 s, > 100 A for 1.2 s).
     const disch = -v.get('elec.batt_amps');
@@ -239,9 +274,15 @@ export class B738Logic implements Subsystem {
         if (!this.chrRun[i] && this.chrS[i] > 0) this.chrS[i] = 0;
         else this.chrRun[i] = !this.chrRun[i];
       }
+      // RESET push: chronograph to zero (and stopped); ET switch RESET (spring-loaded to HLD) zeroes the ET
+      // (FCOM 10.10 clock).
+      if (v.get(B738.clockReset(s)) !== 0) {
+        this.chrS[i] = 0;
+        this.chrRun[i] = false;
+      }
       if (this.chrRun[i]) this.chrS[i] += dt;
       const et = v.get(B738.clockEt(s));
-      if (et >= 0.5 || v.get(B738.clockReset(s)) !== 0) this.etS[i] = 0;
+      if (et >= 0.5) this.etS[i] = 0;
       else if (et > -0.5) this.etS[i] += dt;
       v.set(B738.lt.clockChrS(s), this.chrS[i]);
       v.set(B738.lt.clockEtS(s), this.etS[i]);
@@ -283,23 +324,73 @@ export class B738Logic implements Subsystem {
     if (v.get('eng1.running') !== 0 || v.get('eng2.running') !== 0) this.fdrHrs += dt / 3600;
     v.set('ac.b738.fdr_hours', this.fdrHrs);
 
-    // ---- Wipers: sweep phase for the windshield rain effect (0 PARK .. 3 HIGH; ~1 s per stroke at HIGH, EST).
+    // ---- Wipers (FCOM 3.20): PARK / INT (one stroke every ~7 s) / LOW / HIGH, AC motor per side (XFR 1 / 2).
+    // The blade sweeps 0 (parked) -> 1 (outboard) -> 0; the windshield rain effect reads the rain removal.
+    // EST stroke rates: LOW ~80, HIGH ~120 cycles / min (no public figure; typical transport wipers).
     for (const s of SIDES) {
-      const w = v.get(B738.wiper(s));
-      v.set(`ac.b738.wiper_rain_removal${s}`, w <= 0 ? 0 : w === 1 ? 0.4 : w === 2 ? 0.75 : 1);
+      const k = s - 1;
+      const w = Math.round(v.get(B738.wiper(s)));
+      const pwr = v.get(s === 1 ? 'elec.wiper_l_powered' : 'elec.wiper_r_powered') !== 0;
+      const cycleS = w === 3 ? 0.5 : w === 2 ? 0.75 : 1.1;
+      if (pwr) {
+        if (this.wiperPh[k] > 0 || w >= 2) {
+          this.wiperPh[k] += dt / cycleS;
+          if (this.wiperPh[k] >= 1) this.wiperPh[k] = w >= 2 ? this.wiperPh[k] - 1 : 0;
+        } else if (w === 1) {
+          this.wiperWait[k] += dt;
+          if (this.wiperWait[k] >= 7) {
+            this.wiperWait[k] = 0;
+            this.wiperPh[k] = 1e-6;
+          }
+        }
+        if (w !== 1) this.wiperWait[k] = 7; // INT selected: first stroke at once
+      }
+      const ph = this.wiperPh[k];
+      v.set(B738.wiperSweep(s), ph < 0.5 ? ph * 2 : 2 - ph * 2);
+      v.set(`ac.b738.wiper_rain_removal${s}`, !pwr || w <= 0 ? 0 : w === 1 ? 0.4 : w === 2 ? 0.75 : 1);
+    }
+    // ---- Emergency lights (FCOM 1.40): ON lights them; ARMED lights them automatically when DC bus 1 fails or AC
+    // power is turned off. They run on their own NiCd battery packs (charged from DC bus 1; FAR 25.812(k): at least
+    // 10 min; EST 15 min capacity).
+    const emerSw = v.get(B738.emerExitLt);
+    const dc1 = v.get('elec.dc1_powered') !== 0;
+    const acOff = v.get('elec.xfr1_powered') === 0 && v.get('elec.xfr2_powered') === 0;
+    const emerOn = (emerSw >= 1.5 || (emerSw >= 0.5 && (!dc1 || acOff))) && this.emerPack > 0;
+    if (emerOn) this.emerPack = Math.max(0, this.emerPack - dt / 900);
+    else if (dc1 && v.get('elec.emer_lts_powered') !== 0) this.emerPack = Math.min(1, this.emerPack + dt / 3600);
+    v.set(B738.emerLtsOn, emerOn ? 1 : 0);
+    v.set('ac.b738.emer_lts_pack', this.emerPack);
+    // ---- Igniters (FCOM 7.20): GRD with the start lever at IDLE and CONT fire the selected igniter(s)
+    // (IGNITION L / BOTH / R); FLT fires both regardless of the IGNITION select switch.
+    const ign = v.get(B738.ignSel);
+    for (const i of SIDES) {
+      const es = v.get(B738.engStart(i));
+      const flt = es >= 2.5;
+      const req = flt || es >= 1.5 || (es < 0.5 && v.get(B738.startLever(i)) >= 0.5);
+      v.set(`eng${i}.igniters_l`, req && (flt || ign <= 0.5) && v.get('elec.ign_l_powered') !== 0 ? 1 : 0);
+      v.set(`eng${i}.igniters_r`, req && (flt || ign >= -0.5) && v.get('elec.ign_r_powered') !== 0 ? 1 : 0);
     }
     // ---- Crew oxygen mask regulators (side consoles): EMERGENCY (2) / 100% (1) / N diluter (0) -> OxygenSystem mode.
     for (const s of SIDES) v.set(`ac.b738.oxy_mode${s}`, v.get(B738.oxyEmer(s)) !== 0 ? 2 : v.get(B738.oxyDiluter(s)) !== 0 ? 0 : 1);
     // ---- Alternate flaps drive running (electric motor load, electrical.ts).
     const altSw = v.get(B738.altFlapsSw);
+    // ALTERNATE FLAPS DOWN with ARM: LE devices to FULL EXTEND (standby hydraulics), latched (FCOM 9.20: "LE devices
+    // cannot be retracted by the alternate system"); released once ARM is OFF with system B pressure restored.
+    if (v.get(B738.altFlapsArm) !== 0 && altSw >= 0.5) this.leAltFull = true;
+    else if (v.get(B738.altFlapsArm) === 0 && v.get('hyd.b_psi') > 1000) this.leAltFull = false;
+    v.set('ac.b738.le_alt_full', this.leAltFull ? 1 : 0);
     v.set('flaps.alt_moving', altSw !== 0 && v.get(B738.altFlapsArm) !== 0 && v.get('elec.alt_flaps_powered') !== 0 ? 1 : 0);
     // ---- Outflow valve switch: effective only in MAN (FCOM 2.40); the pressurization block reads the result.
     const outSw = v.get(B738.outflowSw);
     v.set('ac.b738.outflow_cmd', v.get(B738.pressMode) === 2 ? outSw : 0);
-    // ---- CVR ERASE: on the ground with the parking brake set, held ~2 s (FCOM 5.10; SCOPE: no recording).
+    // ---- CVR ERASE: on the ground with the parking brake set, held ~2 s (FCOM 5.10); an erase tone is heard in the
+    // headset jack (EST: short tone). TEST: status light and test tone. SCOPE: no recording is modelled.
     this.cvrEraseT = v.get(B738.cvrErase) !== 0 && !air && v.get(B738.parkBrake) !== 0 ? this.cvrEraseT + dt : 0;
-    if (this.cvrEraseT > 2) v.set('ac.b738.cvr_erased', 1);
-    else if (v.get(B738.cvrTest) !== 0) v.set('ac.b738.cvr_erased', 0);
+    if (this.cvrEraseT > 2) {
+      if (v.get('ac.b738.cvr_erased') === 0) this.ctx.audio?.play('chime', { volume: 0.25, rate: 1.4 });
+      v.set('ac.b738.cvr_erased', 1);
+    } else if (v.get(B738.cvrTest) !== 0) v.set('ac.b738.cvr_erased', 0);
+    if (this.e.cvrTest.rising(v.get(B738.cvrTest) !== 0)) this.ctx.audio?.play('chime', { volume: 0.2, rate: 1.2 });
     // ---- ISFD: BARO push = STD toggle, HP/IN units, ATT RST realigns the attitude, APP selects the ILS deviation display.
     if (this.e.isfdStd.rising(v.get(B738.isfdStd) !== 0)) v.set('adc3.baro_std', v.get('adc3.baro_std') !== 0 ? 0 : 1);
     if (this.e.isfdRst.rising(v.get(B738.isfdRst) !== 0)) this.isfdReset?.();
@@ -352,9 +443,16 @@ export class B738Logic implements Subsystem {
     v.set('xpdr.unit', atc2 ? 2 : 1);
     v.set('elec.xpdr_sel_powered', v.get(atc2 ? 'elec.xpdr2_powered' : 'elec.xpdr_powered'));
     v.set('ac.b738.xpdr_press_alt_ft', v.get(v.get(B738.xpdrAltSrc) >= 1.5 ? 'adc2.press_alt_ft' : 'adc1.press_alt_ft'));
-    // ---- Weather radar control panel. SCOPE: no radar returns; the mode / gain / tilt are published for the ND overlay hook.
-    const wxOn = v.get(B738.wxrPower) !== 0 && v.get('elec.wxr_powered') !== 0;
+    // ---- Weather radar (FCOM 11.30 / 15 "Weather radar"): the radar transmits while WXR is selected on either EFIS
+    // control panel (no separate on/off switch on the NG panel) with the transceiver powered; the control panel
+    // MODE (TEST / WX / WX+T / MAP), GAIN and TILT shape the returns drawn by the ND overlay (surveillance.ts).
+    const wxSel = v.get(EFIS_WXR[0]) !== 0 || v.get(EFIS_WXR[1]) !== 0;
+    const wxPwr = v.get('elec.wxr_powered') !== 0 && v.get('elec.wxr_ctl_powered', 1) !== 0;
+    const wxOn = wxSel && wxPwr && v.get('fail.b738.wxr') === 0;
     v.set('wxr.active', wxOn ? 1 : 0);
+    v.set('wxr.fail', wxSel && (!wxPwr || v.get('fail.b738.wxr') !== 0) ? 1 : 0);
+    const wxm = Math.round(v.get(B738.wxrMode));
+    v.setString('ac.b738.wxr_mode_text', !wxOn ? 'WXR FAIL' : wxm === 3 ? 'TEST' : wxm === 2 ? 'MAP' : wxm === 1 ? 'WX+T' : 'WX');
     v.set('wxr.mode', v.get(B738.wxrMode));
     v.set('wxr.gain', v.get(B738.wxrGain));
     v.set('wxr.tilt_deg', v.get(B738.wxrTilt));
@@ -366,8 +464,44 @@ export class B738Logic implements Subsystem {
     const gearDn = v.get('gear.down_locked') !== 0 || v.get(B738.gearLever) > 0.75;
     const ns = v.get(B738.noSmoking);
     const fb = v.get(B738.fastenBelts);
-    v.set('ac.b738.sign_no_smoking', ns >= 2 || (ns >= 1 && gearDn) ? 1 : 0);
-    v.set('ac.b738.sign_fasten_belts', fb >= 2 || (fb >= 1 && (gearDn || flaps > 0.5)) ? 1 : 0);
+    const nsOn = ns >= 2 || (ns >= 1 && gearDn);
+    const fbOn = fb >= 2 || (fb >= 1 && (gearDn || flaps > 0.5));
+    v.set('ac.b738.sign_no_smoking', nsOn ? 1 : 0);
+    v.set('ac.b738.sign_fasten_belts', fbOn ? 1 : 0);
+    // A low single chime sounds in the cabin with each sign change (FCOM 1.40), heard on the flight deck through
+    // the open door / PA (EST level); the cabin signs are lit only with their power (EST: XFR bus).
+    const signPwr = v.get('elec.xfr1_powered') !== 0 || v.get('elec.xfr2_powered') !== 0;
+    const signs = (nsOn ? 1 : 0) + (fbOn ? 2 : 0);
+    if (signPwr && this.prevSigns >= 0 && signs !== this.prevSigns) {
+      this.ctx.audio?.play('chime', { volume: 0.3, rate: 0.6 });
+      v.set('ac.b738.cabin_chime_count', v.get('ac.b738.cabin_chime_count') + 1);
+    }
+    this.prevSigns = signs;
+    v.set('ac.b738.cabin_signs_lit', signPwr ? signs : 0);
+
+    // ---- Flight deck door (FCOM 1.40 "Flight deck door"): the emergency access code on the cabin keypad
+    // (event 'b738.door.emer_access'; SCOPE: no cabin keypad model) sounds the chime and lights AUTO UNLK; unless the
+    // crew selects DENY, the door unlocks after the time delay (EST 30 s, operator-programmable) for 5 s. UNLKD
+    // unlocks, AUTO keeps it locked, DENY rejects a request. LOCK FAIL: AUTO selected and the lock has no power
+    // (door lock breaker) or the lock failed.
+    const doorSel = v.get(B738.fdDoorLock);
+    if (this.doorReq && this.doorAccessT < 0 && this.doorUnlockT <= 0) {
+      this.doorAccessT = 30;
+      this.ctx.audio?.play('chime', { volume: 0.4, rate: 0.8 });
+    }
+    this.doorReq = false;
+    if (this.doorAccessT >= 0) {
+      if (doorSel >= 0.5) this.doorAccessT = -1; // DENY cancels the request
+      else {
+        this.doorAccessT -= dt;
+        if (this.doorAccessT < 0) this.doorUnlockT = 5;
+      }
+    }
+    if (this.doorUnlockT > 0) this.doorUnlockT -= dt;
+    const lockPwr = v.get('elec.fd_door_lock_powered', 1) !== 0 && v.get('fail.b738.door_lock') === 0;
+    v.set('ac.b738.door_auto_unlk', this.doorAccessT >= 0 ? 1 : 0);
+    v.set('ac.b738.door_lock_fail', doorSel > -0.5 && doorSel < 0.5 && !lockPwr ? 1 : 0);
+    v.set('ac.b738.door_unlocked', doorSel <= -0.5 || this.doorUnlockT > 0 || !lockPwr ? 1 : 0);
   }
 
   reset(): void {
@@ -384,6 +518,10 @@ export class B738Logic implements Subsystem {
     this.e.attendCall.reset(v.get(B738.attendCall) !== 0);
     this.attendT = -1;
     this.crewCallT = 0;
+    this.prevSigns = -1;
+    this.rtoSbArmed = false;
+    this.leAltFull = false;
+    this.e.cvrTest.reset(v.get(B738.cvrTest) !== 0);
   }
 
   /** Failures of the aircraft-specific logic (ids under fail.b738.*). */
@@ -403,6 +541,10 @@ export class B738Logic implements Subsystem {
       f('equip_cool_supply', 'Equipment cooling supply fan', 'EQUIP COOLING SUPPLY OFF light; select ALTN.'),
       f('equip_cool_exhaust', 'Equipment cooling exhaust fan', 'EQUIP COOLING EXHAUST OFF light; select ALTN.'),
       f('zone_temp', 'Duct overheat (zone temperature)', 'ZONE TEMP light.'),
+      f('xpdr1', 'ATC transponder 1 failure', 'Transponder 1 inoperative (select ATC 2); TCAS off with ATC 1 selected.'),
+      f('xpdr2', 'ATC transponder 2 failure', 'Transponder 2 inoperative (select ATC 1); TCAS off with ATC 2 selected.'),
+      f('wxr', 'Weather radar failure', 'WXR FAIL on the ND with WXR selected; no returns.'),
+      f('door_lock', 'Flight deck door lock failure', 'LOCK FAIL light with AUTO selected; door unlocked.'),
     ];
   }
 }
@@ -422,7 +564,7 @@ interface LightBinding {
 export class B738LogicLate implements Subsystem {
   readonly name = 'b738.logic_late';
   private readonly lights: LightBinding[] = [];
-  private readonly cautions: { id: string; group: SixPackGroup; var: string; prev: boolean; unacked: boolean }[] = [];
+  private readonly cautions: { id: string; group: SixPackGroup; var: string; prev: boolean; unacked: boolean; recallOnly: boolean }[] = [];
   private readonly fireIds = B738_ANNUNCIATORS.filter((x) => x.group === null).map((x) => `cas.${x.id}`);
   private readonly mcEdge = [new EdgeDetector(), new EdgeDetector()];
   private readonly recallEdge = [new EdgeDetector(), new EdgeDetector()];
@@ -434,6 +576,7 @@ export class B738LogicLate implements Subsystem {
   private bellOn = false;
   private bellSilenced = false;
   private prevFire = false;
+  private prevTest = false;
   private hornOn = false;
   private altHornCut = false;
   /** ELT g-switch latch (impact with the switch at ARM); reset by selecting ON. */
@@ -445,7 +588,7 @@ export class B738LogicLate implements Subsystem {
     const v = ctx.vars;
     for (const a of B738_ANNUNCIATORS) {
       if (a.light) this.lights.push({ light: a.light, cond: compileCondition(v, a.when) });
-      if (a.group) this.cautions.push({ id: a.id, group: a.group, var: `cas.${a.id}`, prev: false, unacked: false });
+      if (a.group) this.cautions.push({ id: a.id, group: a.group, var: `cas.${a.id}`, prev: false, unacked: false, recallOnly: a.recallOnly === true });
     }
     this.annPower = compileCondition(v, 'elec.dc1_powered || elec.dc2_powered || elec.batt_bus_powered || elec.dc_stby_powered');
     const b = (x: string): Evaluator => compileBinding(v, x, 0);
@@ -494,8 +637,9 @@ export class B738LogicLate implements Subsystem {
     const wht = v.get(B738.windowHeatTest);
     if (powered && wht <= -0.5) for (const w of WINDOW_HEATS) if (v.get(B738.windowHeat(w)) !== 0) v.set(B738.lt.windowOverheat(w), 1);
     if (powered && v.get(B738.ovhtTest) !== 0) for (const z of [1, 2, 3] as const) v.set(B738.lt.zoneTemp(z), 1);
-    const cargoTest = powered && v.get(B738.cargoTest) !== 0;
-    if (cargoTest) for (const z of ['fwd', 'aft'] as const) v.set(B738.lt.cargoFire(z), 1);
+    // Cargo fire TEST (FCOM 8.20): the FWD / AFT FIRE lights, bell and master FIRE WARN come from the cargo zones'
+    // own test (airframe.ts); here the extinguisher squib test lights and DISCH.
+    const cargoTest = powered && v.get(B738.cargoTest) !== 0 && v.get('elec.cargo_fire_powered') !== 0;
     if (powered && v.get(B738.elecMaint) !== 0) {
       v.set(B738.lt.elec, 1);
       v.set(B738.lt.trUnit, 1);
@@ -520,7 +664,8 @@ export class B738LogicLate implements Subsystem {
     let anyUnacked = false;
     for (const c of this.cautions) {
       const on = v.get(c.var) !== 0;
-      if (on && !c.prev) c.unacked = true;
+      // Recall-only faults (single fault in a redundant system) are stored but light nothing until RECALL.
+      if (on && !c.prev && !c.recallOnly) c.unacked = true;
       if (!on) c.unacked = false;
       if (mcPush) c.unacked = false;
       if (recallRelease && on) c.unacked = true;
@@ -543,7 +688,11 @@ export class B738LogicLate implements Subsystem {
     if (this.bellEdge.rising(cut)) this.bellSilenced = true;
     if (fire && !this.prevFire) this.bellSilenced = false;
     this.prevFire = fire;
-    const fireWarn = (fire && !this.bellSilenced) || (cargoTest && !this.bellSilenced);
+    // Any test (OVHT/FIRE or cargo) re-arms the bell like a new fire (a previous cutout does not silence it).
+    const anyTest = v.get('fire.test') !== 0 || cargoTest;
+    if (anyTest && !this.prevTest) this.bellSilenced = false;
+    this.prevTest = anyTest;
+    const fireWarn = fire && !this.bellSilenced;
     v.set(B738.lt.fireWarn, (fireWarn || test) && powered ? 1 : 0);
     v.set('alert.master_warning', fireWarn ? 1 : 0);
     const bell = fireWarn && v.get('elec.fire_det_powered') !== 0;
@@ -602,15 +751,14 @@ export class B738LogicLate implements Subsystem {
     // ---- Engines / APU.
     for (const i of SIDES) {
       v.set(L.engStartValve(i), lit(v.get(`pneu.st${i}_valve_open`) !== 0));
-      const eecOn = v.get(B738.eec(i)) !== 0;
-      v.set(L.eecOn(i), lit(eecOn));
-      v.set(L.eecAltn(i), lit(!eecOn));
+      // ON (white) while the switch is ON (also in soft ALTN); ALTN (amber) in soft or hard alternate (FCOM 7.20).
+      v.set(L.eecOn(i), lit(v.get(B738.eec(i)) !== 0));
+      v.set(L.eecAltn(i), lit(v.get(B738.eecMode(i)) > 0));
     }
     v.set(L.apuEgtC, v.get('apu.egt_c'));
 
     // ---- Hydraulics / flight controls (non-caution lights).
     void HYD_PUMP_SWITCHES;
-    v.set(L.stbyRudOn, lit(v.get(B738.stbyRudder) !== 0));
     v.set(L.hydBrakePsi, v.get('brakes.accum_psi'));
     v.set(L.yawDamperInd, v.get('fcs.yd_cmd'));
 
@@ -678,7 +826,11 @@ export class B738LogicLate implements Subsystem {
       v.set(L.squib(b), powered && v.get(B738.extTest) !== 0 && v.get(`fire.${b}_btl_psi`) > 0 ? 1 : 0);
     }
     for (const z of ['fwd', 'aft'] as const) v.set(L.cargoExtArmed(z), lit(v.get(B738.cargoArm(z)) !== 0));
-    v.set(L.cargoDischarged, lit(v.get('fire.cargo_btl_discharged') !== 0));
+    v.set(L.cargoDischarged, lit(v.get('fire.cargo_btl_discharged') !== 0 || cargoTest));
+    // DETECTOR FAULT: one or more detectors in the selected loop(s) failed (FCOM 8.10).
+    v.set(L.cargoDetFault, lit(v.get('fire.cargo_fwd_fault') !== 0 || v.get('fire.cargo_aft_fault') !== 0));
+    // EXTINGUISHER test lights (green): squib circuit continuity, lit during the cargo TEST with a charged bottle.
+    for (const z of ['fwd', 'aft'] as const) v.set(L.cargoSquib(z), powered && (test || (cargoTest && v.get('fire.cargo_btl_psi') > 0)) ? 1 : 0);
 
     // ---- IRS display unit (ISDU): selected data of the selected IRS (FCOM 11.20).
     const ir = v.get(B738.isduSys) >= 0.5 ? 2 : 1;
@@ -707,14 +859,16 @@ export class B738LogicLate implements Subsystem {
     v.set(B738.lt.isduText('r'), on ? rr : 0);
 
     // ---- Misc.
-    v.set(L.passOxyOn, lit(v.get('oxy.pax_deployed') !== 0));
     v.set(L.crewOxyPsi, v.get('oxy.crew_psi'));
-    v.set(L.lockFail, lit(false)); // SCOPE: flight deck door lock always healthy
+    // Flight deck door (logic above): LOCK FAIL with AUTO selected and the lock failed / unpowered; AUTO UNLK while
+    // an emergency access request counts down.
+    v.set(L.lockFail, lit(v.get('ac.b738.door_lock_fail') !== 0));
+    v.set(L.autoUnlk, lit(v.get('ac.b738.door_auto_unlk') !== 0));
     // CALL (blue): the flight deck is being called by the cabin or the ground crew (FCOM 5.10). ATTEND / GRD CALL
     // themselves sound the cabin chime / nose-wheel-well horn and do not light it (SCOPE: no aural of those).
     v.set(L.callLt, lit(v.get('ac.b738.crew_call_in') !== 0));
     v.set('ac.b738.cvr_test_lt', lit(v.get(B738.cvrTest) !== 0));
-    v.set('ac.b738.fd_door_locked', v.get(B738.fdDoorLock) >= 0 && v.get(B738.door('flt_deck')) === 0 ? 1 : 0);
+    v.set('ac.b738.fd_door_locked', v.get('ac.b738.door_unlocked') === 0 && v.get(B738.door('flt_deck')) === 0 ? 1 : 0);
   }
 
   reset(): void {
@@ -725,6 +879,7 @@ export class B738LogicLate implements Subsystem {
     }
     this.bellSilenced = false;
     this.prevFire = false;
+    this.prevTest = false;
     this.eltImpact = false;
   }
 }

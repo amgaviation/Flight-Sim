@@ -643,6 +643,7 @@ export class Afcs implements Subsystem {
     if (this.vert === 'CWS') this.vert = 'NONE';
     if (this.vert === 'FLARE') this.vert = 'NONE';
     if (this.style === 'kap140' || !this.fdOn()) this.clearModes();
+    else if (this.cfg.autoland?.clearOnGroundDisconnect && this.onGround && (this.lat === 'ROLLOUT' || this.approach)) this.clearModes();
   }
 
   /**

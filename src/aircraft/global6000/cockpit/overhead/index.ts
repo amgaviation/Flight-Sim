@@ -70,8 +70,8 @@ const Z = OVHD_ZONE;
 export const OH = {
   genFail: (n: 1 | 2 | 3 | 4) => `ac.g6k.ck.oh.gen${n}_fail`,
   apuGenFail: 'ac.g6k.ck.oh.apu_gen_fail',
-  ratGenFail: 'ac.g6k.ck.oh.rat_gen_fail',
   xfeedFail: 'ac.g6k.ck.oh.xfeed_fail',
+  wingFeedInhibit: (s: 'l' | 'r') => `ac.g6k.ck.oh.wing_feed_${s}`,
 } as const;
 
 type Seg = LegendSegment;
@@ -261,14 +261,17 @@ export function buildOverhead(c: G6kCockpitContext): void {
     fail: `fail.elec.gen${n}`,
     sw: V.gen(n),
     run: n <= 2 ? 'eng1.running' : 'eng2.running',
+    handle: V.fireHandle(n <= 2 ? 'l' : 'r'),
   }));
+  const feed = (['l', 'r'] as const).map((s) => ({ out: OH.wingFeedInhibit(s), pri: V.priPumps(s), aux: V.auxPump(s) }));
   b.onUpdate(() => {
     for (let i = 0; i < gens.length; i++) {
       const g = gens[i];
-      vars.set(g.out, (vars.get(g.tripped) !== 0 || vars.get(g.fail) !== 0) && vars.get(g.sw) === 1 && vars.get(g.run) !== 0 ? 1 : 0);
+      // GX PTG 6-8: FAIL = failed generating channel; also lit with the engine's fire DISCH handle pulled.
+      vars.set(g.out, ((vars.get(g.tripped) !== 0 || vars.get(g.fail) !== 0) && vars.get(g.sw) === 1 && vars.get(g.run) !== 0) || vars.get(g.handle) !== 0 ? 1 : 0);
     }
+    for (let i = 0; i < feed.length; i++) vars.set(feed[i].out, vars.get(feed[i].pri) === 0 && vars.get(feed[i].aux) === 0 ? 1 : 0);
     vars.set(OH.apuGenFail, (vars.get('elec.apu_gen_tripped') !== 0 || vars.get('fail.elec.apu_gen') !== 0) && vars.get(V.apuGen) === 1 && vars.get('apu.avail') !== 0 ? 1 : 0);
-    vars.set(OH.ratGenFail, vars.get(V.ratDeployed) !== 0 && vars.get(V.ratGen) === 1 && vars.get('elec.rat_gen_online') === 0 && vars.get(V.ratDrive) > G6K_LIMITS.ratShedKias + 10 ? 1 : 0);
     vars.set(OH.xfeedFail, (vars.get(V.xfeed) === 1) !== (vars.get('fuel.xfeed_open') !== 0) && vars.get('fuel.xfeed_transit') === 0 && vars.get('elec.xfeed_valve_powered') !== 0 ? 1 : 0);
   });
 }
@@ -351,7 +354,14 @@ function buildFittings(k: Ctx): void {
   });
 }
 
-/** FIRE DISCH handles (GXFP / FCOM 01-10-41 item 6): L ENG, APU (centre, further aft), R ENG, each with bottle 1 / 2 PBAs. */
+/**
+ * FIRE DISCH handles (GX PTG 9-12 .. 9-14, FCOM 01-10-41 item 6): L ENG, APU (centre, further aft), R ENG. Each
+ * handle is solenoid-locked (unlocked by the DAU on a fire warning, logic.ts V.fireUnlock) or by the manual override
+ * button behind it; pulled, it arms the squibs and closes the fuel / hydraulic / bleed SOVs and trips the VFGs; then it
+ * is turned and held >= 1 s: counter-clockwise (left) = bottle 1, clockwise (right) = bottle 2 (logic.ts). The engraved
+ * "1" / "2" either side are the bottle legends, not buttons. The APU handle has the bottle lockout release pin (slide
+ * to allow the second, clockwise, APU shot).
+ */
 function buildFire(k: Ctx): void {
   const { env } = k.c;
   const zones = [
@@ -360,15 +370,15 @@ function buildFire(k: Ctx): void {
     { z: 'r' as const, x: 374, y: 604, name: 'R ENG', warn: 'fire.eng2_warn' },
   ];
   for (const f of zones) {
-    // Handle: pull arms the squibs and closes the fuel, hydraulic and bleed SOVs (systems/environment.ts createFire,
-    // logic.ts); the red FIRE lamp in the grip follows the zone warning (and FIRE TEST).
     k.p.add(
       new TBarHandle(env, {
         id: `g6k.ovhd.fire_${f.z}`,
         label: `${f.name} FIRE DISCH HANDLE`,
         var: V.fireHandle(f.z),
         style: 'fire',
-        rotate: 'none',
+        rotate: 'discharge',
+        rotateVar: V.fireRot(f.z),
+        unlockVar: V.fireUnlock(f.z),
         lightVar: f.warn,
         legend: f.name,
         scale: 0.8,
@@ -378,34 +388,27 @@ function buildFire(k: Ctx): void {
     );
     cap(k, 'DISCH', f.x, f.y + 16);
     cap(k, 'PULL', f.x, f.y - 12);
-    // Bottle 1 / 2 discharge PBAs under the DISCH legend (momentary; squib fires only with the handle pulled). The
-    // amber legend shows that bottle discharged (FIRE BTL1/2 LO PRESS, GXFP).
-    for (const bt of [1, 2] as const) {
-      k.p.add(
-        new PushButton(env, {
-          id: `g6k.ovhd.fire_${f.z}_disch${bt}`,
-          label: `${f.name} DISCH ${bt}`,
-          var: V.fireDisch(f.z, bt),
-          mode: 'momentary',
-          style: 'korry',
-          width: 0.011,
-          height: 0.009,
-          layout: 'stack',
-          segments: [{ text: String(bt), color: 'amber', var: `fire.bottle${bt}_discharged` }],
-          zone: Z,
-        }),
-        px(f.x + (bt === 1 ? -7 : 7)),
-        py(f.y + 10),
-      );
-    }
+    cap(k, '1', f.x - 9, f.y + 9, 0.0026);
+    cap(k, '2', f.x + 9, f.y + 9, 0.0026);
+    // Manual override button behind the handle (solenoid unlock without a fire warning).
+    k.p.add(
+      new PushButton(env, { id: `g6k.ovhd.fire_${f.z}_ovrd`, label: `${f.name} FIRE HANDLE MANUAL OVERRIDE`, var: V.fireOvrd(f.z), mode: 'momentary', style: 'round', width: 0.0055, capMaterial: 'plasticBlack' }),
+      px(f.x + 12),
+      py(f.y + 3),
+    );
   }
+  // APU bottle lockout release pin (slide right to allow the second APU shot).
+  k.p.add(
+    new ToggleSwitch(env, { id: 'g6k.ovhd.fire_apu_pin', label: 'APU BOTTLE LOCKOUT RELEASE PIN', var: V.fireApuPin, positions: ['LOCK', 'REL'], values: [0, 1], orientation: 'horizontal', labels: { positions: false, height: 0.0017, zone: Z }, scale: 0.5 }),
+    px(318),
+    py(608),
+  );
 }
 
 /** Aft strip: DOME, TEMPERATURE, RECIRC / TRIM AIR / RAM AIR, AURAL WARNING, ELT. */
 function buildAft(k: Ctx): void {
-  // DOME light (dossier 12.1: aft module; EST position on the fire-handle strip: the Vision photographs show CABIN
-  // SYSTEMS where the GX drawing had room for it).
-  toggle(k, { id: 'g6k.ovhd.dome', label: 'DOME LIGHT', v: V.ltDome, x: 402, y: 598, positions: ['OFF', 'ON'], values: [0, 1], name: 'DOME' });
+  // No DOME switch: the flight-compartment area (ceiling) lights are the AREA knob on the pedestal COCKPIT LIGHTS panel
+  // (GX PTG 15-11), powered from the AV BATT DIR bus (systems/lighting.ts).
 
   // CABIN SYSTEMS (photo e_ovhd: aft-left module above AURAL WARNING): CABIN OUTLETS and CABIN POWER PBAs.
   title(k, 'CABIN SYSTEMS', 272, 574, 70);
@@ -475,7 +478,8 @@ function buildHydraulic(k: Ctx): void {
 /** ELECTRICAL panel (GXEL): BATT MASTER, EXT AC / EXT DC, GEN 1-4, APU GEN, RAT GEN (PUSH OFF / RESET). */
 function buildElectrical(k: Ctx): void {
   title(k, 'ELECTRICAL', 175, 428, 70);
-  toggle(k, { id: 'g6k.ovhd.batt_master', label: 'BATT MASTER', v: V.battMaster, x: 150, y: 410, positions: ['OFF', 'ON'], values: [0, 1], name: 'BATT MASTER' });
+  // BATT MASTER OFF / EMS / ON (GX PTG 6-8 panel drawing GX_06_011: OFF down, EMS, ON up); V.battMaster follows (logic.ts).
+  toggle(k, { id: 'g6k.ovhd.batt_master', label: 'BATT MASTER', v: V.battMasterSel, x: 150, y: 410, positions: ['OFF', 'EMS', 'ON'], values: [0, 1, 2], name: 'BATT MASTER' });
   pba(k, { id: 'g6k.ovhd.ext_ac', label: 'EXT AC', v: V.extAc, x: 186, y: 412, segs: [seg.on('AVAIL', 'green', 'elec.ext_ac_avail'), seg.on('ON', 'white', 'elec.ext_ac_online')], name: 'EXT AC' });
   pba(k, { id: 'g6k.ovhd.ext_dc', label: 'EXT DC', v: V.extDc, x: 207, y: 412, segs: [seg.on('AVAIL', 'green', 'elec.ext_dc_avail'), seg.on('ON', 'white', 'elec.ext_dc_online')], name: 'EXT DC' });
   const gx = [147, 165, 189, 207];
@@ -486,7 +490,8 @@ function buildElectrical(k: Ctx): void {
   guardedPba(k, { id: 'g6k.ovhd.dc_emer_ovrd', label: 'EMER DC PWR', v: V.dcEmerOvrd, x: 150, y: 370, segs: [seg.on('OVRD', 'amber', V.dcEmerOvrd)], name: 'EMER DC PWR', color: 'red', guardVar: V.dcEmerOvrdGuard });
   pba(k, { id: 'g6k.ovhd.apu_gen', label: 'APU GEN', v: V.apuGen, x: 177, y: 370, segs: [seg.on('FAIL', 'amber', OH.apuGenFail), seg.eq('OFF', 'white', V.apuGen, 0)], name: 'APU GEN' });
   // RAT GEN: clear flip guard (photo e_elec_eng).
-  guardedPba(k, { id: 'g6k.ovhd.rat_gen', label: 'RAT GEN', v: V.ratGen, x: 205, y: 370, segs: [seg.on('FAIL', 'amber', OH.ratGenFail), seg.eq('OFF', 'white', V.ratGen, 0)], name: 'RAT GEN', color: 'clear', guardVar: V.ratGenGuard });
+  // GX PTG 6-8: RAT GEN legends ON (RAT generator on line) and OFF (operation inhibited); no FAIL legend.
+  guardedPba(k, { id: 'g6k.ovhd.rat_gen', label: 'RAT GEN', v: V.ratGen, x: 205, y: 370, segs: [seg.on('ON', 'green', 'elec.rat_gen_online'), seg.eq('OFF', 'white', V.ratGen, 0)], name: 'RAT GEN', color: 'clear', guardVar: V.ratGenGuard });
 }
 
 /** FUEL panel (GXFU): WING XFER, L / R AUX PUMP, XFEED SOV, L / R PRI PUMP, AFT XFER, L / R RECIRC. */
@@ -507,8 +512,15 @@ function buildFuel(k: Ctx): void {
     name: 'WING XFER',
     initial: 1,
   });
-  cap(k, 'WING FEED', 241, 492, 0.0019);
-  cap(k, 'WING FEED', 297, 492, 0.0019);
+  // WING FEED / INHIBIT legend (GX PTG 11-10 fuel control panel): lit while that side's PRI pumps and AUX pump are both
+  // inhibited (no boost pump feeds the engine from the wing).
+  for (const s of ['l', 'r'] as const) {
+    k.p.add(
+      new AnnunciatorLight(k.c.env, { id: `g6k.ovhd.wing_feed_${s}`, label: `${s.toUpperCase()} WING FEED INHIBIT`, width: 0.02, height: 0.009, segments: [seg.on(['WING FEED', 'INHIBIT'], 'white', OH.wingFeedInhibit(s))] }),
+      px(s === 'l' ? 241 : 297),
+      py(492),
+    );
+  }
   for (const s of ['l', 'r'] as const) {
     const S = s.toUpperCase();
     const x = s === 'l' ? 241 : 297;
@@ -652,7 +664,8 @@ function buildPress(k: Ctx): void {
   cap(k, 'LDG ELEV', 473, 507.5, 0.0024);
   toggle(k, { id: 'g6k.ovhd.ldg_elev_fms', label: 'LDG ELEV MAN / FMS', v: V.ldgElevFms, x: 465, y: 495, positions: ['FMS', 'MAN'], values: [1, 0], initial: 0 });
   toggle(k, { id: 'g6k.ovhd.ldg_elev', label: 'LDG ELEV UP / DN', v: V.ldgElevSlew, x: 481, y: 495, positions: ['DN', '', 'UP'], values: [-1, 0, 1], initial: 1, springs: { 0: 1, 2: 1 } });
-  toggle(k, { id: 'g6k.ovhd.press_rate', label: 'MAN RATE', v: V.pressManRate, x: 500, y: 495, positions: ['NORM', 'HIGH'], values: [0.5, 1], name: 'RATE' });
+  // RATE NORM / HIGH: AUTO cabin rate limits +500 / -300 fpm, HIGH up to 800 fpm descent (GX PTG 13-40 / 13-57).
+  toggle(k, { id: 'g6k.ovhd.press_rate', label: 'RATE NORM / HIGH', v: V.pressRateHigh, x: 500, y: 495, positions: ['NORM', 'HIGH'], values: [0, 1], name: 'RATE' });
   guardedPba(k, { id: 'g6k.ovhd.emer_depress', label: 'EMER DEPRESS', v: V.emerDepress, x: 430, y: 474, segs: [seg.on('ON', 'white', V.emerDepress)], name: 'EMER DEPRESS', color: 'yellow', guardVar: V.emerDepressGuard });
   cap(k, 'OUTFLOW VALVE', 460, 486, 0.0022);
   for (const n of [1, 2] as const)

@@ -247,13 +247,13 @@ export const B738 = {
   nwsSw: `${P}nws_sw`,
   /** BELOW G/S P-INHIBIT push lights (Capt / F/O, momentary). */
   belowGs: (s: Side) => `${P}below_gs${s}`,
-  /** Clock CHR push (momentary) and ET switch HLD (-1) / RUN (0) (a value >= 0.5 still resets ET, kept for the RESET push). */
+  /** Clock CHR push (momentary) and ET switch RESET (1, spring-loaded to HLD) / HLD (-1) / RUN (0) (FCOM 10.10). */
   clockChr: (s: Side) => `${P}clock_chr${s}`,
   clockEt: (s: Side) => `${P}clock_et${s}`,
   /**
    * Clock bezel controls (Smiths 737NG clock, SCBG P1/P3 drawing: CHR top-left, TIME/DATE top-right, ET RUN/HLD
    * bottom-left, RESET bottom, SET with + / - bottom-right; functions per flightdeck737.be "The Clock / Chrono"):
-   * RESET (ET to zero), TIME/DATE (cycles UTC time, UTC date, MAN time, MAN date), SET (steps the MAN field
+   * RESET (chronograph to zero; the ET is zeroed with the ET switch RESET position), TIME/DATE (cycles UTC time, UTC date, MAN time, MAN date), SET (steps the MAN field
    * being set: none, hours, minutes / day, month, year) and + / - (adjust the flashing field). All momentary.
    */
   clockReset: (s: Side) => `${P}clock_reset${s}`,
@@ -392,7 +392,11 @@ export const B738 = {
   xpdrAltSrc: `${P}xpdr_alt_src`,
   tcasRange: `${P}tcas_range`,
   xpdrIdentBtn: `${P}xpdr_ident_btn`,
-  /** Weather radar control panel: mode WX 0 / WX+T 1 / MAP 2 / TEST 3; GAIN 0..1; TILT -15..+15 deg; power (OFF 0 / ON 1). SCOPE: no radar return model. */
+  /**
+   * Weather radar control panel: mode WX 0 / WX+T 1 / MAP 2 / TEST 3; GAIN 0..1; TILT -15..+15 deg. `wxrPower` is a
+   * legacy var kept for the append-only rule: the NG panel has no on/off switch (the radar transmits while WXR is
+   * selected on an EFIS control panel, FCOM 11.30); no control writes it and no system reads it.
+   */
   wxrMode: `${P}wxr_mode`,
   wxrGain: `${P}wxr_gain`,
   wxrTilt: `${P}wxr_tilt_deg`,
@@ -519,6 +523,11 @@ export const B738 = {
     cargoFire: (z: 'fwd' | 'aft') => `${L}cargo_fire_${z}`,
     cargoExtArmed: (z: 'fwd' | 'aft') => `${L}cargo_armed_${z}`,
     cargoDischarged: `${L}cargo_disch`,
+    /** Cargo DETECTOR FAULT (amber) and the cargo EXTINGUISHER squib test lights (green, FWD / AFT), FCOM 8.10. */
+    cargoDetFault: `${L}cargo_det_fault`,
+    cargoSquib: (z: 'fwd' | 'aft') => `${L}cargo_squib_${z}`,
+    /** Flight deck door AUTO UNLK light (amber), FCOM 1.40. */
+    autoUnlk: `${L}auto_unlk`,
     // doors
     doorLt: (d: Door) => `${L}door_${d}`,
     lockFail: `${L}lock_fail`,
@@ -579,6 +588,14 @@ export const B738 = {
   tillerCmd: `${P}tiller_cmd`,
   /** Engine fuel shutoff (spar + engine valve) open commands. */
   engValveOpen: (i: Side) => `${P}eng_valve_open${i}`,
+  /** EEC mode per engine: 0 NORMAL, 1 soft alternate, 2 hard alternate (engines.ts B738Eec, FCOM 7.20). */
+  eecMode: (i: Side) => `${P}eec_mode${i}`,
+  /** Engine oil quantity (US qt) per engine (engines.ts oil model; engine display). */
+  oilQty: (i: Side) => `${P}oil_qty${i}`,
+  /** Emergency lights illuminated (exit signs, cabin / exterior emergency lights; FCOM 1.40). */
+  emerLtsOn: `${P}emer_lts_on`,
+  /** Windshield wiper blade sweep angle (0 = parked .. 1 = full sweep) per side (logic.ts). */
+  wiperSweep: (i: Side) => `${P}wiper_sweep${i}`,
 } as const;
 
 /** System annunciator (six-pack) groups: Capt FLT CONT, IRS, FUEL, ELEC, APU, OVHT/DET; F/O ANTI-ICE, HYD, DOORS, ENG, OVERHEAD, AIR COND (FCOM 15.20). */
@@ -596,7 +613,7 @@ export const B738_DISPLAY_IDS = { isfd: 'b738_isfd', isdu: 'b738_isdu' } as cons
 export function b738ControlVars(): string[] {
   const out: string[] = [];
   const sides: Side[] = [1, 2];
-  const skip = new Set(['acpRxOn', 'acpRxVol', 'lt', 'fadecTla', 'xfrSrc', 'stbyOnBatt', 'stbyPumpCmd', 'stbyRudder', 'ptuCmd', 'gearXferUnit', 'recallActive', 'wingAiValveCmd', 'engValveOpen', 'tillerCmd']);
+  const skip = new Set(['acpRxOn', 'acpRxVol', 'lt', 'fadecTla', 'xfrSrc', 'stbyOnBatt', 'stbyPumpCmd', 'stbyRudder', 'ptuCmd', 'gearXferUnit', 'recallActive', 'wingAiValveCmd', 'engValveOpen', 'tillerCmd', 'eecMode', 'oilQty', 'emerLtsOn', 'wiperSweep', 'wxrPower']);
   const args: Record<string, readonly unknown[]> = {
     fltCtl: ['a', 'b'],
     spoilerSw: ['a', 'b'],

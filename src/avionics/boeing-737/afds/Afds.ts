@@ -82,6 +82,12 @@ function orBinding(a: string, b: Binding | undefined): Binding {
   return `(${a}) || (${b})`;
 }
 
+/** VNAV descent deceleration band above the DES speed restriction altitude (ft), EST (see the VNAV target speed). */
+const DES_REST_DECEL_FT = 2500;
+/** VNAV approach deceleration: distance to the destination (nm) and target (kt), EST. */
+const APPROACH_DECEL_NM = 15;
+const APPROACH_DECEL_KT = 210;
+
 export class B737Afds implements Subsystem {
   readonly name = 'b737_afds';
   readonly afcs: Afcs | null;
@@ -513,6 +519,21 @@ export class B737Afds implements Subsystem {
       const climbing = this.fms.vnav.phase === 'CLB';
       if (climbing && aglOrigin < fmc.accelHtFt && Number.isFinite(fmc.v2Sel) && v.get(this.cfg.vars.flapsDeg) >= 0.5) {
         kt = fmc.v2Sel + 20;
+        mach = 0;
+      }
+      // CLB / DES page SPD REST (default 250 / 10,000; FCOM 11.31 / 11.42): below the restriction altitude the
+      // target is capped; in descent the deceleration segment starts above it so the aircraft crosses the
+      // restriction altitude at the restriction speed (EST 2,500 ft band: ~40 kt at an idle descent
+      // deceleration of ~1 kt per 60 ft). Approach deceleration: VNAV decelerates toward the flap-up
+      // manoeuvring speed (EST 210 kt) within ~15 nm of the destination runway.
+      const phase = this.fms.vnav.phase;
+      const rest = phase === 'CLB' ? fmc.perf.clbRest : phase === 'DES' ? fmc.perf.desRest : null;
+      if (rest && Number.isFinite(rest.kt) && Number.isFinite(rest.altFt) && alt < rest.altFt + (phase === 'DES' ? DES_REST_DECEL_FT : 0) && kt > rest.kt) {
+        kt = rest.kt;
+        mach = 0;
+      }
+      if (phase === 'DES' && v.get(FMS.distToDestNm, 999) < APPROACH_DECEL_NM && kt > APPROACH_DECEL_KT) {
+        kt = APPROACH_DECEL_KT;
         mach = 0;
       }
       const placard = flapPlacardKt(v.get(this.cfg.vars.flapsDeg));

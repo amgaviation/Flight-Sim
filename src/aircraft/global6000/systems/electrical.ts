@@ -126,9 +126,13 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): G6kElectrical {
     dc('ign1', 'dc_ess', '4 * eng1.ignition', 7.5),
     dc('start_valve1', 'dc_ess', '0.6 * pneu.start1_valve_open', 3),
     dc('aux_pump_l', 'dc_ess', 'fuel.aux_l_amps', 20), // GXFU: left DC AUX pump on the DC ESS bus
-    dc('sfcu1', 'dc_ess', '0.8 + 15 * flaps.moving + 10 * slats.transit', 30), // slat/flap control unit 1 + PDU motors (DC)
+    // GX PTG 10-71 EMS breaker pages: SLAT/FLAP CTLR 2 on DC ESS (CTLR 1 on BATT); the PDU motor power SLAT/FLAP PWR 1 / 2
+    // and STAB TRIM CH 1 / 2 are AC loads (AC ESS and AC 1, below).
+    dc('sfcu2', 'dc_ess', 0.8, 5), // slat/flap controller 2
     dc('fcu1', 'dc_ess', 1.5, 5), // flight control unit 1 (spoilers, stab trim, pitch feel, RTL)
-    dc('stab_trim1', 'dc_ess', '0.5 + 12 * trim.pitch_in_motion', 20), // stab trim channel 1 (MDU motor)
+    dc('rud_trim', 'dc_ess', '0.3 + 2 * trim.yaw_in_motion', 5), // GX PTG 10-71: RUDDER TRIM on DC ESS
+    dc('ram_air_vlv', 'dc_ess', `0.3 * ${V.ramAir}`, 3), // GX PTG 13 EMS list: RAM AIR VLV on DC ESS
+    dc('eng_bleed_vlv', 'dc_ess', 0.3, 3), // L / R ENG BLEED (PRV / HPV) solenoids: DC ESS (EMS list)
     dc('lgecu_a', 'dc_ess', '0.6 + 1.5 * gear.moving', 5),
     dc('bcu_a', 'dc_ess', 1.2, 5), // brake control unit channel A (GXLG CB "BRAKE CTL CH A DC 1"; EST DC ESS)
     dc('nws1', 'dc_ess', 0.8, 3),
@@ -153,9 +157,10 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): G6kElectrical {
     dc('ign2', 'batt_bus', '4 * eng2.ignition', 7.5),
     dc('start_valve2', 'batt_bus', '0.6 * pneu.start2_valve_open', 3),
     dc('aux_pump_r', 'batt_bus', 'fuel.aux_r_amps', 20), // GXFU CB list: R AUX PUMP BATT
-    dc('sfcu2', 'batt_bus', '0.8 + 15 * flaps.moving + 10 * slats.transit', 30),
+    dc('sfcu1', 'batt_bus', 0.8, 5), // slat/flap controller 1 (GX PTG 10-71: SLAT/FLAP CTLR 1 on BATT)
     dc('fcu2', 'batt_bus', 1.5, 5),
-    dc('stab_trim2', 'batt_bus', 0.5, 20),
+    dc('xbleed_vlv', 'batt_bus', '0.3', 3), // crossbleed valve actuator: BATT (EMS list)
+    dc('nav_lts', 'batt_bus', 3, 5, { enabled: V.ltNav }), // GX PTG 15 EMS list: NAV LTS on BATT
     dc('lgecu_b', 'batt_bus', 0.6, 5),
     dc('bcu_b', 'batt_bus', 1.2, 5),
     dc('nws2', 'batt_bus', 0.8, 3),
@@ -179,13 +184,9 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): G6kElectrical {
     dc('tcas', 'dc_bus1', 2.0, 5),
     dc('adf1', 'dc_bus1', 0.5, 3),
     dc('fms', 'dc_bus1', 1.5, 5),
-    dc('ldg_lt_l', 'dc_bus1', 8, 15, { enabled: V.ltLdgL }), // wing landing light (EST 225 W)
     dc('ldg_lt_nose', 'dc_bus1', 16, 25, { enabled: `${V.ltLdgNose} && gear.pos0 > 0.95`, model: 'resistive' }), // 2 NLG sealed-beam lamps (GXLT)
-    dc('taxi_lt', 'dc_bus1', 8, 15, { enabled: V.ltTaxi }),
-    dc('nav_lts', 'dc_bus1', 3, 5, { enabled: V.ltNav }),
-    dc('beacon', 'dc_bus1', 3, 5, { enabled: V.ltBeacon }),
+    dc('strobe', 'dc_bus1', 5, 7.5, { enabled: V.ltStrobe }), // GX PTG 15 EMS list: STROBE on DC 1
     dc('logo', 'dc_bus1', 3, 5, { enabled: V.ltLogo }),
-    dc('flood_lts', 'dc_bus1', `6 * ${V.ltArea}`, 7.5, { model: 'resistive' }), // AREA knob (Vision pedestal) drives the cockpit area / flood lights
     dc('integral_lts', 'dc_bus1', `1 * (${V.ltIntegral('l')} + ${V.ltIntegral('c')} + ${V.ltIntegral('r')} + ${V.ltIntegral('cb')} + ${V.ltIntegral('ovhd')})`, 7.5, { model: 'resistive' }),
     dc('hud', 'dc_bus1', `4 * ${V.hudPower}`, 7.5),
     // ------------------------------------------------ DC BUS 2
@@ -197,11 +198,11 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): G6kElectrical {
     dc('nav2', 'dc_bus2', 1.0, 3),
     dc('gps2', 'dc_bus2', 0.8, 3),
     dc('com3', 'dc_bus2', 1.0, 3),
-    dc('ldg_lt_r', 'dc_bus2', 8, 15, { enabled: V.ltLdgR }),
-    dc('strobe', 'dc_bus2', 5, 7.5, { enabled: V.ltStrobe }),
+    dc('beacon', 'dc_bus2', 3, 5, { enabled: V.ltBeacon }), // GX PTG 15 EMS list: BEACON on DC 2
     dc('wing_insp', 'dc_bus2', 3, 5, { enabled: V.ltWing }),
+    dc('ail_trim', 'dc_bus2', '0.3 + 2 * trim.roll_in_motion', 5), // GX PTG 10-71: AILERON TRIM on DC 2
     // Dome, map, EYE REF (EST 0.2 A) and FOOT floor lights (EST 0.5 A) on the DOME/MAP LTS breaker (EST grouping).
-    dc('dome_map_lts', 'dc_bus2', `0.5 * ${V.ltDome} + 0.3 * (${V.ltMap(1)} + ${V.ltMap(2)}) + 0.2 * (${V.ltEyeRef} == 1) + 0.5 * (${V.ltFoot} == 1)`, 5, { model: 'resistive' }),
+    dc('dome_map_lts', 'dc_bus2', `0.3 * (${V.ltMap(1)} + ${V.ltMap(2)}) + 0.2 * (${V.ltEyeRef} == 1) + 0.5 * (${V.ltFoot} == 1)`, 5, { model: 'resistive' }),
     dc('cabin_dc', 'dc_bus2', 20, 40, { enabled: V.cabinPwr, shed: `${airborne} && ${V.singleGen}` }),
     dc('pass_signs', 'dc_bus2', 0.5, 3),
     // ------------------------------------------------ DC EMER (hot from both battery direct buses)
@@ -213,8 +214,13 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): G6kElectrical {
     dc('eng_sov2', 'dc_emer', 0.3, 3),
     dc('apu_fire_sov', 'dc_emer', 0.3, 3), // GXFU CB: APU FIRE SOV DC EMER
     dc('fire_ext', 'dc_emer', 0.3, 5), // bottle squibs
-    dc('emer_lts', 'dc_emer', `${V.emerLights} == 2 ? 3 : 0`, 5),
+    // Emergency lights: own battery packs (GX PTG 15-35); the DC EMER feed only charges them (EST 0.2 A).
+    dc('emer_lts', 'dc_emer', 0.2, 5),
     dc('elt', 'dc_emer', `${V.elt} * 0.5`, 3),
+    // ------------------------------------------------ AV BATT DIR
+    // Cockpit AREA lights (GX PTG 15-11: "The area lights receive 28 VDC from the Avionics Battery Direct Bus ... with no
+    // power on the airplane (BATT MASTER OFF) the area light may drain the AVIONICS BATTERY").
+    dc('flood_lts', 'av_batt_dir', `6 * ${V.ltArea}`, 7.5, { model: 'resistive' }),
     // ------------------------------------------------ APU BATT DIR (APU start contactor assembly)
     dc('apu_starter', 'apu_batt_dir', 'apu.starter_amps', 600), // GXAPU CB: APU START on the APU BATT
     // ------------------------------------------------ AC loads (VA)
@@ -236,16 +242,31 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): G6kElectrical {
     ac('wshld_s', 'ac_bus2', `1500 * ${V.wshldOn('s')}`, 20), // side windows (EST)
     ac('wshld_r', 'ac_bus4', `2500 * ${V.wshldOn('r')}`, 25),
     ac('probe_heat', 'ac_ess', `1200 * ${V.probeHeat}`, 15), // pitot-static probes, AOA vanes, TAT (HBMU, EST)
-    ac('recirc_fans', 'ac_bus3', `600 * ${V.recircFan}`, 10),
+    // GX PTG 13-34: L recirculation fan on AC 1, R on AC 4 (RECIRC PBA switches both off).
+    ac('recirc_fan_l', 'ac_bus1', 300, 10, { enabled: `${V.recircFan} == 1` }),
+    ac('recirc_fan_r', 'ac_bus4', 300, 10, { enabled: `${V.recircFan} == 1` }),
+    // GX PTG 10-71: SLAT/FLAP PWR 1 on AC 1, PWR 2 on AC ESS (PDU motors, EST 1.5 kVA flaps / 1 kVA slats in motion);
+    // STAB TRIM CH 1 on AC 1, CH 2 on AC ESS (MDU motor, EST 400 VA running).
+    ac('slat_flap_pwr1', 'ac_bus1', '50 + 1500 * flaps.moving + 1000 * slats.transit', 20),
+    ac('slat_flap_pwr2', 'ac_ess', '50 + 1500 * flaps.moving + 1000 * slats.transit', 20),
+    ac('stab_trim1', 'ac_bus1', '40 + 400 * trim.pitch_in_motion', 10),
+    ac('stab_trim2', 'ac_ess', '40 + 400 * trim.pitch_in_motion', 10),
+    // GX PTG 15 EMS list: L WING LDG/TAXI LT on AC 1, R on AC 4 (EST 250 VA each lamp); wing taxi lights with the left.
+    ac('ldg_lt_l', 'ac_bus1', 250, 5, { enabled: V.ltLdgL }),
+    ac('ldg_lt_r', 'ac_bus4', 250, 5, { enabled: V.ltLdgR }),
+    ac('taxi_lt', 'ac_bus1', 250, 5, { enabled: V.ltTaxi }),
+    // EMS CDU SWITCH CONTROL L / R FOOTWARMER (GX PTG 15-19): EST 150 VA each on AC 1 / AC 4.
+    ac('footwarmer_l', 'ac_bus1', 150, 5, { enabled: `${V.footWarmer('l')} == 1` }),
+    ac('footwarmer_r', 'ac_bus4', 150, 5, { enabled: `${V.footWarmer('r')} == 1` }),
     ac('cabin_ac', 'ac_bus2', `6000 * (${V.cabinPwr} != 0)`, 60, { shed: `${airborne} && ${V.singleGen}` }), // galley / cabin (EST)
     ac('cabin_ac2', 'ac_bus3', `4000 * (${V.cabinPwr} != 0)`, 40, { shed: `${airborne} && ${V.singleGen}` }),
     // CABIN SYSTEMS / CABIN OUTLETS PBA (overhead): cabin 115 VAC 60 Hz outlets. EST 1,000 VA (no public load figure),
     // shed with CABIN POWER on a single generator.
     ac('cabin_outlets', 'ac_bus3', `1000 * (${V.cabinOutlets} != 0)`, 15, { shed: `${airborne} && ${V.singleGen}` }),
-    ac('av_batt_chgr', 'ac_bus2', 150, 5), // GXEL: AV BATT charger on AC BUS 2
-    ac('apu_batt_chgr', 'ac_bus3', 150, 5), // APU BATT charger on AC BUS 3
+    ac('av_batt_chgr', 'ac_bus3', 150, 5), // GX PTG 6-40 / 6-44 EMS list: AV BATT CHGR on AC 3
+    ac('apu_batt_chgr', 'ac_bus2', 150, 5), // APU BATT CHGR on AC 2
     ac('apu_oil_heat', 'ac_bus4', 100, 5), // GXAPU CB: APU OIL HEAT AC 4
-    ac('avionics_fans', 'ac_ess', 300, 5),
+    ac('avionics_fans', 'ac_bus4', 300, 5), // GX PTG 13 EMS list: AVIONICS FAN on AC 4
   ];
 
   const contactor = { pickupV: 15, dropoutV: 7 }; // MIL-PRF-6106 28 V-class relay (pull-in 15 V max), drop-out EST
@@ -262,10 +283,11 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): G6kElectrical {
     ],
     acGenerators: [
       // GXEL: VFG 40 kVA 115 V 324-596 Hz; GCU on line from ~idle (EST minimum drive 50 % N2, below the 58 % idle).
-      { id: 'gen1', bus: 'gen1_out', ratedKva: L.vfgKva, frequency: VFG_HZ, drive: 'eng1.n2_pct', minDrive: 50, switch: `${V.gen(1)} == 1` },
-      { id: 'gen2', bus: 'gen2_out', ratedKva: L.vfgKva, frequency: VFG_HZ, drive: 'eng1.n2_pct', minDrive: 50, switch: `${V.gen(2)} == 1` },
-      { id: 'gen3', bus: 'gen3_out', ratedKva: L.vfgKva, frequency: VFG_HZ, drive: 'eng2.n2_pct', minDrive: 50, switch: `${V.gen(3)} == 1` },
-      { id: 'gen4', bus: 'gen4_out', ratedKva: L.vfgKva, frequency: VFG_HZ, drive: 'eng2.n2_pct', minDrive: 50, switch: `${V.gen(4)} == 1` },
+      // GX PTG 9-12: pulling the engine fire DISCH handle "sends a signal to trip the applicable VFGs".
+      { id: 'gen1', bus: 'gen1_out', ratedKva: L.vfgKva, frequency: VFG_HZ, drive: 'eng1.n2_pct', minDrive: 50, switch: `${V.gen(1)} == 1 && !${V.fireHandle('l')}` },
+      { id: 'gen2', bus: 'gen2_out', ratedKva: L.vfgKva, frequency: VFG_HZ, drive: 'eng1.n2_pct', minDrive: 50, switch: `${V.gen(2)} == 1 && !${V.fireHandle('l')}` },
+      { id: 'gen3', bus: 'gen3_out', ratedKva: L.vfgKva, frequency: VFG_HZ, drive: 'eng2.n2_pct', minDrive: 50, switch: `${V.gen(3)} == 1 && !${V.fireHandle('r')}` },
+      { id: 'gen4', bus: 'gen4_out', ratedKva: L.vfgKva, frequency: VFG_HZ, drive: 'eng2.n2_pct', minDrive: 50, switch: `${V.gen(4)} == 1 && !${V.fireHandle('r')}` },
       // GXEL: APU generator 40 kVA 400 Hz (on line at APU on-speed).
       { id: 'apu_gen', bus: 'apu_gen_out', ratedKva: L.apuGenKva, drive: 'apu.gen_drive', minDrive: 95, switch: `${V.apuGen} == 1` },
       // GXEL: RAT GEN 9 kVA; the RAT GCU sheds the output at ~147 KIAS and below (priority to the RAT hydraulic pump).

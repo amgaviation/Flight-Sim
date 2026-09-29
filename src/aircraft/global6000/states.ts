@@ -17,7 +17,7 @@ import { ENG, FDM, SURF } from '../../core/vars';
 import type { FlightModel } from '../../physics/FlightModel';
 import type { Turbofan } from '../../physics/engines/Turbofan';
 import { FLAP_DETENTS, G6K_LIMITS } from './data';
-import { G6K_GASPERS, G6K_VARS as V } from './vars';
+import { G6K_ACP_CH, G6K_GASPERS, G6K_VARS as V } from './vars';
 import type { G6kSystems } from './createSystems';
 
 /** Take-off stabilizer (units, EST mid-CG setting inside the 4.5-11 green band). */
@@ -59,6 +59,7 @@ export function setG6kSwitches(ctx: Pick<SimContext, 'vars'>, sys: G6kSystems, s
   v.set(V.apuGen, 1);
   v.set(V.ratGen, 1);
   v.set(V.battMaster, b(powered));
+  v.set(V.battMasterSel, powered ? 2 : 0); // BATT MASTER OFF / EMS / ON
   v.set(V.cabinPwr, b(powered));
   v.set(V.cabinOutlets, b(powered));
   v.set(V.ratGenGuard, 0);
@@ -137,14 +138,18 @@ export function setG6kSwitches(ctx: Pick<SimContext, 'vars'>, sys: G6kSystems, s
   // ---- FIRE
   for (const z of ['l', 'apu', 'r'] as const) {
     v.set(V.fireHandle(z), 0);
+    v.set(V.fireRot(z), 0);
+    v.set(V.fireOvrd(z), 0);
     v.set(V.fireDisch(z, 1), 0);
     v.set(V.fireDisch(z, 2), 0);
   }
+  v.set(V.fireApuPin, 0);
   v.set(V.fireTest, 0);
   // ---- PRESSURIZATION / ELT
   v.set(V.pressAutoMan, 0);
   v.set(V.pressManAlt, 0);
   v.set(V.pressManRate, 0.5);
+  v.set(V.pressRateHigh, 0); // RATE NORM
   v.set(V.ldgElevFms, 1);
   v.set(V.ldgElevSlew, 0);
   v.set(V.ldgElevFt, v.get('fdm.ground_elev_ft', 0));
@@ -165,6 +170,9 @@ export function setG6kSwitches(ctx: Pick<SimContext, 'vars'>, sys: G6kSystems, s
   v.set(V.oxyTest(1), 0);
   v.set(V.oxyTest(2), 0);
   v.set(V.crewOxy, b(powered));
+  v.set(V.crewOxyR, b(powered)); // copilot OXYGEN SUPPLY LOWER DISCONNECT
+  v.set(V.oxyEmer(1), 0);
+  v.set(V.oxyEmer(2), 0);
   v.set(V.paxOxy, 1);
   v.set(V.hudPower, b(powered));
   v.set(V.hudBrt, powered ? 0.7 : 0);
@@ -206,6 +214,7 @@ export function setG6kSwitches(ctx: Pick<SimContext, 'vars'>, sys: G6kSystems, s
   v.set(V.gsMute, 0);
   v.set(V.flapOvrd, 0);
   v.set(V.flapOvrdGuard, 0);
+  v.set(V.gldSw, 0); // GND LIFT DUMPING AUTO
   v.set(V.gldManArm, 0);
   v.set(V.gldOff, 0);
   v.set(V.autobrake, s === 'approach' ? 2 : 0);
@@ -238,6 +247,33 @@ export function setG6kSwitches(ctx: Pick<SimContext, 'vars'>, sys: G6kSystems, s
   v.set(V.ltMap(1), 0);
   v.set(V.ltMap(2), 0);
   v.set(V.annunTest, 0);
+  v.set(V.ltDisplayLwr, night ? 0.7 : 1);
+  // ---- reversion panel (NORM), ACP 1 / 2 (NAV 1 / 2 and MKR audio selected at a mid volume, VHF 1 transmit)
+  for (const s2 of [1, 2] as const) {
+    v.set(V.rspAdc(s2), 0);
+    v.set(V.rspAtt(s2), 0);
+    v.set(V.rspDspl(s2), 0);
+    for (const ch of G6K_ACP_CH) {
+      const on = (ch === 'vhf1' || ch === 'vhf2' || ch === 'mkr' || ch === (s2 === 1 ? 'nav1' : 'nav2'));
+      v.set(V.acpSel(s2, ch), on ? 1 : 0);
+      v.set(V.acpVol(s2, ch), 0.6);
+    }
+    v.set(V.acpMic(s2), 0);
+    v.set(V.acpMask(s2), 0);
+    v.set(V.acpSpkr(s2), 0.5);
+    v.set(V.acpFilter(s2), 1); // BOTH
+    v.set(V.acpRtIc(s2), 0);
+    v.set(V.acpMkrHi(s2), 1);
+    v.set(V.rollSplr(s2), 0);
+  }
+  v.set(V.rspAfcs, 1);
+  v.set(V.displaysRev, 0);
+  v.set(V.tuneSel, 0);
+  // ---- EMS CDU SWITCH CONTROL
+  v.set(V.stallAdvSel, 0);
+  v.set(V.slatFlapReset, 0);
+  v.set(V.footWarmer('l'), 0);
+  v.set(V.footWarmer('r'), 0);
   // ---- doors
   v.set(V.door('pax'), s === 'cold_dark' ? 1 : 0);
   for (const d of ['emer', 'bag', 'aft_eqpt', 'svc_large', 'svc_small'] as const) v.set(V.door(d), 0);
@@ -279,6 +315,9 @@ export function applyG6kState(ctx: SimContext, sys: G6kSystems, s: InitialState)
     sys.elec.reset();
     sys.post.reset();
     sys.pneu.snap(v.get('fdm.sat_c', 15));
+    // The cabin air mass is settled at the zone temperature the pneumatic model publishes on its first step (a stale
+    // 0 C here over-pressurised the cabin by ~8 % and started every state with a cabin-altitude transient).
+    for (const z of [1, 2, 3]) v.set(`pneu.zone${z}_temp_c`, v.get('fdm.sat_c', 15));
     sys.press.settle();
     sys.suite?.applyState(s);
     return;
@@ -333,6 +372,7 @@ export function applyG6kState(ctx: SimContext, sys: G6kSystems, s: InitialState)
   for (const r of sys.ra) r.update(1 / 60);
   v.set(SURF.elevator, 0);
   sys.pneu.snap(22);
+  for (const z of [1, 2, 3]) v.set(`pneu.zone${z}_temp_c`, 22); // cabin mass settled at the published zone temperature
   sys.press.settle();
   sys.suite?.applyState(s);
 

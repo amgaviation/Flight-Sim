@@ -69,7 +69,8 @@ export function createPneumatics(ctx: Pick<SimContext, 'vars'>): PneumaticSystem
         hp: { belowPsi: 30, ratio: 1.5 },
       },
       // APU bleed into the left duct (LIM: APU bleed to 17,000 ft; the Apu block removes bleed above that).
-      { id: 'apu', duct: 'l_duct', pressure: 'apu.bleed_psi', valve: `${B738.apuBleed} != 0 && apu.avail`, regulatedPsi: 45, maxFlowKgs: 1.2 },
+      // Pulling the APU fire switch closes the APU bleed valve (FCOM 8.20).
+      { id: 'apu', duct: 'l_duct', pressure: 'apu.bleed_psi', valve: `${B738.apuBleed} != 0 && apu.avail && !${B738.fireHandleApu}`, regulatedPsi: 45, maxFlowKgs: 1.2 },
     ],
     valves: [{ id: 'iso', a: 'l_duct', b: 'r_duct', open: isoOpen, travelS: 3, power: 'elec.xfr1_powered || elec.dc1_powered' }],
     consumers: [
@@ -134,7 +135,9 @@ export function createPressurization(ctx: Pick<SimContext, 'vars'>): Pressurizat
 export function createApu(ctx: Pick<SimContext, 'vars'>): Apu {
   return new Apu(ctx.vars, {
     // ECU on the battery bus, with its power-interrupt ride-through (logic.ts `apu_ecu_hold`).
-    master: `${B738.apuSw} >= 1 && ac.b738.apu_ecu_hold`,
+    // Pulling the APU fire switch shuts the APU down and closes the inlet door (FCOM 8.20: "closes the APU fuel
+    // valve, APU bleed air valve and APU inlet door, trips the APU generator field").
+    master: `${B738.apuSw} >= 1 && ac.b738.apu_ecu_hold && !${B738.fireHandleApu}`,
     // START is latched by the APU ECU and the start begins once the inlet door is fully open (FCOM 7.10).
     start: `ac.b738.apu_start_req && apu.door_open`,
     // Start converter unit on AC XFR 1 (full-strength start) or the battery bus.
@@ -200,6 +203,7 @@ const loopSel = (sw: string): string => `${sw} <= -0.5 ? 1 : ${sw} >= 0.5 ? 2 : 
  */
 export function createFire(ctx: Pick<SimContext, 'vars'>): FireProtection {
   const det = 'elec.fire_det_powered';
+  const cargoTest = (z: 'fwd' | 'aft') => `${B738.cargoTest} && elec.cargo_fire_powered && !fire.cargo_${z}_fault`;
   return new FireProtection(ctx.vars, {
     zones: [
       {
@@ -228,8 +232,11 @@ export function createFire(ctx: Pick<SimContext, 'vars'>): FireProtection {
       },
       { id: 'apu', loops: 1, handle: B738.fireHandleApu, discharge: [{ bottle: 'apu_btl', command: `abs(${B738.fireRotApu}) >= 0.5` }], fuelCut: `${B738.fireHandleApu} || apu.state == 0`, power: det },
       { id: 'wheel_well', loops: 1, handle: 0, power: det },
-      { id: 'cargo_fwd', loops: 2, loopSelect: loopSel(B738.cargoDetSel('fwd')), handle: B738.cargoArm('fwd'), discharge: [{ bottle: 'cargo_btl', command: B738.cargoDisch }], power: 'elec.cargo_fire_powered' },
-      { id: 'cargo_aft', loops: 2, loopSelect: loopSel(B738.cargoDetSel('aft')), handle: B738.cargoArm('aft'), discharge: [{ bottle: 'cargo_btl', command: B738.cargoDisch }], power: 'elec.cargo_fire_powered' },
+      // Cargo smoke detectors: their own TEST switch on the cargo fire panel (FCOM 8.10 / 8.20); not part of the
+      // engine / APU OVHT/FIRE test. The test lights the FWD / AFT FIRE lights when all detectors respond; the
+      // DETECTOR FAULT light only shows a real detector fault (b737studyguide "Cargo Fire Test").
+      { id: 'cargo_fwd', loops: 2, loopSelect: loopSel(B738.cargoDetSel('fwd')), handle: B738.cargoArm('fwd'), discharge: [{ bottle: 'cargo_btl', command: B738.cargoDisch }], power: 'elec.cargo_fire_powered', test: { fire: cargoTest('fwd') } },
+      { id: 'cargo_aft', loops: 2, loopSelect: loopSel(B738.cargoDetSel('aft')), handle: B738.cargoArm('aft'), discharge: [{ bottle: 'cargo_btl', command: B738.cargoDisch }], power: 'elec.cargo_fire_powered', test: { fire: cargoTest('aft') } },
     ],
     bottles: [
       { id: 'l_btl', chargePsi: 800 },

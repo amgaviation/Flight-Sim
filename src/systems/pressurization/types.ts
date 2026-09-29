@@ -76,6 +76,17 @@ export interface PressurizationConfig {
    * the schedule or the differential limit requires more. Default none.
    */
   departureFieldFt?: Binding;
+  /**
+   * (Appended by the global6000 aircraft.) Maximum outflow valve opening (0..1) as a binding, applied to the valve
+   * command in every mode (AUTO, MANUAL, dump), e.g. an outflow-valve travel limiter at high differential or one of two
+   * outflow valves driven closed. It never stops the valve closing. Default none (1).
+   */
+  outflowLimit?: Binding;
+  /**
+   * (Appended by the global6000 aircraft.) Auto cabin descent rate limit (fpm) as a binding, e.g. a NORM / HIGH rate
+   * selector; overrides `maxCabinDescentFpm` when given.
+   */
+  maxCabinDescentFpmBinding?: Binding;
   /** AUTO fault -> automatic transfer to ALTN (737NG). Default true. */
   autoTransferToAltn?: boolean;
   /** CABIN ALTITUDE warning threshold (ft). Default 10,000 (737: warning horn above 10,000 ft). */

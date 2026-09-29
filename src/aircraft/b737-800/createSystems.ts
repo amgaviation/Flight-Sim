@@ -82,7 +82,7 @@ export function createSystems(ctx: SimContext, opts: CreateSystemsOptions = {}):
   const eng = createEngineControls(ctx, { autoRating: !av.suite.fmc });
   const fc = createFlightControls(ctx);
   const cas = new CasManager(ctx, {
-    messages: B738_ANNUNCIATORS.map(({ group: _g, light: _l, ...m }) => m),
+    messages: B738_ANNUNCIATORS.map(({ group: _g, light: _l, recallOnly: _r, ...m }) => m),
     power: 'elec.dc1_powered || elec.dc2_powered || elec.batt_bus_powered || elec.dc_stby_powered',
     lampTest: 'ac.b738.lights_test >= 0.5',
     // The 737 master caution is silent; the fire bell and the warning horns are driven by the late logic.
@@ -115,7 +115,9 @@ export function createSystems(ctx: SimContext, opts: CreateSystemsOptions = {}):
     fc.gear,
     eng.ratings,
     ...av.suite.systems,
+    av.radioAudio,
     eng.fadec,
+    eng.eec,
     ...eng.starts,
     fc.yd,
     av.stall,
@@ -131,6 +133,7 @@ export function createSystems(ctx: SimContext, opts: CreateSystemsOptions = {}):
     av.altAlert,
     av.taws,
     av.tcas,
+    av.tcasDisplay,
     av.tocw,
     cas,
     av.disc,

@@ -100,7 +100,7 @@ export const B738_CHECKLISTS: Checklist[] = [
       { challenge: 'Flaps', response: 'UP', check: (v) => v.get('surf.flaps_deg') < 0.1 },
       { challenge: 'Parking brake', response: 'Set', check: (v) => v.get('brakes.parking_set') !== 0 },
       { challenge: 'Engine start levers', response: 'CUTOFF', check: (v) => both((i) => v.get(B738.startLever(i)) < 0.5) },
-      { challenge: 'Weather radar', response: 'Off', check: (v) => v.get(B738.wxrPower) === 0 },
+      { challenge: 'Weather radar', response: 'Off', check: (v) => v.get('wxr.active') === 0 }, // WXR deselected on both EFIS panels
     ],
   },
   {

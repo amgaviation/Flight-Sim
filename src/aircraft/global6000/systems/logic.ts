@@ -56,6 +56,7 @@ const N = {
   cowlSw: { l: V.cowlAi('l'), r: V.cowlAi('r') },
   caiCmd: { l: V.caiCmd('l'), r: V.caiCmd('r') },
   waiCmd: { l: V.waiCmd('l'), r: V.waiCmd('r') },
+  prvOpen: { l: V.prvOpen('l'), r: V.prvOpen('r') },
   sov: ['', V.sovOpen(1), V.sovOpen(2)],
   sovSw: ['', V.hydSovL, V.hydSovR],
   hydPsi: ['', 'hyd.sys1_psi', 'hyd.sys2_psi', 'hyd.sys3_psi'],
@@ -65,6 +66,31 @@ const N = {
 /** Per-side fuel recirculation active (FCOC return to that wing tank), read by the fuel temperature bias (fuel.ts). */
 export const RECIRC_L = `${V.recircOn}_l`;
 export const RECIRC_R = `${V.recircOn}_r`;
+
+/** FLIGHT SPOILER lever FULL position (0 .. FULL = inboard MFS proportional; MAX = 1.0 above the FULL -> MAX gate). */
+export const FSL_FULL = 0.9;
+
+/** Fire handle zones: handle, rotation, solenoid unlock and bottle discharge vars (precomputed). */
+const FIRE_Z = (['l', 'apu', 'r'] as const).map((z) => ({
+  z,
+  warn: z === 'l' ? 'fire.eng1_warn' : z === 'r' ? 'fire.eng2_warn' : 'fire.apu_warn',
+  handle: V.fireHandle(z),
+  rot: V.fireRot(z),
+  ovrd: V.fireOvrd(z),
+  unlock: V.fireUnlock(z),
+  d1: V.fireDisch(z, 1),
+  d2: V.fireDisch(z, 2),
+}));
+/** Engine fuel SOV position (1 open) per engine, written by G6kLogic, read by the fuel consumers (fuel.ts) and the CAS. */
+export const FUEL_SOV_OPEN = ['', 'ac.g6k.fuel.eng_sov1_open', 'ac.g6k.fuel.eng_sov2_open'];
+/** Latched SFCU slat / flap faults (SLAT FAIL / FLAP FAIL; reset from the EMS CDU SLAT/FLAP RESET). */
+export const SLAT_FAULT = 'ac.g6k.sfcu.slat_fault';
+export const FLAP_FAULT = 'ac.g6k.sfcu.flap_fault';
+/** SET LDG ELEV advisory condition. */
+export const SET_LDG_ELEV = 'ac.g6k.press.set_ldg_elev';
+
+/** Gear horn secondary-mode take-off inhibit (2 min after lift-off, GX_14_015). */
+export const HORN_TO_INHIBIT = 'ac.g6k.gear.horn_to_inhibit';
 
 /** Wing tank capacity (kg, usable) for the FMQGC percentage logic. */
 const WING_CAP_KG = G6K_LIMITS.mainTankLb * LB;
@@ -115,12 +141,23 @@ export class G6kLogic implements Subsystem {
   private apuFireT = 0;
   private hydPwrT = 0;
   private splrTestT = 0;
+  private skipSelfTest = false;
   private rollDiscT = 0;
   private rollPri = 0;
   private readonly prevRollSw = [0, 0, 0];
   private prevAutobrake = 0;
   private abArmedSeen = false;
   private ditchDumped = false;
+  private rateLimT = 0;
+  private slatFaultT = 0;
+  private flapFaultT = 0;
+  private depFieldFt = 0;
+  private slatLatch = false;
+  private flapLatch = false;
+  private prevSfReset = false;
+  private readonly fuelSov = [true, true, true];
+  private liftoffT = 0;
+  private discT = 0;
   private hornMuteLatched = false;
   private readonly sovFailT = [0, 0, 0];
 
@@ -325,27 +362,66 @@ export class G6kLogic implements Subsystem {
     v.set(RECIRC_R, rr ? 1 : 0);
     v.set(V.recircOn, rl || rr ? 1 : 0);
 
-    // ---------------- bleed / packs / crossbleed (IAMS, EST architecture)
+    // ---------------- bleed / packs / crossbleed (IAMS; GX PTG 13-5 / 13-12, GX PTG 4-13)
+    // L / R ENG BLEED: OFF closes the PRV / HPV; AUTO leaves the PRV to the BMC; ON forces it open ("MAN has priority
+    // over AUTO"). XBLEED: CLSD / AUTO (BMC) / OPEN ("selects crossbleed valve open and the affected side PRV is
+    // commanded to close"). APU BLEED: OFF / AUTO / ON; "Engine bleed has priority over APU bleed ... If both PRVs are
+    // open (engines running) the BMC will automatically close the LCV and the CBV (APU BLEED and XBLEED in AUTO)". The
+    // LCV "will not open when manually selected ON if anti-ice is active, the left engine PRV is manually opened, or the
+    // right engine PRV and the crossbleed valve are manually opened" (GX PTG 4-13).
     const starting = v.get(N.starter[1]) !== 0 || v.get(N.starter[2]) !== 0;
     const bmc = v.get('elec.bmc1_powered') !== 0 || v.get('elec.bmc2_powered') !== 0;
-    for (const s of S2) {
-      const sw = v.get(N.bleedSw[s]);
-      v.set(N.bleedCmd[s], bmc && sw >= 1 && v.get(N.fireHandle[s]) === 0 ? 1 : 0);
-    }
+    const swL = v.get(N.bleedSw.l);
+    const swR = v.get(N.bleedSw.r);
+    const run1 = v.get(N.running[1]) !== 0;
+    const run2 = v.get(N.running[2]) !== 0;
+    const xbSw = v.get(V.xbleed);
     const apuSw = v.get(V.apuBleed);
     const apuAvail = v.get('apu.avail') !== 0 && v.get(V.fireHandle('apu')) === 0;
-    const engBleeds = (v.get('pneu.eng1_valve_open') !== 0 && v.get(N.running[1]) !== 0 ? 1 : 0) + (v.get('pneu.eng2_valve_open') !== 0 && v.get(N.running[2]) !== 0 ? 1 : 0);
-    // AUTO: APU bleed while it is available and the engines do not supply the ducts (or a start is in progress), below the
-    // 30,000 ft APU bleed limit (GXAPU).
-    const apuBleed = bmc && apuAvail && alt < G6K_LIMITS.apuBleedCeilingFt && (apuSw === 2 || (apuSw === 1 && (engBleeds < 2 || starting)));
+    const aiActive = v.get(N.waiCmd.l) !== 0 || v.get(N.waiCmd.r) !== 0 || v.get(N.caiCmd.l) !== 0 || v.get(N.caiCmd.r) !== 0;
+    // APU BLEED ON (manual) interlocks.
+    const lcvRefused = apuSw === 2 && (aiActive || swL === 2 || (swR === 2 && xbSw === 2));
+    // AUTO PRVs: open with the engine running; a starting engine's own PRV stays closed (its starter is fed through the
+    // duct from the APU / cross bleed, EST).
+    let prvL = bmc && swL !== 0 && (swL === 2 || (run1 && v.get(N.starter[1]) === 0));
+    let prvR = bmc && swR !== 0 && (swR === 2 || (run2 && v.get(N.starter[2]) === 0));
+    // XBLEED OPEN selected with both engines supplying: the BMC closes one PRV (EST: the right one, the left one when the
+    // right is manually ON); both manually ON with XBLEED OPEN is a bleed misconfiguration (both stay open).
+    let misconfig = false;
+    if (bmc && xbSw === 2 && prvL && prvR) {
+      if (swL === 2 && swR === 2) misconfig = true;
+      else if (swR === 2) prvL = false;
+      else prvR = false;
+    }
+    // APU BLEED ON accepted: the BMC reconfigures the left PRV (AUTO) closed so the LCV feeds the left duct.
+    const apuManual = apuSw === 2 && !lcvRefused;
+    if (bmc && apuManual && apuAvail && swL === 1) prvL = false;
+    if (apuSw === 2 && lcvRefused) misconfig = true;
+    const fireL = v.get(N.fireHandle.l) !== 0;
+    const fireR = v.get(N.fireHandle.r) !== 0;
+    if (fireL) prvL = false;
+    if (fireR) prvR = false;
+    v.set(N.bleedCmd.l, prvL ? 1 : 0);
+    v.set(N.bleedCmd.r, prvR ? 1 : 0);
+    v.set(N.prvOpen.l, prvL ? 1 : 0);
+    v.set(N.prvOpen.r, prvR ? 1 : 0);
+    v.set(V.bleedMisconfig, misconfig ? 1 : 0);
+    const engBleeds = (prvL && run1 ? 1 : 0) + (prvR && run2 ? 1 : 0);
+    // AUTO: APU bleed while it is available and the engines do not supply both ducts (or a start is in progress), below
+    // the 30,000 ft APU bleed limit (GXAPU).
+    const apuBleed = bmc && apuAvail && alt < G6K_LIMITS.apuBleedCeilingFt && (apuManual || (apuSw === 1 && (engBleeds < 2 || starting)));
     v.set(V.apuBleedCmd, apuBleed ? 1 : 0);
-    const xbSw = v.get(V.xbleed);
     v.set(V.xbleedCmd, bmc && (xbSw === 2 || (xbSw === 1 && (starting || engBleeds === 1 || (apuBleed && engBleeds < 2)))) ? 1 : 0);
-    const ram = v.get(V.ramAir) === 1;
+    // Packs (GX PTG 13-36: RAM AIR does NOT shut the packs; ram air only enters with both packs off below 15,000 ft).
+    // DITCHING (GX PTG 13-59) shuts both packs below 15,000 ft (the AUTO sequence is inhibited above).
+    const ditchOn = v.get(V.ditching) === 1;
+    const ditchActive = ditchOn && alt < 15000;
     for (const s of S2) {
       // EST: packs pause while an engine start draws the duct (air to the starter first).
-      v.set(N.packCmd[s], bmc && v.get(N.packSw[s]) === 1 && !ram && !starting ? 1 : 0);
+      v.set(N.packCmd[s], bmc && v.get(N.packSw[s]) === 1 && !ditchActive && !starting ? 1 : 0);
     }
+    const packsOff = v.get(N.packCmd.l) === 0 && v.get(N.packCmd.r) === 0;
+    v.set(V.ramValveOpen, v.get(V.ramAir) === 1 && packsOff && alt < 15000 && !ground ? 1 : 0);
 
     // ---------------- PRESSURIZATION LDG ELEV UP / DN toggle (FCOM 01-10-41): slewing selects MAN landing elevation.
     // EST rate 500 ft/s (the FCOM gives no rate), range -1,000 .. 14,000 ft (dossier section 12.1).
@@ -354,6 +430,51 @@ export class G6kLogic implements Subsystem {
       if (v.get(V.ldgElevFms) !== 0) v.set(V.ldgElevFms, 0);
       const e = v.get(V.ldgElevFt) + Math.sign(slew) * 500 * dt;
       v.set(V.ldgElevFt, Math.max(-1000, Math.min(14000, e)));
+    }
+
+    // ---------------- cabin pressure control safeties (GX PTG 13-58 .. 13-62; FCOM CSP 700-6 02-10-49 with SB 700-21-034)
+    // Cabin altitude limiters: override AUTO and MAN and close the OFVs at 14,500 +/- 500 ft (EST 14,500 with a 5 s
+    // rate anticipation, as the EMER DEPRESS dump limiter in environment.ts); the 3,000 fpm cabin rate limiter closes
+    // the OFVs except in EMER DEPRESS and DITCHING. Output V.pressLimiter (environment.ts forces the OFVs closed).
+    {
+      const cab = v.get('press.cabin_alt_ft');
+      const rate = v.get('press.cabin_rate_fpm');
+      const dumpOrDitch = v.get(V.emerDepress) === 1 || v.get(V.ditching) === 1;
+      const altLim = cab + Math.max(0, rate) * (5 / 60) >= G6K_LIMITS.cabinLimiterFt;
+      // EST: the rate limiter acts in MAN only (0.2 s confirmation). In AUTO the controller's own schedule (500 fpm up /
+      // 300 or 800 fpm down) already governs, and a transient after a state load or reposition must not shut the OFVs.
+      const rateHigh = !dumpOrDitch && v.get(V.pressAutoMan) === 2 && rate > G6K_LIMITS.cabinRateLimiterFpm;
+      this.rateLimT = rateHigh ? this.rateLimT + dt : 0;
+      const rateLim = this.rateLimT >= 0.2;
+      v.set(V.pressLimiter, !ground && (altLim || rateLim) ? 1 : 0);
+      // DITCHING (GX PTG 13-59): "PACKS flow shutoff, cabin is depressurized, OFVs are driven to the closed position.
+      // The AUTO ditching sequence is inhibited above 15,000 feet." Stage 1 dumps until < 0.1 psid, stage 2 closes.
+      let seq = 0;
+      if (v.get(V.ditching) === 1) {
+        if (alt >= 15000) seq = -1;
+        else {
+          if (Math.abs(v.get('press.diff_psi')) < 0.1) this.ditchDumped = true;
+          seq = this.ditchDumped ? 2 : 1;
+        }
+      } else this.ditchDumped = false;
+      v.set(V.ditchSeq, seq);
+      // CABIN ALT caution 8,200 ft / warning 9,000 ft; with a landing (or take-off) field at or above 7,230 ft the levels
+      // rise in proportion to the airplane altitude below 41,000 ft to field + 1,000 / + 1,800 ft, limited to 14,500 ft
+      // (CAB ALT LEVEL HI advisory).
+      const onGroundOrClimb = ground || v.get('press.phase') <= 1;
+      if (ground) this.depFieldFt = v.get('adc1.alt_ft');
+      const field = onGroundOrClimb ? this.depFieldFt : v.get('press.ldg_elev_ft');
+      let caut: number = G6K_LIMITS.cabAltCautionFt;
+      let warn: number = G6K_LIMITS.cabAltWarnFt;
+      if (field >= 7230 && alt < 41000) {
+        const f = Math.max(0, Math.min(1, (41000 - alt) / Math.max(1, 41000 - field)));
+        caut = Math.min(14500, caut + (field + 1000 - caut) * f);
+        warn = Math.min(14500, warn + (field + 1800 - warn) * f);
+        caut = Math.max(G6K_LIMITS.cabAltCautionFt, caut);
+        warn = Math.max(G6K_LIMITS.cabAltWarnFt, warn);
+      }
+      v.set(V.cabAltCautionFt, caut);
+      v.set(V.cabAltWarnFt, warn);
     }
 
     // ---------------- ice protection (IAMS, EST architecture)
@@ -381,11 +502,20 @@ export class G6kLogic implements Subsystem {
     v.set(V.wshldOn('r'), v.get(V.wshldR) === 1 ? 1 : 0);
     v.set(V.wshldOn('s'), v.get(V.wshldL) === 1 || v.get(V.wshldR) === 1 ? 1 : 0);
 
-    // ---------------- flight spoilers (GXFC): 0 .. FULL = inboard MFS pairs (0 .. 0.5 of full lift dumping); MAX = all
-    // four pairs with the flaps retracted, inboard pairs only with flaps extended.
+    // ---------------- flight spoilers (GX PTG 10-44): 0 .. FULL = inboard MFS pairs (0 .. 0.5 of full lift dumping),
+    // deflection proportional to the lever; MAX = all four pairs with the flaps retracted, inboard pairs only with flaps
+    // extended. Global 6000 lever scale 0 / 1/4 / 1/2 / 3/4 / FULL / MAX (photo EB190582 e_ped_mid): FSL_FULL = 0.9.
+    // SPLRS/STAB IN TEST (GX PTG 10-41): the spoilers are inoperative for ~20 s of self test after hydraulic power-up.
     const fsl = Math.max(0, Math.min(1, v.get(V.flightSpoiler)));
     const flapsExt = v.get('surf.flaps_deg') > 0.5 || v.get('surf.slats') > 0.5;
-    const sb = fsl <= 0.8 ? (fsl / 0.8) * 0.5 : flapsExt ? 0.5 : 0.5 + ((fsl - 0.8) / 0.2) * 0.5;
+    const hydUp = v.get('hyd.sys1_psi') > 1800 || v.get('hyd.sys2_psi') > 1800;
+    if (hydUp) this.hydPwrT += dt;
+    else this.hydPwrT = 0;
+    if (hydUp && this.hydPwrT <= dt + 1e-9 && !this.skipSelfTest) this.splrTestT = G6K_LIMITS.splrStabTestS;
+    this.skipSelfTest = false;
+    this.splrTestT = Math.max(0, this.splrTestT - dt);
+    v.set(V.splrStabTest, this.splrTestT > 0 ? 1 : 0);
+    const sb = this.splrTestT > 0 ? 0 : fsl <= FSL_FULL ? (fsl / FSL_FULL) * 0.5 : flapsExt ? 0.5 : 0.5 + ((fsl - FSL_FULL) / (1 - FSL_FULL)) * 0.5;
     v.set(V.sbCmd, sb);
 
     // ---------------- take-off thrust phase (EST): the FADEC keeps the TO rating (EICAS target, A/T limit) from the
@@ -440,8 +570,136 @@ export class G6kLogic implements Subsystem {
     if (this.lowBank && alt < 34950 && bank <= 6) this.lowBank = false;
     v.set(V.bankLow, this.lowBank ? 1 : 0);
 
-    // ---------------- gear horn mute (GXLG): effective only with both radio altimeters invalid.
-    v.set(V.hornMuteEff, v.get(V.hornMute) === 1 && v.get('ra1.valid') === 0 && v.get('ra2.valid') === 0 ? 1 : 0);
+    // ---------------- gear horn MUTED (GX PTG 14-18): the switch works only with both radio altimeters invalid; the
+    // mute is cancelled (the switchlight pops out) when both throttles are advanced above idle, all gear is down and
+    // locked, or flaps 30 is commanded. The secondary-mode horn rules (createSystems.ts) use V.hornMuteEff.
+    {
+      const raInvalid = v.get('ra1.valid') === 0 && v.get('ra2.valid') === 0;
+      const restore = (tla1 > TLA.idle && tla2 > TLA.idle) || v.get('gear.down_locked') !== 0 || flapLever > 3.5;
+      v.set(V.hornMuteReset, restore ? 1 : 0);
+      const pressed = v.get(V.hornMute) === 1;
+      if (pressed && raInvalid && !restore) this.hornMuteLatched = true;
+      if (!pressed || restore || !raInvalid) this.hornMuteLatched = false;
+      if (pressed && restore) v.set(V.hornMute, 0);
+      v.set(V.hornMuteEff, this.hornMuteLatched ? 1 : 0);
+      // Secondary-mode 2 min take-off inhibit (GX_14_015).
+      if (ground) this.liftoffT = 0;
+      else this.liftoffT += dt;
+      v.set(HORN_TO_INHIBIT, !ground && this.liftoffT < 120 ? 1 : 0);
+    }
+
+    // ---------------- FIRE handles (GX PTG 9-12 .. 9-14): solenoid-locked, unlocked by the DAU on a fire warning or by
+    // the manual override button behind the handle; pulled, the handle is turned and held >= 1 s: counter-clockwise =
+    // bottle 1, clockwise = bottle 2. The APU handle needs its lockout release pin slid for the second (clockwise) shot.
+    for (let k = 0; k < FIRE_Z.length; k++) {
+      const f = FIRE_Z[k];
+      const warn = v.get(f.warn) !== 0;
+      v.set(f.unlock, warn || v.get(f.ovrd) !== 0 ? 1 : 0);
+      const pulled = v.get(f.handle) !== 0;
+      const rot = v.get(f.rot);
+      const pin = v.get(V.fireApuPin) !== 0;
+      const dirOk = rot < -0.5 || (rot > 0.5 && (f.z !== 'apu' || pin));
+      const t = pulled && dirOk ? this.fireRotT[f.z] + dt : 0;
+      this.fireRotT[f.z] = t;
+      const fire = t >= G6K_LIMITS.fireHandleHoldS;
+      v.set(f.d1, fire && rot < 0 ? 1 : 0);
+      v.set(f.d2, fire && rot > 0 ? 1 : 0);
+    }
+    // APU FADEC immediate shutdown (no cooldown): on the ground a fire signal for >= 5 s with the handle not pulled
+    // (GX PTG 9-20), the APU fire handle pulled (GX PTG 4-16 "immediate APU shut down"), or BATT MASTER OFF with no AC
+    // power on (GX PTG 4-18). In flight a fire gives only the warning: the crew shuts the APU down with the handle.
+    {
+      const apuFire = v.get('fire.apu_warn') !== 0;
+      this.apuFireT = apuFire && ground ? this.apuFireT + dt : 0;
+      const acOn = gens > 0 || v.get('elec.ext_ac_online') !== 0;
+      const cmd = this.apuFireT >= G6K_LIMITS.apuFireAutoShutdownS || v.get(V.fireHandle('apu')) !== 0 || (v.get(V.battMaster) === 0 && !acOn);
+      v.set(V.apuFireShutdown, cmd ? 1 : 0);
+    }
+
+    // ---------------- stall protection computer (GX PTG 10-61 .. 10-63)
+    // STALL WARN ADVANCE: the shaker / pusher angles are advanced (EST: the SPC angle of attack scaled by 1 / 0.9, i.e.
+    // the trips at 90 % of the normal angles) for a slat or flap malfunction, icing with the wing anti-ice off or failed,
+    // or the pilot's EMS CDU SWITCH CONTROL selection REV (cancelled only by the pilot).
+    {
+      const ice = v.get('ice.detected') !== 0 && (v.get(N.waiCmd.l) === 0 || v.get(N.waiCmd.r) === 0 || v.get('pneu.wai_l_ok') < 0.5 || v.get('pneu.wai_r_ok') < 0.5);
+      const hl = v.get('fail.slats.drive') !== 0 || v.get('fail.flaps.drive') !== 0 || v.get('flaps.asym') !== 0 || v.get('flaps.disagree') !== 0;
+      const adv = v.get(V.stallAdvSel) === 1 || ice || hl;
+      v.set(V.stallAdvance, adv ? 1 : 0);
+      v.set(V.aoaEff, v.get('adc1.aoa_deg') / (adv ? G6K_LIMITS.stallAdvanceFactor : 1));
+      // "As a high angle of attack is approached: ignition is activated" (before the shakers; EST 0.75 of the stall
+      // angle, the shaker being at 0.8); cancelled when the stall is corrected.
+      const n = v.get('stall.aoa_norm');
+      v.set(V.spcIgn, !ground && v.get('elec.spc_powered') !== 0 && (n >= G6K_LIMITS.spcIgnNorm || v.get('stall.warning') !== 0) ? 1 : 0);
+      // AP/SP DISC (MASTER DISC) hold time: > 5 s STAB TRIM caution, ~12 s STALL PROTECT FAIL (GX PTG 10-57 / 10-65).
+      const held = v.get(V.yokeDisc(1)) !== 0 || v.get(V.yokeDisc(2)) !== 0 || v.get('input.ap_disc') !== 0;
+      this.discT = held ? this.discT + dt : 0;
+      v.set(V.discHeldT, this.discT);
+    }
+
+    // ---------------- AUTOBRAKE solenoid-held selector (GX PTG 14-31): landing only; the switch holds in LO / MED / HI
+    // only while armed (in flight, wheel speed zero, pedals < 20 %, no ground-spoiler deploy command, no fault) and
+    // springs / rotates back to OFF otherwise, and on a disarm (pedals > 20 %, fault, spoilers stowed after deploying).
+    {
+      const sel = v.get(V.autobrake);
+      const pedals = Math.max(v.get('input.brake_left'), v.get('input.brake_right'));
+      const armOk = !ground && wheelKt < 1 && pedals < 0.2 && v.get('fail.autobrake') === 0 && v.get('surf.ground_spoilers') < 0.05;
+      v.set(V.autobrakeArmOk, armOk ? 1 : 0);
+      const engaged = v.get('brakes.autobrake_armed') !== 0 || v.get('brakes.autobrake_active') !== 0;
+      if (sel > 0) {
+        if (armOk || engaged) this.abArmedSeen = true;
+        if (!armOk && !engaged && (this.abArmedSeen || ground || sel !== this.prevAutobrake)) {
+          v.set(V.autobrake, 0);
+          this.abArmedSeen = false;
+        }
+      } else this.abArmedSeen = false;
+      this.prevAutobrake = v.get(V.autobrake);
+    }
+
+    // ---------------- engine fuel SOVs (GX PTG 11; DC EMER motor-driven valves): closed by the fire handle; without
+    // power the valve stays where it is. L (R) ENG FUEL SOV caution = the valve not in its commanded state (cas.ts).
+    for (let i = 1; i <= 2; i++) {
+      const cmdOpen = v.get(i === 1 ? N.fireHandle.l : N.fireHandle.r) === 0;
+      if (v.get(i === 1 ? 'elec.eng_sov1_powered' : 'elec.eng_sov2_powered') !== 0) this.fuelSov[i] = cmdOpen;
+      v.set(FUEL_SOV_OPEN[i], this.fuelSov[i] ? 1 : 0);
+    }
+    // SET LDG ELEV (GX PTG 13-65): landing elevation not received from the FMS (no destination) with LDG ELEV at FMS.
+    v.set(SET_LDG_ELEV, v.get(V.ldgElevFms) === 1 && v.getString('fms.dest') === '' && !ground ? 1 : 0);
+
+    // ---------------- SFCU fault latch (EST): a slat / flap drive fault (FLAP FAIL / SLAT FAIL) stays latched in the SFCUs
+    // until the EMS CDU SWITCH CONTROL SLAT/FLAP RESET is selected with the fault cleared (GX PTG 10-62 control page 1/2).
+    {
+      // Detected only by a powered SFCU channel with its slat/flap drive power (an unpowered system cannot monitor).
+      const sfcuOn =
+        (v.get('elec.sfcu1_powered') !== 0 && v.get('elec.slat_flap_pwr1_powered') !== 0) ||
+        (v.get('elec.sfcu2_powered') !== 0 && v.get('elec.slat_flap_pwr2_powered') !== 0);
+      const slatF = sfcuOn && v.get('fail.slats.drive') !== 0 && Math.abs(v.get('surf.slats') - (flapLever > 0.5 ? 1 : 0)) > 0.1;
+      // The flaps wait for the slats (sequenced drive, createSystems.ts): no flap disagree while the slats run.
+      const flapF =
+        sfcuOn &&
+        ((v.get('flaps.disagree') !== 0 && v.get('slats.transit') === 0) || v.get('flaps.asym') !== 0 || v.get('fail.flaps.drive') !== 0);
+      // Latched after the fault persists 2 s (EST: the CAS confirmation delay; a momentary disagree while the drive
+      // starts or powers up is not a fault).
+      this.slatFaultT = slatF ? this.slatFaultT + dt : 0;
+      this.flapFaultT = flapF ? this.flapFaultT + dt : 0;
+      if (this.slatFaultT >= 2) this.slatLatch = true;
+      if (this.flapFaultT >= 2) this.flapLatch = true;
+      const rst = v.get(V.slatFlapReset) !== 0;
+      if (rst && !this.prevSfReset) {
+        if (!slatF) this.slatLatch = false;
+        if (!flapF) this.flapLatch = false;
+      }
+      this.prevSfReset = rst;
+      v.set(SLAT_FAULT, this.slatLatch ? 1 : 0);
+      v.set(FLAP_FAULT, this.flapLatch ? 1 : 0);
+    }
+
+    // ---------------- L / R HYD SOV FAIL (GX PTG 12-28): SOV not in its commanded position (EST 3 s travel margin); the
+    // SOV follows its command unless `fail.hyd.sov<n>` jams it.
+    for (let i = 1; i <= 2; i++) {
+      const jam = v.get(i === 1 ? 'fail.hyd.sov1' : 'fail.hyd.sov2') !== 0;
+      this.sovFailT[i] = jam ? this.sovFailT[i] + dt : 0;
+      v.set(i === 1 ? V.hydSovFail('l') : V.hydSovFail('r'), this.sovFailT[i] > 3 ? 1 : 0);
+    }
 
     // ---------------- BTMS (GXLG): red at fuse-plug release range (EST 700 C), latched until OVHT WARN RESET with the
     // condition gone.
@@ -455,6 +713,9 @@ export class G6kLogic implements Subsystem {
     const flapsTo = flapLever >= 1.5 && flapLever <= 3.5; // flaps 6 or 16 (EST: the Global takes off with 6 or 16)
     const trimOk = stab >= G6K_LIMITS.stabGreenBand[0] && stab <= G6K_LIMITS.stabGreenBand[1];
     v.set(V.noTakeoff, ground && (!flapsTo || !trimOk || fsl > 0.05 || pb > 0.05) ? 1 : 0);
+    // NO TAKEOFF advisory (GX PTG 10-67): during taxi (engines running, below the take-off thrust) while the take-off
+    // configuration is not set; the red CONFIG warnings take over at take-off thrust.
+    v.set(V.noTakeoffAdv, ground && anyEng && !toThrust && v.get('fdm.gs_kt') > 3 && (!flapsTo || !trimOk || fsl > 0.05) ? 1 : 0);
   }
 
   reset(): void {
@@ -474,6 +735,31 @@ export class G6kLogic implements Subsystem {
     this.lowBank = v.get('fdm.press_alt_ft') > 35050;
     this.btmsLatch = false;
     this.toPhase = false;
+    this.prevBattSel = v.get(V.battMasterSel);
+    this.prevBattMaster = v.get(V.battMaster);
+    this.fireRotT.l = 0;
+    this.fireRotT.apu = 0;
+    this.fireRotT.r = 0;
+    this.apuFireT = 0;
+    const hydUp = v.get('hyd.sys1_psi') > 1800 || v.get('hyd.sys2_psi') > 1800;
+    this.hydPwrT = hydUp ? 100 : 0;
+    this.splrTestT = 0;
+    this.skipSelfTest = hydUp;
+    this.prevAutobrake = v.get(V.autobrake);
+    this.abArmedSeen = v.get(V.autobrake) > 0 && v.get('gear.air_ground') === 0;
+    this.ditchDumped = false;
+    this.rateLimT = 0;
+    this.slatFaultT = 0;
+    this.flapFaultT = 0;
+    this.hornMuteLatched = false;
+    this.sovFailT.fill(0);
+    this.slatLatch = false;
+    this.flapLatch = false;
+    this.liftoffT = v.get('gear.air_ground') !== 0 ? 0 : 1000;
+    this.discT = 0;
+    this.depFieldFt = v.get('adc1.alt_ft');
+    this.fuelSov[1] = v.get(V.fireHandle('l')) === 0;
+    this.fuelSov[2] = v.get(V.fireHandle('r')) === 0;
     const warm = v.get('eng1.running') !== 0 || v.get('eng2.running') !== 0;
     for (let i = 1; i <= 3; i++) this.hydT[i] = warm ? 45 : Math.min(30, v.get('fdm.sat_c', 15));
   }

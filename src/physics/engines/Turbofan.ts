@@ -140,7 +140,16 @@ export class Turbofan implements EngineModel {
     this.oVib2 = ENG.vibN2(index);
     this.oAcc = ENG.accessoryDrive(index);
     this.oBleedP = ENG.bleedPressPsi(index);
+    this.vSeized = ENG.seized(index);
+    this.vVibAdd = ENG.vibAdd(index);
+    this.vOilFactor = ENG.oilPressFactor(index);
+    this.vIttAdd = ENG.ittAdd(index);
   }
+  // Additive failure inputs (default: no effect when the vars are unset).
+  private readonly vSeized: string;
+  private readonly vVibAdd: string;
+  private readonly vOilFactor: string;
+  private readonly vIttAdd: string;
 
   get running(): boolean {
     return this.lit && this.startComplete;
@@ -224,13 +233,15 @@ export class Turbofan implements EngineModel {
     const inletIce = clamp01(v.get(this.vInletIce));
     const oat = env.temperature_K - ZERO_C_IN_K;
     const tasKt = env.tas_ms * MS_TO_KT;
-    const windN2 = c.windmillN2PerKt * tasKt;
-    const windN1 = c.windmillN1PerKt * tasKt;
+    // Seized core (severe damage, additive input): no combustion and no windmilling.
+    const seized = v.get(this.vSeized, 0) > 0.5;
+    const windN2 = seized ? 0 : c.windmillN2PerKt * tasKt;
+    const windN1 = seized ? 0 : c.windmillN1PerKt * tasKt;
     const delta = env.pressure_Pa / 101325;
     const thetaAmb = env.temperature_K / 288.15;
 
     // ---- combustion state transitions
-    if (this.lit && !fuelOn) {
+    if (this.lit && (!fuelOn || seized)) {
       // Flameout / shutdown: fuel removed.
       this.lit = false;
       this.startComplete = false;
@@ -240,7 +251,7 @@ export class Turbofan implements EngineModel {
       const unlitFlow = fuelOn && this.n2 > 5;
       if (unlitFlow && !ignition) this.unlitFuel_s += dt;
       else if (!fuelOn) this.unlitFuel_s = Math.max(0, this.unlitFuel_s - dt * 0.2); // drains/evaporates
-      if (fuelOn && ignition && this.n2 >= 0.5 * c.lightOffN2_pct) {
+      if (fuelOn && ignition && !seized && this.n2 >= 0.5 * c.lightOffN2_pct) {
         this.lit = true;
         this.startComplete = this.n2 >= 0.98 * c.n2Idle_pct;
         this.startElapsed = 0;
@@ -301,7 +312,7 @@ export class Turbofan implements EngineModel {
         const tau = starter ? this.starterTau : 6;
         n2 += (target - n2) * (1 - Math.exp(-dt / tau));
       } else {
-        const tau = Math.max(1, interp1(c.spoolDownTau_s, n2) * 6);
+        const tau = seized ? 0.8 : Math.max(1, interp1(c.spoolDownTau_s, n2) * 6);
         n2 += (target - n2) * (1 - Math.exp(-dt / tau));
       }
       ittTarget = oat;
@@ -333,7 +344,7 @@ export class Turbofan implements EngineModel {
       const tsfc = interp1(c.tsfc, nfrac) * (1 + (c.tsfcMachFactor ?? 0.6) * env.mach) * Math.sqrt(thetaAmb); // kg/(N h)
       const idleFloor = (c.idleFuelFlow_pph / KGS_TO_PPH) * (0.35 + 0.65 * Math.min(1, delta));
       ff_kgs = Math.max(idleFloor, (tsfc * gross) / 3600);
-      ittTarget = this.runningItt(n1, env, bleed, antiIce, inletIce);
+      ittTarget = this.runningItt(n1, env, bleed, antiIce, inletIce) + v.get(this.vIttAdd, 0);
       ittTau = 2.5;
     }
     this.fuelFlow_kgs = ff_kgs;
@@ -345,7 +356,7 @@ export class Turbofan implements EngineModel {
     if (n2 <= n2i) pOil = c.oilPressIdle_psi * (n2 / n2i) * (n2 / n2i);
     else pOil = c.oilPressIdle_psi + (c.oilPressMax_psi - c.oilPressIdle_psi) * clamp01((n2 - n2i) / (c.n2Max_pct - n2i));
     const coldFactor = 1 + 0.3 * clamp01((c.oilTempNormal_c - this.oilTemp_c) / 60);
-    this.oilPress_psi = pOil * coldFactor;
+    this.oilPress_psi = pOil * coldFactor * clamp01(v.get(this.vOilFactor, 1));
     const oilTarget = this.lit
       ? oat + (c.oilTempNormal_c - oat) * (0.6 + 0.4 * clamp01((n2 - n2i) / (c.n2Max_pct - n2i)))
       : oat;
@@ -368,8 +379,9 @@ export class Turbofan implements EngineModel {
     v.set(this.oThrust, this.thrust_N);
     const spin1 = clamp01(n1 / 10);
     const spin2 = clamp01(n2 / 10);
-    v.set(this.oVib1, spin1 * (0.4 + 0.3 * (n1 / 100) + 3.0 * inletIce));
-    v.set(this.oVib2, spin2 * (0.3 + 0.3 * (n2 / 100) + 1.0 * inletIce));
+    const vibAdd = v.get(this.vVibAdd, 0);
+    v.set(this.oVib1, spin1 * (0.4 + 0.3 * (n1 / 100) + 3.0 * inletIce) + vibAdd);
+    v.set(this.oVib2, spin2 * (0.3 + 0.3 * (n2 / 100) + 1.0 * inletIce) + vibAdd);
     v.set(this.oAcc, n2 / 100);
     const b = clamp01((n2 - 0.4 * c.n2Idle_pct) / (c.n2Max_pct - 0.4 * c.n2Idle_pct));
     v.set(this.oBleedP, c.bleedPressMax_psi * Math.pow(b, 1.5) * (0.35 + 0.65 * Math.min(1, delta)));

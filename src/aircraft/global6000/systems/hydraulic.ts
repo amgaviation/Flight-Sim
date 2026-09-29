@@ -26,6 +26,8 @@ import { G6K_LIMITS } from '../data';
 import { G6K_VARS as V } from '../vars';
 
 const GAL = 3.785411784;
+/** EST normal reservoir servicing level (GX PTG 12-26 synoptic example: 61 / 63 / 62 %). */
+export const HYD_INITIAL_QTY = 0.62;
 /** 0..1 availability of a hydraulic system for actuators (full rate above ~2,600 psi). */
 export const hydFrac = (n: 1 | 2 | 3): string => `clamp01(hyd.sys${n}_psi / 2600)`;
 
@@ -34,9 +36,11 @@ export function createHydraulics(ctx: Pick<SimContext, 'vars'>): HydraulicSystem
   const low = G6K_LIMITS.hydLowPsi;
   return new HydraulicSystem(ctx.vars, {
     systems: [
-      { id: 'sys1', nominalPsi: P, reservoirL: 3.2 * GAL, lowPressPsi: low, lowQty: 0.25 }, // EST reservoir sizes
-      { id: 'sys2', nominalPsi: P, reservoirL: 3.2 * GAL, accumulator: { prechargePsi: G6K_LIMITS.brakeAccPrechargePsi, volumeL: 2 }, lowPressPsi: low, lowQty: 0.25 },
-      { id: 'sys3', nominalPsi: P, reservoirL: 2.6 * GAL, accumulator: { prechargePsi: G6K_LIMITS.brakeAccPrechargePsi, volumeL: 2 }, lowPressPsi: low, lowQty: 0.25 },
+      // Reservoir sizes EST. Quantity: GX PTG 12-26 shows ~61-63 % normal servicing (EST initial 0.62) and the LO QTY
+      // lower limits 34 % (system 1), 32 % (system 2), 20 % (system 3; 28 % with the main gear uplocked: cas.ts).
+      { id: 'sys1', nominalPsi: P, reservoirL: 3.2 * GAL, initialQty: HYD_INITIAL_QTY, lowPressPsi: low, lowQty: G6K_LIMITS.hydLoQty[0] },
+      { id: 'sys2', nominalPsi: P, reservoirL: 3.2 * GAL, initialQty: HYD_INITIAL_QTY, accumulator: { prechargePsi: G6K_LIMITS.brakeAccPrechargePsi, volumeL: 2 }, lowPressPsi: low, lowQty: G6K_LIMITS.hydLoQty[1] },
+      { id: 'sys3', nominalPsi: P, reservoirL: 2.6 * GAL, initialQty: HYD_INITIAL_QTY, accumulator: { prechargePsi: G6K_LIMITS.brakeAccPrechargePsi, volumeL: 2 }, lowPressPsi: low, lowQty: G6K_LIMITS.hydLoQty[2] },
     ],
     pumps: [
       // EDPs: EST 30 gpm at take-off N2 (variable displacement, capacity ~ N2), SOV on the suction line.

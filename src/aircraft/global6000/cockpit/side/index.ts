@@ -80,10 +80,18 @@ export function buildSideConsoles(c: G6kCockpitContext): void {
   }
   buildCcbp(c);
 
+  const dim = ['ac.g6k.light.ems1_dim', 'ac.g6k.light.ems2_dim'];
+  units[0].partner = units[1];
+  units[1].partner = units[0];
   b.onUpdate((dt) => {
     const batt = vars.get('elec.batt_bus_powered') !== 0;
-    vars.set('ac.g6k.ck.ems1_pwr', batt ? 1 : 0);
+    // BATT MASTER EMS (GX PTG 6-8: "Electrical Management System is in maintenance mode. Batteries supply power to EMS
+    // only"): the CDUs run from the battery direct buses with the battery bus isolated.
+    const ems = vars.get(V.battMasterSel) === 1;
+    vars.set('ac.g6k.ck.ems1_pwr', batt || (ems && vars.get('elec.av_batt_dir_powered') !== 0) ? 1 : 0);
     vars.set('ac.g6k.ck.ems2_pwr', batt || vars.get('elec.apu_batt_dir_powered') !== 0 ? 1 : 0);
+    // GX PTG 15-6: the L / R DISPLAY knobs also dim the EMS CDUs (times each unit's own BRT keys).
+    for (let i = 0; i < units.length; i++) units[i].dim = vars.get(dim[i], 1);
     shared.tick(dt);
     for (let i = 0; i < units.length; i++) {
       const u = units[i];
@@ -149,6 +157,9 @@ function buildSide(c: G6kCockpitContext, side: 'left' | 'right'): void {
     inb(0.17),
     regY,
   );
+  // EMERGENCY push (100 % oxygen, continuous positive pressure; GX PTG 8-7 regulator drawing "EMERGENCY / PUSH").
+  con.add(new PushButton(env, { id: `g6k.side.oxy_emer${n}`, label: `${who} MASK EMERGENCY`, var: V.oxyEmer(n), mode: 'toggle', style: 'round', width: 0.01, capMaterial: 'knobRed' }), inb(0.145), regY + 0.02);
+  con.label('EMERGENCY', inb(0.145), regY + 0.031, { height: 0.0017, zone });
   con.add(new PushButton(env, { id: `g6k.side.oxy_test${n}`, label: `${who} MASK RESET/TEST`, var: V.oxyTest(n), mode: 'momentary', style: 'round', width: 0.011 }), inb(0.12), regY);
   con.label('RESET/TEST', inb(0.12), regY - 0.012, { height: 0.0019, zone });
   con.add(
@@ -163,23 +174,23 @@ function buildSide(c: G6kCockpitContext, side: 'left' | 'right'): void {
     regY,
   );
 
-  if (side === 'left') {
-    // Crew oxygen supply valve (EST position; OxygenSystem crew bottle valve).
-    con.add(
-      new ToggleSwitch(env, {
-        id: 'g6k.side.crew_oxy',
-        label: 'CREW OXYGEN SUPPLY',
-        var: V.crewOxy,
-        positions: ['CLOSED', 'OPEN'],
-        values: [0, 1],
-        labels: { positions: true, height: 0.0021, zone },
-        scale: 0.8,
-      }),
-      inb(0.12),
-      regY + 0.07,
-    );
-    con.label('CREW OXY SUPPLY', inb(0.12), regY + 0.05, { height: 0.0021, zone });
-  } else {
+  // OXYGEN SUPPLY LOWER DISCONNECT ON / OFF on each side console (GX PTG 15-10 side-console drawing): that mask's supply.
+  con.add(
+    new ToggleSwitch(env, {
+      id: side === 'left' ? 'g6k.side.crew_oxy' : 'g6k.side.crew_oxy_r',
+      label: `${who} OXYGEN SUPPLY LOWER DISCONNECT`,
+      var: side === 'left' ? V.crewOxy : V.crewOxyR,
+      positions: ['OFF', 'ON'],
+      values: [0, 1],
+      labels: { positions: true, height: 0.0021, zone },
+      scale: 0.8,
+    }),
+    inb(side === 'left' ? 0.12 : 0.205),
+    regY + 0.07,
+  );
+  con.label('OXYGEN SUPPLY', inb(side === 'left' ? 0.12 : 0.205), regY + 0.047, { height: 0.0019, zone });
+  con.label('LOWER DISCONNECT', inb(side === 'left' ? 0.12 : 0.205), regY + 0.051, { height: 0.0017, zone });
+  if (side === 'right') {
     // PASSENGER OXYGEN selector (FCOM 01-10-46 item 4): CLOSED / NORMAL / OVERRIDE with PASS ON and LOW lamps.
     const py = regY + 0.075;
     con.add(

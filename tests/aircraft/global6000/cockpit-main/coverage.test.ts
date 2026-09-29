@@ -18,6 +18,7 @@ import type { CockpitControl, ControlPointer } from '../../../../src/cockpit/typ
 import type { EventBus } from '../../../../src/core/EventBus';
 import type { SimVars } from '../../../../src/core/SimVars';
 import { AnnunciatorLight } from '../../../../src/cockpit/controls';
+import { G6K_VARS as V } from '../../../../src/aircraft/global6000/vars';
 import { makeRig, type Rig } from '../helpers';
 import { fakeCanvas } from '../../../avionics/collins-fusion/helpers';
 import { buildG6kCockpit } from '../../../../src/aircraft/global6000/cockpit';
@@ -154,6 +155,11 @@ describe('Global 6000 cockpit: control coverage', () => {
       'g6k.ped.rev1': () => r.vars.set('ac.tla1', 0),
       'g6k.ped.rev2': () => r.vars.set('ac.tla2', 0),
     };
+    // ACP transmitter select keys: select another transmitter first so the key press changes the selection.
+    for (const s of [1, 2] as const)
+      ['vhf1', 'vhf2', 'vhf3', 'hf1', 'hf2', 'sat', 'pa'].forEach((ch, k) => {
+        PRECONDITION[`g6k.ped.acp${s}.mic_${ch}`] = () => r.vars.set(V.acpMic(s), k === 0 ? 1 : 0);
+      });
     // The Vision GEAR AND BRAKES panel has no gear position lights (photo N835GL): no indicator on the main cockpit.
     const INDICATORS: Record<string, string[]> = {};
     const emitted: string[] = [];

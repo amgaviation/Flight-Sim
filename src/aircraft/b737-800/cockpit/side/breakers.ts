@@ -86,7 +86,6 @@ export const B738_P18: CbGroup[] = [
       ['alt_flaps', 'ALTN\nFLAPS'],
       ['stby_rud', 'STBY\nRUD'],
       ['press_altn', 'PRESS\nALTN'],
-      ['emer_lts', 'EMER\nLTS'],
     ],
   },
   {
@@ -167,6 +166,8 @@ export const B738_P6: CbGroup[] = [
       ['eng_ai1', 'ENG 1\nA/I'],
       ['cargo_fire', 'CARGO\nFIRE'],
       ['wxr_ctl', 'WXR\nCONT'],
+      ['emer_lts', 'EMER\nLTS'],
+      ['fd_door_lock', 'FLT DK\nDOOR LOCK'],
       ['xpdr2', 'ATC\n2'],
       ['panel_lts', 'PANEL\nLTS'],
       ['annun_lts', 'MASTER\nDIM'],

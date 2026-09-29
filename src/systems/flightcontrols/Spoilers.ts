@@ -76,8 +76,16 @@ export interface SpoilerConfig {
     /** Radio altitude var (ft) and threshold for the ground-mode backup. Default ra1.alt_ft < 10. */
     raVar?: string;
     raFt?: number;
-    /** RTO deployment without arming. */
-    rto?: { speedKt: number };
+    /**
+     * RTO deployment without arming. Additive `enable`: an extra condition for the RTO rule (e.g. armed only by a
+     * take-off thrust advance on the ground); default always.
+     */
+    rto?: { speedKt: number; enable?: Binding };
+    /**
+     * Additive: deployment with the lever DOWN (not armed) when this condition holds on the ground after wheel
+     * spin-up / ground mode, e.g. 737NG "both reverse thrust levers positioned for reverse thrust" (FCOM 9.20).
+     */
+    reverse?: Binding;
     /** Back-drive the lever to UP when deploying and to DOWN when retracting. Default true. */
     leverBackdrive?: boolean;
   };
@@ -110,6 +118,8 @@ export class Spoilers implements Subsystem {
   private readonly raVar: string;
   private readonly flapsVar: string;
   private prevAdvanced = true;
+  private readonly rtoEnable: () => boolean;
+  private readonly reverse: (() => boolean) | null;
   private readonly fAuto = failVar('spoilers.auto');
   private readonly fFlight = failVar('spoilers.flight');
   private readonly fGround = failVar('spoilers.ground');
@@ -124,6 +134,8 @@ export class Spoilers implements Subsystem {
     const idle = this.idle;
     this.advanced = cfg.auto?.thrustAdvanced !== undefined ? compileCondition(v, cfg.auto.thrustAdvanced) : () => !idle();
     this.groundMode = compileCondition(v, cfg.auto?.groundMode ?? 'gear.air_ground', false);
+    this.rtoEnable = compileCondition(v, cfg.auto?.rto?.enable, true);
+    this.reverse = cfg.auto?.reverse !== undefined ? compileCondition(v, cfg.auto.reverse, false) : null;
     this.fPow = compileBinding(v, cfg.flightPower, 1);
     this.gPow = compileBinding(v, cfg.groundPower, 1);
     this.wheels = cfg.auto?.wheelSpeedVars ?? [GEAR.wheelSpeedKt(1), GEAR.wheelSpeedKt(2)];
@@ -165,9 +177,10 @@ export class Spoilers implements Subsystem {
       const spun = wheel > (a.spinupKt ?? 60);
       const raLow = v.get(this.raVar, 0) < (a.raFt ?? 10);
       const landing = armed && idle && (spun || (onGround && raLow));
-      const rto = a.rto !== undefined && onGround && idle && wheel > a.rto.speedKt;
+      const rto = a.rto !== undefined && onGround && idle && wheel > a.rto.speedKt && this.rtoEnable();
+      const rev = this.reverse !== null && this.reverse() && (spun || (onGround && raLow));
       const adv = this.advanced();
-      if (!this.deployed && (landing || rto)) {
+      if (!this.deployed && (landing || rto || rev)) {
         this.deployed = true;
         if (a.leverBackdrive ?? true) v.set(this.leverVar, 1);
       } else if (this.deployed && adv && !this.prevAdvanced) {
