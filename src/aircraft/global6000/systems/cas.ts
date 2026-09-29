@@ -138,8 +138,8 @@ export const G6K_CAS: CasMessageDef[] = [
   { id: 'mlg_bay_ovht_fail', text: 'MLG BAY OVHT FAIL', level: 'caution', when: 'fire.mlg_fault' },
   { id: 'fire_btl1_lo_press', text: 'FIRE BTL1 LO PRESS', level: 'caution', when: 'fire.bottle1_discharged' },
   { id: 'fire_btl2_lo_press', text: 'FIRE BTL2 LO PRESS', level: 'caution', when: 'fire.bottle2_discharged' },
-  // ---- APU (GXAPU)
-  { id: 'apu_overtemp', text: 'APU OVERTEMP', level: 'caution', when: `apu.egt_c > ${G6K_LIMITS.apuEgtStartMaxC}` },
+  // ---- APU (GXAPU): EGT limit 1,020 C during the start, ~714 C continuous once on speed (apu.avail).
+  { id: 'apu_overtemp', text: 'APU OVERTEMP', level: 'caution', when: `apu.egt_c > (apu.avail ? ${G6K_LIMITS.apuEgtRunMaxC} : ${G6K_LIMITS.apuEgtStartMaxC})`, delayS: 1 },
   { id: 'apu_overspeed', text: 'APU OVERSPEED', level: 'caution', when: 'apu.overspeed' },
   { id: 'apu_oil_lo_press', text: 'APU OIL LO PRESS', level: 'caution', when: 'apu.low_oil' },
   // ---- flight controls (GXFC)

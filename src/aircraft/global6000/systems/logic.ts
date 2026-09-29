@@ -83,6 +83,8 @@ const FIRE_Z = (['l', 'apu', 'r'] as const).map((z) => ({
 }));
 /** Engine fuel SOV position (1 open) per engine, written by G6kLogic, read by the fuel consumers (fuel.ts) and the CAS. */
 export const FUEL_SOV_OPEN = ['', 'ac.g6k.fuel.eng_sov1_open', 'ac.g6k.fuel.eng_sov2_open'];
+/** APU fuel (fire) SOV position (1 open): a DC EMER motor-driven valve that holds its position unpowered (GXFU). */
+export const APU_FUEL_SOV_OPEN = 'ac.g6k.fuel.apu_sov_open';
 /** Latched SFCU slat / flap faults (SLAT FAIL / FLAP FAIL; reset from the EMS CDU SLAT/FLAP RESET). */
 export const SLAT_FAULT = 'ac.g6k.sfcu.slat_fault';
 export const FLAP_FAULT = 'ac.g6k.sfcu.flap_fault';
