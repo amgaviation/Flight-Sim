@@ -10,10 +10,12 @@
  *  - DISPLAYS NORM / REV: REV sets both sides' display reversion (the Fusion
  *    layout shows the PFD + EICAS composite on each outboard AFD), NORM
  *    restores the normal format (FUSION_VARS.rspDspl(1 / 2)).
- *  - TUNE NORM / VHF / DSPL: radio-tuning reversion source `V.tuneSrc`.
- *    SCOPE: the Fusion suite always tunes through the CTP / MKP windows; the
- *    selected tuning source is state only (shown by the knob), as the
- *    reversionary tuning path is not modelled.
+ *  - TUNE NORM / VHF / DSPL: radio-tuning reversion source `V.tuneSrc`,
+ *    consumed by the Fusion suite (tuneReversionVar): VHF / DSPL inhibits CTP
+ *    radio tuning and the CTP annunciates the selected source (GX PTG 16).
+ *    SCOPE: the reversionary tune window itself (tuning through the standby
+ *    VHF head / display path) is not modelled - the MKP / FMS TUNE page keeps
+ *    working as the display path.
  *  - AFCS 1/2 is written as 1 / 2 by the alternate-action switchlight; an
  *    unset var reads as FGC 1.
  *

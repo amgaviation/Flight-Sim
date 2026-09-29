@@ -108,6 +108,12 @@ export interface CtpOptions {
   powered?: (side: 1 | 2) => boolean;
   /** (Appended by global6000.) TUNE knob sets the selected course on the PFD page (Global Vision CTP). */
   courseOnPfdPage?: boolean;
+  /**
+   * (Appended by global6000.) Var holding the pedestal TUNE reversion selection (0 NORM / 1 VHF / 2 DSPL, GX PTG 16).
+   * Non-NORM moves radio tuning off the normal CTP path: CTP radio tuning, transfer and mode cycling are inhibited
+   * (the display annunciates the selected source). Default none.
+   */
+  tuneReversionVar?: string;
 }
 
 export class CtpLogic {
@@ -173,6 +179,11 @@ export class CtpLogic {
 
   page(s: 1 | 2): CtpPage {
     return this.vars.get(FUSION_VARS.ctpPage(s)) as CtpPage;
+  }
+
+  /** TUNE reversion selected off the normal CTP path (VHF / DSPL): CTP radio tuning is inhibited. */
+  private tuneReverted(): boolean {
+    return this.opts.tuneReversionVar !== undefined && this.vars.get(this.opts.tuneReversionVar) >= 0.5;
   }
 
   selectedLine(s: 1 | 2): RadioLine {
@@ -319,6 +330,7 @@ export class CtpLogic {
     }
     const line = RADIO_LINES[n - 1];
     const cur = this.selectedLine(s);
+    if (this.tuneReverted()) return; // GX PTG 16: tuning moved off the CTP (annunciated on the display)
     if (line === 'DME') {
       this.dmeHold(s);
       return;
@@ -350,6 +362,7 @@ export class CtpLogic {
       return;
     }
     if (this.page(s) !== CtpPage.Radio) v.set(FUSION_VARS.ctpPage(s), CtpPage.Radio);
+    if (this.tuneReverted()) return; // GX PTG 16: tuning moved to the standby VHF / display path
     const line = this.selectedLine(s);
     const nav = this.opts.sensors.nav[s - 1];
     const adf = this.opts.sensors.adf[s - 1];
@@ -380,7 +393,7 @@ export class CtpLogic {
 
   /** TUNE push / second LSK press: standby <-> active of the selected radio. */
   transfer(s: 1 | 2): void {
-    if (!this.powered(s)) return;
+    if (!this.powered(s) || this.tuneReverted()) return;
     const v = this.vars;
     const line = this.selectedLine(s);
     const swap = (a: string, b: string) => {

@@ -790,6 +790,11 @@ describe('737-800 line check KLAX -> KSFO (full normal procedure)', () => {
       r.run(0.5);
       press(r, INPUT.apDisconnect); // second push silences the warning / resets the A/P disengage light
       expect(v.get(AP.engaged)).toBe(0);
+      // FCOM 4.20 (fix round 2, B738-F01/G08): after the A/P is disconnected on the ground following an
+      // autoland, the AFDS gives no rollout guidance - ROLLOUT / FLARE clear and the FMA blanks with the F/Ds on.
+      expect(v.getString('ac.fma.roll')).toBe('');
+      expect(v.getString('ac.fma.pitch')).toBe('');
+      expect(v.getString('ac.fma.status')).not.toBe('LAND 3');
       r.events.emit('at.disc');
       r.run(0.5);
       v.set(B738.revLever(1), 0);

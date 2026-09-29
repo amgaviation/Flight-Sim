@@ -174,7 +174,7 @@ describe('G650 procedures probe', () => {
     v.set(V.apuMaster, 0);
     r.run(30);
     // Before Taxi (IRS may still be aligning)
-    log(`  [Before Taxi] before IRS aligned: ${evalList(r, 'Before Taxi')}`);
+    log(`  [Taxi] before IRS aligned: ${evalList(r, 'Taxi')}`);
     let alignT = NaN;
     r.run(900, (t) => {
       if (v.get('ahrs1.valid') === 1 && v.get('ahrs2.valid') === 1 && v.get('ahrs3.valid') === 1) alignT = t;
@@ -186,14 +186,14 @@ describe('G650 procedures probe', () => {
     v.set(V.autobrake, -1);
     v.set(V.ltTaxi, 1);
     r.run(25);
-    log(`  [Before Taxi] ${evalList(r, 'Before Taxi')}`);
+    log(`  [Taxi] ${evalList(r, 'Taxi')}`);
     // Before Takeoff
     v.set(V.parkBrake, 0);
     v.set(V.ltStrobe, 1);
     v.set(V.ltLdgL, 1);
     v.set(V.ltLdgR, 1);
     r.run(2);
-    log(`  [Before Takeoff] ${evalList(r, 'Before Takeoff')}`);
+    log(`  [Line Up] ${evalList(r, 'Line Up')}`);
     log(`  CAS before takeoff: ${cas(r)}`);
     // Shutdown flow, strictly as our Shutdown checklist lists it (parking brake, FUEL CONTROL OFF, BEACON OFF, IRS OFF,
     // EMERGENCY POWER OFF, MAIN BATTERIES OFF), everything else left where the flow put it.

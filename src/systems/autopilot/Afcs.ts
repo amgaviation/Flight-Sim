@@ -619,8 +619,9 @@ export class Afcs implements Subsystem {
       if (this.vert === 'NONE') this.setVert('CWS');
     } else {
       if ((this.vert === 'TO' || this.vert === 'GA') && !this.onGround) {
-        // Garmin/Honeywell/Collins: AP engagement from TO/GA reverts to the basic modes.
-        this.setVert(d.apVertical);
+        // Garmin/Honeywell/Collins: AP engagement from TO/GA reverts to the basic modes. With to.keepModeOnApEngage
+        // (Collins Fusion) the TO vertical mode survives engagement until another vertical mode is selected.
+        if (!(this.vert === 'TO' && this.cfg.to?.keepModeOnApEngage)) this.setVert(d.apVertical);
         if (this.lat === 'TO' || this.lat === 'GA') this.setLat(d.apLateral);
       }
       if (this.lat === 'NONE') this.setLat(d.apLateral);

@@ -26,7 +26,7 @@ import { ControlBase, type ControlOptions } from './ControlBase';
 import { PushButton, type PushButtonOptions } from './PushButton';
 import { RockerSwitch, type RockerSwitchOptions } from './RockerSwitch';
 import { ToggleSwitch, type ToggleSwitchOptions } from './ToggleSwitch';
-import { yokeColumnGeometry, yokeParts, type YokeAnchorName, type YokeStyle } from '../geometry/yokes';
+import { yokeColumnGeometry, yokeParts, type YokeAnchorName, type YokeStyle, type YokeStyleOpts } from '../geometry/yokes';
 import { pedalGeometry, pedalTreadGeometry } from '../geometry/structure';
 import { hitBox } from '../geometry/primitives';
 import { smoothTo } from '../anim';
@@ -47,6 +47,8 @@ export type YokeSwitchSpec = { anchor: YokeAnchorName; offset?: [number, number,
 export interface YokeOptions extends ControlOptions {
   style: YokeStyle;
   scale?: number;
+  /** (Appended by citation-m2, additive.) Per-aircraft profile tweaks for the wheel geometry; omitted = unchanged. */
+  styleOpts?: YokeStyleOpts;
   column?: {
     kind: 'translate' | 'pivot';
     /** Visible shaft length (translate) or hub-to-pivot distance (pivot), m. */
@@ -111,13 +113,14 @@ export class Yoke extends ControlBase implements CompositeControl {
     this.occluders.push(colMesh);
     offset.add(this.wheel);
     // One parts build; the geometry cache adopts the meshes on first use.
-    const pp = yokeParts(o.style, s);
+    const pp = yokeParts(o.style, s, o.styleOpts);
     const adopted = new Set<THREE.BufferGeometry>();
     const adopt = (g: THREE.BufferGeometry) => () => {
       adopted.add(g);
       return g;
     };
-    const key = `yoke.${o.style}.${s}`;
+    // styleOpts joins the cache key so a tweaked profile never collides with the default one.
+    const key = `yoke.${o.style}.${s}` + (o.styleOpts ? `.${o.styleOpts.gripTop ?? 'd'}.${o.styleOpts.gripLean ?? 'd'}` : '');
     this.mesh(this.geo(`${key}.frame`, adopt(pp.frame)), 'yoke', this.wheel);
     this.mesh(this.geo(`${key}.grips`, adopt(pp.grips)), 'yokeGrip', this.wheel);
     const hub = this.mesh(this.geo(`${key}.hub`, adopt(pp.hub)), 'yoke', this.wheel);

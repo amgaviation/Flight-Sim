@@ -148,6 +148,9 @@ export function createEngines(ctx: SimContext): LongitudeEngines {
     // OG 7-5 DESC: "targeting an idle thrust for descent" - the A/T stays in DESC at the idle stop (no HOLD in flight;
     // OG: "HOLD will only activate when on the ground").
     holdAfterDescentIdle: false,
+    // LON-P3-01, OG Section 1 limitation: "Autothrottle ... not armed during taxi". On the ground the AT button is
+    // inert unless TO/GA is active, and TO/GA itself engages the A/T into TO (AW&ST 2019 pilot report).
+    groundEngage: 'toga',
   });
   return { ratings, fadec, starts, at };
 }

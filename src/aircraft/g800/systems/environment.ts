@@ -149,7 +149,10 @@ export function createApu(ctx: Pick<SimContext, 'vars'>): Apu {
     doorTimeS: 10,
     startTimeS: 40, // EST
     availDelayS: 2,
-    cooldownS: 60,
+    cooldownS: 60, // EST ~60 s unloaded cooldown (RE220 practice)
+    // Fix round 1 P10: the RE220 runs its unloaded cooldown after every stop command (not only after recent
+    // bleed use); the generator drops off line at once (avail 0), the fuel cut follows the cooldown.
+    stopCooldown: true,
     egtStartPeakC: 820, // EST: well below the 1,050 degC start limit (GVI)
     egtIdleC: 430, // EST
     egtBleedC: 180,

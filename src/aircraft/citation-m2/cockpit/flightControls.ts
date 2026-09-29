@@ -8,7 +8,8 @@
  * are controlled via switches on each yoke". The M2's push-to-talk switches
  * sit under the armrests (AOPA Pilot, March 2014: "yoke-free PTT";
  * side/index.ts), so the wheels carry no PTT. Photographs (S&D figures): tall
- * M-shaped wheels with a grey hub shroud bearing the CITATION M2 logo plaque
+ * ram's-horn wheels (horns rising well above the hub, slight inward cant:
+ * styleOpts) with a grey hub shroud bearing the CITATION M2 logo plaque
  * (EST dimensions). S&D15 §10.3.H: "Two handheld microphones ... installed on
  * each of the control columns" (coiled cord visible in S&D15 Fig III): a
  * static hand mic in a holder on each column (SCOPE: the hand-mic key is not
@@ -50,6 +51,9 @@ export function buildFlightControls(b: CockpitBuilder): void {
         label: `${L ? 'PILOT' : 'COPILOT'} CONTROL WHEEL`,
         style: 'bizjet',
         scale: 1.05,
+        // Tall ram's-horn wheel (S&D15 Fig III / S&D21 Fig 3 photographs: the CJ-series horns rise well above the
+        // hub, near vertical with a slight inward cant). EST heights scaled from the photographs (M2-L36).
+        styleOpts: { gripTop: 0.12, gripLean: 0.018 },
         column: { kind: 'pivot', length: FLOOR_Z - YOKE_HUB.z - 0.02, aftDeg: 10, fwdDeg: 8, radius: 0.024 },
         rollDeg: 80,
         pitchVar: SURF.elevator,

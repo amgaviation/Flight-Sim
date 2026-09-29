@@ -135,14 +135,19 @@ export function createEngines(ctx: SimContext): G6kEngines {
       fuelOnN2Pct: 18, // EST (light-off at 15 % N2, fdm.ts)
       starterCutoutN2Pct: 50, // EST
       idleN2Pct: 60,
-      hotStartIttC: L.ittStartGroundC, // TCDS 700 C on the ground
+      hotStartIttC: L.ittStartGroundC, // TCDS 3.2: starting ITT limit 700 C on the ground
+      hotStartIttAirC: L.ittStartAirC, // TCDS 3.2: ... 850 C in flight (air starts)
       hotStartPredictS: 0.5,
       lightOffTimeoutS: 15,
       hungWindowS: 15,
       maxStarterS: 120, // EST starter duty
       clearingMotorS: 15,
       // Start valve solenoid on the DC ESS / BATT bus: available above the relay drop-out (QA lesson: >= 7 V, not "powered").
-      starterAvailable: `elec.${i === 1 ? 'dc_ess' : 'batt_bus'}_v >= 7`,
+      // Air-start envelope (fix round P03): the air turbine starter assists a relight only below the starter-assist
+      // ceiling (EST 21,000 ft, data.ts airStartStarterAltFt; the Global QRH envelope is proprietary). Above it the
+      // relight is windmill-only: the auto-start sequence still needs N2 >= fuelOnN2Pct (18 %), which the windmilling
+      // core only reaches at air-start airspeeds, so the airspeed leg of the envelope follows from the windmill N2.
+      starterAvailable: `elec.${i === 1 ? 'dc_ess' : 'batt_bus'}_v >= 7 && (gear.air_ground != 0 || fdm.press_alt_ft < ${L.airStartStarterAltFt})`,
       ignitionPower: `elec.ign${i}_powered`,
       // IGNITION PBA ON = continuous ignition; in AUTO the FADEC fires the igniters for starts and auto relight (the
       // controller's in-flight flameout relight: RUN selected, N2 above the windmill threshold) and the SPC commands

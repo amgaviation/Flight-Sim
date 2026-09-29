@@ -202,6 +202,9 @@ export const G6K_LIMITS = {
   reliefPsi: 10.63, // FCOM CSP 700-6 02-10 (SB 700-21-034 cabin altitude reduction, the Global 6000 standard): safety valve opens at 10.63 +/- 0.1 psid
   cabinDeltaPWarnPsi: 10.85, // ... "at 10.85 psi CABIN DELTA P will be displayed on EICAS"
   pressRateHighDescFpm: 800, // GX PTG 13-57: RATE HIGH "0 to 800 ft/min descent"
+  // ---------------- air start (fix round P03; the Global QRH relight envelope is proprietary)
+  airStartStarterAltFt: 21000, // EST: starter-assisted relight ceiling (typical large-turbofan ATS air-start limit; above it windmill only)
+  airStartWindmillAltFt: 30000, // EST: windmill relight ceiling used by the L/R ENG FLAMEOUT checklist (crew guidance; the FADEC itself gates on windmill N2)
   // ---------------- fire (GX PTG 9-13 / 9-20)
   fireHandleHoldS: 1, // "the handle must be turned fully and held (at least one second)"
   apuFireAutoShutdownS: 5, // ground: FADEC shuts the APU down after a 5 s fire signal with the handle not pulled

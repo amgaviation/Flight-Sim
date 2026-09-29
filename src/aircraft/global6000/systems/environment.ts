@@ -131,7 +131,12 @@ export function createPressurization(ctx: Pick<SimContext, 'vars' | 'nav'>): Pre
     reliefPsi: L.reliefPsi,
     schedule: { x: [0, 45000, 51000], y: [0, L.cabinAtFl450Ft, 5670] }, // AOPA 4,500 ft at FL450; FCOM 5,670 ft at 51,000 ft
     maxCabinDescentFpmBinding: `${V.pressRateHigh} == 1 ? ${L.pressRateHighDescFpm} : 300`,
-    outflowValve: { manualTravelS: 60 }, // EST: "both outflow valves open slowly" (GX PTG 13-54)
+    // EST: combined OFV area sized so the EMER DEPRESS transient gives a plausible ~5,000-10,000 fpm cabin climb
+    // (comparable-type dump rates; no public Global OFV area data) while still reaching the 14,500 ft limiter
+    // (pinned in fidelity/audit3-probes.test.ts). manualTravelS: "both outflow valves open slowly" (GX PTG 13-54).
+    outflowValve: { manualTravelS: 60, maxAreaM2: 9e-3 },
+    // Safety (positive relief) valves kept at the shared default area (independent of the smaller OFVs).
+    safetyAreaM2: 0.026,
     // Limiters / ditching close stage / both OFVs CLOSED force the OFVs shut (0); one OFV CLOSED halves the outflow area;
     // the OFV travel limiter holds <= 50 % above 7 psid (GX PTG 13-59).
     outflowLimit: `(${close}) ? 0 : min(${one} ? 0.5 : 1, press.diff_psi > ${L.ofvTravelLimitPsi} ? ${L.ofvTravelLimitPos} : 1)`,
@@ -205,6 +210,8 @@ export function createApu(ctx: Pick<SimContext, 'vars'>): Apu {
     genLoad: 'clamp01(elec.apu_gen_load_pct / 100)',
     maxBleedPsi: G6K_LIMITS.apuBleedPsi,
     bleedCeilingFt: G6K_LIMITS.apuBleedCeilingFt,
+    startCeilingFt: G6K_LIMITS.apuStartCeilingFt, // GXAPU / TCDS 5.2: RE220 start envelope 37,000 ft
+    operatingCeilingFt: G6K_LIMITS.apuOperatingCeilingFt, // GXAPU: operating envelope 45,000 ft (auto shutdown above)
     doorTimeS: 10, // EST: inlet door + prestart BIT (APU IN BITE)
     startTimeS: 40, // EST
     availDelayS: 2,

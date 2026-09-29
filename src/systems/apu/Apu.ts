@@ -70,6 +70,30 @@ export interface ApuConfig {
   maxBleedPsi?: number;
   /** Bleed available only below this pressure altitude (ft). Default none. */
   bleedCeilingFt?: number;
+  /**
+   * (Appended by the g800 aircraft, additive.) Run the unloaded `cooldownS` after EVERY stop command, not only
+   * when bleed air was used within the last `cooldownS` (RE220-style installations run an unloaded cooldown
+   * before shutdown). Default false (unchanged behaviour).
+   */
+  stopCooldown?: boolean;
+  /**
+   * (Appended by the global6000 aircraft.) Start envelope ceiling (ft): a START command above this pressure altitude
+   * is ignored (the ECU refuses the start). Default none (unchanged behaviour).
+   */
+  startCeilingFt?: number;
+  /**
+   * (Appended by the g650 aircraft, additive.) Clear latched faults on master OFF as soon as the APU is
+   * spooling down, not only once the rotor is fully at rest: a master cycle after a failed (no-light-off)
+   * start then permits an immediate retry once N reaches zero (RE220 installations: a failed APU start is
+   * retried after a master cycle within the starter duty limits, code450 G650 APU Start Checklist / LIM
+   * starter duty 3 min / 15 s x 2). Default false (unchanged behaviour: clear only with the APU at rest).
+   */
+  masterOffFaultClear?: boolean;
+  /**
+   * (Appended by the global6000 aircraft.) Operating envelope ceiling (ft): a starting or running APU above this
+   * pressure altitude shuts down automatically (latched fault, like the other protective shutdowns). Default none.
+   */
+  operatingCeilingFt?: number;
   /** Timings (s). */
   doorTimeS?: number;
   /** Nominal start time to 95 % N (s). Default 45 (EST; 737NG start cycle up to 120 s max). */
@@ -219,8 +243,9 @@ export class Apu implements Subsystem {
     const bleedLoad = clamp01(this.bleedLoad());
     const genLoad = clamp01(this.genLoad());
 
-    // ---- fault reset: master OFF clears latched faults once the APU has stopped
-    if (!master && this.state === ApuState.Off) {
+    // ---- fault reset: master OFF clears latched faults once the APU has stopped (or, with
+    // `masterOffFaultClear`, already while it spools down: the master cycle is the reset).
+    if (!master && (this.state === ApuState.Off || (this.cfg.masterOffFaultClear === true && this.state === ApuState.Spooldown))) {
       this.fault = false;
       this.fireShutdown = false;
       this.overspeed = false;
@@ -250,6 +275,7 @@ export class Apu implements Subsystem {
         if (this.overTempTimer > 1) trip = true;
       } else this.overTempTimer = 0;
       if (this.state === ApuState.Starting && this.startTimer > p.startTimeoutS) trip = true;
+      if (this.cfg.operatingCeilingFt !== undefined && this.alt() > this.cfg.operatingCeilingFt) trip = true;
       if (trip) {
         this.fault = true;
         this.shutdown();
@@ -263,7 +289,7 @@ export class Apu implements Subsystem {
         break;
       case ApuState.Door:
         if (!master) this.state = ApuState.Off;
-        else if (this.door >= 1 && (startEdge || this.cfg.autoStart)) {
+        else if (this.door >= 1 && (startEdge || this.cfg.autoStart) && (this.cfg.startCeilingFt === undefined || this.alt() <= this.cfg.startCeilingFt)) {
           this.state = ApuState.Starting;
           this.startTimer = 0;
           this.starter = true;
@@ -275,7 +301,7 @@ export class Apu implements Subsystem {
         break;
       case ApuState.Running:
         if (!master || stopEdge) {
-          if (this.bleedUsedTimer < p.cooldownS) {
+          if (this.bleedUsedTimer < p.cooldownS || this.cfg.stopCooldown) {
             this.state = ApuState.Cooldown;
             this.cooldownTimer = 0;
           } else this.shutdown();

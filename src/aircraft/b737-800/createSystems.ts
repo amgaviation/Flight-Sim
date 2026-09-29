@@ -38,6 +38,7 @@ import { createHydraulics } from './systems/hydraulic';
 import { createPneumatics, createPressurization, createApu, createIce, createFire, createOxygen, createLighting } from './systems/airframe';
 import { createEngineControls, type EngineControls } from './systems/engines';
 import { createFlightControls, type FlightControlBlocks } from './systems/flight';
+import { B738FlightControlExtras } from './systems/flightControlExtras';
 import { createAvionics, type AvionicsBlocks, type AvionicsOptions } from './systems/avionics';
 import { B738_ANNUNCIATORS } from './systems/cas';
 import { B738Logic, B738LogicLate } from './systems/logic';
@@ -48,6 +49,7 @@ export interface B738Systems extends EngineControls, FlightControlBlocks, Avioni
   failures: FailureManager;
   acSources: AcSourceLogic;
   logic: B738Logic;
+  fcsExtras: B738FlightControlExtras;
   logicLate: B738LogicLate;
   elec: ElectricalNetwork;
   apu: Apu;
@@ -81,6 +83,8 @@ export function createSystems(ctx: SimContext, opts: CreateSystemsOptions = {}):
   // Without an FMC (no navigation database) the thrust rating computer selects its ratings itself.
   const eng = createEngineControls(ctx, { autoRating: !av.suite.fmc });
   const fc = createFlightControls(ctx);
+  // Speed Trim System and Mach trim (FCOM 9.20): FCC pitch augmentation through the AP trim servo / elevator.
+  const fcsExtras = new B738FlightControlExtras(ctx.vars, fc.stab);
   const cas = new CasManager(ctx, {
     messages: B738_ANNUNCIATORS.map(({ group: _g, light: _l, recallOnly: _r, ...m }) => m),
     power: 'elec.dc1_powered || elec.dc2_powered || elec.batt_bus_powered || elec.dc_stby_powered',
@@ -122,6 +126,7 @@ export function createSystems(ctx: SimContext, opts: CreateSystemsOptions = {}):
     fc.yd,
     av.stall,
     fc.fcs,
+    fcsExtras,
     fc.stab,
     fc.aileronTrim,
     fc.rudderTrim,
@@ -149,5 +154,5 @@ export function createSystems(ctx: SimContext, opts: CreateSystemsOptions = {}):
     for (const d of defs) seen.add(d.id);
     failures.register(defs);
   }
-  return { list, failures, acSources, logic, logicLate, elec, apu, fuel, hyd, pneu, press, ice, fire, oxy, lights, cas, ...eng, ...fc, ...av };
+  return { list, failures, acSources, logic, logicLate, fcsExtras, elec, apu, fuel, hyd, pneu, press, ice, fire, oxy, lights, cas, ...eng, ...fc, ...av };
 }

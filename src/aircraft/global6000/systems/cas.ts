@@ -19,7 +19,7 @@ import { G6K_LIMITS, LB } from '../data';
 import { GLOBAL6000_FDM } from '../fdm';
 import { FUEL_LOW_KG } from './fuel';
 import { G6K_VARS as V } from '../vars';
-import { FLAP_FAULT, FUEL_SOV_OPEN, SET_LDG_ELEV, SLAT_FAULT } from './logic';
+import { APU_FUEL_SOV_OPEN, FLAP_FAULT, FUEL_SOV_OPEN, SET_LDG_ELEV, SLAT_FAULT } from './logic';
 
 const TL = 'takeoff+landing' as const;
 const air = 'gear.air_ground == 0';
@@ -121,7 +121,9 @@ export const G6K_CAS: CasMessageDef[] = [
   { id: 'fuel_computr_fail', text: 'FUEL COMPUTR FAIL', level: 'caution', when: `!elec.fuel_cmptr_a_powered && !elec.fuel_cmptr_b_powered && ${anyEng}`, delayS: 2 },
   // GX PTG 11-41: aft transfer unable to keep pace with the schedule (EST: aft fuel left with a wing below 4,500 lb).
   { id: 'aft_xfer_off_sched', text: 'AFT XFER OFF SCHED', level: 'caution', when: `fuel.aft_usable_kg > 20 && ${V.aftXfer} >= 1 && min(fuel.tank0_kg, fuel.tank2_kg) < ${4500 * LB + unusable}`, delayS: 30 },
-  { id: 'apu_fuel_sov', text: 'APU FUEL SOV', level: 'caution', when: `!elec.apu_fire_sov_powered && apu.state >= 1 && apu.state <= 4`, delayS: 3 },
+  // GXFU / GX PTG 11-42 pattern: the APU fuel SOV is a held-position motor valve (logic.ts); the caution posts on a
+  // command / position mismatch (the fire handle commands it closed but the valve has not moved, e.g. unpowered).
+  { id: 'apu_fuel_sov', text: 'APU FUEL SOV', level: 'caution', when: `${APU_FUEL_SOV_OPEN} == ${V.fireHandle('apu')}`, delayS: 3 },
   { id: 'xfeed_valve_fail', text: 'XFEED VALVE FAIL', level: 'caution', when: `(${V.xfeed} == 1) != fuel.xfeed_open && !fuel.xfeed_transit`, delayS: 5 },
   // ---- engines
   ...each((x) => [
@@ -268,7 +270,7 @@ export const G6K_CAS: CasMessageDef[] = [
   { id: 'xfeed_valve_open', text: 'XFEED VALVE OPEN', level: 'status', when: 'fuel.xfeed_open' },
   // GX PTG 9-28: APU SOVS CLSD (APU SOV and LCV closed with the handle pulled).
   { id: 'apu_sovs_clsd', text: 'APU SOVS CLSD', level: 'status', when: V.fireHandle('apu') },
-  { id: 'apu_fuel_sov_clsd', text: 'APU FUEL SOV CLSD', level: 'status', when: `!${V.fireHandle('apu')} && !elec.apu_fire_sov_powered` },
+  { id: 'apu_fuel_sov_clsd', text: 'APU FUEL SOV CLSD', level: 'status', when: `!${V.fireHandle('apu')} && !${APU_FUEL_SOV_OPEN}` },
   { id: 'apu_bleed_on', text: 'APU BLEED ON', level: 'status', when: 'pneu.apu_valve_open' },
   { id: 'apu_bleed_off', text: 'APU BLEED OFF', level: 'status', when: `${V.apuBleed} == 0 && apu.avail && !${V.fireHandle('apu')}` },
   // GX PTG 10-50: status messages with the GND LIFT DUMPING switch at MANUAL ARM / OFF.

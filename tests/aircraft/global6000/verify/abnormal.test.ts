@@ -161,9 +161,12 @@ describe('Global 6000 abnormal check-ride items', () => {
     v.set(V.emerDepressGuard, 1);
     v.set(V.emerDepress, 1);
     let peak = 0;
-    r.run(120, () => {
+    // EST OFV area (round-3 fix G3-12): a plausible few-thousand-fpm dump takes ~4 min to the 14,500 ft limiter.
+    r.run(420, () => {
       peak = Math.max(peak, v.get('press.cabin_alt_ft'));
+      return v.get('press.pax_masks') !== 0;
     });
+    r.run(30);
     expect(posted(r)).toContain('warning:CABIN ALT');
     expect(posted(r)).toContain('caution:EMER DEPRESS'); // GX PTG 13-64: amber caution
     expect(v.get('press.pax_masks')).toBe(1);

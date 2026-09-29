@@ -394,23 +394,26 @@ Inhibits:
 ## 6. Normal procedures (OG 17; `checklists.ts`)
 
 1. **Cockpit inspection.** CONTROL LOCK UNLOCK (EST item). STBY PWR to TEST (green ≥ 10 s), then ON. EMER LTS to ARM. Gear DOWN. BATT L/R ON and check volts. EIS/CAS. GPU and/or APU ON/START (BATT amps 0 or charging). Lights.
-2. **Cockpit preparation.**
-   - APU running; GPU disconnected.
-   - Dry motor if the engines were shut down 15-180 min ago.
+2. **Cockpit preparation** (all 13 OG items).
+   - EIS/CAS check. APU running; GPU disconnected.
+   - Dry motor if the engines were shut down 15-180 min ago. ATIS/clearance.
    - Trims set per the CG chart.
    - PERF: weight and fuel, TOLD, V-speeds. Pressurization LDG ELEV. Fuel balance.
-   - AP engage/disengage test (first flight of the day).
+   - Item 13, AP engage/disengage test (first flight of the day): works from a cold power-up once the CONTROL
+     LOCK is released (the lock inhibits AP engagement, createSystems.ts).
 3. **Before start.** EMER/PARK BRAKE set (PARK BRAKE ON).
-4. **Starting engines (APU).** Throttle IDLE, then for each engine, right first:
+4. **Starting engines (APU).** Throttle IDLE, then for each engine — either first, R recommended (OG 17-4
+   "either engine"; the auto-checks are symmetric):
    - RUN/STOP → RUN;
    - START psi ≥ 32;
    - STARTER push;
    - monitor (ITT < 650 °C).
-   Then check the EIS/CAS.
+   Then check the EIS/CAS. A **Starting Engines (Using Cross-Bleed)** list (OG 17-12) covers the second engine
+   from the running engine's bleed at idle + 25 % N1.
 5. **Before taxi.** Flight controls. Speedbrakes retracted. Flaps 1 or 2. Instruments aligned; altimeters within 75 ft of the field and 50 ft of each other. ENG A/I as required. AUTO GROUND SPOILERS armed, POWER RESERVE AUTO (EST items).
 6. **Taxi.** Lights. Park brake stowed. Brakes. NWS. Reversers deploy/stow check.
-7. **Before takeoff.** Flaps, speedbrakes, trims, ice protection, V-speeds displayed, SPD knob FMS, briefing. In icing, P/S ON for 15 s. Lights. EIS/CAS (no NO TAKEOFF).
-8. **Takeoff.** Throttles TO; A/T shows green HOLD (with the A/T engaged, HOLD comes as soon as the levers reach T/O on the ground); N1 matches, green TO. Release the brakes. Rotate at VR to 10°.
+7. **Before takeoff.** Flaps, speedbrakes, trims, ice protection, V-speeds displayed, SPD knob FMS, briefing. In icing, P/S ON for 15 s. Then the ----CLEARED FOR TAKEOFF---- group (OG 17-5): flight controls free (control lock released), ice protection, lights, EIS/CAS (no NO TAKEOFF).
+8. **Takeoff** — Static and Rolling variants (OG 17-6; rolling: brakes released first, throttles TO within 500 ft). Throttles TO; A/T shows green HOLD (with the A/T engaged, HOLD comes as soon as the levers reach T/O on the ground); N1 matches, green TO. Release the brakes. Rotate at VR to 10°. The A/T cannot be engaged on the ground with the AT button (OG Section 1: not armed during taxi); TO/GA engages it into TO (`Autothrottle` option `groundEngage: 'toga'`).
 9. **After takeoff.**
    - Gear UP with a positive rate.
    - Flaps UP at or above V2+20.
@@ -423,7 +426,13 @@ Inhibits:
 14. **Landing.** A/T RETARD at 50 ft; throttles IDLE; brakes after nosewheel touchdown; reversers, at idle by 45 KIAS.
 15. **Go-around.** TO/GA; throttles TO; 7.5° pitch; flaps 2; VAPP minimum; gear UP with a positive rate; flaps UP at VAPP+10.
 16. **Shutdown.** Throttles IDLE; park brake; ENG A/I OFF; RUN/STOP STOP; EMER LTS OFF; STBY PWR OFF; APU OFF; lights OFF; BATT OFF.
-17. **Also listed:** quick turn, APU start, dry motor (STOP + hold START until 20 % N2 or 15 s, OG 7-6), cross-bleed start (running engine at idle + 25 % N1: at plain idle the HP-regulated manifold is below 32 psi).
+17. **Also listed:** Quick Turn (OG 17-10, six items + return to Cockpit Preparation), Starting APU, Engine Dry Motor (STOP + hold START, release at 19 % N2 or 15 s — OG 17-11; the 7-6 narrative says 20 %), Starting Engines (Using Cross-Bleed) (OG 17-12; running engine at idle + 25 % N1: at plain idle the HP-regulated manifold is below 32 psi).
+
+Emergency/abnormal checklists beyond the DGAC card (`checklists.ts`, sequencing marked EST where no public C700
+text exists): ENGINE FIRE L or R (switchlight, bottle 1/2, RUN/STOP STOP — which clears the red ENGINE FAIL),
+ENGINE FAILURE / SHUTDOWN IN FLIGHT with an AIR START (cross-bleed) group, DUAL GENERATOR FAILURE (GEN RESET,
+APU ≤ FL310, PTCU HYD GEN, ELEC L/R EMER), HYD SYSTEM A or B FAILURE, and SMOKE / FUMES (masks, MIC SEL MASK,
+PRESS SOURCE isolation).
 
 Key abnormal procedures and the modelled reactions:
 
@@ -932,7 +941,11 @@ the resulting inventory. Main points:
   - ALT knob PUSH FINE (crewControls.ts);
   - display controllers on the GCU logic.
 - **States / checklists.** cold & dark has the CONTROL LOCK engaged; the Cockpit Inspection checklist starts with
-  CONTROL LOCK UNLOCK; Before Taxi checks AUTO GROUND SPOILERS and POWER RESERVE AUTO.
+  CONTROL LOCK UNLOCK; Before Taxi checks AUTO GROUND SPOILERS and POWER RESERVE AUTO (tagged EST). Fix round 3
+  (LON-P3-09/-10/-11/-19): ready-to-taxi and takeoff presets leave the APU running (OG 17: first OFF in the
+  climb), takeoff/cruise select SPD knob FMS, the presets compute TOLD for the actual weight and reposition field
+  (`applyPresetTold` in states.ts via performance.ts) instead of the shared default v-speeds, and the LDG ELEV
+  selector is set to the reposition field elevation when no FMS destination exists.
 - **EIS.** Flap scale 0 / 7 / 15 / 35 with the selected-position cyan bug; the thrust-mode label is the governing
   rating (CRU below CLB), APR while the reserve is in force, magenta under the A/T (OG 7-7).
 - **Superseded text.** §10.2 and §11.1-§11.2 geometry descriptions refer to the first build; §7 is current.
@@ -1085,3 +1098,37 @@ Tests: `tests/aircraft/citation-longitude/functionFix2.test.ts`; the check-ride 
 
 ### 17.3 Shared-library changes
 - None. (`ScriptedPilot.rotateRateDegS` already existed.)
+
+## 18. Procedures fix round 3 (LENS procedures, gaps LON-P3-01..19)
+
+Tests: `tests/aircraft/citation-longitude/fixRound3.test.ts` (each fails without its fix).
+
+### 18.1 Fixed
+- **LON-P3-01** A/T taxi guard: on the ground the AT button engages the A/T into HOLD (servo off, no engine
+  spool — OG 7-5 ground HOLD kept, so the OG 17-6 "Check green HOLD" and manual lever advance still work); the
+  servo-driving TO mode is entered only through TO/GA, which also engages the A/T on the ground by itself
+  (OG Section 1 limitation; AW&ST 2019 pilot report). `Autothrottle` option `groundEngage: 'toga'` (engines.ts).
+- **LON-P3-03..08, -14..18** Checklists: Cockpit Preparation now has all 13 OG items (EIS/CAS, ATIS/Clearance,
+  Autopilot First Flight of Day); Before Takeoff has the CLEARED FOR TAKEOFF group with Flight Controls — Free;
+  Quick Turn (OG 17-10) and Starting Engines (Using Cross-Bleed) (OG 17-12) added; engine start reworded to
+  "either engine — R recommended" with symmetric checks; ENGINE FIRE / ENGINE FAILURE + AIR START / DUAL GENERATOR
+  FAILURE / HYD A-B FAILURE / SMOKE-FUMES emergency lists added (EST sequencing marked); dry-motor release at 19 %
+  N2 (OG 17-11); external-power sub-steps a-e; Takeoff split into Static and Rolling; Go-Around ends with
+  Throttles — As Required; RVSM crosscheck interval; EST tags on the two Before Taxi operator items.
+- **LON-P3-09..11, -19** Presets: APU running at ready-to-taxi/takeoff, SPD knob FMS for takeoff/cruise, TOLD
+  v-speeds computed for the actual weight/field (`applyPresetTold`), LDG ELEV selector at the reposition field.
+- **LON-P3-12** (partial) Ground-effect lift raised (fdm.ts, EST McCormick image-vortex range): liftoff now
+  VR+12.4 at the BCA 4.5 deg/s rotation (below V2 128; was VR+15.3 at 3 deg/s, above V2). At 6.3 kt/s acceleration
+  (consistent with the FPG field lengths at 34,000 lb) a liftoff by VR+8 is kinematically impossible with any
+  normal rotation rate; the FPG's own V2-at-35-ft = VR+14 supports the modelled VR+12.
+
+### 18.2 Not changed (audited, with evidence)
+- **LON-P3-02** The AP does engage on the ground after a normal cold power-up; the auditor's probe left the
+  CONTROL LOCK engaged (cold & dark stows it; Cockpit Inspection item 1 releases it, and the lock intentionally
+  inhibits AP engagement). Regression-tested in fixRound3.test.ts.
+- **LON-P3-13** At the chart's own condition (rotation speed, flaps 2) computeTrim matches OG 17-3 within
+  0.13-0.29 deg across 25-34 % MAC (probe at 130 kt: -5.76/-4.68/-3.30 vs chart -6.05/-4.83/-3.17); the auditor's
+  150 kt probe measures a different trim condition. Recorded closed in LON4-13 of the same round.
+
+### 18.3 Shared-library changes (additive, opt-in, default behaviour unchanged)
+- `src/systems/fadec/Autothrottle.ts`: config option `groundEngage?: 'toga'` (bizjet ground-engagement policy).

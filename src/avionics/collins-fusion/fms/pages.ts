@@ -17,6 +17,7 @@
  *    and display pilot-entered V-speeds (they drive the PFD speed bugs).
  */
 import { FMS, GPS, NAV } from '../../../core/vars';
+import { distanceNm } from '../../../core/geo';
 import type { SimVars } from '../../../core/SimVars';
 import type { FlightPlan } from '../../../nav/flightplan/FlightPlan';
 import type { PlanLeg } from '../../../nav/flightplan/types';
@@ -46,7 +47,7 @@ import {
   parseWeightLb,
 } from './format';
 
-export type FmsPageId = 'IDX' | 'POS' | 'FPLN' | 'LEGS' | 'DEP' | 'ARR' | 'DIR' | 'PERF' | 'VNAV' | 'PROG' | 'TOLD' | 'LDG' | 'HOLD' | 'TUNE' | 'MSG';
+export type FmsPageId = 'IDX' | 'POS' | 'FPLN' | 'LEGS' | 'DEP' | 'ARR' | 'DIR' | 'PERF' | 'VNAV' | 'PROG' | 'TOLD' | 'LDG' | 'HOLD' | 'TUNE' | 'MSG' | 'SEL';
 
 export interface PageCtx {
   host: FmsHost;
@@ -81,13 +82,70 @@ function pos(ctx: PageCtx): { lat: number; lon: number } {
   return { lat: ctx.vars.get(GPS.lat), lon: ctx.vars.get(GPS.lon) };
 }
 
-function resolve(ctx: PageCtx, ident: string, near?: { lat: number; lon: number }): Waypoint | null {
-  const db = ctx.host.db;
-  if (!db) return null;
-  const p = near ?? pos(ctx);
-  const c = db.resolve(ident.toUpperCase(), Number.isFinite(p.lat) ? p.lat : 0, Number.isFinite(p.lon) ? p.lon : 0);
-  return c[0] ?? null;
+// ================================================================ SELECT WPT (duplicate idents)
+
+interface SelState {
+  wpts: Waypoint[];
+  ref: { lat: number; lon: number };
+  from: FmsPageId;
+  fromIndex: number;
+  apply: (w: Waypoint) => LskResult;
 }
+
+/**
+ * Resolves an ident to a waypoint; when the database holds several fixes with
+ * that ident (e.g. the JST VOR and the airport whose FAA LID is JST) the
+ * Collins FMS presents a SELECT WPT list, nearest first, instead of silently
+ * taking one (Collins FMS-3000/6000 CDU duplicate-ident page convention).
+ */
+function resolveOrSelect(ctx: PageCtx, ident: string, near: { lat: number; lon: number } | undefined, from: FmsPageId, fromIndex: number, apply: (w: Waypoint) => LskResult): LskResult {
+  const db = ctx.host.db;
+  if (!db) return NOT_IN_DB;
+  const p = near ?? pos(ctx);
+  const ref = { lat: Number.isFinite(p.lat) ? p.lat : 0, lon: Number.isFinite(p.lon) ? p.lon : 0 };
+  const c = db.resolve(ident.toUpperCase(), ref.lat, ref.lon);
+  if (c.length === 0) return NOT_IN_DB;
+  if (c.length === 1) return apply(c[0]);
+  ctx.win.state.sel = { wpts: c.slice(0, 10), ref, from, fromIndex, apply } satisfies SelState;
+  return { ok: true, page: 'SEL' };
+}
+
+const SEL_KIND: Readonly<Record<string, string>> = { airport: 'AIRPORT', vor: 'VOR', ndb: 'NDB', fix: 'WAYPOINT', dme: 'DME' };
+
+const SEL: FmsPage = {
+  title: 'SELECT WPT',
+  pages: (ctx) => Math.max(1, Math.ceil(((ctx.win.state.sel as SelState | undefined)?.wpts.length ?? 0) / 5)),
+  render(ctx, s, page) {
+    s.title = 'SELECT WPT';
+    const st = ctx.win.state.sel as SelState | undefined;
+    if (!st) {
+      s.dataC(3, 'NO SELECTION', 'amber');
+      s.dataL(6, '<RETURN');
+      return;
+    }
+    for (let i = 0; i < 5; i++) {
+      const w = st.wpts[(page - 1) * 5 + i];
+      if (!w) break;
+      const d = distanceNm(st.ref.lat, st.ref.lon, w.lat, w.lon);
+      s.labelL(i + 1, `${SEL_KIND[w.kind] ?? w.kind.toUpperCase()}  ${fmtNm(d)}NM`);
+      s.dataL(i + 1, `${w.ident}  ${fmtLat(w.lat)} ${fmtLon(w.lon)}`, 'cyan');
+    }
+    s.dataL(6, '<RETURN');
+  },
+  lsk(ctx, k, _scratch, page) {
+    const st = ctx.win.state.sel as SelState | undefined;
+    if (k === 'L6') {
+      ctx.win.state.sel = undefined;
+      return { page: st?.from ?? 'IDX', index: st?.fromIndex ?? 1, keep: true };
+    }
+    if (!st || k[0] !== 'L') return INVALID;
+    const w = st.wpts[(page - 1) * 5 + lskNum(k) - 1];
+    if (!w) return INVALID;
+    ctx.win.state.sel = undefined;
+    const r = st.apply(w);
+    return { ...(r ?? { ok: true }), page: st.from, index: st.fromIndex };
+  },
+};
 
 /**
  * Edits the plan through the FMS (Boeing style: goes into the MOD plan). On
@@ -344,10 +402,11 @@ const FPLN: FmsPage = {
       if (!scratch) return { scratch: isLeft ? (row.via === 'DIRECT' ? '' : row.via) : row.to };
       if (isLeft) return INVALID;
       const prevLeg = plan.legs[row.first - 1];
-      const w = resolve(ctx, scratch, prevLeg?.fix ?? undefined);
-      if (!w) return NOT_IN_DB;
-      edit(ctx, (p) => p.insertWaypoint(row.first, w, { segment: 'enroute' }));
-      return { ok: true };
+      const at = row.first;
+      return resolveOrSelect(ctx, scratch, prevLeg?.fix ?? undefined, 'FPLN', page, (w) => {
+        edit(ctx, (p) => p.insertWaypoint(at, w, { segment: 'enroute' }));
+        return { ok: true };
+      });
     }
     if (r === rows.length) {
       if (isLeft) {
@@ -374,10 +433,10 @@ const FPLN: FmsPage = {
         return ok ? { ok: true } : { error: 'NOT ON AIRWAY' };
       }
       const prevLeg = plan.legs[end - 1];
-      const w = resolve(ctx, scratch, prevLeg?.fix ?? undefined);
-      if (!w) return NOT_IN_DB;
-      edit(ctx, (p) => p.appendEnrouteWaypoint(w));
-      return { ok: true };
+      return resolveOrSelect(ctx, scratch, prevLeg?.fix ?? undefined, 'FPLN', page, (w) => {
+        edit(ctx, (p) => p.appendEnrouteWaypoint(w));
+        return { ok: true };
+      });
     }
   },
 };
@@ -458,10 +517,10 @@ const LEGS: FmsPage = {
         // Direct-to by entering the waypoint on the active line.
         return fms.directTo(scratch) ? { ok: true } : NOT_IN_DB;
       }
-      const w = resolve(ctx, scratch, plan.legs[idx - 1]?.fix ?? undefined);
-      if (!w) return NOT_IN_DB;
-      edit(ctx, (p) => p.insertWaypoint(idx, w));
-      return { ok: true };
+      return resolveOrSelect(ctx, scratch, plan.legs[idx - 1]?.fix ?? undefined, 'LEGS', page, (w) => {
+        edit(ctx, (p) => p.insertWaypoint(idx, w));
+        return { ok: true };
+      });
     }
     // Right side: speed / altitude constraint.
     if (leg.type === 'DISCO') return INVALID;
@@ -1195,7 +1254,7 @@ const MSG: FmsPage = {
   },
 };
 
-export const FMS_PAGES: Readonly<Record<FmsPageId, FmsPage>> = { IDX, POS, FPLN, LEGS, DEP, ARR, DIR, PERF, VNAV, PROG, TOLD, LDG, HOLD, TUNE, MSG };
+export const FMS_PAGES: Readonly<Record<FmsPageId, FmsPage>> = { IDX, POS, FPLN, LEGS, DEP, ARR, DIR, PERF, VNAV, PROG, TOLD, LDG, HOLD, TUNE, MSG, SEL };
 
 /** Page ids in the order used by tests / documentation. */
 export const FMS_PAGE_IDS = Object.keys(FMS_PAGES) as FmsPageId[];

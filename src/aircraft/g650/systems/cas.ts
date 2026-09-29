@@ -38,6 +38,8 @@ const TO = 'takeoff' as const;
 const TL = 'takeoff+landing' as const;
 const air = 'gear.air_ground == 0';
 const gnd = 'gear.air_ground != 0';
+/** Any IRU still in its ground alignment (suppresses the FBW-mode cautions on the ground, P11). */
+const aligning = '(ahrs1.aligning || ahrs2.aligning || ahrs3.aligning)';
 
 type Side = { s: 'L' | 'R'; l: 'l' | 'r'; i: 1 | 2; tank: 'left' | 'right'; hyd: 'left' | 'right' };
 const L: Side = { s: 'L', l: 'l', i: 1, tank: 'left', hyd: 'left' };
@@ -126,15 +128,16 @@ export const G650_CAS: CasMessageDef[] = [
   ...lr('cowl_ai_fail', 'Cowl Anti-Ice Fail', 'caution', (x) => `${V.caiCmd(x.l)} && pneu.cai_${x.l}_ok < 0.5 && eng${x.i}.running`, { delayS: 10, inhibit: TL }), // EST text
   ...lr('probe_heat', 'Probe Heat Fail', 'caution', (x) => (x.l === 'l' ? `(${V.probeHeatOn(1)} && !elec.probe1_powered) || (${V.probeHeatOn(3)} && !elec.probe3_powered)` : `(${V.probeHeatOn(2)} && !elec.probe2_powered) || (${V.probeHeatOn(4)} && !elec.probe4_powered)`), { delayS: 5, inhibit: TL }), // EST text
   // ---- flight controls
-  // EST gate: during the normal ground IRS alignment (~4 min after power-up) the FBW reports non-Normal until
-  // inertial data are valid; crews report a clean CAS after the power-up checklist and no public source shows
-  // this caution during a normal alignment (dossier §14), so like stall_prot_unavail it is engine-gated -
-  // suppressed on the ground with both engines shut down until a G650 CAS manual excerpt settles it.
-  { id: 'fcc_alternate', text: 'FCC Alternate Mode', level: 'caution', when: 'fbw.mode_code == 1 && (eng1.running || eng2.running || gear.air_ground == 0)', inhibit: TO },
+  // EST gate: during the normal ground IRS alignment (~4-7 min after power-up) the FBW reports non-Normal
+  // until inertial data are valid; crews report a clean CAS after the power-up checklist and no public source
+  // shows this caution during a normal alignment (dossier §14), so it is suppressed on the ground while any
+  // IRS is still aligning (engines running or not: the ground alignment continues through engine start) and,
+  // like stall_prot_unavail, engine-gated otherwise - until a G650 CAS manual excerpt settles it.
+  { id: 'fcc_alternate', text: 'FCC Alternate Mode', level: 'caution', when: `fbw.mode_code == 1 && (eng1.running || eng2.running || ${air}) && !(${gnd} && ${aligning})`, inhibit: TO },
   { id: 'fcc_direct', text: 'FCC Direct Mode', level: 'caution', when: 'fbw.mode_code == 2', inhibit: TO },
   // BFCU BACKUP mode (LUC flight controls; EST text following the FCC mode caution convention).
   { id: 'fcc_backup', text: 'FCC Backup Mode', level: 'caution', when: 'fbw.mode_code == 3', inhibit: TO },
-  { id: 'stall_prot_unavail', text: 'Stall Protection Unavail', level: 'caution', when: 'fbw.mode_code != 0 && (eng1.running || eng2.running)', inhibit: TO },
+  { id: 'stall_prot_unavail', text: 'Stall Protection Unavail', level: 'caution', when: `fbw.mode_code != 0 && (eng1.running || eng2.running) && !(${gnd} && ${aligning})`, inhibit: TO },
   { id: 'stall_prot_active', text: 'Stall Protection Active', level: 'caution', when: `${air} && stall.aoa_norm >= 0.96` },
   { id: 'yaw_damper_off', text: 'Yaw Damper Off', level: 'caution', when: `fbw.mode_code >= 2 && (eng1.running || eng2.running)`, inhibit: TO },
   { id: 'sb_auto_retract', text: 'Speed Brake Auto Retract', level: 'caution', when: V.sbAutoRetract, inhibit: TL },

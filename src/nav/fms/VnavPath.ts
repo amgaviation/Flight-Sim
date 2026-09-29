@@ -14,9 +14,11 @@
  *   - otherwise the line passes straight through.
  * The top of descent is where the path meets the cruise altitude.
  *
- * SCOPE: no idle-thrust energy path, deceleration segments or wind/ISA
- * corrections (a Boeing FMC computes an idle path; Garmin VNAV, as modelled,
- * flies a fixed angle).
+ * SCOPE: no idle-thrust energy path or wind/ISA corrections (a Boeing FMC
+ * computes an idle path; Garmin VNAV, as modelled, flies a fixed angle).
+ * Deceleration segments (250 kt / 10,000 ft transition, approach decel) are
+ * speed-target behaviour and live in VnavGuidance (`speedLimitDecelFt`,
+ * `approachDecelNm`).
  */
 import type { FlightPlan } from '../flightplan/FlightPlan';
 import type { PlanLeg } from '../flightplan/types';

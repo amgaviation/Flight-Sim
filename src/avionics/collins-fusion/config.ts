@@ -400,6 +400,12 @@ export interface FusionSuiteConfig {
    * shows its PFD page (TUNE/MENU key), instead of switching back to the radio page. Default false.
    */
   ctpCourseOnPfdPage?: boolean;
+  /**
+   * (Appended by global6000.) Var holding the pedestal TUNE reversion selection (0 NORM / 1 VHF / 2 DSPL, GX PTG 16:
+   * the selector moves radio tuning off the normal CTP/MKP path). Non-NORM inhibits CTP radio tuning and the CTP
+   * annunciates the selected source. Default '' (no reversion selector).
+   */
+  tuneReversionVar?: string;
 }
 
 export interface FusionResolvedConfig extends Required<Omit<FusionSuiteConfig, 'sensors' | 'events' | 'power' | 'checklists' | 'casChecklists' | 'synopticBindings'>> {
@@ -428,6 +434,7 @@ export function resolveConfig(c: FusionSuiteConfig): FusionResolvedConfig {
     fuelUnit: c.fuelUnit ?? 'lb',
     transitionAltFt: c.transitionAltFt ?? 18000, // FAA transition altitude (14 CFR 91.121)
     ctpCourseOnPfdPage: c.ctpCourseOnPfdPage ?? false,
+    tuneReversionVar: c.tuneReversionVar ?? '',
     scales: engineScales(c.engines),
   };
 }

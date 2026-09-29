@@ -59,11 +59,13 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): ElectricalNetwo
     ac('cdu1', 'xfr1', 40, {}, 5),
     ac('adf1', 'xfr1', 30, {}, 3),
     ac('ign_r', 'xfr1', 'eng1.ignition * 60 + eng2.ignition * 60', {}, 5), // right igniters
-    ac('fuel_l_fwd', 'xfr1', 'fuel.l_fwd_amps * 115', {}, 15), // fuel boost pumps ~1.2 kVA each at full flow
-    ac('fuel_r_fwd', 'xfr1', 'fuel.r_fwd_amps * 115', {}, 15),
+    // Fuel boost pumps ~1.2 kVA each at full flow. Diagonal split (B737NG Power Sources training doc, sjap.nl,
+    // "115 VAC TRANSFER BUS 1/2" load lists): XFR 1 carries BOOST PUMP TANK 1 FWD, TANK 2 AFT and CTR TANK LEFT;
+    // XFR 2 carries TANK 1 AFT, TANK 2 FWD and CTR TANK RIGHT — one pump per main tank survives a transfer bus loss.
+    ac('fuel_l_fwd', 'xfr1', 'fuel.l_fwd_amps * 115', {}, 15),
+    ac('fuel_r_aft', 'xfr1', 'fuel.r_aft_amps * 115', {}, 15),
     ac('fuel_c_l', 'xfr1', 'fuel.c_l_amps * 115', {}, 15),
-    ac('hyd_elec1', 'xfr1', 'hyd.emdp_b_va', {}, 50), // ELEC 1 pump (system B)
-    ac('hyd_stby', 'xfr1', 'hyd.stby_pump_va', {}, 25),
+    ac('hyd_elec1', 'xfr1', 'hyd.emdp_b_va', {}, 50), // ELEC 1 pump (system B; "B SYS ELEC HYDR PUMP" on XFR 1, sjap.nl)
     ac('probe_heat_a', 'xfr1', 900, { enabled: onW(B738.probeHeat('a')), model: 'resistive' }, 15),
     ac('win_heat_l_side', 'xfr1', 1800, { enabled: onW(B738.windowHeat('l_side')), model: 'resistive' }, 20),
     ac('win_heat_r_fwd', 'xfr1', 2600, { enabled: onW(B738.windowHeat('r_fwd')), model: 'resistive' }, 25),
@@ -83,10 +85,11 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): ElectricalNetwo
     ac('irs2_ac', 'xfr2', 110, {}, 5),
     ac('nav2', 'xfr2', 40, {}, 3),
     ac('adf2', 'xfr2', 30, {}, 3),
-    ac('fuel_l_aft', 'xfr2', 'fuel.l_aft_amps * 115', {}, 15),
-    ac('fuel_r_aft', 'xfr2', 'fuel.r_aft_amps * 115', {}, 15),
+    ac('fuel_l_aft', 'xfr2', 'fuel.l_aft_amps * 115', {}, 15), // BOOST PUMP TANK 1 AFT on XFR 2 (sjap.nl, see XFR 1 note)
+    ac('fuel_r_fwd', 'xfr2', 'fuel.r_fwd_amps * 115', {}, 15),
     ac('fuel_c_r', 'xfr2', 'fuel.c_r_amps * 115', {}, 15),
-    ac('hyd_elec2', 'xfr2', 'hyd.emdp_a_va', {}, 50), // ELEC 2 pump (system A)
+    ac('hyd_elec2', 'xfr2', 'hyd.emdp_a_va', {}, 50), // ELEC 2 pump (system A; "A SYS ELEC HYDR PUMP" on XFR 2, sjap.nl)
+    ac('hyd_stby', 'xfr2', 'hyd.stby_pump_va', {}, 25), // "STBY HYDR PUMP" on XFR BUS 2 (sjap.nl NG Power Sources)
     ac('probe_heat_b', 'xfr2', 900, { enabled: onW(B738.probeHeat('b')), model: 'resistive' }, 15),
     ac('win_heat_l_fwd', 'xfr2', 2600, { enabled: onW(B738.windowHeat('l_fwd')), model: 'resistive' }, 25),
     ac('win_heat_r_side', 'xfr2', 1800, { enabled: onW(B738.windowHeat('r_side')), model: 'resistive' }, 20),
@@ -205,11 +208,17 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): ElectricalNetwo
       { id: 'tru3_dc' },
       { id: 'batt_bus' },
       { id: 'hot_batt' },
+      { id: 'hot_aux' },
       { id: 'sw_hot_batt' },
       { id: 'dc_stby' },
     ],
-    // FCOM 6.20: 24 V NiCd main battery (BATTERY_737NG_NICD: 20-cell, 48 Ah; LIM quotes 40 Ah on older units).
-    batteries: [{ id: 'batt', bus: 'hot_batt', ...BATTERY_737NG_NICD, ambientC: 'fdm.sat_c' }],
+    // FCOM 6.10 / b737.org.uk Electrics: two 48 Ah NiCd batteries, main and auxiliary
+    // (BATTERY_737NG_NICD: 20-cell, 48 Ah; LIM quotes 40 Ah on older units). The auxiliary battery
+    // parallels the main battery for standby power / autoland loads (60 min standby endurance class).
+    batteries: [
+      { id: 'batt', bus: 'hot_batt', ...BATTERY_737NG_NICD, ambientC: 'fdm.sat_c' },
+      { id: 'aux_batt', bus: 'hot_aux', ...BATTERY_737NG_NICD, ambientC: 'fdm.sat_c' },
+    ],
     acGenerators: [
       // IDGs: 90 kVA, 115 V 400 Hz (LIM). On line above ~50 % N2 (EST; ground idle 59 %). ENGINE fire handle pulled trips the GCB (FCOM 8.20).
       { id: 'idg1', bus: 'idg1_out', ratedKva: 90, drive: 'eng1.n2_pct', minDrive: 50, switch: `!${B738.fireHandle(1)}`, disconnect: `${B738.driveDisc(1)} && eng1.n2_pct > 20`, overloadTripPct: 150, overloadTripS: 5 },
@@ -225,6 +234,9 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): ElectricalNetwo
       { id: 'tru3', acBus: 'tru3_ac', dcBus: 'tru3_dc', ratedA: 75 },
       // Battery charger (FCOM 6.20: from AC ground service bus 2 / XFR 2): constant-voltage charging (EST 28.5 V, 50 A).
       { id: 'bat_chgr', acBus: 'xfr2', dcBus: 'hot_batt', ratedA: 50, noLoadV: 28.5, fullLoadV: 27.5 },
+      // Auxiliary battery charger: "AUX BATTERY CHARGER" on AC ground service bus 1, normally fed from XFR 1
+      // (sjap.nl NG Power Sources; the ground service buses are not modelled separately).
+      { id: 'aux_bat_chgr', acBus: 'xfr1', dcBus: 'hot_aux', ratedA: 50, noLoadV: 28.5, fullLoadV: 27.5 },
     ],
     // Static inverter: 1 kVA class (EST), battery bus -> AC standby bus.
     inverters: [{ id: 'inv', dcBus: 'batt_bus', acBus: 'ac_stby', ratedVa: 1000, enabled: B738.stbyOnBatt }],
@@ -258,6 +270,9 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): ElectricalNetwo
       { id: 'dc_stby_batt', a: 'batt_bus', b: 'dc_stby', closed: B738.stbyOnBatt },
       // Battery bus from the battery (BAT ON) when TR3 is not supplying it, or in standby-on-battery.
       { id: 'bat_bus_relay', a: 'hot_batt', b: 'batt_bus', closed: `${B738.batSw} != 0 && (!elec.tru3_online || ${B738.stbyOnBatt})`, coil: { pickupV: 14, dropoutV: 8 } },
+      // Auxiliary battery: parallels the main battery for standby power (FCOM 6.10 / b737.org.uk Electrics:
+      // "the auxiliary battery ... assists the main battery in supplying standby power"): same relay condition.
+      { id: 'aux_bat_relay', a: 'hot_aux', b: 'batt_bus', closed: `${B738.batSw} != 0 && (!elec.tru3_online || ${B738.stbyOnBatt})`, coil: { pickupV: 14, dropoutV: 8 } },
       { id: 'sw_hot_relay', a: 'hot_batt', b: 'sw_hot_batt', closed: `${B738.batSw} != 0`, coil: { pickupV: 14, dropoutV: 8 } },
     ],
     loads,
@@ -292,7 +307,12 @@ export class AcSourceLogic implements Subsystem {
     const idgAvail = [v.get('elec.idg1_avail') !== 0 && v.get(B738.fireHandle(1)) === 0, v.get('elec.idg2_avail') !== 0 && v.get(B738.fireHandle(2)) === 0];
     const apuAvail = v.get('elec.apu_gen_avail') !== 0 && v.get(B738.fireHandleApu) === 0;
     const gpuAvail = v.get('elec.gpu_avail') !== 0;
-    const auto = v.get(B738.busXferSw) !== 0;
+    // FCOM 6.20 / 4.20: during a dual-channel (fail-operational) approach the electrical system splits into two
+    // isolated sides — the automatic bus transfer is inhibited from G/S capture with both A/P channels engaged
+    // (same condition that opens the DC cross bus tie), so a source failure leaves that side dead rather than
+    // joining the buses.
+    const dualCh = v.get('ap.channels') === 2 && v.get('ap.vert_code') === VERTICAL_MODES.indexOf('GS');
+    const auto = v.get(B738.busXferSw) !== 0 && !dualCh;
     const e = this.edges;
     const s = this.src;
     // ---- manual switches (momentary)

@@ -32,7 +32,7 @@
  *    rudder pedals +/-7 deg (FCOM 14.20).
  */
 import type { SimContext } from '../../../core/SimContext';
-import { MechanicalFlightControls, TrimAxis, Flaps, Spoilers, NosewheelSteering, YawDamper } from '../../../systems/flightcontrols';
+import { MechanicalFlightControls, TrimAxis, Flaps, Spoilers, NosewheelSteering, YawDamper, FCS_VARS } from '../../../systems/flightcontrols';
 import { LandingGear, Brakes, AUTOBRAKE_737NG, gearHornRules } from '../../../systems/gear';
 import { B738_FLAP_DETENTS, STAB } from '../data';
 import { B738, GEAR_LEVER, SPEEDBRAKE } from '../vars';
@@ -60,7 +60,8 @@ export interface FlightControlBlocks {
 
 export function createFlightControls(ctx: SimContext): FlightControlBlocks {
   const fcs = new MechanicalFlightControls(ctx, {
-    pitch: { actuators: [actA, actB], rateLimit: 1.5 },
+    // Mach trim adds a nose-up elevator bias above M0.615 (FCOM 9.20; flightControlExtras.ts writes it).
+    pitch: { actuators: [actA, actB], rateLimit: 1.5, addVars: [FCS_VARS.apServo('pitch'), FCS_VARS.pusherCmd, B738.machTrimElev] },
     roll: { actuators: [actA, actB], rateLimit: 2.0 },
     yaw: {
       actuators: [actA, actB, actStby],

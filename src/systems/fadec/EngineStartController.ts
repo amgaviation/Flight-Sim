@@ -88,6 +88,12 @@ export interface EngineStartConfig {
   starterCutoutN2Pct: number;
   idleN2Pct: number;
   hotStartIttC: number;
+  /**
+   * (Appended by the global6000 aircraft.) In-flight hot-start ITT limit (°C), used in place of `hotStartIttC` when
+   * airborne (`onGround` false), e.g. BR710 TCDS: starting ITT 700 °C on the ground / 850 °C in flight. Default
+   * none (`hotStartIttC` everywhere, unchanged behaviour).
+   */
+  hotStartIttAirC?: number;
   lightOffTimeoutS?: number;
   hungWindowS?: number;
   maxStarterS?: number;
@@ -202,6 +208,11 @@ export class EngineStartController implements Subsystem {
     ];
   }
 
+  /** Hot-start ITT abort limit: `hotStartIttAirC` when airborne (if configured), else `hotStartIttC`. */
+  private hotLimit(): number {
+    return this.cfg.hotStartIttAirC !== undefined && !this.ground() ? this.cfg.hotStartIttAirC : this.cfg.hotStartIttC;
+  }
+
   reset(): void {
     this.state = this.vars.get(this.iRun) !== 0 ? StartState.Running : StartState.Off;
     this.prevStart = this.startSw();
@@ -285,7 +296,7 @@ export class EngineStartController implements Subsystem {
           fuel = runLever;
           if (!starter && cfg.releaseSwitch && held) v.set(cfg.releaseSwitch.var, cfg.releaseSwitch.offValue);
           if (!runLever) this.abort('CUTOFF');
-          else if (itt > cfg.hotStartIttC || itt + this.ittRate * (cfg.hotStartPredictS ?? 2) > cfg.hotStartIttC + 30) this.abort('HOT');
+          else if (itt > this.hotLimit() || itt + this.ittRate * (cfg.hotStartPredictS ?? 2) > this.hotLimit() + 30) this.abort('HOT');
           else if (running || n2 >= 0.98 * cfg.idleN2Pct) this.enter(StartState.Running);
           else {
             this.hungT += dt;

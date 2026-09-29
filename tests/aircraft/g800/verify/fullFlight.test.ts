@@ -110,8 +110,11 @@ describe('G800 check ride KSAV -> KATL (full normal procedure)', () => {
       expect(v.get('elec.batt_l_v')).toBeGreaterThan(G800_LIMITS.battMinPreflightV);
       expect(v.get('elec.l_ess_dc_v')).toBeGreaterThan(24);
       expect(v.get('elec.l_main_ac_powered')).toBe(0);
-      v.set('ac.door.main', 0);
-      r.run(2);
+      // Close the main entry door with its DOORS OPEN switchlight (procedures fix round 1 P07: writing
+      // ac.door.main directly is overwritten by the door actuator, which follows V.doorOpenCmd).
+      v.set(V.doorOpenCmd, 0);
+      r.run(12); // EST 10 s airstair travel
+      expect(v.get('ac.door.main')).toBeLessThan(0.02);
       log(r, 'batteries on');
 
       // ================================================================ 3. APU battery start

@@ -70,6 +70,14 @@ export class G800Logic implements Subsystem {
   private readonly startPulse = [false, false];
   /** Seconds since each engine stopped running (rotor bow avoidance). */
   private readonly offS = [1e7, 1e7];
+  /**
+   * Pending AutoStart request per engine (fix round 1 P02): an ENGINE START / L-R START press with the FUEL
+   * CONTROL still OFF is kept by the FADEC and executes when RUN is selected (EST: the real AutoStart always
+   * answers a start request; C450S G700/G800 powerplant gives no discard behaviour). Cleared when the FADEC
+   * auto start takes over, the engine runs, or CRANK MASTER is selected.
+   */
+  private readonly pendingStart = [false, false];
+  private readonly engStartEdge = new Edge();
   /** APU START latched until the inlet door is open. */
   private apuStartLatch = false;
   private readonly apuStartEdge = new Edge();
@@ -113,8 +121,10 @@ export class G800Logic implements Subsystem {
       this.protectT[i] = 0;
       this.bowNeeded[i] = false;
       this.startPulse[i] = false;
+      this.pendingStart[i] = false;
       this.offS[i] = running ? 0 : 1e7; // presets: engines off for a long time (cold soak, no rotor bow)
     }
+    this.engStartEdge.reset(v.get(V.engStartBtn) !== 0);
     this.apuStartLatch = false;
     this.apuStartEdge.reset(v.get(V.apuStart) !== 0);
     this.apuMasterEdge.reset(v.get(V.apuMaster) === 1);
@@ -238,6 +248,7 @@ export class G800Logic implements Subsystem {
     // fuel control switch to RUN and momentarily depressing the ENGINE START switch" (forward overhead strip). The OHPTS
     // ENGINE page START MASTER + L / R START keys (shared Epic page) request the same FADEC auto start; CRANK MASTER dry motoring.
     const engStart = v.get(V.engStartBtn) !== 0;
+    const engStartRise = this.engStartEdge.rise(engStart);
     const crank = v.get(V.crankMaster) === 1;
     for (let i = 1; i <= 2; i++) {
       const k = i - 1;
@@ -257,7 +268,11 @@ export class G800Logic implements Subsystem {
       v.set(V.crankReq(i as 1 | 2), this.crankLatch[k] ? 1 : 0);
 
       // Start request: OHPTS START MASTER + L/R START, or the forward-strip ENGINE START with FUEL CONTROL at RUN.
-      const rawReq = !crank && ((v.get(V.startMaster) === 1 && btn) || (engStart && fuelRun && !running));
+      // Fix round 1 P02: a press before RUN is latched pending (see pendingStart) so selecting RUN afterwards
+      // completes the AutoStart instead of the 0.5 s press being discarded.
+      if (((v.get(V.startMaster) === 1 && btnRise) || engStartRise) && !running && !crank) this.pendingStart[k] = true;
+      if (running || crank || v.get(`fadec.eng${i}.auto_starter`) !== 0) this.pendingStart[k] = false;
+      const rawReq = !crank && !running && fuelRun && (this.pendingStart[k] || (v.get(V.startMaster) === 1 && btn) || engStart);
       // Start protection (C450S G700/G800 powerplant: max TGT prior to start 120 C; rotor-bow avoidance 50 s dry crank
       // after a shutdown of 20 min .. 5 h, SVO displayed, CAS "Engine Start Protect"): a start request with the engine
       // hot or bowed motors it first; the start proceeds automatically once the protection is complete.

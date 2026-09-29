@@ -71,7 +71,12 @@ export const B738 = {
   crossfeed: `${P}crossfeed`,
 
   // ---------------------------------------------------------------- ELECTRICAL panel
-  /** DC meters selector: STBY PWR 0, BAT BUS 1, BAT 2, TR1 3, TR2 4, TR3 5, TEST 6. */
+  /**
+   * DC meters selector: STBY PWR 0, BAT BUS 1, BAT 2, TR1 3, TR2 4, TR3 5, TEST 6, AUX BAT 7 (appended value;
+   * the real panel order is STBY PWR, BAT BUS, BAT, AUX BAT, TR1, TR2, TR3, TEST — b737.org.uk Electrics /
+   * AviationHunt ATA 24: aircraft with the auxiliary battery carry an AUX BAT position; the cockpit selector
+   * places value 7 in the real rotary order).
+   */
   dcMeterSel: `${P}dc_meter_sel`,
   /** AC meters selector: STBY PWR 0, GRD PWR 1, GEN1 2, APU GEN 3, GEN2 4, INV 5, TEST 6. */
   acMeterSel: `${P}ac_meter_sel`,
@@ -610,6 +615,14 @@ export const B738 = {
   emerLtsOn: `${P}emer_lts_on`,
   /** Windshield wiper blade sweep angle (0 = parked .. 1 = full sweep) per side (logic.ts). */
   wiperSweep: (i: Side) => `${P}wiper_sweep${i}`,
+  /** Speed Trim System actively trimming (flightControlExtras.ts, FCOM 9.20): -1 nose down / 0 / +1 nose up. */
+  stsCmd: `${P}sts_cmd`,
+  /** Mach trim elevator bias (normalized elevator units, + = nose up; flightControlExtras.ts, FCOM 9.20). */
+  machTrimElev: `${P}mach_trim_elev`,
+  /** Air conditioning OVHT TEST held with annunciator power (drives the WING-BODY OVERHEAT loop test, FCOM 2.20). */
+  ovhtTestActive: `${P}ovht_test_act`,
+  /** Centre boost pump automatic low-output-pressure shutoff latch (fuel.ts / logic.ts; SB-driven NG change). */
+  ctrPumpShutoff: (p: 'c_l' | 'c_r') => `${P}${p}_shutoff`,
 } as const;
 
 /** System annunciator (six-pack) groups: Capt FLT CONT, IRS, FUEL, ELEC, APU, OVHT/DET; F/O ANTI-ICE, HYD, DOORS, ENG, OVERHEAD, AIR COND (FCOM 15.20). */
@@ -627,7 +640,7 @@ export const B738_DISPLAY_IDS = { isfd: 'b738_isfd', isdu: 'b738_isdu' } as cons
 export function b738ControlVars(): string[] {
   const out: string[] = [];
   const sides: Side[] = [1, 2];
-  const skip = new Set(['acpRxOn', 'acpRxVol', 'lt', 'fadecTla', 'xfrSrc', 'stbyOnBatt', 'stbyPumpCmd', 'stbyRudder', 'ptuCmd', 'gearXferUnit', 'recallActive', 'wingAiValveCmd', 'engValveOpen', 'tillerCmd', 'eecMode', 'oilQty', 'emerLtsOn', 'wiperSweep', 'wxrPower']);
+  const skip = new Set(['acpRxOn', 'acpRxVol', 'lt', 'fadecTla', 'xfrSrc', 'stbyOnBatt', 'stbyPumpCmd', 'stbyRudder', 'ptuCmd', 'gearXferUnit', 'recallActive', 'wingAiValveCmd', 'engValveOpen', 'tillerCmd', 'eecMode', 'oilQty', 'emerLtsOn', 'wiperSweep', 'wxrPower', 'stsCmd', 'machTrimElev', 'ovhtTestActive', 'ctrPumpShutoff']);
   const args: Record<string, readonly unknown[]> = {
     fltCtl: ['a', 'b'],
     spoilerSw: ['a', 'b'],

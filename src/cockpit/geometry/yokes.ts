@@ -17,6 +17,18 @@ import { cylinderZ, merge, roundedBox, sphere, transform, tube } from './primiti
 
 export type YokeStyle = 'cessna' | 'bizjet' | 'gulfstream' | 'boeing' | 'ramshorn';
 
+/**
+ * (Appended by citation-m2, additive: optional per-aircraft profile tweaks for
+ * the 'bizjet'/'gulfstream' wheel. Omitted = geometry unchanged for every
+ * existing caller; other styles ignore it.)
+ */
+export interface YokeStyleOpts {
+  /** Grip top height above the hub centre (m, pre-scale). Default 0.085. Taller values give the tall "ram's-horn" CJ-style horns. */
+  gripTop?: number;
+  /** Inward lean of each grip over its height (m, pre-scale). Default 0.014. */
+  gripLean?: number;
+}
+
 export interface YokeAnchor {
   position: [number, number, number];
   /** Outward normal (anchor +Z). */
@@ -92,8 +104,8 @@ function anchorsFor(xL: number, yTop: number, yMid: number, r: number, hubZ: num
   };
 }
 
-/** Builds the wheel parts for a style. */
-export function yokeParts(style: YokeStyle, scale = 1): YokeParts {
+/** Builds the wheel parts for a style. (`opts` appended by citation-m2, additive; omitted = unchanged.) */
+export function yokeParts(style: YokeStyle, scale = 1, opts?: YokeStyleOpts): YokeParts {
   const s = scale;
   switch (style) {
     case 'cessna': {
@@ -137,8 +149,11 @@ export function yokeParts(style: YokeStyle, scale = 1): YokeParts {
     case 'bizjet':
     case 'gulfstream': {
       // M-shaped wheel: canted grips joined to a central hub by swept arms.
+      // Optional taller "ram's-horn" grips via opts.gripTop (defaults reproduce the original profile exactly).
       const W = (style === 'gulfstream' ? 0.38 : 0.36) * s;
       const r = 0.015 * s;
+      const gTop = (opts?.gripTop ?? 0.085) * s;
+      const lean = (opts?.gripLean ?? 0.014) * s;
       const armL = tube(
         [
           new THREE.Vector3(-0.045 * s, -0.01 * s, 0),
@@ -153,8 +168,8 @@ export function yokeParts(style: YokeStyle, scale = 1): YokeParts {
       const armR = armL.clone();
       armR.scale(-1, 1, 1);
       flipWinding(armR);
-      const gl = gripTube(-W / 2 + 0.008 * s, -0.005 * s, 0.085 * s, r, 0.014 * s);
-      const gr = gripTube(W / 2 - 0.008 * s, -0.005 * s, 0.085 * s, r, -0.014 * s);
+      const gl = gripTube(-W / 2 + 0.008 * s, -0.005 * s, gTop, r, lean);
+      const gr = gripTube(W / 2 - 0.008 * s, -0.005 * s, gTop, r, -lean);
       const hub = roundedBox(0.1 * s, 0.07 * s, 0.035 * s, 0.012 * s, 4);
       transform(hub, 0, 0, 0.004 * s);
       const frame = merge([armL, armR]);
@@ -168,11 +183,11 @@ export function yokeParts(style: YokeStyle, scale = 1): YokeParts {
         grips,
         hub,
         gripBoxes: [
-          { w: 0.045 * s, h: 0.11 * s, d: 0.04 * s, x: -W / 2 + 0.015 * s, y: 0.04 * s, z: 0, rz: -0.15 },
-          { w: 0.045 * s, h: 0.11 * s, d: 0.04 * s, x: W / 2 - 0.015 * s, y: 0.04 * s, z: 0, rz: 0.15 },
+          { w: 0.045 * s, h: gTop + 0.025 * s, d: 0.04 * s, x: -W / 2 + 0.015 * s, y: (gTop - 0.005 * s) / 2, z: 0, rz: -0.15 },
+          { w: 0.045 * s, h: gTop + 0.025 * s, d: 0.04 * s, x: W / 2 - 0.015 * s, y: (gTop - 0.005 * s) / 2, z: 0, rz: 0.15 },
           { w: W * 0.6, h: 0.05 * s, d: 0.04 * s, x: 0, y: -0.02 * s, z: 0, rz: 0 },
         ],
-        anchors: anchorsFor(-W / 2 + 0.012 * s, 0.085 * s, 0.05 * s, r, 0.022 * s, 0.035 * s),
+        anchors: anchorsFor(opts?.gripTop !== undefined ? -W / 2 + 0.008 * s + lean * 0.5 : -W / 2 + 0.012 * s, gTop, gTop - 0.035 * s, r, 0.022 * s, 0.035 * s),
         width: W,
       };
     }

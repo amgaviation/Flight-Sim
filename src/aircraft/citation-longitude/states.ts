@@ -12,11 +12,12 @@
  */
 import type { InitialState } from '../types';
 import type { SimContext } from '../../core/SimContext';
-import { ENG, FDM } from '../../core/vars';
+import { ENG, ENV, FDM } from '../../core/vars';
 import type { FlightModel } from '../../physics/FlightModel';
 import type { Turbofan } from '../../physics/engines/Turbofan';
 import { LON_VARS as V } from './vars';
 import { STAB_RANGE, type LongitudeSystems } from './createSystems';
+import { ApuState } from '../../systems/apu';
 import { TLA } from './systems/logic';
 import { CITATION_LONGITUDE_FDM } from './fdm';
 
@@ -113,8 +114,10 @@ export function setLongitudeSwitches(ctx: Pick<SimContext, 'vars'>, sys: Longitu
   v.set(V.startR, 0);
   v.set(V.tla(1), 0);
   v.set(V.tla(2), 0);
-  // ---- APU: off once the engines run (OG 17-6: OFF before FL350; quiet ramp EST)
-  v.set(V.apuKnob, 0);
+  // ---- APU (LON-P3-09): started in Cockpit Preparation and left running for the start and takeoff; first commanded
+  // OFF in After Takeoff/Climb "APU Knob (prior to climb above FL350) - OFF" (OG 17-3 / 17-6). In-air states model
+  // the crew choice after that item: OFF.
+  v.set(V.apuKnob, s === 'ready_to_taxi' || s === 'takeoff' ? 1 : 0);
   // ---- bleed / ECS / pressurization
   v.set(V.bleedEngL, 1);
   v.set(V.bleedEngR, 1);
@@ -301,7 +304,13 @@ export function applyLongitudeState(ctx: SimContext, sys: LongitudeSystems, s: I
   }
   sys.hyd.setPressure('a', 3000);
   sys.hyd.setPressure('b', 3000);
-  sys.apu.setRunning(false);
+  // LON-P3-09: APU running on the ground (knob set above); the generator/bleed come online in elec.settle()/pneu.snap().
+  // Publish apu.state and re-snap the fuel valves before the first APU update, or the APU fuel feed (fuel.apu_on,
+  // snapped while apu.state still read 0) flames it out on the first frame.
+  const apuOn = s === 'ready_to_taxi' || s === 'takeoff';
+  sys.apu.setRunning(apuOn);
+  v.set('apu.state', apuOn ? ApuState.Running : ApuState.Off);
+  if (apuOn) v.set('fuel.apu_on', 1); // the APU feed (published by the fuel system after the APU in the list)
   for (const st of sys.starts) st.reset();
   sys.elec.settle();
   sys.elec.reset();
@@ -318,8 +327,14 @@ export function applyLongitudeState(ctx: SimContext, sys: LongitudeSystems, s: I
   }
   sys.pneu.snap(22);
   v.set('pneu.cabin_temp_c', 22); // see the cold & dark branch
+  // LON-P3-19: "Pressurization LDG ELEV - Verify/Set" (OG 17-3 item 11 / 17-7 Descent item 1). The presets load no
+  // flight plan, so the FMS-destination setting (-9999) would leave the controller without a landing elevation;
+  // the crew of the preset has set the selector to the reposition field instead.
+  const fieldElevFt = Math.round(ctx.world.elevationAt(v.get(FDM.lat), v.get(FDM.lon)) / 0.3048 / 10) * 10;
+  v.set(V.pressLdgElevFt, fieldElevFt);
   sys.press.settle();
   sys.suite?.applyState(s);
+  applyPresetTold(ctx, sys, s, fieldElevFt);
 
   // ---- AFCS / autothrottle set-up (G5000 GMC 710: selected values; OG 17: SPD knob FMS)
   const hdg = v.get(FDM.headingMag);
@@ -345,6 +360,55 @@ export function applyLongitudeState(ctx: SimContext, sys: LongitudeSystems, s: I
     v.set('ap.sel_alt_ft', 10000);
     v.set('ap.sel_spd_kt', 200);
     v.set('ap.spd_is_mach', 0);
+  }
+  // LON-P3-10: "SPD Knob - FMS" (OG 17-5 Before Takeoff item 6; FMS speed is also normal in cruise, OG 7-4).
+  if (s === 'takeoff' || s === 'cruise') v.set('g3k.spd_fms', 1);
+}
+
+const KG_TO_LB = 1 / 0.45359237;
+
+/**
+ * LON-P3-11/-19: the presets leave "Takeoff Data - Completed" / "V Speeds - Verify/Set" (OG 17-3 items 9/10) and
+ * "Landing data - Confirm" (Approach) done, so compute TOLD for the actual weight and reposition field through the
+ * aircraft's own provider (performance.ts) instead of showing the shared static default v-speeds (~15 kt high at
+ * light weights). The runway is unknown in a reposition, so the field-length check is left out (length NaN).
+ */
+function applyPresetTold(ctx: SimContext, sys: LongitudeSystems, s: InitialState, fieldElevFt: number): void {
+  const suite = sys.suite;
+  if (!suite) return;
+  const v = ctx.vars;
+  const fm = ctx.fdm as Partial<FlightModel>;
+  fm.massModel?.update();
+  const weightLb = (fm.massModel?.mass ?? v.get(FDM.mass, 15500)) * KG_TO_LB;
+  const told = suite.system.told;
+  const common = {
+    airport: '',
+    runway: '',
+    runwayLengthFt: NaN,
+    runwayElevFt: fieldElevFt,
+    runwayHeadingMag: Math.round(v.get(FDM.headingMag)),
+    windDirMag: v.get(ENV.surfaceWindDir, 0),
+    windKt: v.get(ENV.surfaceWindKt, 0),
+    oatC: Math.round(v.get(FDM.sat, 15)),
+    qnhInHg: v.get(ENV.qnhInHg, 29.92),
+    weightLb: Math.round(weightLb),
+    antiIce: false,
+    wet: false,
+  };
+  if (s === 'ready_to_taxi' || s === 'takeoff') {
+    Object.assign(told.inputs.takeoff, common, { flaps: '2', slope: 0 }); // flaps 2 preferred (FPG)
+    const res = told.computeTakeoff();
+    if (res) {
+      suite.system.vspeeds.applyTold(res.vspeeds);
+      told.takeoffConfirmed = true;
+    }
+  } else if (s === 'approach') {
+    Object.assign(told.inputs.landing, common, { flaps: 'FULL' });
+    const res = told.computeLanding();
+    if (res) {
+      suite.system.vspeeds.applyTold(res.vspeeds);
+      told.landingConfirmed = true;
+    }
   }
 }
 

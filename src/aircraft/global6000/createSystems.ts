@@ -287,6 +287,8 @@ export function createSystems(ctx: SimContext, opts: G6kSystemsOptions = {}): G6
         sensors: { comCount: 3 },
         // Global Vision CTP (photo N835GL): no CRS knobs on the FCP; the CTP TUNE/DATA knob sets the course on the PFD page.
         ctpCourseOnPfdPage: true,
+        // Pedestal TUNE reversion selector (GX PTG 16): VHF / DSPL inhibits CTP tuning, annunciated on the CTP.
+        tuneReversionVar: V.tuneSrc,
         power: {
           afd: ['elec.afd1_powered', 'elec.afd2_powered', 'elec.afd3_powered', 'elec.afd4_powered'],
           ctp: ['elec.ctp1_powered', 'elec.ctp2_powered'],
@@ -361,6 +363,9 @@ export function createSystems(ctx: SimContext, opts: G6kSystemsOptions = {}): G6
     // VNAV never descends through the FCP preselected altitude (Collins VNAV: the preselector altitude is always
     // honoured; found by the full-flight verification: VALTS followed the next constraint through 5,000 ft selected).
     altvBoundBySel: true,
+    // FSB appendix 6 (GVFD AFCS): the TO pitch mode is held after AP engagement until another vertical mode is
+    // selected (no reversion to the basic PITCH mode).
+    to: { ...AFCS_PROLINE_FUSION.to!, keepModeOnApEngage: true },
     disconnect: {
       ...AFCS_PROLINE_FUSION.disconnect,
       // GX PTG 10-61: "If the angle of attack continues to increase: the stick shakers are activated, autopilot
@@ -634,6 +639,10 @@ export function createSystems(ctx: SimContext, opts: G6kSystemsOptions = {}): G6
     { id: 'elec.dcpc', name: 'DC power center (DCPC) control failure', category: 'electrical' },
     { id: 'hyd.sov1', name: 'Left hydraulic SOV jammed', category: 'hydraulic', description: 'The L HYD SOV does not follow its command (L HYD SOV FAIL).' },
     { id: 'hyd.sov2', name: 'Right hydraulic SOV jammed', category: 'hydraulic', description: 'The R HYD SOV does not follow its command (R HYD SOV FAIL).' },
+    // GXHY: HYD n HI TEMP caution above 96 C - the fluid temperature model (logic.ts) climbs past the caution level.
+    { id: 'hyd.sys1_hitemp', name: 'Hydraulic system 1 overheat', category: 'hydraulic', description: 'Fluid overheats while pressurized (blocked cooler): HYD 1 HI TEMP above 96 C.' },
+    { id: 'hyd.sys2_hitemp', name: 'Hydraulic system 2 overheat', category: 'hydraulic', description: 'Fluid overheats while pressurized (blocked cooler): HYD 2 HI TEMP above 96 C.' },
+    { id: 'hyd.sys3_hitemp', name: 'Hydraulic system 3 overheat', category: 'hydraulic', description: 'Fluid overheats while pressurized (blocked cooler): HYD 3 HI TEMP above 96 C.' },
     { id: 'fcs.roll_disconnect', name: 'Aileron jam / roll disconnect', category: 'flight controls', description: 'The control wheels are disconnected after a jammed aileron circuit: MFS roll assist averages both wheels until a ROLL SPLRS priority is selected; ROLL SELECT after 30 s.' },
     { id: 'fcs.mach_trim', name: 'Mach trim failure', category: 'flight controls', description: 'MACH TRIM FAIL: no Mach trim compensation.' },
   ]);

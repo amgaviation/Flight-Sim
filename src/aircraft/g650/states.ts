@@ -110,10 +110,11 @@ export function setG650Switches(ctx: Pick<SimContext, 'vars'>, sys: G650Systems,
   v.set(V.contIgn, 0);
   // ---- FIRE TEST
   for (const k of [V.fireTestLA, V.fireTestLB, V.fireTestRA, V.fireTestRB, V.fireFaultTest]) v.set(k, 0);
-  // ---- OXYGEN
+  // ---- OXYGEN (Shutdown checklist "OXYGEN Systems - OFF", code450: a secured cold & dark aircraft has
+  // crew and passenger oxygen selected OFF; every powered state has them ON / AUTO)
   v.set(V.crewOxy, b(powered));
-  v.set(V.paxOxy, 1); // AUTO
-  v.set(V.paxShutoff, 1);
+  v.set(V.paxOxy, powered ? 1 : 0); // AUTO when powered, OFF cold & dark
+  v.set(V.paxShutoff, b(powered));
   v.set(V.oxyMaskL, 0);
   v.set(V.oxyMaskR, 0);
   v.set(V.oxyMaskMode, 0); // deprecated shared var (kept for compatibility)
@@ -134,7 +135,7 @@ export function setG650Switches(ctx: Pick<SimContext, 'vars'>, sys: G650Systems,
   v.set(V.ltLogo, b(powered && night && !inAir));
   v.set(V.ltWing, 0);
   v.set(V.ltEmer, powered ? 1 : 0);
-  v.set(V.seatBelt, b(moving));
+  v.set(V.seatBelt, b(powered)); // code450 Before Starting Engines item 32: SEAT BELT / NO SMOKE ON before start (P12)
   v.set(V.noSmoke, b(powered));
   v.set(V.ltPanel, powered ? (night ? 0.6 : 1) : 0);
   v.set(V.ltFlood, powered && night ? 0.25 : 0);
@@ -142,6 +143,9 @@ export function setG650Switches(ctx: Pick<SimContext, 'vars'>, sys: G650Systems,
   // MASTER CONTROL: OFF (day mode) by day, night range (annunciators dimmed, backlighting on) at night.
   v.set(V.ltMaster, powered && night ? 0.5 : 0);
   v.set(V.vestOride, 0);
+  // ---- transponder / TCAS (Epic ATC control, core xpdr.mode): TA/RA in the moving states (Line Up
+  // checklist "Transponder / TCAS - TA/RA"), STANDBY parked (Shutdown "Transponder - STANDBY"), OFF cold & dark.
+  v.set('xpdr.mode', moving ? 5 : powered ? 1 : 0);
   v.set(V.ltMapL, 0);
   v.set(V.ltMapR, 0);
   for (const n of [1, 2, 3, 4] as const) v.set(V.duBrt(n), night ? 0.7 : 1);

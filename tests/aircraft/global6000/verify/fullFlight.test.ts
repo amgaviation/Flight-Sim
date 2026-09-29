@@ -303,6 +303,12 @@ describe('Global 6000 check ride KTEB -> KPIT (full normal procedure)', () => {
       type(r, 'RAV');
       lsk(r, `R${free}` as 'R1');
       r.run(0.3);
+      // Duplicate-ident SELECT WPT page (round-3 fix G3-14): RAV exists several times worldwide; the list is
+      // nearest first, so L1 is the Ravine VORTAC.
+      if (w.pageId === 'SEL') {
+        lsk(r, 'L1');
+        r.run(0.3);
+      }
       expect(w.scratchText).toBe('');
       expect(sys.fms.plans.displayed.legs.some((l) => l.fix?.ident === 'RAV')).toBe(true);
       // ARRIVAL: ILS 28R via NASTY.
@@ -435,6 +441,7 @@ describe('Global 6000 check ride KTEB -> KPIT (full normal procedure)', () => {
       v.set(V.ltLdgNose, 1);
       v.set(V.ltStrobe, 1);
       v.set(V.ltTaxi, 0);
+      v.set('xpdr.mode', 5); // Transponder TA/RA (CTP XPDR mode select; fix round P05 auto-check)
       r.run(1);
       expect(checklistFails(r, 'BEFORE TAKEOFF')).toEqual([]);
       expect(casActive(r, 'warning')).toEqual([]);
@@ -598,7 +605,6 @@ describe('Global 6000 check ride KTEB -> KPIT (full normal procedure)', () => {
       expect(maxDesIas).toBeLessThan(G6K_LIMITS.vmoKt);
       expect(maxDesMachOver).toBeLessThan(0);
       expect(v.get('adc1.baro_std')).toBe(0);
-      expect(checklistFails(r, 'DESCENT')).toEqual([]);
 
       // ================================================================ 11. approach: ILS 28R
       const wLand = v.get('fdm.mass_kg') / LBKG;
@@ -610,6 +616,8 @@ describe('Global 6000 check ride KTEB -> KPIT (full normal procedure)', () => {
       type(r, String(vapp));
       lsk(r, 'L2');
       expect(v.get(FUSION_VARS.vspd('vref'))).toBe(vref);
+      // The DESCENT flow is complete once VREF is entered (fix round P08: the item auto-checks fusion.vspd.vref).
+      expect(checklistFails(r, 'DESCENT')).toEqual([]);
       v.set(V.autobrake, 2); // MED
       v.set(V.ltLdgL, 1);
       v.set(V.ltLdgR, 1);
@@ -722,17 +730,17 @@ describe('Global 6000 check ride KTEB -> KPIT (full normal procedure)', () => {
         const vsPath = -gsFpm * Math.tan(3 * D2R) - (ra > 100 ? 150 * Math.max(-1, Math.min(1, v.get('nav1.gs_dev'))) : 0);
         const vsTgt = vsPath;
         let thetaCmd: number;
-        if (ra > 40) {
+        if (ra > 30) {
           const tasFpm = Math.max(1, v.get(FDM.tas) * 101.27);
           const gam = Math.asin(Math.max(-1, Math.min(1, v.get(FDM.vs) / tasFpm))) / D2R;
           const gamTgt = Math.asin(Math.max(-1, Math.min(1, vsTgt / tasFpm))) / D2R;
           thetaCmd = Math.max(-2, Math.min(8, v.get(FDM.pitch) + (gamTgt - gam)));
           pitchApp = v.get(FDM.pitch);
-        } else thetaCmd = pitchApp + 4 * Math.min(1, (40 - ra) / 25);
+        } else thetaCmd = pitchApp + 3 * Math.min(1, (30 - ra) / 20); // G3-17: short flare (+3 deg by 10 ft), no float
         if (ra < 6) tdVs = Math.min(isNaN(tdVs) ? 0 : tdVs, v.get(FDM.vs));
         const e = thetaCmd - v.get(FDM.pitch);
         pInt = Math.max(-0.3, Math.min(0.3, pInt + (0.05 * e) / 60));
-        v.set(INPUT.pitch, Math.max(-1, Math.min(1, (ra > 40 ? 0.2 : 0.35) * e + pInt - 0.15 * v.get(FDM.q))));
+        v.set(INPUT.pitch, Math.max(-1, Math.min(1, (ra > 30 ? 0.2 : 0.35) * e + pInt - 0.15 * v.get(FDM.q))));
         const bankCmd = Math.max(-5, Math.min(5, -0.05 * clCross() - 0.5 * wrap180(v.get(FDM.trackTrue) - rw28r.headingTrue)));
         v.set(INPUT.roll, Math.max(-1, Math.min(1, 0.05 * (bankCmd - v.get(FDM.bank)))));
         if (v.get('gear.air_ground') === 1) {
@@ -752,7 +760,9 @@ describe('Global 6000 check ride KTEB -> KPIT (full normal procedure)', () => {
       expect(pitchApp).toBeLessThan(6);
       expect(tdPitch).toBeGreaterThan(3);
       expect(tdPitch).toBeLessThan(11);
-      expect(tdIas).toBeGreaterThan(vapp - 20);
+      // G3-17: a real touchdown is nearer VREF - 5 (= VAPP - 10); the shortened flare must not float the speed off
+      // below VAPP - 8 or touch down fast.
+      expect(tdIas).toBeGreaterThanOrEqual(vapp - 8);
       expect(tdIas).toBeLessThan(vapp + 5);
       expect(tdDistFt).toBeGreaterThan(300);
       expect(tdDistFt).toBeLessThan(3000);

@@ -101,7 +101,8 @@ export function setG800Switches(ctx: Pick<SimContext, 'vars'>, sys: G800Systems,
   v.set(V.ltLandingL, b(ldg));
   v.set(V.ltLandingR, b(ldg));
   v.set(V.ltTaxi, b(s === 'ready_to_taxi' || s === 'takeoff'));
-  v.set(V.ltRecog, b(moving));
+  // Recognition lights off in high cruise (fix round 1 P14: normally used below 10,000 / 18,000 ft).
+  v.set(V.ltRecog, b(moving && s !== 'cruise'));
   v.set(V.ltLogo, b(powered && night && !inAir));
   v.set(V.ltWing, 0);
   v.set(V.ltEmer, b(powered));
@@ -194,6 +195,10 @@ export function setG800Switches(ctx: Pick<SimContext, 'vars'>, sys: G800Systems,
   }
   v.set(V.obsMask, 0);
   v.set(V.obsMaskMode, 0);
+  // ---- transponder / TCAS (fix round 1 P06): STANDBY on the ground before taxi, TA/RA with a code for the
+  // flight phases (xpdr.mode: 1 STBY, 5 TA/RA; src/core/vars.ts). Code EST 2677 (a discrete ATC assignment).
+  v.set('xpdr.mode', !powered ? 0 : moving ? 5 : 1);
+  v.set('xpdr.code', powered ? 2677 : 0);
   v.set('ac.door.baggage', 0);
   // ---- function fix round 1: TSC AUDIO / TAWS apps, gear LOCK RELEASE
   v.set(V.micSel(1), 1);
@@ -303,6 +308,11 @@ export function applyG800State(ctx: SimContext, sys: G800Systems, s: InitialStat
   v.set('ap.fd1_on', 1);
   v.set('ap.fd2_on', 1);
   if (s === 'cruise') {
+    // Level cruise set-up (fix round 1 P05): TRS at CRZ (the Cruise checklist's first item — a crew selection,
+    // no automatic CRZ at level-off), altimeters on STD above the transition altitude.
+    sys.ratings.select('CRZ');
+    sys.ratings.update(1 / 60);
+    for (const n of [1, 2, 3]) v.set(`adc${n}.baro_std`, 1);
     v.set('ap.sel_alt_ft', Math.round(v.get(FDM.altMsl) / 100) * 100);
     sys.afcs.update(1 / 60);
     v.set('ap.sel_mach', Math.round(v.get(FDM.mach) * 100) / 100);

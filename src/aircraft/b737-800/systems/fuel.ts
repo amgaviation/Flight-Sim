@@ -48,8 +48,31 @@ export function createFuel(ctx: Pick<SimContext, 'vars'>): FuelSystem {
       { id: 'l_aft', kind: 'electric', from: 'main1', to: 'man1', pressurePsi: PUMP.mainPsi, maxFlowPph: PUMP.maxPph, on: pumpOn('l_aft', 'fuel_l_aft'), lowPressWhenOff: true, ratedAmps: PUMP.amps },
       { id: 'r_fwd', kind: 'electric', from: 'main2', to: 'man2', pressurePsi: PUMP.mainPsi, maxFlowPph: PUMP.maxPph, on: pumpOn('r_fwd', 'fuel_r_fwd'), lowPressWhenOff: true, ratedAmps: PUMP.amps },
       { id: 'r_aft', kind: 'electric', from: 'main2', to: 'man2', pressurePsi: PUMP.mainPsi, maxFlowPph: PUMP.maxPph, on: pumpOn('r_aft', 'fuel_r_aft'), lowPressWhenOff: true, ratedAmps: PUMP.amps },
-      { id: 'c_l', kind: 'electric', from: 'center', to: 'man1', pressurePsi: PUMP.centerPsi, maxFlowPph: PUMP.maxPph, on: pumpOn('c_l', 'fuel_c_l'), lowPressWhenOff: false, ratedAmps: PUMP.amps },
-      { id: 'c_r', kind: 'electric', from: 'center', to: 'man2', pressurePsi: PUMP.centerPsi, maxFlowPph: PUMP.maxPph, on: pumpOn('c_r', 'fuel_c_r'), lowPressWhenOff: false, ratedAmps: PUMP.amps },
+      // Centre pumps: automatic low-output-pressure shutoff (b737.org.uk Fuel; SB/AD 2002-43-11 class change on
+      // the NG): once the centre tank runs dry the pump latches off (logic.ts latch) with the switch still ON and
+      // the LOW PRESSURE light on (cas.ts), preventing dry running; reset by cycling the switch OFF.
+      {
+        id: 'c_l',
+        kind: 'electric',
+        from: 'center',
+        to: 'man1',
+        pressurePsi: PUMP.centerPsi,
+        maxFlowPph: PUMP.maxPph,
+        on: `${pumpOn('c_l', 'fuel_c_l')} && !${B738.ctrPumpShutoff('c_l')}`,
+        lowPressWhenOff: false,
+        ratedAmps: PUMP.amps,
+      },
+      {
+        id: 'c_r',
+        kind: 'electric',
+        from: 'center',
+        to: 'man2',
+        pressurePsi: PUMP.centerPsi,
+        maxFlowPph: PUMP.maxPph,
+        on: `${pumpOn('c_r', 'fuel_c_r')} && !${B738.ctrPumpShutoff('c_r')}`,
+        lowPressWhenOff: false,
+        ratedAmps: PUMP.amps,
+      },
     ],
     valves: [
       { id: 'xfeed', a: 'man1', b: 'man2', open: `${B738.crossfeed} != 0`, travelS: 2, power: 'elec.fuel_valves_powered' }, // EST travel

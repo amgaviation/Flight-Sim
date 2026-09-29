@@ -40,12 +40,15 @@ export interface CtpDisplayOptions {
   sensors: FusionSensors;
   pixelRatio?: number;
   canvas?: 'dom' | 'offscreen' | DisplayCanvas;
+  /** (Appended by global6000.) TUNE reversion var (0 NORM / 1 VHF / 2 DSPL): non-NORM is annunciated on the RADIO page. */
+  tuneReversionVar?: string;
 }
 
 export class CtpDisplay extends CanvasDisplay {
   readonly side: 1 | 2;
   private readonly v: SimVars;
   private readonly sn: FusionSensors;
+  private readonly tuneRevVar?: string;
   private readonly hsi = new Hsi({ cx: 240, cy: 136, radius: 86, style: { ...HSI_COLLINS, labelSize: 13 }, mode: 'rose', wind: null });
 
   constructor(o: CtpDisplayOptions) {
@@ -53,6 +56,7 @@ export class CtpDisplay extends CanvasDisplay {
     this.side = o.side;
     this.v = o.vars;
     this.sn = o.sensors;
+    this.tuneRevVar = o.tuneReversionVar;
     this.animating = true;
   }
 
@@ -94,6 +98,12 @@ export class CtpDisplay extends CanvasDisplay {
     txt(ctx, 'DME', 468, y2 - 24, 12, C.grey, 'right');
     txt(ctx, v.getBool(NAV.dmeHold(nav)) ? 'HOLD' : 'NORM', 466, y2 + 1, 18, v.getBool(NAV.dmeHold(nav)) ? C.amber : C.white, 'right');
     seg(ctx, 240, 8, 240, CTP_H - 8, C.line, 1);
+    // TUNE reversion (GX PTG 16): the pedestal selector has moved tuning to the standby VHF / display path - the CTP
+    // annunciates the selected source (amber) and its radio tuning is inhibited (logic/ctp.ts).
+    if (this.tuneRevVar !== undefined) {
+      const rev = Math.round(v.get(this.tuneRevVar));
+      if (rev >= 1) txt(ctx, rev >= 2 ? 'TUNE DSPL' : 'TUNE VHF', 240, 14, 14, C.amber, 'center');
+    }
   }
 
   /** Frequency line: label, active (green, large) and standby (cyan). */

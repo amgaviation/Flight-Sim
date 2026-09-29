@@ -86,6 +86,8 @@ export class G650Logic implements Subsystem {
   private edmLatch = false;
   // flight-deck door lock latch
   private doorLocked = false;
+  // fire tests seen (L, R, APU, FAULT) for the checklist "TESTED" auto-checks
+  private readonly fireTested = [false, false, false, false];
 
   constructor(vars: SimVars) {
     this.v = vars;
@@ -163,7 +165,10 @@ export class G650Logic implements Subsystem {
       this.auxManT += dt;
       aux = ground || this.auxManT < 120;
     } else if (auxSw === 1) {
-      const pedals = Math.max(v.get('input.brake_left'), v.get('input.brake_right')) > 0.1 || v.get(V.parkBrake) > 0.1;
+      // A brake PEDAL press (LUC: low pressure + WOW + brake pedal); the parking brake handle is not a
+      // pedal and does not latch the pump - a parked aircraft rests unpressurized, so the R-first engine
+      // start demonstrates the PTU pressurizing the left system (code450 Engine Start Checklist, P09).
+      const pedals = Math.max(v.get('input.brake_left'), v.get('input.brake_right')) > 0.1;
       // Ground: auto latch with low L pressure, WOW and a brake pedal (LUC); released when L pressure recovers.
       if (ground && lPsi < G650_LIMITS.hydLowPsi && pedals) this.auxGroundLatch = true;
       if (!ground || lPsi > 2900) this.auxGroundLatch = false;
@@ -263,6 +268,24 @@ export class G650Logic implements Subsystem {
 
     // ---------------- FMS cruise phase for the automatic thrust rating (engines.ts: TO -> CLB -> CRZ).
     v.set(V.fmsCruise, !ground && v.getString('fms.vnav_phase') === 'CRZ' ? 1 : 0);
+
+    // ---------------- fire-test latches (checklists.ts "TESTED" auto-checks; code450 Before Starting
+    // Engines fire-test items / APU Start Checklist item 6): latched once the test switch has driven its
+    // warning (fault test: while the FDCUs are powered), cleared at detection-system power-down so the
+    // next flight tests again. EST bookkeeping - the real ECL senses the crew's checks, not the tests.
+    const fdcuPow = v.get('elec.fdcu_l_powered') !== 0 || v.get('elec.fdcu_r_powered') !== 0;
+    if (!fdcuPow) {
+      for (let i = 0; i < 4; i++) this.fireTested[i] = false;
+    } else {
+      if ((v.get(V.fireTestLA) !== 0 || v.get(V.fireTestLB) !== 0) && v.get('fire.eng1_warn') !== 0) this.fireTested[0] = true;
+      if ((v.get(V.fireTestRA) !== 0 || v.get(V.fireTestRB) !== 0) && v.get('fire.eng2_warn') !== 0) this.fireTested[1] = true;
+      if (v.get(V.apuFireTest) !== 0 && v.get('fire.apu_warn') !== 0) this.fireTested[2] = true;
+      if (v.get(V.fireFaultTest) !== 0) this.fireTested[3] = true;
+    }
+    v.set(V.fireTested('l'), this.fireTested[0] ? 1 : 0);
+    v.set(V.fireTested('r'), this.fireTested[1] ? 1 : 0);
+    v.set(V.fireTested('apu'), this.fireTested[2] ? 1 : 0);
+    v.set(V.fireTested('fault'), this.fireTested[3] ? 1 : 0);
 
     // ---------------- RAAS INHIBIT (pedestal): gates the SmartRunway/RAAS callouts (G650Raas, createSystems.ts)
     // and the switchlight legend (Honeywell EGPWS with RAAS, FAA FSB GVI).
@@ -368,6 +391,7 @@ export class G650Logic implements Subsystem {
     this.accum[1] = v.get(V.accumOutbdPsi) > 0 ? v.get(V.accumOutbdPsi) : 3000;
     this.edmT = 0;
     this.edmLatch = false;
+    for (let i = 0; i < 4; i++) this.fireTested[i] = false;
   }
 }
 

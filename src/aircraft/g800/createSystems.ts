@@ -394,6 +394,9 @@ export function createG800Systems(ctx: SimContext, opts: G800SystemsOptions = {}
       // Rudder trim outside its takeoff band (TrimAxis takeoffBand [-0.2, 0.2], EST; function fix round 1).
       { id: 'rudder_trim', bad: 'abs(trim.yaw_units) > 0.2', text: 'RUDDER TRIM', voice: 'Rudder trim' },
       { id: 'fcs', bad: 'fbw.mode_code != 0', text: 'FLIGHT CONTROLS', voice: 'Flight controls' },
+      // Main entry door not closed (fix round 1 P07; EST: the blue "Main Door" advisory alone would let an
+      // open airstair reach the takeoff roll).
+      { id: 'door', bad: 'ac.door.main > 0.02', text: 'MAIN DOOR', voice: 'Door' },
     ],
   });
   const cas = new CasManager(ctx, {

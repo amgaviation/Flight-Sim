@@ -70,7 +70,7 @@ The Global Express training manuals describe the BD-700-1A10 airframe and system
 | N2 | 99.6 % take-off; 98.9 % MCT; 99.8 % overspeed; idle ≥ 58 % | TCDS 3.2 |
 | ITT | 900 °C take-off; 860 °C MCT; 905 °C over-temperature; starting 700 °C ground / 850 °C air | TCDS 3.2 |
 | Reverse | the FADEC limits N1 to 70.0 % for 30 s | TCDS 3.2 |
-| Oil | 160 °C maximum. Pressure: 25 psid minimum to complete the flight; 35 psid lower limit for flight (idle to 72.3 % N2) | E018 |
+| Oil | 160 °C maximum. Pressure: 25 psid minimum to complete the flight; lower limit for flight 35 psid to 72.3 % N2 rising to 45 psid at 90 % N2 (the CAS caution follows the schedule - G3-03) | E018 |
 | Control | dual-channel FADEC. EPR is the primary setting parameter; N1 is the alternate mode (pedestal ENGINE EPR / N1 PBAs) | GX_01_018 |
 | Start | air-turbine starter on APU or cross bleed; FADEC auto start with the L / R START PBA; dry motoring with CRANK | GX_01_018, EST sequence |
 
@@ -92,7 +92,9 @@ The Global Express training manuals describe the BD-700-1A10 airframe and system
   - CRZ above 25,000 ft when level in ALT or VALT.
 - **Thrust lever law:** one MAX detent. The minimum take-off lever position is 30° TLA (GXFC GLD auto-arm), which is
   EST 0.67 of the travel.
-- **Reverse:** the piggy-back reverse levers are limited to 70 % N1.
+- **Reverse:** the piggy-back reverse levers are limited to 70 % N1; max reverse is time-limited to 30 s (TCDS 3.2),
+  after which the commanded reverse ramps toward idle reverse (G3-05, `logic.ts`; the post-limit behaviour is a
+  SCOPE simplification).
 
 ## 3. Speeds, envelope, V-speeds
 
@@ -226,7 +228,9 @@ when light.
     (EST). They run continuously with the engine running; the PRI PUMPS PBA inhibits them.
   - DC AUX pumps: L on DC ESS, R on the BATT BUS. They back up a failed AC pump, run for take-off and landing, drive
     wing transfer and feed the APU start.
-- **Crossfeed:** XFEED SOV, manual only. The APU draws from the right feed line.
+- **Crossfeed:** XFEED SOV, manual only. The APU draws from the right feed line through the APU fire SOV, a DC EMER
+  motor-driven valve that holds its position unpowered (a DC EMER loss does not starve a running APU; APU FUEL SOV
+  posts on a command / position mismatch - G3-10).
 - **Transfers:**
   - Centre → wings with two AC pumps: start below 93 % wing, stop above 97 %.
   - Aft → wings (AUTO) when either wing reaches 5,500 lb, or with ON.
@@ -265,11 +269,13 @@ when light.
 
 - **SOVs:** the L / R HYD SOV PBAs and the fire handles close the EDP suction SOVs.
 - **Messages:**
-  - HYD n LO PRESS when both pumps of a system are below 1,800 psi.
+  - HYD n LO PRESS when both pumps of a system are below 1,800 psi (gated only on the aircraft being powered, so a
+    system 1 loss after a left-engine failure still alerts - G3-01).
   - HYD n LO QTY.
-  - HYD n HI TEMP above 96 °C.
+  - HYD n HI TEMP above 96 °C (reachable through the `hyd.sysN_hitemp` overheat failures - G3-07).
   - HYD RAT PUMP FAIL.
-- **Accumulator precharge:** brake 500 psi, RAT 1,000 psi.
+- **Accumulator precharge:** brake 500 psi, RAT 1,000 psi. SCOPE: the system 3 brake and RAT accumulators are merged
+  into one at the brake precharge (one accumulator per system in the shared block).
 - Flow rates and reservoir sizes are EST (EDP 30 gpm, ACMP 6.5 gpm, RAT 5 gpm).
 
 ### 5.4 Flight controls (GXFC): `createSystems.ts`, `systems/logic.ts`
@@ -320,8 +326,10 @@ when light.
   - START is spring-loaded back to RUN.
 - **Envelope and starting:**
   - The starter runs from the APU battery; starter cut-out at 46 %.
-  - Start envelope 37,000 ft; operating envelope 45,000 ft; APU bleed to 30,000 ft (about 45 psi).
-  - EGT start limit 1,020 °C; 60 s cooldown.
+  - Start envelope 37,000 ft (a START above it is refused) and operating envelope 45,000 ft (automatic shutdown
+    above), both enforced since round 3 (G3-02, additive `startCeilingFt` / `operatingCeilingFt` on the shared
+    Apu block); APU bleed to 30,000 ft (about 45 psi).
+  - EGT start limit 1,020 °C; continuous running limit ~714 °C (APU OVERTEMP once on speed, G3-04); 60 s cooldown.
 - **Fire:** an APU fire shuts the APU down automatically on the ground.
 
 ### 5.7 Bleed air, air conditioning, pressurization (IAMS; architecture EST)
@@ -371,7 +379,9 @@ when light.
 ### 5.10 Oxygen
 
 - **Crew:** quick-donning masks with regulator N / 100 % / EMERGENCY. The crew bottle is EST 115 ft³ at 1,850 psi.
-- **Passengers:** PASSENGER OXYGEN CLOSED / NORMAL / OVERRIDE. NORMAL deploys automatically at 14,000 ft cabin (EST).
+- **Passengers:** PASSENGER OXYGEN CLOSED / NORMAL / OVERRIDE. NORMAL deploys automatically at ~14,500 ft cabin
+  (GX PTG 8-4: "All oxygen compartment doors will open … if cabin altitude reaches approximately 14,500 feet";
+  `data.ts paxMaskFt`, one threshold shared by the deploy logic and the CABIN ALT checklist check, fix round P09).
 
 ### 5.11 Avionics (FUSION, FSB)
 
@@ -394,8 +404,11 @@ when light.
   - VS −8,000 / +6,000 fpm.
 - APPR switches the AFCS nav source to the localizer. The Fusion FCP performs a nav-to-nav transfer when the PFD
   source is FMS and an ILS approach is loaded.
-- Pressing the FCP AT button engages the autothrottle.
+- The Vision FCP has no A/T key (photo N835GL; §7): the autothrottle engages on the take-off thrust-lever advance
+  (systems/vision.ts) and disconnects via the thrust-lever `at.disc` switches or TOGA (§18).
 - EDM (emergency descent mode).
+- AP engagement in the TO vertical mode keeps TO (FSB appendix 6 GVFD AFCS; `to.keepModeOnApEngage` in the shared
+  Afcs, configured in createSystems.ts) instead of reverting to PITCH.
 - AFCS options (set by the check-ride verification, §16): armed LNAV / LOC captures only once airborne
   (`nav.groundCapture: false`, the TO lateral mode holds the runway track); VNAV climbs in VFLC (`vnavClimb`); VNAV never
   descends through the FCP altitude (`altvBoundBySel`); the VNAV modes and the A/T fly the FCP speed, which the Fusion FCP
@@ -435,6 +448,13 @@ when light.
 
 The full sequence is in `checklists.ts`. Auto-checks verify the switch positions and system state live.
 
+Fix round P01/P02/P13/P14 added the missing phases so the ECL phase list matches the real flow: **EXTERIOR
+INSPECTION** (display-only, SCOPE: no walkaround model), **TAXI** (brakes check, flight controls free & correct on
+all three hydraulic systems, flight instruments check, taxi light), **CLIMB** (altimeters STD at the EST 18,000 ft
+transition, landing/taxi lights off at 10,000 ft, pressurization check), **CRUISE** (altimeters, pressurization,
+fuel balance within 400 lb, fuel temperature above −35 °C) and **SECURING** (IRS/APU/EMER LIGHTS/BATT MASTER off,
+split out of SHUTDOWN, which now ends with the EST 2-min idle warm-down, ENG RUN OFF, beacon and PASS SIGNS off).
+
 1. **COCKPIT PREPARATION:**
    1. BATT MASTER ON, DC buses powered.
    2. EMER LIGHTS ARM, PARK/EMER BRAKE SET, gear handle DN.
@@ -459,7 +479,9 @@ The full sequence is in `checklists.ts`. Auto-checks verify the switch positions
    3. Anti-ice as required.
 5. **BEFORE TAKEOFF:**
    1. Slats/flaps 6 or 16, stabilizer trim in the green band, spoilers RETRACT.
-   2. GLD armed, autobrake OFF (RTO: EST), NWS ARMED.
+   2. GLD AUTO (arms on thrust advance, GXFC 30° TLA), autobrake OFF (GXLG lists an OFF/LO/MED/HI selector only;
+      no RTO mode is documented in our sources, so none is modelled and a reject is braked manually — SCOPE), NWS
+      ARMED, transponder TA/RA (`xpdr.mode` 5, auto-checked).
    3. Thrust levers to take-off: the autothrottle engages automatically on the take-off thrust advance (AOPA 2012; the
       Vision FCP has no A/T key).
    3. Transponder / TCAS, no CONFIG messages.
@@ -497,6 +519,14 @@ In the headless start test (`start.test.ts`):
 | EMER PWR ONLY | RAT deploys (auto), land as soon as practicable | RAT GEN powers AC ESS, the RAT pump powers system 3 |
 | HYD n LO PRESS | check the ACMP ON, land at the nearest suitable airport | EDP failure → ACMP B takes over; a leak → LO PRESS + LO QTY |
 | CONFIG … (NO TAKEOFF) | reject the take-off or correct the configuration | flaps 0 at take-off thrust raises CONFIG FLAPS |
+| L/R ENG FLAMEOUT | thrust IDLE, relight envelope (EST: windmill below FL300 / starter assist below 21,000 ft), ENG RUN cycle OFF→ON, ITT ≤ 850 °C (TCDS 3.2), APU below 37,000 ft | `round4-procedures.test.ts`: no starter above the 21,000 ft EST air-start ceiling; starter-assisted relight at 15,000 ft |
+| FUEL IMBALANCE | AUX pumps ON, XFEED closed, WING XFER toward the light wing, monitor | manual L→R / R→L transfer moves fuel; the auto-check senses the direction |
+| AC/DC BUS FAIL | GEN reset, bus isolation verified, APU as required | CAS ids `ac_bus{n}_fail` / `dc_bus{n}_fail` link to the checklists |
+| GEAR DISAGREE | below VLO 200 KIAS, handle DN, manual release handle PULL (free fall) | `gear.actuation` failure + manual release → 3 green |
+| FLAP/SLAT FAIL | speed below VFE, EMS SLAT/FLAP RESET, VREF correction | latched SFCU faults clear on reset (logic.ts) |
+| SMOKE / FUMES | masks 100 %, ACP MASK, RECIRC off, isolate source | EST wording (QRH proprietary) |
+| EMERGENCY DESCENT | masks, thrust IDLE, spoilers FULL, VMO/MMO, level at 10,000 ft / MEA | EDM (FSB) targets 15,000 ft on the autopilot |
+| REJECTED TAKEOFF | thrust IDLE, max manual braking, MAX REV, spoilers verified | memory items; no autobrake RTO mode (SCOPE, GXLG) |
 
 ## 9. Initial states (`states.ts`)
 
@@ -504,9 +534,9 @@ In the headless start test (`start.test.ts`):
 |---|---|---|
 | `cold_dark` | off | every switch OFF / normal, BATT MASTER OFF, PARK BRAKE set, doors closed, gear handle DN |
 | `ready_to_taxi` | both idle | VFGs on line, IRS NAV, hydraulics AUTO / 3A ON, slats/flaps 6, park brake set |
-| `takeoff` | both idle | on the runway, slats/flaps 6, stabilizer 7.5 units (green band), GLD armed, NWS ARMED, landing lights ON |
-| `cruise` | trimmed thrust | slats/flaps 0 IN, gear UP, AP HDG + ALT, A/T SPD / MACH, stabilizer at the `computeTrim` pitch trim |
-| `approach` | trimmed thrust | slats/flaps 30, gear DN, autobrake MED, landing lights ON |
+| `takeoff` | both idle | on the runway, slats/flaps 6, stabilizer 7.5 units (green band), GLD AUTO (arms on thrust advance, GXFC), NWS ARMED, landing lights ON, transponder TA/RA, TOLD V1/VR/V2 entered |
+| `cruise` | trimmed thrust | slats/flaps 0 IN, gear UP, AP HDG + ALT, A/T SPD / MACH, stabilizer at the `computeTrim` pitch trim, transponder TA/RA, altimeters STD (above the EST 18,000 ft transition) |
+| `approach` | trimmed thrust | slats/flaps 30, gear DN, autobrake MED, landing lights ON, transponder TA/RA, altimeters QNH, VREF/VAPP entered |
 
 - **In-air states:** the aircraft is repositioned with the state's configuration, then:
   1. `FlightModel.computeTrim` runs.
@@ -690,7 +720,7 @@ Global Vision layout (photos N835GL c_ped, EB190582 e_ped_mid / e_ped_aft / e_pe
 | ENGINE RUN L / R | toggles (lift to move) | 1 ON / 0 OFF | lift-lock | `V.engRun(1/2)` | aft end of the quadrant |
 | MKP 1 / 2 | keyboards + scratchpad strip | Vision key set (ROUTE, FMS, DEP/ARR, CNCL, EXEC, letters, digits, CAS, CNS, CHART, ECL/EXT, arrows, PREV, NEXT); black key caps, white legends (photo c_ped) | — | `fusion.mkp{s}.key` | forward, y ∓0.17 |
 | CCP 1 / 2 | palm-rest cursor device, DSPL SEL < > ∨, ESC, DATA knob, PTT buttons | — | — | `fusion.ccp{s}.*`; PTT `V.yokePtt(s)` | aft of the MKPs |
-| Reversion panel: DISPLAYS NORM / REV, TUNE VHF / NORM / DSPL, L PFD ADC / IRS, AFCS 1/2, R PFD ADC / IRS | rotaries + Korry keys | DISPLAYS 0 / 1; TUNE 1 VHF / 0 NORM / 2 DSPL; keys toggle | — | `V.displaysRev`, `V.tuneSel` → `V.tuneSrc`, `V.rspAdc(s)`, `V.rspAtt(s)`, `V.rspAfcs` → Fusion `fusion.rsp{s}.adc/att/dspl`, `fusion.rsp.afcs` (systems/reversion.ts; GX PTG 16) | left, forward of the dimmers |
+| Reversion panel: DISPLAYS NORM / REV, TUNE VHF / NORM / DSPL, L PFD ADC / IRS, AFCS 1/2, R PFD ADC / IRS | rotaries + Korry keys | DISPLAYS 0 / 1; TUNE 1 VHF / 0 NORM / 2 DSPL; keys toggle | — | `V.displaysRev`, `V.tuneSel` → `V.tuneSrc` (VHF / DSPL inhibits CTP tuning, annunciated on the CTP - G3-11), `V.rspAdc(s)`, `V.rspAtt(s)`, `V.rspAfcs` → Fusion `fusion.rsp{s}.adc/att/dspl`, `fusion.rsp.afcs` (systems/reversion.ts; GX PTG 16) | left, forward of the dimmers |
 | Display dimmers L / CTR / R DSPL, LWR DSPL | knobs | 0 … 1 | — | `V.ltDisplay(z)` (L / R also dim EMS CDU 1 / 2), `V.ltDisplayLwr` (AFD 3) | left, below the reversion keys |
 | ACP 1 / 2 | audio control panels: 7 transmitter keys (VHF1..3, HF1 / 2, SAT, PA), 14 receiver knobs (push in off / pull out on, turn volume: VHF1..3, HF1 / 2, SAT, PA, NAV1 / 2, ADF1 / 2, MKR, DME1 / 2), R/T - IC toggle, ID / BOTH / VOICE, MKR HI / LO, MASK / BOOM, SPKR | keys / push-pull knobs / toggles | — | spring R/T and IC to centre | `V.acpMic(s)`, `V.acpSel(s, ch)`, `V.acpVol(s, ch)`, `V.acpRtIc(s)`, `V.acpFilter(s)`, `V.acpMkrHi(s)`, `V.acpMask(s)`, `V.acpSpkr(s)` (systems/audioControl.ts: NAV / ADF Morse idents, marker tones, keyed radio) | either side of the park brake, aft of the CCPs (photo e_acp) |
 | PARK/EMER BRAKE | handle (black grip, red band, chrome base) | 0 stowed … 1 locked (proportional below the lock) | gate | `V.parkBrake` | centre, recessed gate, captions both sides |
@@ -721,6 +751,7 @@ are EMS CDU TEST CONTROL entries (GX PTG 15-19). The ACPs and the reversion pane
 | HUD power (optional) | — | 1 ON | `V.hudPower` (no cockpit switch on the Vision deck; set with aircraft power) | — |
 | Control wheel: MSTR DISC, NOSE DN / NOSE UP trim (split), TCS, FPV CAGE, R/T / IC rocker | switches | momentary | `V.yokeDisc`, `V.yokeTrim`, `ap.cws`, `fusion.s{s}.fpv_cage`, `V.yokePtt(s)` | yokes (no hub CHRONO on the Vision wheel) |
 | Doors (exterior / cabin agents) | — | 1 open | `ac.door.pax_open`, `emer`, `bag`, `aft_eqpt`, `svc_large`, `svc_small` | — |
+| PAX DOOR latch (fix round P10) | toggle handle | OPEN (1) / CLOSED (0) | `ac.door.pax_open` (`g6k.side.pax_door`) | aft bulkhead beside the doorway; SCOPE stand-in for the entry-door latch so BEFORE START "Doors - CLOSED" is performable |
 
 ## 13. Known simplifications and open points
 
@@ -919,12 +950,15 @@ the pilot's inboard armrest).
 
 **Remaining gaps found by the check ride**
 
-- Waypoint idents shared with an airport's FAA LID resolve to the airport first (JST → KJST, HAR → KCXY) because the
-  Fusion FMS has no duplicate-ident selection page (`src/avionics/collins-fusion/fms/pages.ts resolve`, other agent's
-  module). The check ride uses RAV.
+- ~~Waypoint idents shared with an airport's FAA LID resolve to the airport first (JST → KJST, HAR → KCXY)~~ fixed
+  (round 3, G3-14): the Fusion FMS now presents a SELECT WPT duplicate-ident page (nearest first, Collins CDU
+  convention; `src/avionics/collins-fusion/fms/pages.ts`, additive shared change), tested in
+  `tests/aircraft/global6000/fidelity/audit3-fms-ctp.test.ts`.
 - The AP/SP DISC var alone does not disconnect the AP; the 3D button emits `ap.disc` itself. Hardware bindings
   work through `input.ap_disc`, which the AFCS reads directly (checked in §17).
-- Engaging the AP in the TO vertical mode reverts to PITCH (shared AFCS behaviour); the crew then selects FLC / VNAV.
+- ~~Engaging the AP in the TO vertical mode reverts to PITCH~~ fixed (round 3, G3-13): the shared Afcs takes the
+  additive `to.keepModeOnApEngage` option (FSB appendix 6: TO pitch mode held after AP engagement until another
+  vertical mode is selected), configured in createSystems.ts.
 - The light-weight (73,000 lb) lift-off comes ~VR + 16 kt after a 2.5 °/s rotation (high thrust-to-weight
   acceleration during the rotation); take-off V-speeds remain the CLmax-derived EST values.
 
@@ -962,20 +996,22 @@ does not cover. Results with this build:
   at T/W 0.4 over a ~3 s rotation.
 - Light-weight climb 5,600 fpm at 250 KIAS / 4,500 ft (73,000 lb): consistent with the thrust lapse
   (≈ 0.72 of static at M0.4, CLB) and L/D ≈ 15.6. AOPA gives only "> 3,000 fpm".
-- CABIN ALT 10,000 ft and the passenger masks at 14,000 ft remain EST (no public Global figure found).
+- The passenger masks deploy at ~14,500 ft cabin (GX PTG 8-4, sourced since fix round P09; the CABIN ALT checklist
+  check uses the same `paxMaskFt`).
 - Render budget: 1,035 draw calls / 769 k triangles in the pilot view under SwiftShader (≈ 4 fps software). 254 calls
   are the collins-fusion MKP keyboards (one mesh per key, other module). The Global's own static geometry is
   already consolidated (§16).
 
 **Still open**
 
-- The touchdown in the check ride is ~VAPP − 14 kt (108 KIAS at VAPP 122). The scripted flare holds the attitude too
-  long after the A/T RETARD. This is pilot technique in the test, not an FDM defect; the approach attitude (3.9°)
-  and touchdown attitude (7.9°) match the AAIB data.
-- No automatic relight or windmill restart model after `engN.flameout` is cleared: the crew restarts with START
-  (in-flight start envelope not modelled; TCDS 850 °C air-start ITT limit applies).
-- The EMER DEPRESS dump rate (up to ~80,000 fpm cabin climb) comes from the shared outflow-valve area. No public
-  Global outflow-valve data was found.
+- ~~The touchdown in the check ride is ~VAPP − 14 kt~~ fixed (round 4, G3-17): the scripted flare now starts at
+  30 ft and holds +3° (no float); the check ride asserts touchdown within VAPP − 8 … VAPP + 5.
+- ~~No automatic relight after `engN.flameout` is cleared~~: the shared start controller auto-relights a
+  windmilling engine (probed in `fidelity/audit3-probes.test.ts`); the TCDS 850 °C air-start ITT limit is applied
+  in flight since round 3 (G3-06, `hotStartIttAirC`).
+- ~~The EMER DEPRESS dump rate (up to ~80,000 fpm cabin climb)~~ fixed (round 3, G3-12): the OFV area is an EST
+  value tuned so the dump transient is a plausible few thousand fpm sustained (pinned in
+  `fidelity/audit3-probes.test.ts`); no public Global outflow-valve data was found.
 - No rudder bias or thrust asymmetry compensation (the Global has none that is public). OEI directional control is
   the pilot's.
 
@@ -1159,10 +1195,11 @@ The table conventions are those of §12.
 
 **Not done, or kept as SCOPE**
 
-- G6K-F-37 (AP engagement in TO mode, FMS duplicate idents): shared Fusion FMS / AFCS code outside this module;
-  unchanged.
+- G6K-F-37 (AP engagement in TO mode, FMS duplicate idents): fixed in round 3 (G3-13 / G3-14) through additive
+  shared-module options (`to.keepModeOnApEngage`; Fusion FMS SELECT WPT page).
 - G6K-F-24: auto relight uses the shared start controller, which is on by default, and the SPC ignition is added.
-  The TCDS 850 °C air-start ITT limit is not modelled, because the shared controller has one hot-start limit.
+  The TCDS 850 °C air-start ITT limit is modelled since round 3 (G3-06): the shared controller takes the additive
+  `hotStartIttAirC` (700 °C ground / 850 °C in flight, TCDS 3.2).
 - G6K-F-19: WING TO CTR LEAK, L / R WING FULL and XFER VALVE OPEN are not modelled; there is no leak or level-switch
   model.
 - G6K-F-09: MAN PRESS FAULT is not modelled.
@@ -1220,3 +1257,38 @@ Fixes for the round-3 layout audit (gaps G6K-L3-01 .. -18, G3-16/-18), verified 
 Tests: `fidelity/round3-layout.test.ts` (AFD 3 default, GLD position, black MKP caps, favicon);
 `verify/drawcalls.test.ts` guard tightened; shared `tests/avionics/collins-fusion/layout.test.ts` /
 `suite.test.ts` updated for the AFD 3 default.
+
+## 21. Function fix round 3 (LENS audit)
+
+Fixes for the round-3 function audit (gaps G3-01 .. G3-15, G3-21), tested in
+`tests/aircraft/global6000/fidelity/audit3-probes.test.ts` and `audit3-fms-ctp.test.ts`.
+
+- **G3-01 HYD 1/2 LO PRESS gate** (major): the caution posts whenever any engine or AC bus is powered, not only
+  with that system's engine running - the eng-out + ACMP-fail compound case now alerts (`systems/cas.ts`).
+- **G3-02 APU envelope** (major): start refused above 37,000 ft, automatic shutdown above 45,000 ft (GXAPU / TCDS
+  5.2); additive `startCeilingFt` / `operatingCeilingFt` on the shared `src/systems/apu/Apu.ts`.
+- **G3-03 oil-pressure schedule** (major): the L/R ENG OIL LO PRESS caution follows the E018 N2 schedule
+  (35 psid to 72.3 % N2 → 45 psid at 90 %) instead of a fixed 35 psid.
+- **G3-13 AP in TO mode** (major): additive `to.keepModeOnApEngage` in the shared Afcs; the TO pitch mode survives
+  AP engagement (FSB appendix 6), configured in createSystems.ts.
+- **G3-14 duplicate idents** (major): SELECT WPT page in the shared Fusion FMS (`fms/pages.ts`, page id `SEL`):
+  several database matches for an entered ident present a nearest-first list (JST offers the VOR, the NDB and the
+  airport KJST).
+- **G3-04 APU OVERTEMP**: 1,020 °C during the start, 714 °C continuous once `apu.avail`.
+- **G3-05 reverse 30 s**: max reverse ramps to idle reverse after 30 s (TCDS 3.2; SCOPE on the post-limit ramp).
+- **G3-06 air-start ITT**: additive `hotStartIttAirC` on the shared EngineStartController (700 °C ground / 850 °C
+  in flight, TCDS 3.2).
+- **G3-07 HYD n HI TEMP reachable**: new `hyd.sysN_hitemp` overheat failures bias the fluid-temperature model past
+  96 °C.
+- **G3-08 RAT accumulator**: SCOPE comment - system 3's brake and RAT accumulators are merged at the brake
+  precharge (one accumulator per system in the shared block).
+- **G3-09 EMS CDU 2 power**: gated like CDU 1 - BATT MASTER OFF leaves both CDUs dark; the EMS position powers
+  CDU 2 from the APU battery direct bus (GX PTG 6-8).
+- **G3-10 APU fuel SOV**: modelled as a held-position motor-driven valve (DC EMER); a bus loss no longer flames
+  the APU out, and APU FUEL SOV posts on a command / position mismatch.
+- **G3-11 TUNE reversion**: `V.tuneSrc` is consumed by the Fusion suite (`tuneReversionVar`): VHF / DSPL inhibits
+  CTP radio tuning and the CTP annunciates the source; the reversionary tune window itself remains SCOPE.
+- **G3-12 EMER DEPRESS rate**: OFV area is an EST value (environment.ts) tuned to a plausible few-thousand-fpm
+  sustained dump that still reaches the 14,500 ft limiter.
+- **G3-15 avionics hold-up**: kept as EST (DO-160 §16 rationale; no type-specific figure is public).
+- **G3-21 dossier**: the stale FCP AT-button sentence in §5.11 replaced (the Vision FCP has no A/T key).

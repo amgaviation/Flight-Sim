@@ -862,9 +862,9 @@ speed brakes on the ground only, GROUND FLAPS caution in flight; night detection
 - **Systems**: STBY FLT DISPLAY OFF/ON/TEST, BATTERY DISCONNECT relay, FUEL BOOST OFF, AIR SOURCE BOTH /
   FRESH AIR, EMER LTS OFF/ARMED/ON, TOUCH CONTROLS dimmer, PTT → COM TX, gear-handle lamp, GTC SYSTEM TESTS /
   ENGINE / CABIN pages. Tests: `tests/aircraft/citation-m2/fixround1.test.ts`, `cockpit-main/controls.test.ts`.
-- **Open / EST**: exact M2 tilt-panel legends (no legible reference found); HORN SILENCE location; the
-  shared bizjet yoke geometry (horn height) and the seat's inboard armrests over the aft pedestal are shared-library
-  shapes, not changed; GCU 275 key logic follows G1000-family practice (pilot's guide not public).
+- **Open / EST**: exact M2 tilt-panel legends (no legible reference found); HORN SILENCE location;
+  GCU 275 key logic follows G1000-family practice (pilot's guide not public). The shared bizjet yoke horn
+  height and the seat inboard-armrest fit were fixed in round 2 (§20).
 
 ## 18. Fix round 1 — function lens (M2-L13/L14, M2-F01 … F59, M2-PROC-02 … 35)
 Tests: `tests/aircraft/citation-m2/fixround1-function.test.ts` (37 cases, each fails without its fix).
@@ -929,3 +929,22 @@ no longer works around the hold-in-lieu.
   anti-skid, OIL PRESS and single-engine restart is CJ-family EST (525AFM-06 pages not reviewed); the "Microphone
   select MIC OXY MASK" items have no switch in the sim (audio SCOPE); oxygen "pressure checked" uses the 400 psi LOW
   threshold (dispatch minimum depends on the flight, AFM Section IV not public).
+
+## 20. Fix round 2 — layout lens (M2-L36, M2-L40, M2-NEW-01)
+Tests: `tests/aircraft/citation-m2/fixround2.test.ts` (geometric checks, each fails without its fix).
+- **M2-L36 — tall ram's-horn control wheels**: the shared bizjet yoke gained an additive `styleOpts`
+  profile parameter (`src/cockpit/geometry/yokes.ts` `YokeStyleOpts`: `gripTop`, `gripLean`; defaults
+  reproduce the original M-wheel exactly for the other jets). The M2 sets `gripTop 0.12 / gripLean 0.018`
+  (EST from the S&D15 Fig III / S&D21 Fig 3 photographs), so the horns rise well above the hub with a slight
+  inward cant; the grip-top switch anchors (trim split switch, CWS) and drag hit boxes follow the taller horns.
+- **M2-NEW-01 — seat armrests vs pedestal**: the shared jet seat gained an additive armrest option
+  (`src/cockpit/geometry/structure.ts` `SeatGeometryOpts`: raise / length / aft shift / no support posts;
+  defaults unchanged). The M2 uses `M2_SEAT_ARMREST` (shell.ts: raised 3 cm, 0.28 m long, shifted 10 cm aft,
+  fold-down without posts, EST from the pin1 / S&D21 Fig 3 photographs), so the inboard armrests pass above
+  the low aft console (top 0.46 m vs armrest bottom 0.515 m above the floor) and end short of the throttle
+  quadrant's lever zone.
+- **M2-L40 — legend legibility (shared renderer)**: closed by verification, no code change. The symptom did
+  not reproduce: in the fresh day screenshots (`tests/output/citation-m2-r2/view_3.png`, `view_6.png`) the
+  ELECTRICAL POWER panel legends (L GEN / BATTERY / R GEN / DISPATCH / STBY DISP) and the tilt-panel bracket
+  legends (PRESSURIZATION / WINDSHIELD / ICE PROTECTION / FUEL BOOST / TEMP / LANDING GEAR / LIGHTS) are
+  readable. Re-open only if a shared-renderer change regresses it.

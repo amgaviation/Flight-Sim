@@ -161,4 +161,20 @@ describe('Global 6000 fix round 2: pedestal / glareshield / EMS controls', () =>
     step(2);
     expect(v.get('oxy.copilot_flowing')).toBe(1);
   });
+  it('G3-09: EMS CDUs dark with BATT MASTER OFF; the EMS position powers both from the battery direct buses', { timeout: 120_000 }, () => {
+    const { r, step } = setupFull('cold_dark');
+    const v = r.vars;
+    v.set(V.battMasterSel, 0); // OFF: batteries isolated - both CDUs dark (GX PTG 6-8)
+    step(1);
+    expect(v.get('ac.g6k.ck.ems1_pwr')).toBe(0);
+    expect(v.get('ac.g6k.ck.ems2_pwr')).toBe(0);
+    v.set(V.battMasterSel, 1); // EMS: batteries supply the EMS only (CDU 1 AV BATT, CDU 2 APU BATT)
+    step(1);
+    expect(v.get('ac.g6k.ck.ems1_pwr')).toBe(1);
+    expect(v.get('ac.g6k.ck.ems2_pwr')).toBe(1);
+    v.set(V.battMasterSel, 2); // ON: battery bus powers both
+    step(1);
+    expect(v.get('ac.g6k.ck.ems1_pwr')).toBe(1);
+    expect(v.get('ac.g6k.ck.ems2_pwr')).toBe(1);
+  });
 });

@@ -111,7 +111,7 @@ export const G6K_VARS = {
   oxyMask: (s: 1 | 2) => `${P}oxy.mask${s}`, // quick-donning mask out of its stowage: 1 in use
   oxyMaskMode: `${P}oxy.mask_mode`, // mask regulator: 0 N (diluter), 1 100 %, 2 EMERGENCY
   crewOxy: 'ac.oxy.crew_sw', // crew oxygen supply valve: 1 ON
-  paxOxy: 'ac.oxy.pax_sw', // PASSENGER OXYGEN: 0 CLOSED, 1 NORMAL (auto at 14,000 ft cabin), 2 OVERRIDE (deploy)
+  paxOxy: 'ac.oxy.pax_sw', // PASSENGER OXYGEN: 0 CLOSED, 1 NORMAL (auto at ~14,500 ft cabin, GX PTG 8-4), 2 OVERRIDE (deploy)
   hudPower: `${P}hud.power_sw`, // HUD system power (optional equipment): 1 ON. No cockpit switch on the Vision deck (powered through its DC BUS 1 breaker; states.ts sets it with aircraft power)
   tiller: 'input.tiller', // NOSE STEER handwheel (pilot side console): +/-75 deg
 

@@ -224,12 +224,17 @@ export function createElectrical(ctx: Pick<SimContext, 'vars'>): ElectricalNetwo
       { id: 'emer_r', a: 'r_ess_dc', b: 'emer_dc', kind: 'diode', closed: 1 },
       { id: 'ebatt_rly', a: 'ebatt', b: 'emer_dc', closed: V.ebattOn },
       { id: 'ebatt_chg', a: 'emer_dc', b: 'ebatt', kind: 'diode', closed: `${V.emerPwr} >= 1` },
-      // ---- flight-control buses
-      { id: 'ups_l', a: 'l_ess_dc', b: 'fcc_ups', kind: 'diode', closed: 1 },
-      { id: 'ups_r', a: 'r_ess_dc', b: 'fcc_ups', kind: 'diode', closed: 1 },
+      // ---- flight-control buses. The EBHA battery feeds only the 7 EBHA MCEs and the UPS battery only
+      // FCC 1A / 2B and the BFCU (LUC electrical, dossier §4.1): the steering diodes feed the FCS buses
+      // FROM the ESS DC buses, never back. The ideal-diode solver cannot open a diode that sits inside a
+      // ring of conducting diodes (l_ess_dc -> fcc_ups <- r_ess_dc is no bridge), so each tie is also
+      // gated on its ESS DC bus having a source of its own (battery relay, ESS TRU or AUX TRU
+      // substitution) - with the main batteries OFF the FCS batteries then carry only their own buses.
+      { id: 'ups_l', a: 'l_ess_dc', b: 'fcc_ups', kind: 'diode', closed: `${V.battL} == 1 || elec.l_ess_tru_online || ${V.auxSubst} == 1` },
+      { id: 'ups_r', a: 'r_ess_dc', b: 'fcc_ups', kind: 'diode', closed: `${V.battR} == 1 || elec.r_ess_tru_online || ${V.auxSubst} == 2` },
       { id: 'ups_rly', a: 'ups_batt_bus', b: 'fcc_ups', closed: `${V.upsBatt} == 1` },
-      { id: 'ebha_l', a: 'l_ess_dc', b: 'ebha', kind: 'diode', closed: 1 },
-      { id: 'ebha_r', a: 'r_ess_dc', b: 'ebha', kind: 'diode', closed: 1 },
+      { id: 'ebha_l', a: 'l_ess_dc', b: 'ebha', kind: 'diode', closed: `${V.battL} == 1 || elec.l_ess_tru_online || ${V.auxSubst} == 1` },
+      { id: 'ebha_r', a: 'r_ess_dc', b: 'ebha', kind: 'diode', closed: `${V.battR} == 1 || elec.r_ess_tru_online || ${V.auxSubst} == 2` },
       { id: 'ebha_rly', a: 'ebha_batt_bus', b: 'ebha', closed: `${V.ebhaBatt} == 1` },
       // ---- ground service bus (LUC: R MAIN DC > R MAIN BATT)
       { id: 'gsb_main', a: 'r_main_dc', b: 'gsb', closed: `${V.gsb} == 1` },

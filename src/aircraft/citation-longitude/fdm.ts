@@ -236,7 +236,10 @@ export const CITATION_LONGITUDE_FDM: FdmConfig = {
     CL_spoiler: -0.12, // speedbrake panels (4 of 6) at full flight deflection (EST)
     CL_groundSpoiler: -0.35, // all six panels at 60 deg (OG 15-5): lift dump (EST)
     groundEffectDrag: { x: [0, 0.05, 0.1, 0.2, 0.3, 0.5, 1.0], y: [0.3, 0.45, 0.72, 0.91, 0.954, 0.985, 1.0] },
-    groundEffectLift: { x: [0, 0.1, 0.2, 0.3, 0.5, 1.0], y: [1.1, 1.06, 1.03, 1.015, 1.004, 1.0] },
+    // LON-P3-12 (EST): raised so a 3 deg/s rotation at VR lifts off near VR+10 instead of VR+15 (OG 17-6: rotate at
+    // VR to 10 deg; FPG p.4 V2 at 35 ft = VR + 13-14 kt). McCormick image-vortex theory gives 10-20 % lift gain for
+    // a flapped low wing at h/b ~ 0.1; was 1.10/1.06/1.03 (liftoff at VR+15.3, alpha 7.5, 34,000 lb flaps 2).
+    groundEffectLift: { x: [0, 0.1, 0.2, 0.3, 0.5, 1.0], y: [1.19, 1.14, 1.07, 1.035, 1.012, 1.0] },
     CL_mach: { x: [0, 0.4, 0.6, 0.7, 0.8, 0.85, 0.9], y: [1, 1.04, 1.1, 1.14, 1.16, 1.12, 1.02] },
     // Drag: CD0 clean calibrated to the FPG cruise fuel flows; flap increments EST (single-slotted Fowler).
     CD0: { x: [0, 7, 15, 35], y: [0.0191, 0.026, 0.038, 0.077] },

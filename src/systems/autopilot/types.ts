@@ -218,6 +218,13 @@ export interface AfcsConfig {
     pitchDeg: number;
     /** After lift-off, once climbing > `minClimbFpm`, hold selected speed + `addKt` (737: V2+20). */
     speedAfterLiftoff?: { addKt: number; minClimbFpm: number };
+    /**
+     * (Appended by the global6000 aircraft.) The TO vertical mode survives AP engagement in flight instead of
+     * reverting to the default basic mode, until another vertical mode is selected (Collins Fusion, FSB BD-700-1A10
+     * appendix 6 GVFD AFCS: the AFCS holds the TO pitch mode after AP engagement). Lateral TO/GA and the GA vertical
+     * mode still revert. Default false (unchanged behaviour).
+     */
+    keepModeOnApEngage?: boolean;
   };
   ga?: {
     lateral: 'LVL' | 'TRK' | 'HDG';

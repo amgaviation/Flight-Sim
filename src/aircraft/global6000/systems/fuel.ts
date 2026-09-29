@@ -28,7 +28,7 @@ import { FuelSystem } from '../../../systems/fuel';
 import { LB, G6K_LIMITS } from '../data';
 import { GLOBAL6000_FDM } from '../fdm';
 import { G6K_VARS as V } from '../vars';
-import { FUEL_SOV_OPEN, RECIRC_L, RECIRC_R } from './logic';
+import { APU_FUEL_SOV_OPEN, FUEL_SOV_OPEN, RECIRC_L, RECIRC_R } from './logic';
 
 export const FUEL_LOW_KG = G6K_LIMITS.lowFuelLb * LB;
 /** Tank ids (FuelSystem) in FDM index order: 0 left main, 1 centre, 2 right main, 3 aft (Fusion GLOBAL6000_AIRFRAME.tanks). */
@@ -66,8 +66,10 @@ export function createFuel(ctx: Pick<SimContext, 'vars'>): FuelSystem {
       // The SOV is a motor-driven valve (DC EMER): it holds its position without power (logic.ts FUEL_SOV_OPEN).
       { id: 'eng1', node: 'l_feed', flowPph: 'eng1.ff_pph', engine: 1, run: `fadec.eng1.fuel_cmd && ${FUEL_SOV_OPEN[1]} && !fail.eng1.flameout`, suction: { tank: 'l_main', ceilingFt: 20000 } },
       { id: 'eng2', node: 'r_feed', flowPph: 'eng2.ff_pph', engine: 2, run: `fadec.eng2.fuel_cmd && ${FUEL_SOV_OPEN[2]} && !fail.eng2.flameout`, suction: { tank: 'r_main', ceilingFt: 20000 } },
-      // APU from the right feed line through the APU fire SOV (DC EMER); boost pressure required (GXAPU).
-      { id: 'apu', node: 'r_feed', flowPph: 'apu.ff_pph', run: `(apu.fuel_cmd || (apu.state >= 1 && apu.state <= 4)) && !${V.fireHandle('apu')} && elec.apu_fire_sov_powered`, minPressPsi: 5 },
+      // APU from the right feed line through the APU fire SOV (DC EMER, GXFU): a motor-driven valve that HOLDS its
+      // position unpowered (logic.ts APU_FUEL_SOV_OPEN) - a DC EMER bus loss leaves the valve where it is and the
+      // running APU keeps its fuel. Boost pressure required (GXAPU).
+      { id: 'apu', node: 'r_feed', flowPph: 'apu.ff_pph', run: `(apu.fuel_cmd || (apu.state >= 1 && apu.state <= 4)) && ${APU_FUEL_SOV_OPEN}`, minPressPsi: 5 },
     ],
     transfers: [
       // Centre transfer pumps (EST 5,000 lb/h each), FMQGC commanded.

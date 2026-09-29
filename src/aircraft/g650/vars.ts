@@ -188,7 +188,11 @@ export const G650_VARS = {
   autobrake: `${P}autobrake`, // AUTOBRAKE rotary: -1 RTO, 0 OFF, 1 LOW, 2 MED, 3 HIGH
   nwsPower: `${P}nws_sw`, // NWS POWER (guarded, red): 1 ON, 0 OFF
   terrInhibit: `${P}taws.terr_inhibit`, // TERRAIN INHIBIT: 1 ON
-  gpwsInhibit: `${P}taws.gpws_inhibit`, // GPWS INHIBIT: 1 ON (no G650 pedestal switch in the photographs: state / TAWS input only)
+  // SCOPE: GPWS INHIBIT is a TAWS input / state var without a cockpit switch. The photographed G650
+  // pedestal tilt panel carries TERRAIN INHIBIT, RAAS INHIBIT and GPWS / GND SPLR FLAP ORIDE (pedestal.ts);
+  // no public photo shows a discrete basic-GPWS inhibit switch, so the var is settable from states /
+  // failures only until a tilt-panel photo settles the full switch set (dossier §9.8).
+  gpwsInhibit: `${P}taws.gpws_inhibit`,
   tiller: 'input.tiller',
   // ---- added by the check-ride review (G650ER pedestal / lower centre panel photographs, Flickr jeffatchison
   // 52948656184 / 52948654839; SmartCockpit G650 avionics quiz: "IRS Mode Select panel", amber "ON BAT")
@@ -257,6 +261,11 @@ export const G650_VARS = {
   edm: `${P}press.edm`, // Emergency Descent Mode latched (high cabin altitude, no crew response)
   raasCallout: `${P}taws.raas_callout`, // string: last RAAS callout ('' when none)
   raasOnRunway: `${P}taws.raas_on_rwy`, // 1 while RAAS considers the aircraft on a runway
+  // ---- added by fix round 1 (procedures lens)
+  // Fire tests seen this power cycle (logic.ts latches; checklists.ts "TESTED" auto-checks, code450
+  // Before Starting Engines fire-test items and APU Start Checklist item 6): 'l' / 'r' engine loop tests,
+  // 'apu' APU detector test, 'fault' FAULT TEST. Cleared when the detection system loses power.
+  fireTested: (k: 'l' | 'r' | 'apu' | 'fault') => `${P}fire.tested_${k}`,
 
   // ======================================================== YOKE / TILLER (added with the cockpit build)
   // The app's input module rewrites input.pitch_trim_rate / input.ap_disc / input.tiller every frame, so the

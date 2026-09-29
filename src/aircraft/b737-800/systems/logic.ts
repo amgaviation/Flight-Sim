@@ -462,6 +462,17 @@ export class B738Logic implements Subsystem {
     // airframe, surveillance.ts wxrEffectiveTiltDeg); IDNT held = ground clutter suppressed on the display.
     v.set('wxr.stab', v.get(B738.wxrStab, 1) !== 0 ? 1 : 0);
     v.set('wxr.idnt', v.get(B738.wxrIdnt) !== 0 ? 1 : 0);
+    // ---- Air conditioning OVHT TEST (FCOM 2.20): while held it tests the wing-body overheat detector loops;
+    // cas.ts lights both WING-BODY OVERHEAT lights (and the AIR COND six-pack) from this flag.
+    v.set(B738.ovhtTestActive, v.get(B738.ovhtTest) !== 0 ? 1 : 0);
+    // ---- Centre boost pump automatic shutoff (b737.org.uk Fuel: NG centre pumps post-SB/AD 2002-43-11 shut off
+    // automatically on low output pressure to prevent dry running). Latched with the switch ON once the centre
+    // tank is empty; the LOW PRESSURE light stays on (cas.ts); reset by cycling the switch OFF.
+    for (const p of ['c_l', 'c_r'] as const) {
+      const sw = v.get(B738.fuelPump(p)) !== 0;
+      if (!sw) v.set(B738.ctrPumpShutoff(p), 0);
+      else if (v.get('fuel.center_usable_kg') <= 1) v.set(B738.ctrPumpShutoff(p), 1);
+    }
     // ---- Service interphone (SCOPE: no interphone audio), TAT probe test (SCOPE: aspirated TAT test flag).
     v.set('ac.b738.svc_interphone_active', v.get(B738.svcInterphone) !== 0 ? 1 : 0);
     v.set('ac.b738.tat_test_active', v.get(B738.tatTest) !== 0 && !air ? 1 : 0);
@@ -547,6 +558,8 @@ export class B738Logic implements Subsystem {
       f('equip_cool_supply', 'Equipment cooling supply fan', 'EQUIP COOLING SUPPLY OFF light; select ALTN.'),
       f('equip_cool_exhaust', 'Equipment cooling exhaust fan', 'EQUIP COOLING EXHAUST OFF light; select ALTN.'),
       f('zone_temp', 'Duct overheat (zone temperature)', 'ZONE TEMP light.'),
+      f('fmc1', 'FMC L failure', 'Left FMC failed: CDU / LNAV / VNAV lost in NORMAL or BOTH ON L; select FMC BOTH ON R.'),
+      f('fmc2', 'FMC R failure', 'Right FMC failed: CDU / LNAV / VNAV lost in BOTH ON R.'),
       f('xpdr1', 'ATC transponder 1 failure', 'Transponder 1 inoperative (select ATC 2); TCAS off with ATC 1 selected.'),
       f('xpdr2', 'ATC transponder 2 failure', 'Transponder 2 inoperative (select ATC 1); TCAS off with ATC 2 selected.'),
       f('wxr', 'Weather radar failure', 'WXR FAIL on the ND with WXR selected; no returns.'),
@@ -609,7 +622,8 @@ export class B738LogicLate implements Subsystem {
       [b('elec.inv_online * 115'), b('elec.inv_online * 400'), b('elec.inv_va / 115')],
       [b('0'), b('0'), b('0')],
     ];
-    // DC meters: STBY PWR, BAT BUS, BAT, TR1, TR2, TR3 (volts, amps).
+    // DC meters: STBY PWR, BAT BUS, BAT, TR1, TR2, TR3, TEST, AUX BAT (value 7, appended; the cockpit selector
+    // places it between BAT and TR1 as on the real panel — b737.org.uk Electrics).
     this.dcMeter = [
       [b('elec.dc_stby_v'), b('elec.dc_stby_amps')],
       [b('elec.batt_bus_v'), b('elec.batt_bus_amps')],
@@ -618,6 +632,7 @@ export class B738LogicLate implements Subsystem {
       [b('elec.tru2_v'), b('elec.tru2_amps')],
       [b('elec.tru3_v'), b('elec.tru3_amps')],
       [b('0'), b('0')],
+      [b('elec.aux_batt_v'), b('elec.aux_batt_amps')],
     ];
   }
 
@@ -636,13 +651,13 @@ export class B738LogicLate implements Subsystem {
     }
 
     // ---- Panel test switches (FCOM): WINDOW HEAT TEST OVHT lights OVERHEAT (ON lights out), PWR TEST forces ON;
-    //      air conditioning OVHT TEST lights ZONE TEMP; cargo fire TEST lights both cargo FIRE lights;
+    //      air conditioning OVHT TEST tests the wing-body overheat loops (cas.ts wing_body_ovht conditions read
+    //      ac.b738.ovht_test_act, FCOM 2.20); cargo fire TEST lights both cargo FIRE lights;
     //      electrical MAINT lights ELEC / TR UNIT (SCOPE: BITE lamp test only).
     // FWD / AFT CAB ZONE TEMP lights (the duct overheat failure lights CONT CAB via its annunciator): lamp test only.
     for (const z of [2, 3] as const) v.set(B738.lt.zoneTemp(z), powered && test ? 1 : 0);
     const wht = v.get(B738.windowHeatTest);
     if (powered && wht <= -0.5) for (const w of WINDOW_HEATS) if (v.get(B738.windowHeat(w)) !== 0) v.set(B738.lt.windowOverheat(w), 1);
-    if (powered && v.get(B738.ovhtTest) !== 0) for (const z of [1, 2, 3] as const) v.set(B738.lt.zoneTemp(z), 1);
     // Cargo fire TEST (FCOM 8.20): the FWD / AFT FIRE lights, bell and master FIRE WARN come from the cargo zones'
     // own test (airframe.ts); here the extinguisher squib test lights and DISCH.
     const cargoTest = powered && v.get(B738.cargoTest) !== 0 && v.get('elec.cargo_fire_powered') !== 0;
@@ -704,8 +719,8 @@ export class B738LogicLate implements Subsystem {
     const bell = fireWarn && v.get('elec.fire_det_powered') !== 0;
     if (bell !== this.bellOn) {
       this.bellOn = bell;
-      // SCOPE: the fire bell uses the synthesized master-warning chime (no bell sample in the audio engine).
-      this.ctx.audio?.tone('master_warning', bell);
+      // Continuous fire warning bell (FCOM 8.20): procedural motor-driven bell voice ('fire_bell', audio synth.ts).
+      this.ctx.audio?.tone('fire_bell', bell);
     }
     // ---- Intermittent warning horn: take-off configuration or cabin altitude (ALT HORN CUTOUT silences the latter).
     const cabAlt = v.get('press.cabin_alt_warn') !== 0;
@@ -736,7 +751,7 @@ export class B738LogicLate implements Subsystem {
     v.set(L.apuMaint, lit(false)); // SCOPE: no APU maintenance BITE
     // Meters.
     const acSel = Math.max(0, Math.min(6, Math.round(v.get(B738.acMeterSel))));
-    const dcSel = Math.max(0, Math.min(6, Math.round(v.get(B738.dcMeterSel))));
+    const dcSel = Math.max(0, Math.min(7, Math.round(v.get(B738.dcMeterSel))));
     v.set(L.acVolts, this.acMeter[acSel][0]());
     v.set(L.acHz, this.acMeter[acSel][1]());
     v.set(L.acAmps, this.acMeter[acSel][2]());

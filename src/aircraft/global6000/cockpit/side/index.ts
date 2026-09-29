@@ -34,6 +34,11 @@
  *  - Cockpit door: the Global flight-deck door is a manual door without an
  *    electric lock control on the flight deck (EST from the FCOM flight
  *    compartment chapter, which lists no door control), so none is built.
+ *  - Passenger entry door (fix round P10): the entry door is immediately aft
+ *    of the flight deck; a latch handle on the aft bulkhead beside the
+ *    doorway stands in for it (writes `ac.door.pax_open`), so the BEFORE
+ *    START "Doors - CLOSED" item is performable from the cockpit. SCOPE: no
+ *    cabin / airstair model.
  */
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -81,6 +86,24 @@ export function buildSideConsoles(c: G6kCockpitContext): void {
   }
   buildCcbp(c);
 
+  // ---- Passenger entry door latch handle (fix round P10; see the header note). On the aft bulkhead beside the
+  // doorway, copilot side; ac.door.pax_open 1 = open (GXAG door warning: PASSENGER DOOR caution while open).
+  const dp = b.panel({ name: 'g6k_pax_door', center_m: [X_AFT + 0.012, 0.46, -1.12], facing: 'fwd', width: 0.09, height: 0.1, origin: 'center', material: 'panelDark', radius: 0.008, screws: false });
+  dp.label('PAX DOOR', 0, -0.038, { height: 0.0032, zone: 'panel_cb' });
+  dp.add(
+    new ToggleSwitch(c.env, {
+      id: 'g6k.side.pax_door',
+      label: 'PASSENGER DOOR LATCH',
+      var: V.door('pax'),
+      positions: ['OPEN', 'CLOSED'],
+      values: [1, 0],
+      labels: { positions: true, height: 0.0024, zone: 'panel_cb' },
+      scale: 1.4,
+    }),
+    0,
+    0.01,
+  );
+
   const dim = ['ac.g6k.light.ems1_dim', 'ac.g6k.light.ems2_dim'];
   units[0].partner = units[1];
   units[1].partner = units[0];
@@ -90,7 +113,9 @@ export function buildSideConsoles(c: G6kCockpitContext): void {
     // only"): the CDUs run from the battery direct buses with the battery bus isolated.
     const ems = vars.get(V.battMasterSel) === 1;
     vars.set('ac.g6k.ck.ems1_pwr', batt || (ems && vars.get('elec.av_batt_dir_powered') !== 0) ? 1 : 0);
-    vars.set('ac.g6k.ck.ems2_pwr', batt || vars.get('elec.apu_batt_dir_powered') !== 0 ? 1 : 0);
+    // GX PTG 6-8: BATT MASTER OFF isolates the batteries - both CDUs dark; the EMS position powers CDU 2 from the APU
+    // battery direct bus (like CDU 1 from the AV battery), not the always-hot bus alone.
+    vars.set('ac.g6k.ck.ems2_pwr', batt || (ems && vars.get('elec.apu_batt_dir_powered') !== 0) ? 1 : 0);
     // GX PTG 15-6: the L / R DISPLAY knobs also dim the EMS CDUs (times each unit's own BRT keys).
     for (let i = 0; i < units.length; i++) units[i].dim = vars.get(dim[i], 1);
     shared.tick(dt);

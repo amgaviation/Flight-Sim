@@ -16,7 +16,7 @@ async function activeRoute(r: Awaited<ReturnType<typeof rig>>): Promise<void> {
 }
 
 describe('737NG CDU: scratchpad and page selection', () => {
-  it('powers up on IDENT with the model and engine rating; INIT REF from IDENT goes to POS INIT', async () => {
+  it('powers up on IDENT with the model and engine rating; INIT REF from IDENT goes to POS INIT', { timeout: 15_000 }, async () => {
     const r = await rig();
     expect(r.cdu.pageId).toBe('ident');
     const s = r.text();

@@ -124,6 +124,16 @@ export interface AutothrottleConfig {
    * turn into climb thrust (the HOLD -> THR release is meant for the takeoff HOLD at `thrHoldEndFt`).
    */
   holdAfterDescentIdle?: boolean;
+  /**
+   * (Appended by citation-longitude, LON-P3-01.) Bizjet ground-engagement policy. 'toga': on the ground the AT
+   * button engages the A/T into HOLD (servo off, the levers stay wherever the crew put them — OG 7-5: "HOLD will
+   * only activate when on the ground"), never into a servo-driving speed/thrust mode, so pressing A/T during taxi
+   * cannot spool the engines (Longitude OG Section 1 limitation: "Autothrottle ... not armed during taxi"); TO is
+   * entered only through the TO/GA request, and a TO/GA press on the ground engages the A/T into TO by itself
+   * (AW&ST 2019 Longitude pilot report: pressing TOGA drives the thrust levers to the takeoff rating).
+   * Default: undefined = unrestricted (previous behaviour: ground engagement into SPD).
+   */
+  groundEngage?: 'toga';
 }
 
 export class Autothrottle implements Subsystem {
@@ -190,7 +200,8 @@ export class Autothrottle implements Subsystem {
     if (this.engaged) this.disengage(true);
     else if (this.power() && this.vars.get(this.f) === 0) {
       this.engagedBizjet = true;
-      this.mode = AtMode.Speed;
+      // LON-P3-01 (cfg.groundEngage 'toga'): on the ground the button engages into HOLD, never a servo mode.
+      this.mode = this.cfg.groundEngage === 'toga' && this.vars.get('gear.air_ground') !== 0 ? AtMode.Hold : AtMode.Speed;
       this.prevReq = -1;
       this.clearWarning();
     }
@@ -269,6 +280,12 @@ export class Autothrottle implements Subsystem {
         this.disengage(true);
       }
       this.prevArm = v.get(this.armVar) !== 0;
+    }
+    // LON-P3-01 (cfg.groundEngage 'toga'): a TO/GA press on the ground engages the A/T into TO by itself.
+    if (!this.boeing && this.cfg.groundEngage === 'toga' && !this.engaged && ok && onGround && reqChanged && req === AtRequest.Takeoff) {
+      this.engagedBizjet = true;
+      this.mode = AtMode.Takeoff;
+      this.clearWarning();
     }
     if (this.engaged && !ok) this.disengage(true);
 
@@ -407,10 +424,13 @@ export class Autothrottle implements Subsystem {
         this.mode = AtMode.Idle;
         break;
       case AtRequest.Thrust:
-        this.mode = AtMode.Thrust;
+        // LON-P3-01 (cfg.groundEngage 'toga'): no servo-driving speed/thrust mode on the ground - stay in HOLD.
+        if (!this.boeing && this.cfg.groundEngage === 'toga' && onGround) this.mode = AtMode.Hold;
+        else this.mode = AtMode.Thrust;
         break;
       case AtRequest.Speed:
-        this.mode = AtMode.Speed;
+        if (!this.boeing && this.cfg.groundEngage === 'toga' && onGround) this.mode = AtMode.Hold;
+        else this.mode = AtMode.Speed;
         break;
       default:
         // No AFDS pitch mode: Boeing keeps its mode; bizjets fall back to SPD.

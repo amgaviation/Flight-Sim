@@ -135,6 +135,9 @@ export class G6kLogic implements Subsystem {
   private toPhase = false;
   // hydraulic temperatures (EST first-order warm-up)
   private readonly hydT = [0, 20, 20, 20];
+  // reverse-thrust 30 s limit (TCDS 3.2) timer / commanded-reverse cap per engine
+  private readonly maxRevT = [0, 0, 0];
+  private readonly revCap = [0, 1, 1];
   // fix round 2 (function lens)
   private prevBattSel = NaN;
   private prevBattMaster = NaN;
@@ -158,6 +161,7 @@ export class G6kLogic implements Subsystem {
   private flapLatch = false;
   private prevSfReset = false;
   private readonly fuelSov = [true, true, true];
+  private apuFuelSov = true;
   private liftoffT = 0;
   private discT = 0;
   private hornMuteLatched = false;
@@ -203,7 +207,14 @@ export class G6kLogic implements Subsystem {
       const rev = v.get(N.rev[i]);
       // Piggy-back reverse levers can only be lifted with the thrust lever at idle (mechanical interlock).
       const t = i === 1 ? tla1 : tla2;
-      v.set(N.revEff[i], t <= TLA.idle + 0.02 ? Math.max(0, Math.min(1, rev)) : 0);
+      const base = t <= TLA.idle + 0.02 ? Math.max(0, Math.min(1, rev)) : 0;
+      // TCDS 3.2: "FADEC controls the fan rpm (N1) to 70.0 % for 30 seconds" - max reverse is time-limited to 30 s.
+      // SCOPE: after 30 s at high reverse the FADEC here ramps the commanded reverse toward idle reverse (~3 s ramp,
+      // EST); the exact post-limit FADEC behaviour is not published.
+      if (base > 0.9 && v.get(N.running[i]) !== 0) this.maxRevT[i] += dt;
+      else if (base < 0.5) this.maxRevT[i] = 0;
+      this.revCap[i] = this.maxRevT[i] > 30 ? Math.max(0.15, this.revCap[i] - dt / 3) : 1;
+      v.set(N.revEff[i], Math.min(base, this.revCap[i]));
       v.set(N.tlaEff[i], rev > 0.02 ? 0 : Math.max(0, Math.min(1, t)));
     }
 
@@ -290,11 +301,14 @@ export class G6kLogic implements Subsystem {
     for (let k = 0; k < ACMPS.length; k++) v.set(ACMPS[k].cmd, want[k] ? 1 : 0);
     v.set(V.acmpCmd('3a'), want[3] ? 1 : 0);
     v.set(V.pumpRatCmd, this.ratLatched ? 1 : 0);
-    // Fluid temperature (EST: warms toward 45 C + 20 C with pumps delivering, cools to ambient, tau 20 min).
+    // Fluid temperature (EST: warms toward 45 C + 20 C with pumps delivering, cools to ambient, tau 20 min). The
+    // `hyd.sysN_hitemp` failure (createSystems.ts catalogue) models a system overheating (e.g. a pump running against
+    // a blocked case-drain cooler): the temperature climbs past the 96 C HYD n HI TEMP caution level (GXHY).
     for (let i = 1; i <= 3; i++) {
       const pressurised = v.get(N.hydPsi[i]) > 1000;
-      const target = pressurised ? 50 : Math.min(30, v.get('fdm.sat_c', 15));
-      this.hydT[i] += ((target - this.hydT[i]) * dt) / 1200;
+      const overheat = pressurised && v.get(`fail.hyd.sys${i}_hitemp`) !== 0;
+      const target = overheat ? 120 : pressurised ? 50 : Math.min(30, v.get('fdm.sat_c', 15));
+      this.hydT[i] += ((target - this.hydT[i]) * dt) / (overheat ? 120 : 1200);
       v.set(N.hydTemp[i], this.hydT[i]);
     }
 
@@ -664,6 +678,11 @@ export class G6kLogic implements Subsystem {
       if (v.get(i === 1 ? 'elec.eng_sov1_powered' : 'elec.eng_sov2_powered') !== 0) this.fuelSov[i] = cmdOpen;
       v.set(FUEL_SOV_OPEN[i], this.fuelSov[i] ? 1 : 0);
     }
+    // APU fire SOV (GXFU): the same kind of motor-driven valve on the DC EMER bus - closed by the APU fire handle,
+    // holds its position unpowered (a DC EMER bus loss must NOT flame out a running APU). APU FUEL SOV caution =
+    // valve not in its commanded state (cas.ts).
+    if (v.get('elec.apu_fire_sov_powered') !== 0) this.apuFuelSov = v.get(V.fireHandle('apu')) === 0;
+    v.set(APU_FUEL_SOV_OPEN, this.apuFuelSov ? 1 : 0);
     // SET LDG ELEV (GX PTG 13-65): landing elevation not received from the FMS (no destination) with LDG ELEV at FMS.
     v.set(SET_LDG_ELEV, v.get(V.ldgElevFms) === 1 && v.getString('fms.dest') === '' && !ground ? 1 : 0);
 
@@ -762,6 +781,10 @@ export class G6kLogic implements Subsystem {
     this.depFieldFt = v.get('adc1.alt_ft');
     this.fuelSov[1] = v.get(V.fireHandle('l')) === 0;
     this.fuelSov[2] = v.get(V.fireHandle('r')) === 0;
+    this.apuFuelSov = v.get(V.fireHandle('apu')) === 0;
+    this.maxRevT.fill(0);
+    this.revCap[1] = 1;
+    this.revCap[2] = 1;
     const warm = v.get('eng1.running') !== 0 || v.get('eng2.running') !== 0;
     for (let i = 1; i <= 3; i++) this.hydT[i] = warm ? 45 : Math.min(30, v.get('fdm.sat_c', 15));
   }

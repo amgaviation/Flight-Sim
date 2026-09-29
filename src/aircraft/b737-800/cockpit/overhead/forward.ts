@@ -193,7 +193,20 @@ export function buildForwardOverhead(c: B738CockpitContext, root: Panel): void {
       id('dc_meter'),
       'DC METERS',
       B738.dcMeterSel,
-      ['STBY PWR', 'BAT BUS', 'BAT', 'TR1', 'TR2', 'TR3', 'TEST'].map((l, i) => ({ value: i, label: l, angle: -135 + i * 45 })),
+      // Real rotary order STBY PWR, BAT BUS, BAT, AUX BAT, TR1, TR2, TR3, TEST (b737.org.uk Electrics; aircraft
+      // with the auxiliary battery). AUX BAT is the appended var value 7 placed in its real position.
+      (
+        [
+          ['STBY PWR', 0],
+          ['BAT BUS', 1],
+          ['BAT', 2],
+          ['AUX BAT', 7],
+          ['TR1', 3],
+          ['TR2', 4],
+          ['TR3', 5],
+          ['TEST', 6],
+        ] as const
+      ).map(([l, value], i) => ({ value, label: l, angle: -140 + i * 40 })),
       0.185,
       0.183,
       { diameter: 0.013, labelHeight: 0.0013, labelRadius: 0.0125 },

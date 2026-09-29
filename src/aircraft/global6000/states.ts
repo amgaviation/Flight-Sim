@@ -13,10 +13,11 @@
  */
 import type { InitialState } from '../types';
 import type { SimContext } from '../../core/SimContext';
-import { ENG, FDM, SURF } from '../../core/vars';
+import { ENG, FDM, NAV, SURF } from '../../core/vars';
 import type { FlightModel } from '../../physics/FlightModel';
 import type { Turbofan } from '../../physics/engines/Turbofan';
-import { FLAP_DETENTS, G6K_LIMITS } from './data';
+import { FUSION_VARS } from '../../avionics/collins-fusion/vars';
+import { FLAP_DETENTS, G6K_LIMITS, LB, vSpeeds } from './data';
 import { G6K_ACP_CH, G6K_GASPERS, G6K_VARS as V } from './vars';
 import type { G6kSystems } from './createSystems';
 
@@ -277,6 +278,9 @@ export function setG6kSwitches(ctx: Pick<SimContext, 'vars'>, sys: G6kSystems, s
   // ---- doors
   v.set(V.door('pax'), s === 'cold_dark' ? 1 : 0);
   for (const d of ['emer', 'bag', 'aft_eqpt', 'svc_large', 'svc_small'] as const) v.set(V.door(d), 0);
+  // ---- transponder (fix round P05): BEFORE TAKEOFF "Transponder - TA/RA" (checklists.ts) / AFTER LANDING "STBY":
+  // TA/RA (xpdr.mode 5) from the take-off state through the approach, STBY (1) on the ground states.
+  v.set(NAV.xpdrMode, s === 'takeoff' || inAir ? 5 : 1);
 }
 
 /** `AircraftInstance.applyState` of the Global 6000. */
@@ -365,6 +369,14 @@ export function applyG6kState(ctx: SimContext, sys: G6kSystems, s: InitialState)
     i.update(1 / 60); // publish the aligned attitude before the AFCS set-up below
   }
   sys.standbyAhrs.reset(true);
+  // Fix round P06: the climb checklist sets the altimeters to STD at the transition altitude, so an in-air state
+  // above it starts with both ADCs and the IESI (ADC 3) on STD 29.92 (EST transition altitude 18,000 ft, North
+  // America; the sim has no per-region transition database).
+  const baroStd = inAir && v.get(FDM.altMsl) > 18000;
+  for (const n of [1, 2, 3] as const) {
+    v.set(`adc${n}.baro_std`, baroStd ? 1 : 0);
+    if (baroStd) v.set(`adc${n}.baro_inhg`, 29.92);
+  }
   for (const a of sys.adc) {
     a.reset();
     for (let k = 0; k < 200; k++) a.update(1 / 60); // self test done: air data valid when the state starts
@@ -375,6 +387,19 @@ export function applyG6kState(ctx: SimContext, sys: G6kSystems, s: InitialState)
   for (const z of [1, 2, 3]) v.set(`pneu.zone${z}_temp_c`, 22); // cabin mass settled at the published zone temperature
   sys.press.settle();
   sys.suite?.applyState(s);
+
+  // ---- TOLD / V-speeds (fix round P07): the checklists leave TOLD entered before take-off ("FMS - PROGRAMMED
+  // (TOLD entered)") and VREF set in the descent, so the takeoff / approach presets start with the FMS TOLD
+  // V-speeds for the present weight (data.ts vSpeeds; the PFD speed tape shows the bugs).
+  const wLb = v.get(FDM.mass) / LB;
+  const vs = vSpeeds(wLb);
+  const takeoffBugs = s === 'takeoff' || s === 'ready_to_taxi';
+  v.set(FUSION_VARS.vspd('v1'), takeoffBugs ? Math.round(vs.v1) : 0);
+  v.set(FUSION_VARS.vspd('vr'), takeoffBugs ? Math.round(vs.vr) : 0);
+  v.set(FUSION_VARS.vspd('v2'), takeoffBugs ? Math.round(vs.v2) : 0);
+  const vref = Math.round(vs.vref);
+  v.set(FUSION_VARS.vspd('vref'), s === 'approach' ? vref : 0);
+  v.set(FUSION_VARS.vspd('vapp'), s === 'approach' ? vref + 5 : 0); // VREF + 5 (dossier section 7; fullFlight.test.ts)
 
   // ---- AFCS / autothrottle set-up (FCP selected values)
   const hdg = v.get(FDM.headingMag);

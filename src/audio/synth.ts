@@ -417,6 +417,13 @@ export const LOOPS: Record<string, Recipe> = {
   // aircraft through the loop gain. VOR/LOC/DME idents are 1020 Hz (FAA Order 6820.10 / AIM 1-1-3, 1-1-9); NDBs
   // commonly use 1020 Hz (or 400 Hz) keyed modulation.
   'ident.1020': (sr) => makeLoopable(normalize(tone(sr, 1, 1020, [1], 0.001, 0.001), 0.5), sr, 0.02),
+  // Continuous fire warning bell (appended for the 737 family, additive): motor-driven clapper bell,
+  // ~18 strikes/s on an inharmonic ~1.9 kHz shell (EST character of transport-category fire bells).
+  fire_bell: (sr) => {
+    const out = new Float32Array(Math.round(sr * 0.5));
+    for (let k = 0; k < 9; k++) mixInto(out, bell(sr, 0.12, 1900, 0.06), sr, k * 0.055, 0.7);
+    return makeLoopable(normalize(out, 0.85), sr, 0.01);
+  },
   // ELT remote aural warning buzzer (EST: ~2.9 kHz piezo beeping 0.5 s on / 0.5 s off).
   'elt.buzzer': (sr) => {
     const out = new Float32Array(Math.round(sr));

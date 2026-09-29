@@ -37,6 +37,12 @@ export interface SpeedSchedule {
    * so the aircraft has decelerated when it crosses 10,000 ft (the FMS deceleration segment). Default 0.
    */
   speedLimitDecelFt?: number;
+  /**
+   * Additive: approach deceleration segment (Boeing FMC style). In the DES phase within this distance (nm) of
+   * the end of descent the target speed blends linearly from the descent speed down to the approach speed,
+   * reaching it 3 nm before the end of descent. Default 0 (off; Garmin-style constant descent speed).
+   */
+  approachDecelNm?: number;
 }
 
 /** Generic defaults; aircraft should supply their own schedule. EST: typical light-jet figures. */
@@ -154,6 +160,16 @@ export class VnavGuidance {
     }
     const limitAlt = SPEED_LIMIT_ALT_FT + (this.phase === 'DES' ? (sp.speedLimitDecelFt ?? 0) : 0);
     if (alt < limitAlt && this.phase !== 'APR') kt = Math.min(kt, SPEED_LIMIT_KT);
+    // Approach deceleration segment (approachDecelNm, additive): blend down to the approach speed before the
+    // end of descent so the aircraft arrives at the FAF area decelerated (Boeing FMC decel segment).
+    const decelNm = sp.approachDecelNm ?? 0;
+    if (decelNm > 3 && this.phase === 'DES' && p.valid && Number.isFinite(p.eodDistNm)) {
+      const dEod = p.eodDistNm - s;
+      if (dEod < decelNm) {
+        const f = Math.max(0, Math.min(1, (dEod - 3) / (decelNm - 3)));
+        kt = Math.min(kt, sp.approachKt + (kt - sp.approachKt) * f);
+      }
+    }
     // Next speed constraint ahead (at / at-or-below caps the target).
     for (let k = Math.max(0, activeIdx); k < legs.length; k++) {
       const l = legs[k];

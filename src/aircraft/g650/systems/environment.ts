@@ -171,6 +171,10 @@ export function createApu(ctx: Pick<SimContext, 'vars'>): Apu {
     starterCutoutPct: 40, // LUC: starter disengages at 40 % on the ground
     selfSustainPct: 40,
     egtLimitC: G650_LIMITS.apuEgtStartC, // LIM 1,050 degC start (732 degC running: CAS only)
+    // A failed (no-light-off) start is retried after a MASTER cycle within the starter duty limits
+    // (code450 APU Start Checklist; LIM starter duty 3 min / 15 s x 2): the master cycle clears the
+    // latched fault already during spooldown, not only with the rotor at rest (P01).
+    masterOffFaultClear: true,
     ffIdlePph: 180,
     ffFullPph: G650_LIMITS.apuFuelPph,
   });

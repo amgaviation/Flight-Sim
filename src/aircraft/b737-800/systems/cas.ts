@@ -38,7 +38,10 @@ const gnd = 'gear.air_ground != 0';
 const eng = (i: 1 | 2) => `eng${i}.n2_pct > 50`;
 const pumpSide: Record<FuelPump, 1 | 2> = { l_aft: 1, l_fwd: 1, r_fwd: 2, r_aft: 2, c_l: 1, c_r: 2 };
 const pumpText: Record<FuelPump, string> = { l_aft: 'L AFT', l_fwd: 'L FWD', r_fwd: 'R FWD', r_aft: 'R AFT', c_l: 'CTR L', c_r: 'CTR R' };
-const lpCond = (p: FuelPump): string => `fuel.${p}_lowpress && (${air} || ${eng(pumpSide[p])} || ${B738.fuelPump(p)} != 0)`;
+// Centre pumps: the automatic low-output-pressure shutoff (logic.ts latch) keeps the LOW PRESSURE light on with
+// the switch ON while the pump is latched off (b737.org.uk Fuel: post-SB/AD centre pump auto shutoff).
+const lpCond = (p: FuelPump): string =>
+  `(fuel.${p}_lowpress${p.startsWith('c_') ? ` || ${B738.ctrPumpShutoff(p as 'c_l' | 'c_r')}` : ''}) && (${air} || ${eng(pumpSide[p])} || ${B738.fuelPump(p)} != 0)`;
 const doorText: Record<Door, string> = {
   fwd_entry: 'FWD ENTRY',
   aft_entry: 'AFT ENTRY',
@@ -176,8 +179,9 @@ export const B738_ANNUNCIATORS: Annunciator[] = [
   // ================================================================ AIR COND
   a('pack1', 'PACK L', 'air_cond', `pneu.pack1_trip || (${B738.pack(1)} >= 1 && !pneu.pack1_on && ${air})`, B738.lt.packTrip(1), { delayS: 2 }),
   a('pack2', 'PACK R', 'air_cond', `pneu.pack2_trip || (${B738.pack(2)} >= 1 && !pneu.pack2_on && ${air})`, B738.lt.packTrip(2), { delayS: 2 }),
-  a('wing_body_ovht1', 'WING-BODY OVERHEAT L', 'air_cond', 'pneu.l_duct_leak', B738.lt.wingBodyOvht(1)),
-  a('wing_body_ovht2', 'WING-BODY OVERHEAT R', 'air_cond', 'pneu.r_duct_leak', B738.lt.wingBodyOvht(2)),
+  // OVHT TEST (bleed panel) tests the wing-body overheat detector loops: both lights while held (FCOM 2.20).
+  a('wing_body_ovht1', 'WING-BODY OVERHEAT L', 'air_cond', `pneu.l_duct_leak || ${B738.ovhtTestActive}`, B738.lt.wingBodyOvht(1)),
+  a('wing_body_ovht2', 'WING-BODY OVERHEAT R', 'air_cond', `pneu.r_duct_leak || ${B738.ovhtTestActive}`, B738.lt.wingBodyOvht(2)),
   a('bleed_trip1', 'BLEED TRIP OFF 1', 'air_cond', 'pneu.bleed1_trip', B738.lt.bleedTripOff(1)),
   a('bleed_trip2', 'BLEED TRIP OFF 2', 'air_cond', 'pneu.bleed2_trip', B738.lt.bleedTripOff(2)),
   a('zone_temp', 'ZONE TEMP', 'air_cond', 'fail.b738.zone_temp', B738.lt.zoneTemp(1)),

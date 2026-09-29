@@ -111,7 +111,10 @@ export class B737Suite {
               // Initial VNAV schedule (replaced by the FMC's ECON / selected speeds once PERF INIT is done).
               // 250 kt below 10,000 ft (14 CFR 91.117); 280 / .78 climb, .78 cruise, .78 / 280 descent are the
               // commonly quoted 737-800 ECON-like values (EST), approach 150 kt (EST, flaps 30 VREF + ~5 at mid weights).
-              speeds: { climbKt: 280, cruiseKt: 280, cruiseMach: 0.78, descentKt: 280, descentMach: 0.78, approachKt: 150 },
+              // speedLimitDecelFt: the FMC builds a deceleration segment so the 250 kt / 10,000 ft transition is
+              // met (FCOM 11.31 DES page speed transition, EST 2,000 ft of deceleration); approachDecelNm: the
+              // approach deceleration segment toward VREF-based approach speed before the FAF (EST 12 nm).
+              speeds: { climbKt: 280, cruiseKt: 280, cruiseMach: 0.78, descentKt: 280, descentMach: 0.78, approachKt: 150, speedLimitDecelFt: 2000, approachDecelNm: 12 },
               ...cfg.fmsOptions,
             },
           )

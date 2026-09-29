@@ -12,7 +12,9 @@ describe('G800 check-airman regressions', () => {
     const r = makeRig('cruise', { weightLb: 85000, air: { altFtMsl: 41000, iasKt: 254 } });
     const v = r.vars;
     r.run(1);
-    expect(v.getString('fadec.rating')).toBe('CLB');
+    // Procedures fix round 1 P05: the cruise preset now loads with CRZ already selected (the Cruise
+    // checklist's completed state); manual selections still stick until the next automatic transition.
+    expect(v.getString('fadec.rating')).toBe('CRZ');
     r.events.emit('fadec.rating', 'CRZ');
     r.run(5);
     expect(v.getString('fadec.rating')).toBe('CRZ');

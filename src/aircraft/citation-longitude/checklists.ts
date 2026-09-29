@@ -23,7 +23,13 @@ export const LONGITUDE_CHECKLISTS: Checklist[] = [
       { challenge: 'LANDING GEAR handle', response: 'DOWN', check: eq(V.gearHandle, 1) },
       { challenge: 'BATT buttons (both)', response: 'ON, check volts', check: (v) => v.get(V.battL) !== 0 && v.get(V.battR) !== 0 },
       { challenge: 'EIS / CAS', response: 'Check' },
-      { challenge: 'External power / APU', response: 'As desired (BATT amps 0 or charging)', check: (v) => v.get('elec.gpu_online') !== 0 || v.get('apu.avail') !== 0 },
+      // OG 17-2 item 6 sub-steps a-e (LON-P3-15): EXT PWR and/or APU, with the combined auto-check on the last.
+      { challenge: 'External power / APU', response: 'As desired:' },
+      { challenge: 'a. EXT PWR button (if AVAIL illuminated)', response: 'ON' },
+      { challenge: 'b. BATT amps', response: '0 or charging' },
+      { challenge: 'c. (and/or) APU knob', response: 'ON / START' },
+      { challenge: 'd. External power', response: 'Disconnected' },
+      { challenge: 'e. BATT amps', response: '0 or charging', check: (v) => v.get('elec.gpu_online') !== 0 || v.get('apu.avail') !== 0 },
       { challenge: 'Exterior / interior lights', response: 'ON / check / OFF, or as required' },
     ],
   },
@@ -32,15 +38,19 @@ export const LONGITUDE_CHECKLISTS: Checklist[] = [
     phase: 'Preflight',
     items: [
       { challenge: 'Cockpit inspection', response: 'Complete' },
+      { challenge: 'EIS / CAS', response: 'Check' }, // OG 17-3 item 2 (LON-P3-03)
       { challenge: 'APU knob', response: 'ON / START', check: (v) => v.get('apu.avail') !== 0 },
       { challenge: 'External power', response: 'Disconnected', check: off('elec.gpu_online') },
       { challenge: 'Engine dry motor', response: 'Consider', check: (v) => v.get(V.dryMotorReq(1)) === 0 && v.get(V.dryMotorReq(2)) === 0 },
+      { challenge: 'ATIS / Clearance', response: 'As required' }, // OG 17-3 item 6 (LON-P3-03)
       { challenge: 'Trims', response: 'Check / set for takeoff (stab per CG chart)', check: (v) => v.get('trim.pitch_to_ok') !== 0 && v.get('trim.roll_to_ok') !== 0 && v.get('trim.yaw_to_ok') !== 0 },
       { challenge: 'Weight and fuel (MFD GTC: PERF)', response: 'Completed' },
       { challenge: 'Takeoff data (MFD GTC: PERF)', response: 'Completed' },
       { challenge: 'V speeds', response: 'Verify / set' },
       { challenge: 'Pressurization LDG ELEV', response: 'Verify / set' },
       { challenge: 'Fuel quantity and balance', response: 'Check', check: (v) => Math.abs(v.get('fuel.imbalance_kg')) < 227 },
+      // OG 17-3 item 13 (LON-P3-03): a momentary ground action (engage, verify, disengage), so no steady auto-check.
+      { challenge: 'Autopilot (First Flight of Day)', response: 'Engage / Disengage' },
     ],
   },
   {
@@ -56,12 +66,29 @@ export const LONGITUDE_CHECKLISTS: Checklist[] = [
     phase: 'Ground',
     items: [
       { challenge: 'Throttles', response: 'IDLE', check: (v) => Math.abs(v.get(V.tla(1))) < 0.03 && Math.abs(v.get(V.tla(2))) < 0.03 },
-      { challenge: 'ENGINE RUN/STOP button (R first)', response: 'RUN', check: on(V.runR) },
+      // OG 17-4 item 2: "ENGINE RUN/STOP Button (either engine) - RUN" (LON-P3-07; right-first is only the OG 9
+      // bleed-routing recommendation, not a checklist requirement, so the checks are symmetric).
+      { challenge: 'ENGINE RUN/STOP button (either engine — R recommended)', response: 'RUN', check: (v) => v.get(V.runL) !== 0 || v.get(V.runR) !== 0 },
       { challenge: 'START pressure', response: 'Verify >= 32 psi' },
       { challenge: 'ENGINE STARTER button', response: 'Push' },
-      { challenge: 'Engine instruments', response: 'Monitor (ITT < 650 C)', check: on('eng2.running') },
-      { challenge: 'Opposite engine', response: 'Repeat', check: (v) => v.get('eng1.running') !== 0 && v.get(V.runL) !== 0 },
+      { challenge: 'Engine instruments', response: 'Monitor (ITT < 650 C)', check: (v) => v.get('eng1.running') !== 0 || v.get('eng2.running') !== 0 },
+      { challenge: 'Opposite engine', response: 'Repeat steps 1 thru 4', check: (v) => v.get('eng1.running') !== 0 && v.get('eng2.running') !== 0 && v.get(V.runL) !== 0 && v.get(V.runR) !== 0 },
       { challenge: 'EIS / CAS', response: 'Check', check: (v) => v.get('elec.gen_l_online') !== 0 && v.get('elec.gen_r_online') !== 0 },
+    ],
+  },
+  {
+    // OG 17-12 (LON-P3-06): second engine started with bleed air cross-fed from the running engine.
+    title: 'Starting Engines (Using Cross-Bleed)',
+    phase: 'Ground',
+    items: [
+      { challenge: 'Operating engine throttle', response: 'IDLE + 25 % N1 minimum', check: (v) => Math.max(v.get('eng1.n1_pct'), v.get('eng2.n1_pct')) >= 45 }, // ground idle ~22 % N1 + 25
+      { challenge: 'Throttle (engine being started)', response: 'IDLE' },
+      { challenge: 'ENGINE RUN/STOP button', response: 'RUN' },
+      { challenge: 'START pressure', response: 'Verify >= 32 psi', check: (v) => v.get(V.startPsi) >= 32 },
+      { challenge: 'ENGINE STARTER button', response: 'Push' },
+      { challenge: 'Engine instruments', response: 'Monitor (ITT < 650 C)', check: (v) => v.get('eng1.running') !== 0 && v.get('eng2.running') !== 0 },
+      { challenge: 'Throttles', response: 'IDLE', check: (v) => Math.abs(v.get(V.tla(1))) < 0.03 && Math.abs(v.get(V.tla(2))) < 0.03 },
+      { challenge: 'EIS / CAS', response: 'Check' },
     ],
   },
   {
@@ -73,9 +100,10 @@ export const LONGITUDE_CHECKLISTS: Checklist[] = [
       { challenge: 'Flaps', response: 'Set for takeoff (1 or 2)', check: (v) => v.get('surf.flaps_deg') > 5 && v.get('surf.flaps_deg') < 17 },
       { challenge: 'Flight instruments / avionics', response: 'Aligned / no flags; altimeters within 75 ft of field, 50 ft of each other', check: (v) => v.get('ahrs1.valid') !== 0 && v.get('ahrs2.valid') !== 0 },
       { challenge: 'ENGINE ICE PROTECTION buttons', response: 'As required' },
-      // EST items from the pedestal / glareshield switchlights in the photographs (AFM text not public).
-      { challenge: 'AUTO GROUND SPOILERS button', response: 'NORM (armed)', check: on(V.autoGndSplr) },
-      { challenge: 'POWER RESERVE', response: 'AUTO (armed)', check: (v) => v.get(V.aprAuto) !== 0 && v.get(V.aprManual) === 0 },
+      // EST items from the pedestal / glareshield switchlights in the photographs (AFM text not public); tagged
+      // (EST) in the challenge so they read as operator additions to the 5-item OG 17-4 list (LON-P3-18).
+      { challenge: 'AUTO GROUND SPOILERS button (EST)', response: 'NORM (armed)', check: on(V.autoGndSplr) },
+      { challenge: 'POWER RESERVE (EST)', response: 'AUTO (armed)', check: (v) => v.get(V.aprAuto) !== 0 && v.get(V.aprManual) === 0 },
     ],
   },
   {
@@ -102,18 +130,34 @@ export const LONGITUDE_CHECKLISTS: Checklist[] = [
       { challenge: 'Crew briefing', response: 'Complete (rolling takeoff: +500 ft)' },
       { challenge: 'Radar', response: 'As required' },
       { challenge: 'PITOT/STATIC (icing, within 1 min of takeoff)', response: 'ON 15 s then NORM', check: off(V.pitotStatic) },
+      // OG 17-5 (LON-P3-04): the last four items follow the "----CLEARED FOR TAKEOFF----" divider.
+      { challenge: '---- CLEARED FOR TAKEOFF ----', response: '' },
+      { challenge: 'Flight controls', response: 'Free', check: off(V.controlLock) },
+      { challenge: 'ICE PROTECTION buttons', response: 'As required' },
       { challenge: 'Exterior lights', response: 'As required' },
       { challenge: 'EIS / CAS', response: 'Check (no NO TAKEOFF)', check: off(V.noTakeoff) },
     ],
   },
   {
-    title: 'Takeoff',
+    title: 'Takeoff (Static)',
     phase: 'Takeoff',
     items: [
       { challenge: 'Throttles', response: 'TO', check: (v) => v.get(V.tla(1)) > 0.95 && v.get(V.tla(2)) > 0.95 },
       { challenge: 'Autothrottle (if used)', response: 'Check green HOLD' },
       { challenge: 'EIS / CAS', response: 'Check (N1 matches command, green TO)' },
       { challenge: 'Brakes', response: 'Release' },
+      { challenge: 'Elevator control', response: 'Rotate at VR (10 deg initial pitch)' },
+    ],
+  },
+  {
+    // OG 17-6 "Rolling Takeoff" (LON-P3-16): brakes released first, throttles to TO within 500 ft of brake release.
+    title: 'Takeoff (Rolling)',
+    phase: 'Takeoff',
+    items: [
+      { challenge: 'Brakes', response: 'Release' },
+      { challenge: 'Throttles (within 500 ft of brake release)', response: 'TO', check: (v) => v.get(V.tla(1)) > 0.95 && v.get(V.tla(2)) > 0.95 },
+      { challenge: 'Autothrottle (if used)', response: 'Check green HOLD' },
+      { challenge: 'EIS / CAS', response: 'Check (N1 matches command, green TO)' },
       { challenge: 'Elevator control', response: 'Rotate at VR (10 deg initial pitch)' },
     ],
   },
@@ -137,7 +181,7 @@ export const LONGITUDE_CHECKLISTS: Checklist[] = [
     items: [
       { challenge: 'Throttles', response: 'CRU or as desired' },
       { challenge: 'Autopilot (RVSM)', response: 'As required' },
-      { challenge: 'Altimeters (RVSM)', response: 'Crosscheck within 200 ft' },
+      { challenge: 'Altimeters (RVSM)', response: 'Crosscheck (within 200 ft at 1 hour intervals or less)' }, // OG 17-7 item 3
     ],
   },
   {
@@ -198,6 +242,7 @@ export const LONGITUDE_CHECKLISTS: Checklist[] = [
       { challenge: 'Landing gear (positive rate)', response: 'UP' },
       { challenge: 'Flaps (at or above VAPP + 10)', response: 'UP' },
       { challenge: 'SPD knob', response: 'FMS' },
+      { challenge: 'Throttles', response: 'As required' }, // OG 17-8 item 9 (LON-P3-17)
     ],
   },
   {
@@ -228,6 +273,20 @@ export const LONGITUDE_CHECKLISTS: Checklist[] = [
     ],
   },
   {
+    // OG 17-10 "Quick Turn" (LON-P3-05): turnaround without a full shutdown flow; return to Cockpit Preparation.
+    title: 'Quick Turn',
+    phase: 'Ground',
+    items: [
+      { challenge: 'Throttles', response: 'IDLE', check: (v) => Math.abs(v.get(V.tla(1))) < 0.03 && Math.abs(v.get(V.tla(2))) < 0.03 },
+      { challenge: 'EMER/PARK BRAKE handle', response: 'Set', check: on('brakes.parking_set') },
+      { challenge: 'ENGINE ICE PROTECTION buttons', response: 'OFF', check: (v) => v.get(V.aiEngL) === 0 && v.get(V.aiEngR) === 0 },
+      { challenge: 'ENGINE RUN/STOP buttons', response: 'STOP', check: (v) => v.get(V.runL) === 0 && v.get(V.runR) === 0 },
+      { challenge: 'Exterior lights', response: 'As required' },
+      { challenge: 'Electrical power source (APU ON/START or EXT PWR)', response: 'As desired (BATT amps 0 or charging)', check: (v) => v.get('apu.avail') !== 0 || v.get('elec.gpu_online') !== 0 },
+      { challenge: 'Before the next flight', response: 'Return to Cockpit Preparation' },
+    ],
+  },
+  {
     title: 'Starting APU',
     phase: 'Ground',
     items: [
@@ -247,7 +306,9 @@ export const LONGITUDE_CHECKLISTS: Checklist[] = [
       { challenge: 'Throttle (affected side)', response: 'IDLE' },
       { challenge: 'ENGINE RUN/STOP (affected side)', response: 'STOP' },
       { challenge: 'ENGINE STARTER (affected side)', response: 'Push and hold' },
-      { challenge: 'ENGINE STARTER', response: 'Release at 20 % N2 or 15 s' }, // OG 7-6
+      // OG 17-11 item 4: "Release when N2 19% or 15s Elapsed Time" (the OG 7-6 narrative says 20 %; the checklist
+      // section is the operative text — LON-P3-14).
+      { challenge: 'ENGINE STARTER', response: 'Release at 19 % N2 or 15 s' },
       { challenge: 'Next start attempt', response: 'When ENG DRY MTR PROC clears', check: (v) => v.get(V.dryMotorReq(1)) === 0 && v.get(V.dryMotorReq(2)) === 0 },
     ],
   },
@@ -331,6 +392,72 @@ export const LONGITUDE_CHECKLISTS: Checklist[] = [
     items: [
       { challenge: 'Below V1', response: 'Takeoff - abort' },
       { challenge: 'Above V1: throttles', response: 'TO' },
+    ],
+  },
+  // ---------------- LON-P3-08: key emergency/abnormal procedures beyond the DGAC card. The controls and system
+  // responses are all modelled (fire shutoff/bottles, cross-bleed air start, APU/PTCU generators, RSS, oxygen/MIC);
+  // item sequencing marked EST follows Citation-family QRH practice where no public C700 text exists.
+  {
+    title: 'ENGINE FIRE L or R',
+    phase: 'Emergency',
+    items: [
+      { challenge: 'ENG FIRE switchlight (affected side)', response: 'Push (fuel, hydraulics and bleed shut off; bottles armed)', check: (v) => v.get(V.fireEngL) !== 0 || v.get(V.fireEngR) !== 0 },
+      { challenge: 'BOTTLE 1 ARMED switchlight', response: 'Push (discharge)' },
+      { challenge: 'If ENG FIRE remains illuminated after 30 s: BOTTLE 2', response: 'Push (discharge)' },
+      // The fire switch cuts fuel with RUN still selected, so the red ENGINE FAIL posts until RUN/STOP is set to STOP.
+      { challenge: 'ENGINE RUN/STOP button (affected side)', response: 'STOP', check: (v) => v.get(V.runL) === 0 || v.get(V.runR) === 0 },
+      { challenge: 'Land', response: 'As soon as possible' }, // EST (standard fire-procedure closure)
+    ],
+  },
+  {
+    title: 'ENGINE FAILURE / SHUTDOWN IN FLIGHT',
+    phase: 'Emergency',
+    items: [
+      { challenge: 'Throttle (affected side)', response: 'IDLE' },
+      { challenge: 'ENGINE RUN/STOP button (affected side)', response: 'STOP', check: (v) => v.get(V.runL) === 0 || v.get(V.runR) === 0 },
+      { challenge: 'Rudder / aileron trim', response: 'As required' },
+      { challenge: 'APU knob (at or below FL310)', response: 'Consider ON / START' },
+      { challenge: '---- AIR START (no fire / damage suspected) ----', response: '' },
+      // OG 7 / 17-12 cross-bleed: the operating engine at idle + 25 % N1 gives >= 32 psi starter pressure (EST in
+      // flight; the OG publishes the requirement for ground cross-bleed starts).
+      { challenge: 'a. Operating engine', response: 'IDLE + 25 % N1 minimum' },
+      { challenge: 'b. ENGINE RUN/STOP button (affected side)', response: 'RUN' },
+      { challenge: 'c. START pressure', response: 'Verify >= 32 psi' },
+      { challenge: 'd. ENGINE STARTER button', response: 'Push' },
+      { challenge: 'e. Engine instruments', response: 'Monitor (ITT < 650 C)', check: (v) => v.get('eng1.running') !== 0 && v.get('eng2.running') !== 0 },
+    ],
+  },
+  {
+    title: 'DUAL GENERATOR FAILURE', // EST flow (dossier §6 abnormal table: APU gen or PTCU HYD GEN, ELEC EMER)
+    phase: 'Emergency',
+    items: [
+      { challenge: 'GEN switches (both)', response: 'RESET, then ON' },
+      { challenge: 'If not restored: APU knob (at or below FL310)', response: 'ON / START, APU GEN ON' },
+      { challenge: 'Or: PTCU knob', response: 'HYD GEN', check: (v) => v.get('elec.gen_l_online') !== 0 || v.get('elec.gen_r_online') !== 0 || v.get('elec.apu_gen_online') !== 0 || v.get(V.ptcu) === 4 },
+      { challenge: 'If on batteries only: ELEC L and R buttons', response: 'EMER (shed the main buses)' },
+      { challenge: 'Land', response: 'As soon as practical' },
+    ],
+  },
+  {
+    title: 'HYD SYSTEM A or B FAILURE', // EST flow (OG 13: A also feeds the rudder with RSS backup; accumulators)
+    phase: 'Abnormal',
+    items: [
+      { challenge: 'Hydraulic pressure / quantity (synoptics)', response: 'Check' },
+      { challenge: 'HYDRAULIC PUMP knob (affected side)', response: 'MIN; SHUTOFF if overheat or quantity loss' },
+      { challenge: 'System A failed', response: 'Rudder on the standby (RSS) system; L reverser inoperative' },
+      { challenge: 'System B failed', response: 'R reverser inoperative; ground spoilers on the accumulator' },
+      { challenge: 'Landing distance', response: 'Plan for the increase; land as soon as practical' },
+    ],
+  },
+  {
+    title: 'SMOKE / FUMES', // EST flow (Citation-family practice; masks/MIC per the DGAC CABIN ALTITUDE items)
+    phase: 'Emergency',
+    items: [
+      { challenge: 'Oxygen masks', response: 'Don and 100 %', check: (v) => v.get(V.oxyMaskL) !== 0 && v.get(V.oxyMode) >= 1 },
+      { challenge: 'MIC SEL buttons (both)', response: 'MASK', check: (v) => v.get(V.micSelL) !== 0 && v.get(V.micSelR) !== 0 },
+      { challenge: 'PRESS SOURCE button (suspected side)', response: 'OFF (isolate the bleed source)' },
+      { challenge: 'If smoke persists', response: 'Consider descent and PRESS DUMP (guarded)' },
+      { challenge: 'Land', response: 'As soon as possible' },
     ],
   },
   {

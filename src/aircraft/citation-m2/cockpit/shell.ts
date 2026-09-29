@@ -31,6 +31,15 @@ import {
 import { FLOOR_AFT_X, FLOOR_Z, GLARE, SEAT } from './layout';
 import { hoodGeometry } from './fit';
 
+/**
+ * Crew-seat armrest fit (M2-NEW-01): raised, shortened and shifted aft, with no
+ * forward support posts (fold-down armrests), so the inboard armrests clear the
+ * reduced-size pedestal (pin1 / S&D21 Fig 3 photographs: the armrests pass above
+ * the low aft console and end short of the throttle quadrant). EST dimensions;
+ * verified geometrically by tests/aircraft/citation-m2/fixround2.test.ts.
+ */
+export const M2_SEAT_ARMREST = { raise_m: 0.03, length_m: 0.28, aft_m: 0.1, post: false } as const;
+
 /** Lining inset from the outer skin (m): skin, frames and insulation (EST). */
 const INSET = 0.045;
 const TWO_PI = 2 * Math.PI;
@@ -121,5 +130,5 @@ export function buildShell(b: CockpitBuilder): void {
   add(hoodGeometry({ browX: GLARE.browX, browZ: GLARE.browZ, halfSpan: GLARE.width / 2 + 0.05, arc: 0.07, lip: 0.014, slopeDeg: -GLARE.pitchDeg }), mats.get('glareshield'), 'glareshield');
 
   // Crew seats (bizjet style, sunk so the cushion is 0.36 m above the floor; EST photograph: light leather / sheepskin).
-  for (const s of [-1, 1]) b.seat('bizjet', [SEAT.x, s * SEAT.y, SEAT.z]);
+  for (const s of [-1, 1]) b.seat('bizjet', [SEAT.x, s * SEAT.y, SEAT.z], undefined, { armrest: M2_SEAT_ARMREST });
 }

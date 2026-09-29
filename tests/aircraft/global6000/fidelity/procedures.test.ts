@@ -68,7 +68,9 @@ describe('Global 6000 procedures audit', () => {
       }
     }
     console.log(`[proc] items ${total}, without auto-check ${noCheck}\n${lines.join('\n')}`);
-    expect(doorVars).toEqual([]); // pinned: no cockpit control closes / opens the doors
+    // Fix round P10: the pax entry door latch handle (cockpit/side/index.ts) closes / opens ac.door.pax_open, so
+    // the BEFORE START "Doors - CLOSED" item is performable from the cockpit.
+    expect(doorVars).toEqual(['ac.door.pax_open']);
   });
 
   it('initial states vs checklists (item by item)', { timeout: 600_000 }, () => {

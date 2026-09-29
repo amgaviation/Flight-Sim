@@ -148,12 +148,12 @@ describe('G650 control audit', () => {
     }
   });
 
-  it('checklist auto-checks: "Before Takeoff" items pass in the takeoff state', () => {
+  it('checklist auto-checks: "Line Up" items pass in the takeoff state', () => {
     const r = makeRig('takeoff', { weightLb: 80000 });
     r.run(2);
-    const list = G650_CHECKLISTS.find((c) => c.title === 'Before Takeoff')!;
+    const list = G650_CHECKLISTS.find((c) => c.title === 'Line Up')!;
     for (const item of list.items) if (item.check) expect(item.check(r.vars), item.challenge).toBe(true);
-    const bt = G650_CHECKLISTS.find((c) => c.title === 'Before Taxi')!;
+    const bt = G650_CHECKLISTS.find((c) => c.title === 'Taxi')!;
     for (const item of bt.items) if (item.check) expect(item.check(r.vars), item.challenge).toBe(true);
   });
 });

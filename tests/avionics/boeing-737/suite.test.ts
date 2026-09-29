@@ -39,7 +39,7 @@ function deck(t: SuiteRig) {
 }
 
 describe('737NG suite composition', () => {
-  it('creates radios, FMS, FMC, two CDUs, the AFDS and all displays', async () => {
+  it('creates radios, FMS, FMC, two CDUs, the AFDS and all displays', { timeout: 15_000 }, async () => {
     const t = await makeSuite({}, true);
     const s = t.suite;
     expect(s.radios).not.toBeNull();

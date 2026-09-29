@@ -40,6 +40,9 @@ export function createHydraulics(ctx: Pick<SimContext, 'vars'>): HydraulicSystem
       // lower limits 34 % (system 1), 32 % (system 2), 20 % (system 3; 28 % with the main gear uplocked: cas.ts).
       { id: 'sys1', nominalPsi: P, reservoirL: 3.2 * GAL, initialQty: HYD_INITIAL_QTY, lowPressPsi: low, lowQty: G6K_LIMITS.hydLoQty[0] },
       { id: 'sys2', nominalPsi: P, reservoirL: 3.2 * GAL, initialQty: HYD_INITIAL_QTY, accumulator: { prechargePsi: G6K_LIMITS.brakeAccPrechargePsi, volumeL: 2 }, lowPressPsi: low, lowQty: G6K_LIMITS.hydLoQty[1] },
+      // SCOPE: system 3 has TWO accumulators on the real aircraft (GXHY: brake accumulator 500 psi precharge, RAT
+      // accumulator 1,000 psi = G6K_LIMITS.ratAccPrechargePsi); the shared HydraulicSystem models one accumulator per
+      // system, so they are merged here at the brake precharge (the value the BCU / brakes.accum_psi consumers read).
       { id: 'sys3', nominalPsi: P, reservoirL: 2.6 * GAL, initialQty: HYD_INITIAL_QTY, accumulator: { prechargePsi: G6K_LIMITS.brakeAccPrechargePsi, volumeL: 2 }, lowPressPsi: low, lowQty: G6K_LIMITS.hydLoQty[2] },
     ],
     pumps: [

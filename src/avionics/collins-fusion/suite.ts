@@ -159,7 +159,12 @@ export class FusionSuite {
       powered: () => this.sidePower.fcp() >= 0.5,
       approachInfo: () => this.approachInfo(),
     });
-    this.ctpLogic = new CtpLogic(vars, events, { sensors: cfg.sensors, powered: (s) => this.sidePower.ctp[s - 1]() >= 0.5, courseOnPfdPage: cfg.ctpCourseOnPfdPage });
+    this.ctpLogic = new CtpLogic(vars, events, {
+      sensors: cfg.sensors,
+      powered: (s) => this.sidePower.ctp[s - 1]() >= 0.5,
+      courseOnPfdPage: cfg.ctpCourseOnPfdPage,
+      tuneReversionVar: cfg.tuneReversionVar || undefined,
+    });
     this.fmsHost = new FmsHost(vars, events, this.fms, host.nav ?? null, cfg);
     this.fmsWin = [
       new FmsWindowModel(1, this.fmsHost, vars, () => this.sidePower.mkp[0]() >= 0.5),
@@ -232,7 +237,7 @@ export class FusionSuite {
     };
     for (const s of [1, 2] as const) {
       const id = `${p}.ctp${s}`;
-      this.ctp.push(new CtpDisplay({ id, side: s, vars, sensors: cfg.sensors, pixelRatio: pr, canvas: canvasOf() }));
+      this.ctp.push(new CtpDisplay({ id, side: s, vars, sensors: cfg.sensors, pixelRatio: pr, canvas: canvasOf(), tuneReversionVar: cfg.tuneReversionVar || undefined }));
       this.addPower(id, pw.ctp?.[s - 1]);
     }
     const iesiId = `${p}.iesi`;

@@ -40,7 +40,7 @@ import {
   type Cutout,
   type ScrewKind,
 } from './geometry/panel';
-import { seatGeometry, type SeatStyle } from './geometry/structure';
+import { seatGeometry, type SeatGeometryOpts, type SeatStyle } from './geometry/structure';
 import {
   AnnunciatorLight,
   CircuitBreaker,
@@ -484,10 +484,11 @@ export class CockpitBuilder {
 
   /**
    * Crew seat at a body position (origin on the floor under the front of the seat pan).
-   * (`opts` appended by b737-800, additive: `panRaise_m` lifts the cushion on a taller base.)
+   * (`opts` appended by b737-800, additive: `panRaise_m` lifts the cushion on a taller base.
+   * `armrest` appended by citation-m2, additive: see SeatGeometryOpts; omitted = unchanged.)
    */
-  seat(style: SeatStyle, position_m: BodyVec, material?: MaterialName, opts?: { panRaise_m?: number }): THREE.Group {
-    const parts = seatGeometry(style, opts?.panRaise_m ?? 0);
+  seat(style: SeatStyle, position_m: BodyVec, material?: MaterialName, opts?: { panRaise_m?: number } & SeatGeometryOpts): THREE.Group {
+    const parts = seatGeometry(style, opts?.panRaise_m ?? 0, opts);
     const g = new THREE.Group();
     const mat = material ?? (this.env.materials.palette.seatMaterial === 'fabric' ? 'fabric' : 'leather');
     g.add(new THREE.Mesh(parts.cushion, this.env.materials.get(mat)));

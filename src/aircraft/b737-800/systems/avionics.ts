@@ -24,6 +24,7 @@ import { AirDataComputer, Ahrs, Irs, RadioAltimeter } from '../../../systems/sen
 import { StallWarning, Overspeed, AltitudeAlert, ALT_ALERT_737NG, Taws, Tcas, TakeoffConfigWarning, DisconnectAlerts } from '../../../systems/warning';
 import { VERTICAL_MODES, AFCS_B737_AFDS } from '../../../systems/autopilot';
 import { createB737Suite, type B737Suite } from '../../../avionics/boeing-737';
+import { B737_VARS } from '../../../avionics/boeing-737/vars';
 import type { AfcsGains } from '../../../systems/autopilot';
 import { SHAKER_ALPHA_DEG } from '../fdm';
 import { B738_LIMITS, STAB } from '../data';
@@ -112,7 +113,11 @@ export function createAvionics(ctx: SimContext, opts: AvionicsOptions = {}): Avi
         du: { capt_out: POWER.duCaptOut, capt_in: POWER.duCaptIn, upper: POWER.duUpper, lower: POWER.duLower, fo_in: POWER.duFoIn, fo_out: POWER.duFoOut },
         deu1: POWER.deu1,
         deu2: POWER.deu2,
-        fmc: POWER.fmc,
+        // Dual FMC (FCOM 11): the FMC transfer switch selects the operative computer. One FMC is modelled; the
+        // switch selects which of the two FMC failure states (fail.b738.fmc1/2, B738Logic failures) drives it:
+        // NORMAL and BOTH ON L run on FMC L, BOTH ON R on FMC R — with FMC L failed, BOTH ON R restores the
+        // CDU / LNAV / VNAV / ND map data (SCOPE: no independent second computation channel).
+        fmc: `${POWER.fmc} && ((${B737_VARS.fmcSel} > 0.5 && !fail.b738.fmc2) || (${B737_VARS.fmcSel} <= 0.5 && !fail.b738.fmc1))`,
         cdu1: POWER.cdu1,
         cdu2: POWER.cdu2,
         mcp: POWER.mcp,

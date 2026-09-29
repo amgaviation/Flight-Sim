@@ -96,9 +96,13 @@ describe('Global 6000 function fixes: hydraulics / bleed / ECS / pressurization'
     r.run(2);
     v.set(V.emerDepress, 1);
     let maxCab = 0;
-    r.run(120, () => {
+    // EST OFV area (round-3 fix G3-12): the dump transient is a plausible few thousand fpm, so the cabin takes
+    // several minutes to reach the limiter.
+    r.run(420, () => {
       maxCab = Math.max(maxCab, v.get('press.cabin_alt_ft'));
+      return maxCab > 14000;
     });
+    r.run(30);
     expect(v.get('press.cabin_alt_ft')).toBeGreaterThan(12000);
     expect(maxCab).toBeLessThan(15500);
     expect(posted(r)).toContain('caution:EMER DEPRESS');

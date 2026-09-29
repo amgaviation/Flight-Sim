@@ -78,6 +78,7 @@ describe('Global 6000 checklist execution (procedures lens)', () => {
     expect(failing(r, 'AFTER START')).toEqual([]);
 
     // ---- BEFORE TAKEOFF
+    v.set('xpdr.mode', 5); // crew selects TA/RA on the CTP (fix round P05: the item now has an auto-check)
     v.set(V.ltStrobe, 1);
     v.set(V.ltLdgL, 1);
     v.set(V.ltLdgR, 1);
@@ -100,28 +101,47 @@ describe('Global 6000 checklist execution (procedures lens)', () => {
     v.set(V.engRun(2), 0);
     r.run(40, () => v.get('eng1.running') === 0 && v.get('eng2.running') === 0);
     v.set(V.ltBeacon, 0);
+    v.set(V.seatBelts, 0); // fix round P13: PASS SIGNS - OFF
+    r.run(3);
+    console.log('[exec] SHUTDOWN fails:', failing(r, 'SHUTDOWN').join(' ; ') || 'none');
+    expect(failing(r, 'SHUTDOWN')).toEqual([]);
+    // ---- SECURING (fix round P13: split terminating flow)
     for (const n of [1, 2, 3] as const) v.set(V.irsMode(n), 0);
     v.set(V.apuSw, 0);
     v.set(V.emerLights, 0);
     v.set(V.battMasterSel, 0);
     v.set(V.battMaster, 0);
     r.run(3);
-    console.log('[exec] SHUTDOWN fails:', failing(r, 'SHUTDOWN').join(' ; ') || 'none');
-    expect(failing(r, 'SHUTDOWN')).toEqual([]);
+    console.log('[exec] SECURING fails:', failing(r, 'SECURING').join(' ; ') || 'none');
+    expect(failing(r, 'SECURING')).toEqual([]);
   });
 
-  it('preset pins: transponder left in STBY in flight, QNH not STD at FL410, no V-speeds in takeoff / approach presets', () => {
+  it('presets fixed (P05/P06/P07): TA/RA in flight, STD at FL410, TOLD V-speeds in takeoff / approach presets', () => {
     const cr = makeRig('cruise', { avionics: true, air: { altFtMsl: 41000, iasKt: 250 } });
     cr.run(2);
-    // GAP (real: TA/RA in flight, STD above transition): pinned current behaviour.
-    expect(cr.vars.get('xpdr.mode')).toBe(1);
-    expect(cr.vars.get('adc1.baro_std')).toBe(0);
+    expect(cr.vars.get('xpdr.mode')).toBe(5); // TA/RA in flight (checklists BEFORE TAKEOFF)
+    expect(cr.vars.get('adc1.baro_std')).toBe(1); // STD above the transition altitude (CLIMB checklist)
+    expect(cr.vars.get('adc2.baro_std')).toBe(1);
+    expect(cr.vars.get('adc3.baro_std')).toBe(1); // IESI
     const to = makeRig('takeoff', { avionics: true });
     to.run(2);
-    expect(to.vars.get('fusion.vspd.v1')).toBe(0); // GAP: takeoff preset has no TOLD / V-speeds
+    const v1 = to.vars.get('fusion.vspd.v1');
+    const vr = to.vars.get('fusion.vspd.vr');
+    const v2 = to.vars.get('fusion.vspd.v2');
+    expect(v1).toBeGreaterThan(80); // TOLD entered before take-off ("FMS - PROGRAMMED")
+    expect(vr).toBeGreaterThanOrEqual(v1);
+    expect(v2).toBeGreaterThan(vr);
+    expect(to.vars.get('xpdr.mode')).toBe(5); // BEFORE TAKEOFF "Transponder - TA/RA"
+    expect(to.vars.get('adc1.baro_std')).toBe(0); // QNH on the ground
     const ap = makeRig('approach', { avionics: true, air: { altFtMsl: 2500, iasKt: 140 } });
     ap.run(2);
-    expect(ap.vars.get('fusion.vspd.vref')).toBe(0); // GAP: approach preset has no VREF
-    expect(ap.vars.get('xpdr.mode')).toBe(1);
+    const vref = ap.vars.get('fusion.vspd.vref');
+    expect(vref).toBeGreaterThan(90); // DESCENT "Approach speeds (VREF) - SET"
+    expect(ap.vars.get('fusion.vspd.vapp')).toBe(vref + 5);
+    expect(ap.vars.get('xpdr.mode')).toBe(5);
+    expect(ap.vars.get('adc1.baro_std')).toBe(0); // below transition
+    const rt = makeRig('ready_to_taxi', { avionics: true });
+    rt.run(2);
+    expect(rt.vars.get('xpdr.mode')).toBe(1); // STBY on the ground until BEFORE TAKEOFF
   });
 });

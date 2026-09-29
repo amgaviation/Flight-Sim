@@ -138,6 +138,23 @@ export function sidewallGeometry(R: number, len: number, a0: number, a1: number,
 
 export type SeatStyle = 'airline' | 'bizjet' | 'ga';
 
+/**
+ * (Appended by citation-m2, additive.) Optional armrest tweaks for jet seats;
+ * omitted = geometry unchanged for every existing caller.
+ */
+export interface SeatGeometryOpts {
+  armrest?: {
+    /** Raise the armrests (and lengthen their support posts) by this much (m). */
+    raise_m?: number;
+    /** Armrest length (m, default 0.32). */
+    length_m?: number;
+    /** Shift the armrests aft by this much (m). */
+    aft_m?: number;
+    /** Support posts under the armrests (default true). False = cantilevered / fold-down armrests. */
+    post?: boolean;
+  };
+}
+
 export interface SeatParts {
   cushion: THREE.BufferGeometry;
   back: THREE.BufferGeometry;
@@ -149,9 +166,14 @@ export interface SeatParts {
  * Z aft, origin on the floor under the front of the seat pan. Seat reference
  * point height ~0.42 m (airline), 0.36 m (GA) EST.
  */
-export function seatGeometry(style: SeatStyle, panRaise = 0): SeatParts {
+export function seatGeometry(style: SeatStyle, panRaise = 0, opts?: SeatGeometryOpts): SeatParts {
   // (panRaise appended by b737-800, additive: raises the seat pan / back / armrests by panRaise metres on a
   // taller pedestal base, for decks whose design-eye geometry needs a higher cushion. Default 0 = unchanged.)
+  // (opts appended by citation-m2, additive: optional armrest raise / length / aft-shift so seats beside a low
+  // centre pedestal clear it, as on the real M2. Omitted = geometry unchanged for every existing caller.)
+  const armRaise = opts?.armrest?.raise_m ?? 0;
+  const armLen = opts?.armrest?.length_m ?? 0.32;
+  const armAft = opts?.armrest?.aft_m ?? 0;
   const ga = style === 'ga';
   const W = ga ? 0.46 : 0.52;
   const panH = (ga ? 0.34 : 0.42) + panRaise;
@@ -185,13 +207,15 @@ export function seatGeometry(style: SeatStyle, panRaise = 0): SeatParts {
     transform(rail, sx * W * 0.3, 0.01, panD / 2);
     fr.push(rail);
     if (!ga) {
-      const arm = roundedBox(0.06, 0.05, 0.32, 0.02, 3);
-      transform(arm, sx * (W / 2 + 0.035), panH + 0.2, panD * 0.55);
+      const arm = roundedBox(0.06, 0.05, armLen, 0.02, 3);
+      transform(arm, sx * (W / 2 + 0.035), panH + 0.2 + armRaise, panD * 0.55 + armAft);
       fr.push(arm);
-      const post = cylinderZ(0.012, 0.012, 0, 0.14, 12);
-      post.rotateX(-Math.PI / 2);
-      transform(post, sx * (W / 2 + 0.035), panH + 0.04, panD * 0.75);
-      fr.push(post);
+      if (opts?.armrest?.post !== false) {
+        const post = cylinderZ(0.012, 0.012, 0, 0.14 + armRaise, 12);
+        post.rotateX(-Math.PI / 2);
+        transform(post, sx * (W / 2 + 0.035), panH + 0.04, panD * 0.75 + armAft);
+        fr.push(post);
+      }
     }
   }
   const frame = merge(fr);

@@ -289,8 +289,9 @@ function buildCbPanel(c: B738CockpitContext, s: Side, groups: CbGroup[], ratings
   // the remaining rows are populated with non-functional breaker bodies to approximate the real density
   // (fix round 1 B738-L15; static meshes, merged by the builder's static consolidation: no draw-call cost).
   const DUMMY_ROWS = 8;
+  const N_SECTIONS = s === 1 ? 3 : 4; // P18-1..3 / P6-1..12 section bands (see below)
   const realH = cbPanelHeight(groups, CB_PANEL.w, 0.024);
-  const h = realH + CB_GRID.title + DUMMY_ROWS * CB_GRID.dy + 0.02;
+  const h = realH + N_SECTIONS * CB_GRID.title + DUMMY_ROWS * CB_GRID.dy + 0.02;
   const P = { ...CB_PANEL, h, z: CB_TOP_Z + h / 2 };
   // Cabinet behind the panel (to the sidewall), from just above the panel down to the floor.
   const cabTop = P.z - P.h / 2 - 0.015;
@@ -328,16 +329,27 @@ function buildCbPanel(c: B738CockpitContext, s: Side, groups: CbGroup[], ratings
     const G = CB_GRID;
     const cols = Math.min(G.maxCols, Math.max(1, Math.floor((P.w - 2 * G.margin) / G.dx)));
     const y0 = realH + 0.004;
-    panel.line(G.margin, y0, P.w - G.margin, y0, 0.0005, 'cb');
-    panel.label(s === 1 ? 'EQUIP / SYSTEM FEEDS' : 'EQUIP / SYSTEM FEEDS', P.w / 2, y0, { height: 0.003, weight: 800, zone: 'cb' });
+    // Real panel geography (b737.org.uk "Circuit Breaker Guide" / FCOM 6.10): the Captain's P18 load control
+    // center is organised in sections P18-1..P18-3, the F/O's P6 main power distribution panel in P6-1..P6-12
+    // (each a column of dozens of breakers). The dummy rows below the functional groups carry those section
+    // titles so the panel geography matches photographs; SCOPE: the placeholder breakers are static bodies
+    // (state-only, no modelled load behind them).
+    const sections = s === 1 ? ['P18-1', 'P18-2', 'P18-3'] : ['P6-1 · P6-2 · P6-3', 'P6-4 · P6-5 · P6-6', 'P6-7 · P6-8 · P6-9', 'P6-10 · P6-11 · P6-12'];
+    const rowsPer = Math.ceil(DUMMY_ROWS / sections.length);
     const bodyGeo = env.geometry.get('b738.cb_dummy_body', () => new THREE.CylinderGeometry(0.0047, 0.0047, 0.009, 10).rotateX(Math.PI / 2));
     const collarGeo = env.geometry.get('b738.cb_dummy_collar', () => new THREE.CylinderGeometry(0.0072, 0.0072, 0.0035, 12).rotateX(Math.PI / 2));
     const bodyMat = env.materials.get('plasticBlack');
     const collarMat = env.materials.get('panelDark');
     for (let r = 0; r < DUMMY_ROWS; r++) {
+      const sec = Math.min(sections.length - 1, Math.floor(r / rowsPer));
+      if (r % rowsPer === 0) {
+        const yl = y0 + sec * G.title + r * G.dy;
+        panel.line(G.margin, yl, P.w - G.margin, yl, 0.0005, 'cb');
+        panel.label(sections[sec], P.w / 2, yl, { height: 0.0028, weight: 800, zone: 'cb' });
+      }
       for (let ci = 0; ci < cols; ci++) {
         const bx = G.margin + 0.004 + G.dx / 2 + ci * G.dx;
-        const by = y0 + G.title + 0.004 + r * G.dy;
+        const by = y0 + (sec + 1) * G.title + 0.004 + r * G.dy;
         const body = new THREE.Mesh(bodyGeo, bodyMat);
         body.userData.cockpitStatic = true;
         panel.addObject(body, bx, by, { z: 0.006 });
