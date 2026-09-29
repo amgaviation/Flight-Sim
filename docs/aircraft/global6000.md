@@ -1,0 +1,1294 @@
+# Bombardier Global 6000: research dossier and implementation reference
+
+The Global 6000 is an ultra-long-range business jet: BD-700-1A10 with the Global Vision Flight Deck, powered by
+2 × Rolls-Royce Deutschland BR700-710A2-20.
+
+- **Flight controls:** hydraulically powered, cable-signalled, with yokes, slats and Fowler flaps, and a stick pusher.
+- **Avionics:** Collins Pro Line Fusion ("Global Vision"): four 15.1 in AFDs, FCP, CTP, CCP, MKP, RSP and IESI.
+- **Electrical:** four VFGs, an APU generator and a RAT.
+- **Hydraulics:** three 3,000 psi systems.
+
+This document collects the public data behind `src/aircraft/global6000/**`. It is also the contract for the cockpit
+build (`src/aircraft/global6000/cockpit`, another agent). Every control listed in §12 has a var in `vars.ts` that a
+system in `systems/**` or `createSystems.ts` consumes. The audit test in `tests/aircraft/global6000/states.test.ts`
+enforces this.
+
+## 0. Sources
+
+| Tag | Source |
+|---|---|
+| TCDS | EASA Type Certificate Data Sheet IM.A.009 "BD-700", Issue 14 (23 Jan 2026), Section 2 (BD-700-1A10 / -1A11). Sections used: fuel 1.4 (SB 700-28-040 configuration), weights 1.5, datum 1.7, BR700-710A2-20 limits 3.2, oil 3.3, APU RE220 5.2, altitudes 5.4, Cat 2 5.6, exits 5.7, tyres 5.9, crew and passengers 5.10 / 5.11 |
+| SPEC | Bombardier "Global 6000" factsheet (2017): dimensions, wing area 1,021 ft², BOW 52,230 lb, max fuel 45,050 lb, 14,750 lbf flat-rated to ISA + 20 °C, 6,000 nm at M0.85, MMO 0.89, take-off distance 6,476 ft (SL ISA MTOW), landing distance 2,236 ft, initial cruise altitude 41,000 ft at MTOW, ceiling 51,000 ft |
+| GXAG | Bombardier Global Express training manual "Airplane General": dimensions (GX_01_002), eye position (GX_01_005), flight compartment and overhead layout (GX_01_018), airspeed limits placard (GX_01_018 / 022), control wheel switches |
+| GXEL | same series, "Electrical": VFGs, APU GEN, RAT GEN, TRUs, batteries, bus priorities, messages |
+| GXHY | "Hydraulics": systems 1–3, EDP / ACMP / RAT pump, AUTO logic, accumulators, pressure colours, messages |
+| GXFU | "Fuel System": tanks, pumps, transfers, crossfeed, recirculation, messages |
+| GXFC | "Flight Controls": PCUs, stabilizer 0–14 units, slat/flap lever, MFS / GS, ground lift dumping, stall protection |
+| GXLG | "Landing Gear & Brakes": LGECU, actuation, NWS, autobrake, BTMS, horn, messages |
+| GXAPU | "Auxiliary Power Unit": RE220, envelope, bleed, starter cut-out, messages |
+| GXFP | "Fire Protection": FIDEEX loops, two shared bottles, MLG bay overheat |
+| GXAF | "Automatic Flight": roll rate, bank limits, low-bank transition, pitch / VS limits, FLC changeover |
+| GXLT | "Lighting": exterior and flight-compartment lighting controls |
+| FSB | FAA Flight Standardization Board report BD-700-1A10 / 1A11, appendix 6 (Global Vision Flight Deck differences: four AFDs, CTP, CCP, MKP, RSP, EDM, autothrottle, triple FMS) |
+| AOPA | "First look at the Global 6000", AOPA Pilot, Sep 2012: FL410 M0.85 490 KTAS at 3,200 lb/h, landing target 116 KIAS, 4,500 ft cabin at FL450 |
+| E018 | EASA TCDS E.018 (BR700-710 series), as quoted in `src/avionics/collins-fusion/config.ts` |
+| FUSION | `docs/modules/avionics-collins-fusion.md` (Collins course syllabus 523-0817473, FSB, Global 6000 cockpit photographs) |
+
+In the code and in this document:
+
+- `EST` marks an estimate and gives its reasoning.
+- `SCOPE` marks a deliberate simplification.
+
+The Global Express training manuals describe the BD-700-1A10 airframe and systems. The Global 6000 is the same type
+(TCDS Section 2) with the Global Vision avionics and the SB 700-28-040 fuel configuration.
+
+## 1. Dimensions, weights, capacities
+
+| Item | Value | Source |
+|---|---|---|
+| Span / length / height | 94 ft 0 in (28.65 m) / 99 ft 5 in (30.30 m) / 25 ft 6 in (7.77 m) | SPEC, GXAG GX_01_002 |
+| Wing area | 1,022 ft² (94.95 m²) equivalent; 35° sweep; 4 slat segments per side; double-slotted Fowler flaps (inboard / outboard) | GXAG, SPEC 1,021 ft² |
+| MAC | 3.80 m | EST: taper-0.2 equivalent planform (`fdm.ts`) |
+| Wheelbase / main gear track | 13.06 m / 4.18 m | GXAG three-view |
+| Fuselage diameter | 2.69 m; horizontal tail span 9.68 m | GXAG |
+| Tyres | nose 21×7.25-10, mains H38×12.0-19 twin | TCDS 5.9 |
+| Max ramp / MTOW / MLW / MZFW | 99,750 / 99,500 / 78,600 / 58,000 lb | TCDS 1.5 |
+| BOW / max payload | 52,230 lb / 5,770 lb (typical) | SPEC |
+| Fuel (usable) | L / R main 15,045 lb each, centre 12,683 lb, aft 2,275 lb; total 45,050 lb | TCDS 1.4, SPEC |
+| Unusable fuel | 72 lb drainable + 100 lb undrainable | TCDS 1.4 |
+| Engine oil | 4.8 US gal per engine incl. lines | TCDS 3.3 |
+| Occupants | minimum crew 2, 19 passengers max | TCDS 5.10 / 5.11 |
+| Altitudes | 51,000 ft max operating; 13,700 ft max take-off / landing | TCDS 5.4 |
+| Ambient | −30 … +50 °C at sea level | GXAG |
+
+## 2. Powerplant: BR700-710A2-20
+
+| Item | Value | Source |
+|---|---|---|
+| Thrust | take-off 14,750 lbf (65.6 kN), 5 min AEO / 10 min OEI; MCT 14,450 lbf; flat-rated to ISA + 20 °C | TCDS 3.2, SPEC |
+| N1 | 102.0 % take-off; 102.5 % overspeed | TCDS 3.2 |
+| N2 | 99.6 % take-off; 98.9 % MCT; 99.8 % overspeed; idle ≥ 58 % | TCDS 3.2 |
+| ITT | 900 °C take-off; 860 °C MCT; 905 °C over-temperature; starting 700 °C ground / 850 °C air | TCDS 3.2 |
+| Reverse | the FADEC limits N1 to 70.0 % for 30 s | TCDS 3.2 |
+| Oil | 160 °C maximum. Pressure: 25 psid minimum to complete the flight; lower limit for flight 35 psid to 72.3 % N2 rising to 45 psid at 90 % N2 (the CAS caution follows the schedule - G3-03) | E018 |
+| Control | dual-channel FADEC. EPR is the primary setting parameter; N1 is the alternate mode (pedestal ENGINE EPR / N1 PBAs) | GX_01_018 |
+| Start | air-turbine starter on APU or cross bleed; FADEC auto start with the L / R START PBA; dry motoring with CRANK | GX_01_018, EST sequence |
+
+### Engine model (`fdm.ts br710()`, EST calibration)
+
+- **Thrust:** rated corrected N1 of 96.5 % gives take-off thrust. Lapse is `δ^0.8 (1 − 0.5M + 0.4M²)/√θ`.
+- **Fuel:** TSFC is 0.0398 kg/N/h at rated SL static. This was calibrated so that FL410 M0.85 at 78,000 lb burns
+  3,220 lb/h against the 3,200 lb/h in AOPA.
+- **Idle:** N1 24 %, N2 60 %, 550 lb/h, ITT 470 °C.
+- **Start:** peak ITT 560 °C; starter to 28 % N2; light-off at 15 %; about 24 s from light-off to idle.
+- **Reverse:** efficiency 0.4.
+- **Nacelles:** at x −9.3 m, y ±2.45 m, z −0.95 m (body frame).
+
+### FADEC ratings (`systems/engines.ts`)
+
+- **Ratings:** TO / GA / MCT / CLB / CRZ tables, flat to ISA + 20 °C.
+- **Automatic selection:**
+  - GA in the air with the slats out and the gear down.
+  - CRZ above 25,000 ft when level in ALT or VALT.
+- **Thrust lever law:** one MAX detent. The minimum take-off lever position is 30° TLA (GXFC GLD auto-arm), which is
+  EST 0.67 of the travel.
+- **Reverse:** the piggy-back reverse levers are limited to 70 % N1; max reverse is time-limited to 30 s (TCDS 3.2),
+  after which the commanded reverse ramps toward idle reverse (G3-05, `logic.ts`; the post-limit behaviour is a
+  SCOPE simplification).
+
+## 3. Speeds, envelope, V-speeds
+
+| Item | Value | Source |
+|---|---|---|
+| VMO | 300 KIAS below 8,000 ft; 340 KIAS from 8,000 to 30,267 ft | GXAG placard |
+| MMO | 0.89 up to 35,000 ft; 0.88 at 41,000; 0.858 at 47,000; 0.842 at 51,000 (linear between) | GXAG placard |
+| VA | 254 KIAS at SL / 96,000 lb; 250 KIAS at 20,000 ft / 78,600 lb | GXAG |
+| VFE | slats out (0 OUT) 225; flaps 6 210; flaps 16 210; flaps 30 185 KIAS | GXAG / GXFC |
+| VLO / VLE | 200 / 250 KIAS | GXAG |
+| Load factors | +2.5 / −1.0 clean; +2.0 / 0 flaps | EST: 14 CFR 25.337 / 25.345 minimums |
+| Stall protection | shakers, pusher; inhibited below 70 KCAS | GXFC |
+| Demonstrated crosswind | 29 kt | EST: operator figure, no public AFM value |
+
+### V-speeds (EST, `data.ts vSpeeds`)
+
+The AFM tables are not public, so the reference speeds come from the CLmax calibration:
+
+- CLmax values: clean slats in 1.25, slats out 1.70, flaps 6 1.87, flaps 16 2.05, flaps 30 2.25.
+- VS1G = √(2W / ρ₀ S CLmax).
+- V2 = 1.13 × VS1G (flaps 6), per 25.107.
+- VR = V2 − 4 kt; V1 = VR − 2 kt.
+- VREF = 1.23 × VS1G (flaps 30), per 25.125.
+
+At MTOW this gives VR 136 / V2 140 KIAS. At 75,000 lb, VREF + 5 is 126 KIAS; AOPA quotes a 116 KIAS landing target
+when light.
+
+### Model results (`tests/aircraft/global6000`, this build)
+
+| Test | Result | Target |
+|---|---|---|
+| MTOW take-off SL ISA, slats/flaps 6 | rotation 136 KIAS, lift-off 148 KIAS; 4,693 ft to 35 ft (× 1.15 = 5,397 ft) | SPEC 6,476 ft (±15 %) |
+| Accelerate-stop from V1 at MTOW (GLD + max braking, no reverse) | 6,131 ft | within 15 % of 6,476 ft |
+| Stall 78,600 lb clean (slats in) | 133.0 KCAS (shaker 148.3) | 134.8 (±5 %) |
+| Stall 78,600 lb slats / flaps 30 | 98.2 KCAS (shaker 105.9) | 100.5 (±5 %) |
+| Stall 65,000 lb slats / flaps 30 | 90.3 KCAS | 91.4 (±5 %) |
+| Climb MTOW → FL410 (FLC 250 / 300 KIAS / M0.80, A/T CLB) | 18.0 min; 1,260 fpm at FL400 | SPEC initial cruise altitude FL410 (≥ 300 fpm residual) |
+| FL410 M0.85 at 96,500 lb | 487.5 KTAS, 3,697 lb/h | SPEC 487 KTAS ± 8 %; fuel flow EST 3,200–4,000 heavy |
+| FL410 M0.85 at 78,000 lb | 487.5 KTAS, 3,220 lb/h | AOPA 490 / 3,200 lb/h ± 8 % |
+| Vmo / Mmo | overspeed clacker and `alert.overspeed` above 300 / 340 KIAS and the MMO schedule (FL330 0.89, FL470 0.858) | GXAG placard |
+| Coupled ILS | CYUL 06L: 0.008 LOC / 0.008 GS (full scale 1), -671 fpm at 200 ft; KTEB 6: 0.010 / 0.010. AP disconnected at 200 ft RA | within 1 dot (0.5 full scale) |
+| Approach / touchdown attitude (full-flight check ride, 70,500 lb, VAPP 122) | 3.9° on the glideslope, 7.9° at touchdown | AAIB EW/C2008/08/09 (Global Express N618WF): mean ~4° on the approach, 8° at touchdown |
+| Check ride KTEB → KPIT (`verify/fullFlight.test.ts`, 73,300 lb) | lift-off 132 KIAS at 2,266 ft; FL350 in 8.2 min; FL350 M0.85 490 KTAS 3,676 lb/h at 71,600 lb; cabin 3,500 ft / 9.47 psi | EST bands (see §16) |
+
+## 4. Aerodynamics (`fdm.ts`, EST calibration)
+
+- **Lift:** lift-curve slope 0.082 /° including fuselage and tail. The slats add ΔCL 0.45 and delay the stall
+  (`ALPHA_STALL_SLATS`).
+
+  | Flaps | CL0 | Stall α | Post-stall CLmax |
+  |---|---|---|---|
+  | 0 | 0.15 | 14° | 1.25 |
+  | 6 | 0.80 | 9° | 1.42 (+ slats) |
+  | 16 | 0.80 | 11° | 1.60 (+ slats) |
+  | 30 | 0.80 | 11° | 1.80 (+ slats) |
+
+- **Drag:** CD0 0.0165 clean, 0.026 with slats and flaps 6, 0.038 with flaps 16, 0.072 with flaps 30. Gear, spoiler
+  and compressibility drag rise above M0.84.
+- **Pitch:** T-tail with a trimmable stabilizer: Cm_δe 0.5, Cm_q −30, Cm_trim 0.35.
+  - The stabilizer runs 0–14 units = −2° to +12° (GXFC).
+  - The take-off green band is 4.5–11 units (GX_10_022).
+- **Inertia (EST):** Ixx 300,000, Iyy 780,000, Izz 985,000 kg·m². These are radius-of-gyration estimates for a 30 m,
+  45 t aircraft with aft engines. Iyy was raised so that the pusher overshoot stays within 1.15 VS-equivalent α.
+- **Contacts:** tail strike at about 13.5° on compressed mains (tail cone contact at x −11.5 m, z −0.35 m); wingtips,
+  nacelles, belly and nose contacts.
+
+## 5. Systems
+
+### 5.1 Electrical (GXEL): `systems/electrical.ts`, logic in `systems/logic.ts`
+
+**Sources and bus priorities**
+
+- **AC 115 V, never paralleled.** Sources:
+  - VFGs: GEN 1 and GEN 2 on the left engine, GEN 3 and GEN 4 on the right. Each is 40 kVA at 324–596 Hz.
+  - APU GEN: 40 kVA, 400 Hz.
+  - EXT AC.
+  - RAT GEN: 9 kVA. It feeds AC ESS only and sheds below about 147 KIAS in favour of the RAT hydraulic pump.
+- **AC bus priorities** (priority `SourceSelector`s, `elec.<sel>_src`):
+
+  | Bus | Priority order |
+  |---|---|
+  | AC 1 | 1, 4, 3, 2, APU |
+  | AC 2 | 2, 3, 4, APU |
+  | AC 3 | 3, 2, 1, APU |
+  | AC 4 | 4, 1, 2, 3, APU |
+  | AC ESS | RAT, 4, 1, 2, 3, APU |
+
+- **Single-VFG operation** (exactly one VFG, no APU GEN or EXT AC) sheds AC 2 and AC 3.
+- **DC 28 V: four 150 A TRUs.**
+  - TRU 1 is fed from AC 1, ESS TRU 1 from AC 2, TRU 2 from AC 3 and ESS TRU 2 from AC ESS. The feeder mapping is EST.
+  - DC bus priorities:
+
+    | Bus | Priority order |
+    |---|---|
+    | DC 1 | TRU 1, ESS TRU 1 |
+    | DC ESS | ESS TRU 1, ESS TRU 2, TRU 2, TRU 1 |
+    | BATT BUS | ESS TRU 2, ESS TRU 1, TRU 2, TRU 1 |
+    | DC 2 | TRU 2, ESS TRU 2 |
+
+  - With a single TRU, DC 1 and DC 2 are shed.
+  - The emergency tie contactor (ETC) joins DC ESS and BATT BUS.
+  - DC PWR EMER OVRD bypasses a failed DCPC.
+- **Batteries:** AV BATT 24 V 25 Ah and APU BATT 25.2 V 42 Ah, both NiCd.
+  - BATT MASTER connects both to the BATT BUS and, through the ETC, to DC ESS. Emergency endurance is at least 15 min.
+  - DC EMER is hot from the battery direct buses.
+  - EXT DC feeds the APU BATT DIR bus.
+
+**RAT**
+
+- Deploys automatically in flight above 100 KIAS (EST) when all AC is lost or both engines are out. The delay is 14 s,
+  or 0 s with both engines out or the slats/flaps out (EST).
+- The manual deploy handle latches it out. It re-stows only on the ground (maintenance).
+
+**Loads**
+
+- Loads are EST currents per equipment class, each behind a `cb.<load>` breaker.
+- The ACMP breakers are 3-phase 35 A. They are carried as their single-phase equivalent (105 A) because the network
+  computes I = VA / V.
+
+`SCOPE:`
+
+- The SSPCs are the network breakers.
+- The chargers are modelled as the batteries floating on the BATT BUS.
+
+### 5.2 Fuel (GXFU, TCDS 1.4): `systems/fuel.ts`
+
+- **Tanks:** L main, centre, R main, aft (FDM tank indices 0–3). Each inboard feed cell is modelled as part of its
+  main tank.
+- **Pumps:**
+  - Two AC PRI pumps per side: L FWD on AC 2, R FWD on AC 3, R AFT on AC 4 (GXFU breaker list), and L AFT on AC 1
+    (EST). They run continuously with the engine running; the PRI PUMPS PBA inhibits them.
+  - DC AUX pumps: L on DC ESS, R on the BATT BUS. They back up a failed AC pump, run for take-off and landing, drive
+    wing transfer and feed the APU start.
+- **Crossfeed:** XFEED SOV, manual only. The APU draws from the right feed line through the APU fire SOV, a DC EMER
+  motor-driven valve that holds its position unpowered (a DC EMER loss does not starve a running APU; APU FUEL SOV
+  posts on a command / position mismatch - G3-10).
+- **Transfers:**
+  - Centre → wings with two AC pumps: start below 93 % wing, stop above 97 %.
+  - Aft → wings (AUTO) when either wing reaches 5,500 lb, or with ON.
+  - Wing to wing with the AUX pumps: automatic at a 400 lb imbalance with the slat/flap lever at 0 IN, or manual
+    L→R / R→L.
+- **Recirculation:** automatic above 34,000 ft. It biases the wing tank temperature.
+- **Messages:**
+  - FUEL LO QTY below 600 lb in a wing.
+  - FUEL IMBALANCE above 1,100 lb in flight, or 600 lb on the ground / take-off / approach configuration.
+  - WING FUEL LO TEMP below −35 °C.
+  - FUEL HI TEMP above +54 °C.
+- The fire handles close the engine fuel SOVs.
+- Tank quantities decrement with burn: `fuel.used_kg` > 1,000 kg over the climb test.
+
+### 5.3 Hydraulics (GXHY): `systems/hydraulic.ts`
+
+**Systems (3,000 psi)**
+
+| System | Pumps | Main users |
+|---|---|---|
+| 1 | EDP 1A (L engine) + ACMP 1B (AC 3) | left PCUs and rudder, MFS, GS, L reverser |
+| 2 | EDP 2A (R engine) + ACMP 2B (AC 2) | right PCUs and rudder, MFS, main gear actuators, R reverser, outboard brakes (accumulator) |
+| 3 | ACMP 3A (AC 4, normally ON) + ACMP 3B (AC 1) + RAT pump | all PCUs, GS, gear side-brace / doors / uplocks / nose gear, inboard and park / emergency brakes, NWS |
+
+**Pump logic (`logic.ts`)**
+
+- **ACMP AUTO:** the B pumps run when all of the following hold:
+  - the slat/flap lever is out of 0;
+  - slat motion has stopped;
+  - at least two VFGs are on line.
+
+  They also run when the system's primary pump (A) fails. Once on, they stay on for at least 5 min.
+- **On the APU generator alone** (ground), only one ACMP runs at a time.
+
+**Other items**
+
+- **SOVs:** the L / R HYD SOV PBAs and the fire handles close the EDP suction SOVs.
+- **Messages:**
+  - HYD n LO PRESS when both pumps of a system are below 1,800 psi (gated only on the aircraft being powered, so a
+    system 1 loss after a left-engine failure still alerts - G3-01).
+  - HYD n LO QTY.
+  - HYD n HI TEMP above 96 °C (reachable through the `hyd.sysN_hitemp` overheat failures - G3-07).
+  - HYD RAT PUMP FAIL.
+- **Accumulator precharge:** brake 500 psi, RAT 1,000 psi. SCOPE: the system 3 brake and RAT accumulators are merged
+  into one at the brake precharge (one accumulator per system in the shared block).
+- Flow rates and reservoir sizes are EST (EDP 30 gpm, ACMP 6.5 gpm, RAT 5 gpm).
+
+### 5.4 Flight controls (GXFC): `createSystems.ts`, `systems/logic.ts`
+
+**Primary controls and trim**
+
+- **Primary controls:** mechanical cable-signalled PCUs (`MechanicalFlightControls`): 2 per aileron and elevator,
+  3 on the rudder. They are powered by the three hydraulic systems (`hydFrac`).
+- **Yaw damper:** engages automatically 3 s after AFCS power-up.
+- **Stabilizer trim:** 0–14 units, neutral 7, rate 0.5 °/s falling to 0.3 °/s at high Mach. STAB CH 1 / CH 2
+  disconnect PBAs.
+- **Aileron trim:** split switch.
+- **Rudder trim:** rotary.
+
+**High-lift, spoilers and ground lift dumping**
+
+- **Slat/flap lever:** 0 IN (slats in), 0 OUT (slats out, flaps 0), 6, 16, 30. The slats are sequenced before the
+  flaps.
+- **Flight spoiler lever:** RETRACT / 1/4 / 1/2 / FULL / MAX. The multifunction spoilers are limited with the flaps
+  out (EST schedule).
+- **Ground lift dumping:** auto-arms with both thrust levers below 30° TLA in the air, or with MAN ARM. It deploys at
+  RA < 7 ft with wheel speed > 16 kt, latches at 45 kt, and disarms after 40 s (GXFC).
+
+**Stall protection (SPC)**
+
+- The configuration index is flaps (°) + 100 × slats, and sets the stall angle.
+- Shaker at 0.8 and pusher at 0.9 of the stall angle of attack. The pusher drives both columns fully forward
+  (EST −1.3 command).
+- Inhibited below 70 KCAS.
+- STALL PUSHER switches on both side panels.
+
+### 5.5 Landing gear, brakes, steering (GXLG)
+
+- **LGECU:** retraction on system 2, doors and uplocks on system 3. GEAR DISAGREE after 28 s.
+- **Handle:** the DN LCK REL PBA overrides the handle solenoid. The manual release handle gives free fall.
+- **Nose-wheel steering:** tiller ±75°, pedals ±7.5°.
+- **Autobrake:** LO / MED / HI = 4 / 8 / 13 ft/s².
+- **PARK/EMER BRAKE handle:** proportional emergency braking below the parking lock.
+- **BTMS:** brake temperature monitoring, with BRAKE OVHT and a RESET.
+- **Gear horn:** HORN MUTED is available only with both RAs invalid.
+- **Take-off configuration:** red "NO TAKEOFF" CONFIG messages for flaps, stabilizer, aileron and rudder trim,
+  spoilers and PARK BRAKE ON.
+
+### 5.6 APU: Honeywell RE220 GX (GXAPU, TCDS 5.2)
+
+- **Control:** single rotary OFF / RUN / START.
+  - RUN opens the inlet door and runs the prestart BIT.
+  - START is spring-loaded back to RUN.
+- **Envelope and starting:**
+  - The starter runs from the APU battery; starter cut-out at 46 %.
+  - Start envelope 37,000 ft (a START above it is refused) and operating envelope 45,000 ft (automatic shutdown
+    above), both enforced since round 3 (G3-02, additive `startCeilingFt` / `operatingCeilingFt` on the shared
+    Apu block); APU bleed to 30,000 ft (about 45 psi).
+  - EGT start limit 1,020 °C; continuous running limit ~714 °C (APU OVERTEMP once on speed, G3-04); 60 s cooldown.
+- **Fire:** an APU fire shuts the APU down automatically on the ground.
+
+### 5.7 Bleed air, air conditioning, pressurization (IAMS; architecture EST)
+
+**Bleed and air conditioning**
+
+- **Bleed sources:** each engine's HP/LP bleed feeds its own duct through a PRSOV. The APU load control valve feeds
+  the left duct.
+- **Crossbleed (XBLEED):** in AUTO it opens for starts and with a single bleed source.
+- **Engine starters:** air-turbine starters sit on each duct and need about 35 psi.
+- **Packs and zones:**
+  - L / R PACK, TRIM AIR, RECIRC and RAM AIR switches.
+  - PACK CONTROL MAN TEMP knobs.
+  - Three temperature zones (cockpit, forward cabin, aft cabin), 16–30 °C.
+
+**Pressurization (`PRESS_GLOBAL6000`)**
+
+- **Schedule:** 4,500 ft cabin at FL450 (AOPA); 10.33 psid maximum (EST).
+- **Modes:**
+  - AUTO uses the FMS landing elevation.
+  - MAN drives the outflow valves with MAN ALT UP / DN (both OFVs, slowly: EST 60 s full travel).
+  - RATE NORM / HIGH sets the AUTO cabin descent limit, 300 / 800 fpm (GX PTG 13-57).
+  - Limiters, ditching sequence and OFV travel limit: §19.
+- **Other controls:** OUTFLOW VALVE 1 / 2 CLOSED, EMERG DEPRESS and DITCHING (guarded).
+- **Placard limits:** 0.1 psi taxi and 1.0 psi landing differential (GX_01_018).
+
+### 5.8 Ice and rain
+
+- **WING and L / R COWL anti-ice:** OFF / AUTO / ON, with the ice detectors driving AUTO. WING XBLEED lets one bleed
+  supply both wings.
+- **Windshield heat:** L / R windshield PBAs; the side windows follow.
+- **Probe heat:** the probes and AOA vanes are heated automatically by the HBMU.
+
+### 5.9 Fire (GXFP)
+
+- **Detection:** FIDEEX dual loops on the engines and APU; single loops in the main wheel wells (MLG BAY OVHT).
+- **Extinguishing:** two bottles, each able to discharge into either engine or the APU. The pulled handle is
+  rotated and held ≥ 1 s: left → bottle 1, right → bottle 2 (GX PTG 9-12 .. 9-14; §19).
+- **Fire handles:** pulling a handle arms the squibs and closes:
+  - the engine fuel SOV (`fuelCut`);
+  - the hydraulic SOV (`hyd.sovN_open`);
+  - the bleed.
+
+  The status messages are L/R ENG SOV CLSD and ENG BLEED OFF.
+- **Test:** EMS CDU FIRE TEST.
+
+### 5.10 Oxygen
+
+- **Crew:** quick-donning masks with regulator N / 100 % / EMERGENCY. The crew bottle is EST 115 ft³ at 1,850 psi.
+- **Passengers:** PASSENGER OXYGEN CLOSED / NORMAL / OVERRIDE. NORMAL deploys automatically at ~14,500 ft cabin
+  (GX PTG 8-4: "All oxygen compartment doors will open … if cabin altitude reaches approximately 14,500 feet";
+  `data.ts paxMaskFt`, one threshold shared by the deploy logic and the CABIN ALT checklist check, fix round P09).
+
+### 5.11 Avionics (FUSION, FSB)
+
+**Suite composition**
+
+- Collins Pro Line Fusion (`createFusionSuite`, `GLOBAL6000_AIRFRAME`, `BR710A2_20_ENGINES`):
+  - four AFD-6520 displays in a T arrangement;
+  - FCP-5120;
+  - 2 CTP, 2 CCP, 2 MKP, 2 RSP;
+  - IESI.
+- The aircraft builds its own `Radios` and `Fms` and passes them to the suite. The synoptics read the aircraft vars
+  (`synopticBindings`).
+
+**AFCS**
+
+- `Afcs` is configured with `AFCS_PROLINE_FUSION`:
+  - bank limit 27°, or 17° with HALF BANK; low bank is automatic above 35,050 ft (GXAF);
+  - roll rate 7.5 °/s;
+  - pitch ±20°;
+  - VS −8,000 / +6,000 fpm.
+- APPR switches the AFCS nav source to the localizer. The Fusion FCP performs a nav-to-nav transfer when the PFD
+  source is FMS and an ILS approach is loaded.
+- The Vision FCP has no A/T key (photo N835GL; §7): the autothrottle engages on the take-off thrust-lever advance
+  (systems/vision.ts) and disconnects via the thrust-lever `at.disc` switches or TOGA (§18).
+- EDM (emergency descent mode).
+- AP engagement in the TO vertical mode keeps TO (FSB appendix 6 GVFD AFCS; `to.keepModeOnApEngage` in the shared
+  Afcs, configured in createSystems.ts) instead of reverting to PITCH.
+- AFCS options (set by the check-ride verification, §16): armed LNAV / LOC captures only once airborne
+  (`nav.groundCapture: false`, the TO lateral mode holds the runway track); VNAV climbs in VFLC (`vnavClimb`); VNAV never
+  descends through the FCP altitude (`altvBoundBySel`); the VNAV modes and the A/T fly the FCP speed, which the Fusion FCP
+  fills with the FMS speed in SPD FMS (`vnavSpeedFromSelected`); AoA feed-forward filter 4 s (`alphaTauS`).
+- The Fusion PERF INIT / VNAV SETUP defaults are the Global's: BOW 52,230 lb (SPEC), climb 300 KIAS / M0.80, cruise
+  M0.85, descent M0.85 / 300 KIAS (EST, `FMS_SPEEDS` in createSystems.ts); 250 KIAS below 10,000 ft by the FMS.
+
+**Sensors, TAWS and CAS**
+
+- **Sensors:** ADC ×2, IRS ×3 (OFF / ALN / NAV / ATT), standby AHRS (IESI), RA ×2.
+- **Surveillance:** TAWS (EGPWS with TERR OFF, G/S WARN MUTED, FLAP OVRD) and TCAS.
+- **CAS:** `CasManager` with `G6K_CAS` (146 message definitions).
+  - Voices and chimes go through the IAC aural channels (AURAL MUTE: §12.1).
+  - Take-off inhibit from 80 kt to 400 ft (or 30 s after lift-off); landing inhibit below 200 ft RA until 60 kt (EST).
+
+## 6. CAS (`systems/cas.ts`)
+
+**Message texts and colours**
+
+- Texts are in upper case, as on the Global EICAS.
+- Where the text differs from the public GX manuals or comes from the Fusion `GLOBAL_CAS_TEXTS`, it is marked EST in
+  the file. The main groups:
+
+  | Colour | Level | Main groups |
+  |---|---|---|
+  | Red | warnings | L/R ENG FIRE, APU FIRE, MLG BAY OVHT, L/R ENG OIL PRESS, CONFIG STAB TRIM / AIL TRIM / RUD TRIM / FLAPS / SPOILERS, PARK BRAKE ON, GEAR, NORM BRAKE FAIL, BRAKE OVHT, CABIN ALT, CABIN DELTA P, ENGINE EXCEEDANCE |
+  | Amber | cautions | EMER PWR ONLY, AC BUS n FAIL, AC ESS BUS FAIL, GEN n OVLD, RAT GEN FAIL, DC BUS 1/2 FAIL, DC ESS BUS FAIL, BATT BUS FAIL, DC EMER BUS FAIL, BATT MASTER OFF, APU/AV BATT FAIL, HYD n LO PRESS / LO QTY / HI TEMP, HYD RAT PUMP FAIL, FUEL LO QTY, FUEL IMBALANCE, L/R PRI FUEL PUMPS, L/R ENG FUEL SOV, WING FUEL LO/HI TEMP, CTR FUEL XFER FAIL, AFT XFER FAIL, XFEED VALVE FAIL, L/R ENG FLAMEOUT, ENG OIL LO PRESS, ENG START ABORT, ENG FIRE FAIL, REV UNLOCKED, FIRE BTL1/2 LO PRESS, APU OVERTEMP / OVERSPEED / OIL LO PRESS, STALL PROTECT FAIL, FLAP FAIL, SLAT FAIL, YD OFF, STAB TRIM FAIL, GLD FAIL, GEAR DISAGREE, PARK/EMER BRAKE ON, INBD / OUTBD BRK LO PRESS, NOSE STEER FAIL, AUTOBRAKE FAIL, GEAR SYS FAIL, NOSE DOOR, door messages, BLEED FAIL, PACK FAIL, CABIN PRESS AUTO FAIL, WING / COWL A/ICE FAIL, WSHLD HEAT FAIL, ICE |
+  | Cyan | advisories | GEN n FAIL, APU GEN FAIL, TRU n FAIL, RAT GEN ON, BATTERY EMER PWR ON, ACMP / pump ON, transfers, ignition, anti-ice ON |
+  | White | status | GEN n OFF, APU GEN OFF, RAT GEN OFF, DC BUS MAN OFF, ENG SOV CLSD, ENG BLEED OFF, APU FUEL SOV CLSD, PARKING BRAKE, N1 MODE, … |
+
+**Warning behaviour**
+
+- The warnings have aural callouts: "LEFT ENGINE FIRE", "NO TAKEOFF", "GEAR", "CABIN PRESSURE", and others.
+- Master WARNING and master CAUTION are acknowledged with the `cas.ack_warning` / `cas.ack_caution` events.
+
+## 7. Normal procedures (abridged, `checklists.ts`)
+
+The full sequence is in `checklists.ts`. Auto-checks verify the switch positions and system state live.
+
+Fix round P01/P02/P13/P14 added the missing phases so the ECL phase list matches the real flow: **EXTERIOR
+INSPECTION** (display-only, SCOPE: no walkaround model), **TAXI** (brakes check, flight controls free & correct on
+all three hydraulic systems, flight instruments check, taxi light), **CLIMB** (altimeters STD at the EST 18,000 ft
+transition, landing/taxi lights off at 10,000 ft, pressurization check), **CRUISE** (altimeters, pressurization,
+fuel balance within 400 lb, fuel temperature above −35 °C) and **SECURING** (IRS/APU/EMER LIGHTS/BATT MASTER off,
+split out of SHUTDOWN, which now ends with the EST 2-min idle warm-down, ENG RUN OFF, beacon and PASS SIGNS off).
+
+1. **COCKPIT PREPARATION:**
+   1. BATT MASTER ON, DC buses powered.
+   2. EMER LIGHTS ARM, PARK/EMER BRAKE SET, gear handle DN.
+   3. ENG RUN switches OFF, thrust levers IDLE, fire handles IN, EMS CDU FIRE TEST.
+   4. APU START, then AVAIL; APU GEN on line.
+   5. IRS 1 / 2 / 3 NAV.
+   6. HYD 1B / 2B / 3B AUTO, HYD 3A ON.
+2. **BEFORE START:**
+   1. Doors closed, beacon ON.
+   2. APU BLEED AUTO, XBLEED AUTO.
+   3. PRI / AUX pumps normal.
+3. **ENGINE START** (right engine first, EST):
+   1. START selector AUTO, thrust levers IDLE, ENGINE RUN R ON: the FADEC auto start runs (GX PTG 17-42: "The normal
+      start sequence is initiated automatically, with the ENGINE START switch selected to AUTO, IGNITION switch
+      selected to Normal (default), thrust levers IDLE and the engine RUN switch to ON"). L CRANK / R CRANK on the START
+      selector motor the engine (dry / wet crank, manual start with IGNITION ON and ENGINE RUN ON at 20 % N2).
+   2. Monitor light-off (< 15 s), ITT (< 700 °C) and N2 to about 60 %.
+   3. Repeat for the left engine.
+4. **AFTER START:**
+   1. GEN 1–4 on line, APU as required.
+   2. Hydraulics 3,000 psi.
+   3. Anti-ice as required.
+5. **BEFORE TAKEOFF:**
+   1. Slats/flaps 6 or 16, stabilizer trim in the green band, spoilers RETRACT.
+   2. GLD AUTO (arms on thrust advance, GXFC 30° TLA), autobrake OFF (GXLG lists an OFF/LO/MED/HI selector only;
+      no RTO mode is documented in our sources, so none is modelled and a reject is braked manually — SCOPE), NWS
+      ARMED, transponder TA/RA (`xpdr.mode` 5, auto-checked).
+   3. Thrust levers to take-off: the autothrottle engages automatically on the take-off thrust advance (AOPA 2012; the
+      Vision FCP has no A/T key).
+   3. Transponder / TCAS, no CONFIG messages.
+6. **AFTER TAKEOFF:**
+   1. Gear UP.
+   2. Slats/flaps 0 IN.
+   3. A/T CLB.
+7. **DESCENT, APPROACH and LANDING:**
+   1. Landing elevation, autobrake.
+   2. Slats/flaps 16, then gear DN, then flaps 30.
+   3. VREF + 5.
+8. **AFTER LANDING:**
+   1. Spoilers RETRACT.
+   2. Slats/flaps 0 IN.
+   3. APU as required.
+9. **SHUTDOWN:**
+   1. PARK BRAKE.
+   2. ENG RUN OFF.
+   3. BATT MASTER OFF.
+
+In the headless start test (`start.test.ts`):
+
+- The APU is AVAIL in under 60 s.
+- The engines light off in under 15 s and reach idle in under 60 s.
+- Peak start ITT is under 700 °C.
+- The battery bus stays above 24 V during the air starts.
+
+## 8. Non-normal procedures (abridged)
+
+| CAS | Memory / QRH items (EST wording) | Model reaction verified in `failures.test.ts` |
+|---|---|---|
+| L/R ENG FIRE | Thrust lever IDLE, ENG RUN OFF, fire handle PULL, DISCH bottle 1; bottle 2 after 30 s if the warning persists | fuel, hydraulic SOV and bleed close; bottle discharged → FIRE BTL LO PRESS; the other side's VFGs carry all AC buses; ACMP B keeps the system pressurized |
+| APU FIRE | APU fire handle, DISCH | automatic APU shutdown on the ground |
+| GEN n FAIL | none (automatic transfer) | the bus transfers by priority, no bus loss |
+| EMER PWR ONLY | RAT deploys (auto), land as soon as practicable | RAT GEN powers AC ESS, the RAT pump powers system 3 |
+| HYD n LO PRESS | check the ACMP ON, land at the nearest suitable airport | EDP failure → ACMP B takes over; a leak → LO PRESS + LO QTY |
+| CONFIG … (NO TAKEOFF) | reject the take-off or correct the configuration | flaps 0 at take-off thrust raises CONFIG FLAPS |
+| L/R ENG FLAMEOUT | thrust IDLE, relight envelope (EST: windmill below FL300 / starter assist below 21,000 ft), ENG RUN cycle OFF→ON, ITT ≤ 850 °C (TCDS 3.2), APU below 37,000 ft | `round4-procedures.test.ts`: no starter above the 21,000 ft EST air-start ceiling; starter-assisted relight at 15,000 ft |
+| FUEL IMBALANCE | AUX pumps ON, XFEED closed, WING XFER toward the light wing, monitor | manual L→R / R→L transfer moves fuel; the auto-check senses the direction |
+| AC/DC BUS FAIL | GEN reset, bus isolation verified, APU as required | CAS ids `ac_bus{n}_fail` / `dc_bus{n}_fail` link to the checklists |
+| GEAR DISAGREE | below VLO 200 KIAS, handle DN, manual release handle PULL (free fall) | `gear.actuation` failure + manual release → 3 green |
+| FLAP/SLAT FAIL | speed below VFE, EMS SLAT/FLAP RESET, VREF correction | latched SFCU faults clear on reset (logic.ts) |
+| SMOKE / FUMES | masks 100 %, ACP MASK, RECIRC off, isolate source | EST wording (QRH proprietary) |
+| EMERGENCY DESCENT | masks, thrust IDLE, spoilers FULL, VMO/MMO, level at 10,000 ft / MEA | EDM (FSB) targets 15,000 ft on the autopilot |
+| REJECTED TAKEOFF | thrust IDLE, max manual braking, MAX REV, spoilers verified | memory items; no autobrake RTO mode (SCOPE, GXLG) |
+
+## 9. Initial states (`states.ts`)
+
+| State | Engines | Configuration |
+|---|---|---|
+| `cold_dark` | off | every switch OFF / normal, BATT MASTER OFF, PARK BRAKE set, doors closed, gear handle DN |
+| `ready_to_taxi` | both idle | VFGs on line, IRS NAV, hydraulics AUTO / 3A ON, slats/flaps 6, park brake set |
+| `takeoff` | both idle | on the runway, slats/flaps 6, stabilizer 7.5 units (green band), GLD AUTO (arms on thrust advance, GXFC), NWS ARMED, landing lights ON, transponder TA/RA, TOLD V1/VR/V2 entered |
+| `cruise` | trimmed thrust | slats/flaps 0 IN, gear UP, AP HDG + ALT, A/T SPD / MACH, stabilizer at the `computeTrim` pitch trim, transponder TA/RA, altimeters STD (above the EST 18,000 ft transition) |
+| `approach` | trimmed thrust | slats/flaps 30, gear DN, autobrake MED, landing lights ON, transponder TA/RA, altimeters QNH, VREF/VAPP entered |
+
+- **In-air states:** the aircraft is repositioned with the state's configuration, then:
+  1. `FlightModel.computeTrim` runs.
+  2. The thrust levers are set from `n1ForThrust`.
+  3. The stabilizer is set from the trim result.
+- **Checks:** `states.test.ts` checks that each state holds altitude within 200 ft and speed within 8 kt for 30 s,
+  with no master warning or caution.
+
+## 10. Panel geometry, eye point, windshield (EST)
+
+**Body frame (`fdm.ts`)**
+
+- The origin is the empty-weight CG with the gear down; x is forward, y right, z down.
+- The TCDS datum FS 0 is 144 in ahead of the nose; it is not used in the FDM.
+- The nose tip is at about x = +14.3 m (EST: 30.30 m length, CG about 16 m aft of the nose).
+
+| Item | Position (body frame) | Size | Notes |
+|---|---|---|---|
+| Pilot / copilot design eye | x +10.9, y ∓0.49, z −1.02 m | — | GXAG GX_01_005: eye 0.49 m off the centreline, 3.14 m above the ramp (`eyeHeightOnGround_m`); seats at x 10.6 m |
+| Windshield | two main panes (L / R, heated, `wshld_l` / `wshld_r`) and two side windows each side (`wshld_s`, heated side windows) | main pane EST 0.95 m wide × 0.60 m high, sloped about 30° from horizontal | the lower edge is about 0.25 m below the eye and 0.85 m ahead; the centre post is on the centreline |
+| Glareshield | 0.65 m ahead of the eye, 0.23 m below it (§14.1) | face 1.66 m | Global Vision (photo N835GL): EVS knob, HUD knob, [ROLL SPLRS], MASTER WARNING/CAUTION (one switchlight, y ∓0.61), CTP 1 (y −0.47), FCP-5120 (centre, 0.62 × 0.08 m), CTP 2, MASTER WARNING/CAUTION, [ROLL SPLRS] |
+| Main instrument panel | plane 0.78 m ahead of the eye, tilted 12° aft at the top | 1.9 m wide | AFD 15.1 in (0.307 × 0.192 m active, `FUSION_HW.afd`) with 14–22 mm bezels |
+| AFD 1 / 4 (PFDs) | centres y ∓0.43 (upper row), 0.62 m below the eye | 0.335 × 0.228 m with the bezel | in front of each pilot, landscape; bezels almost touch the ~95 mm centre columns (photo N835GL) |
+| AFD 2 (upper centre) | centre y 0, upper row | same | EICAS / MFD |
+| AFD 3 (lower centre) | centre y 0, on the steep (40°) forward face of the pedestal, bezel top ~0.10 m below the upper row | same | between the knee panels, framed by the tan pedestal rails |
+| IESI + TAWS column | y −0.215, top level with the PFD top | IESI 0.085 × 0.095 m; TAWS panel 0.085 × 0.07 m | IESI; TAWS G/S, FLAPS, TERRAIN; AIRSPEED LIMITS placard; CREW LIFE VEST UNDER SEAT |
+| GEAR AND BRAKES column | y +0.215, upper row | 0.09 × 0.27 m | NOSE STEER, HORN, BTMS OVHT WARN RESET; LDG GEAR handle (UP arrow); DN LCK RELEASE; AUTOBRAKE; STATIC GROUND OPERATION placard |
+| Main-panel wings | y ∓0.61 … ∓0.93, turned 14° toward each pilot | 0.325 × 0.305 m | STALL PUSHER plate, gasper, EMS CDU 1 / 2 (0.27 × 0.15 m landscape) |
+| Pedestal forward (top) | 0.45–0.6 m ahead of the eye, 0.81 m below it | 0.54 m wide | MKP 1 / MKP 2 at y ∓0.17 beside the ~0.14 m throttle quadrant (FLIGHT SPOILER slot, two drum-grip thrust levers, MAX THRUST gate, IDLE REV / MAX REV, EVENT) |
+| Pedestal centre | | | CCP 1 / CCP 2 palm rests aft of the MKPs, ENGINE RUN at the aft end of the quadrant; ACP 1 / 2 (fix round 2); reversion panel and display dimmers (left), PARK/EMER BRAKE gate and SLAT/FLAP lever (centre), COCKPIT LIGHTS (right) |
+| Pedestal aft (EST, not photographed) | | | STAB CH 1 / 2, AIL / RUD trim, GND LIFT DUMPING MANUAL ARM / AUTO / OFF, IRS 1 / 2 / 3; RAT and gear manual release handles on the aft face |
+| Overhead | from 0.25 m ahead to 0.35 m behind the eye, 0.50–0.60 m above it, sloping down forward | 0.80 m wide | GX_01_018 layout (§12.1): forward edge L ENG FIRE / APU FIRE / R ENG FIRE handles, then ELECTRICAL, HYDRAULIC, FUEL, BLEED / AIR COND, ANTI-ICE, PRESSURIZATION, ENGINE / APU, EXTERNAL LIGHTS, PASS SIGNS |
+| Side consoles | outboard of each seat (tan leather) | 0.24 m wide | oxygen mask stowage, headset jacks, crew oxygen / PASSENGER OXYGEN, NOSE STEER tiller (pilot side, flush hub at the forward end) |
+| Control wheels | hub 0.50 m ahead of and 0.37 m below each eye (overlays the lower third of the PFD from the eye) | 0.36 m wide | MSTR DISC, NOSE DN / NOSE UP trim, TCS, FPV CAGE, R/T / IC rocker |
+
+## 11. Implementation map
+
+| File | Contents |
+|---|---|
+| `data.ts` | `G6K_LIMITS`, VMO / MMO schedules, slat/flap detents, stabilizer units, CLmax and V-speeds |
+| `vars.ts` | `G6K_VARS` (controls and derived vars), `G6K_CONTROL_VARS` (audit list), `G6K_EVENTS` |
+| `fdm.ts` | `GLOBAL6000_FDM` (geometry, aero tables, BR710 engines, gear, tanks, stations, contacts) |
+| `systems/electrical.ts` | `createElectrical` (network, priority selectors, bus power control, settle) |
+| `systems/fuel.ts` | four tanks, PRI / AUX pumps, crossfeed, transfers |
+| `systems/hydraulic.ts` | systems 1–3, EDPs, ACMPs, RAT pump, consumers |
+| `systems/environment.ts` | pneumatics, pressurization, ice, APU, fire, oxygen |
+| `systems/engines.ts` | FADEC ratings and lever law, start controllers, autothrottle |
+| `systems/logic.ts` | `G6kLogic` (bus shedding, RAT, ACMP AUTO, FMQGC, IAMS, spoilers / GLD, SPC, brakes, BTMS, config); `G6kPostLogic` (engine fail latch, YD auto-engage, G/S cancel bridge) |
+| `systems/cas.ts` | `G6K_CAS` |
+| `systems/lighting.ts` | exterior and interior lighting and dimmers (display brightness to `display.fusion.*.brt`) |
+| `createSystems.ts` | composition and update order; Fusion suite; radios / FMS; AFCS; A/T; stall; overspeed with the MMO schedule; TAWS; TCAS; CAS with IAC aural gating; failures |
+| `states.ts` | `applyG6kState` (every switch set per state, in-air trim) |
+| `checklists.ts` | `G6K_CHECKLISTS`, `G6K_CAS_CHECKLISTS` |
+| `meta.ts`, `inputMap.ts` | catalogue metadata; input bindings (reverse, flap detents 0–4, speedbrake detents, AP toggle event) |
+| `tests/aircraft/global6000/*` | start (a), performance (b–e), approach (f), failures (g), states and control audit |
+
+## 12. Cockpit control inventory
+
+**Table conventions**
+
+- `V.` names refer to `G6K_VARS` in `vars.ts`.
+- Plain names are the literal var names.
+- Momentary controls write 1 while held and 0 on release.
+- PBA = push-button annunciator (switchlight).
+- Positions and sizes are EST from GX_01_018 and Global 6000 cockpit photographs, using the §10 frame.
+
+### 12.1 Overhead panel (GX_01_018), forward to aft
+
+| Panel | Label | Type | Positions (value) | Spring / guard | Lighting | Var | Location / size |
+|---|---|---|---|---|---|---|---|
+| FIRE | L ENG FIRE / APU FIRE / R ENG FIRE handles | T-handle: pull, then rotate | 0 stowed / 1 pulled; rotation −1 left (bottle 1) / +1 right (bottle 2), held ≥ 1 s discharges (GX PTG 9-12 .. 9-14) | solenoid-locked unless that zone's FIRE warning is on | red FIRE in the handle | `V.fireHandle(z)`, rotation `V.fireRot(z)`, unlock `V.fireUnlock(z)` → `V.fireDisch(z, 1/2)` (logic.ts) | forward edge, left / centre / right; engraved "1" / "2" either side |
+| FIRE | FIRE HANDLE MANUAL OVERRIDE (one per handle) | round push | momentary 1 | — | — | `V.fireOvrd(z)`: releases the solenoid lock without a warning | beside each handle |
+| FIRE | APU bottle lockout release pin | toggle LOCK / REL | 0 / 1 | — | — | `V.fireApuPin`: the APU handle turns right (bottle 2 into the APU) only with the pin released | beside the APU handle |
+| ELECTRICAL | EXT AC | PBA | 1 ON | — | AVAIL (cart) / ON | `ac.elec.ext_ac_sw` (cart `V.extAcAvail`) | top-left group, 20 mm squares |
+| ELECTRICAL | GEN 1 / GEN 2 / GEN 3 / GEN 4 | PBA | 1 normal / 0 OFF (OFF → ON resets the GCU) | — | OFF white, FAIL amber | `ac.elec.gen{n}_sw` | row of four |
+| ELECTRICAL | APU GEN | PBA | 1 normal / 0 OFF | — | OFF / FAIL | `ac.elec.apu_gen_sw` | centre |
+| ELECTRICAL | RAT GEN | PBA | 1 normal / 0 OFF | clear flip guard (`V.ratGenGuard`) | ON green (RAT generator on line) / OFF white (GX PTG 6-8; no FAIL legend) | `ac.elec.rat_gen_sw` | lower right (photo e_elec_eng) |
+| ELECTRICAL | EMER DC PWR | PBA | 1 OVRD | red guard (`V.dcEmerOvrdGuard`) | OVRD amber | `V.dcEmerOvrd` | below GEN 1, left of APU GEN (photo e_elec_eng; was on the pedestal) |
+| ELECTRICAL | EXT DC | PBA | 1 ON | — | AVAIL / ON | `ac.elec.ext_dc_sw` (unit `V.extDcAvail`) | |
+| ELECTRICAL | BATT MASTER | 3-position toggle | 0 OFF / 1 EMS / 2 ON (GX PTG 6-8: EMS powers only the EMS CDUs from the AV BATT DIR bus, battery bus isolated) | — | — | `V.battMasterSel`; `ac.elec.batt_master_sw` (`V.battMaster`) = 1 only at ON, synced both ways (logic.ts) | lower left, 15 mm lever |
+| CABIN SYSTEMS | CABIN POWER | PBA | 1 ON | — | OFF white | `ac.elec.cabin_pwr_sw` | aft-left module above AURAL WARNING (photo e_ovhd); also the EMS CDU SWITCH CONTROL page |
+| CABIN SYSTEMS | CABIN OUTLETS | PBA | 1 ON | — | OFF white | `V.cabinOutlets` = `ac.elec.cabin_outlets_sw` (1,000 VA EST on AC BUS 3, shed on a single generator) | beside CABIN POWER |
+| EMS CDU 1 / 2 (EMER CNTL page) | AC BUS 1–4 (at most three: "MAX 3 AC BUSES MAN OFF", GX PTG 6-15) / DC BUS 1, 2, DC ESS, BATT BUS MAN OFF | soft keys | 1 isolated | — | MAN OFF on the page, status CAS | `ac.elec.ac_bus{n}_isol`, `ac.elec.<bus>_isol` | EMS CDUs in the main-panel wings (§12.3) |
+| WINDSHIELD HEAT | L / R | rotary | 1 ON / 0 OFF/RESET | — | none (status on the synoptic / CAS) | `ac.ice.wshld_l_sw`, `ac.ice.wshld_r_sw` | photo e_press_lts |
+| HYDRAULIC | L / R HYD SOV | PBA | 0 open / 1 CLOSED | — | CLOSED white | `ac.hyd.sov_l_sw`, `ac.hyd.sov_r_sw` | |
+| HYDRAULIC | PUMP 1B / 2B / 3B | rotary | 0 OFF / 1 AUTO / 2 ON | — | — | `ac.hyd.pump1b_sw` / `2b` / `3b` | 25 mm knobs |
+| HYDRAULIC | PUMP 3A | toggle | 0 OFF / 2 ON | — | — | `ac.hyd.pump3a_sw` | |
+| AURAL WARNING | IAC 1 / IAC 2 MUTED | PBA | 1 muted | — | MUTED white | `V.auralMute(1/2)` | the CAS voices / chimes go silent only with both muted (`SCOPE`, createSystems.ts) |
+| FUEL | L / R PRI PUMPS | PBA | 1 normal / 0 OFF | — | OFF / FAIL | `ac.fuel.pri_l_sw`, `ac.fuel.pri_r_sw` | |
+| FUEL | L / R AUX PUMP | PBA | 1 normal / 0 OFF | — | ON / FAIL | `ac.fuel.aux_l_sw`, `ac.fuel.aux_r_sw` | |
+| FUEL | XFEED | PBA | 1 OPEN | — | OPEN | `ac.fuel.xfeed_sw` | |
+| FUEL | L / R RECIRC | PBA | 1 normal / 0 OFF (per side, status L / R FUEL RECIRC OFF) | — | OFF | `ac.fuel.recirc_l_sw`, `ac.fuel.recirc_r_sw` | |
+| FUEL | L / R WING FEED INHIBIT | annunciator | lit with that side's PRI and AUX pumps both off (GX PTG 11-10) | — | white | `ac.g6k.ck.oh.wing_feed_l/_r` | beside the pump PBAs |
+| FUEL | AFT XFER | rotary | 0 OFF / 1 AUTO / 2 ON | — | — | `ac.fuel.aft_xfer_sw` | |
+| FUEL | WING XFER | rotary | 0 OFF / 1 AUTO / 2 L→R / 3 R→L | — | — | `ac.fuel.wing_xfer_sw` | |
+| BLEED / AIR COND | L / R ENG BLEED | rotary | 0 OFF / 1 AUTO / 2 ON | — | — | `ac.bleed.l_sw`, `ac.bleed.r_sw` | |
+| BLEED / AIR COND | APU BLEED | rotary | 0 CLSD / 1 AUTO / 2 OPEN | — | — | `ac.bleed.apu_sw` | |
+| BLEED / AIR COND | XBLEED | rotary | 0 CLSD / 1 AUTO / 2 OPEN | — | — | `ac.bleed.xbleed_sw` | |
+| BLEED / AIR COND | L / R PACK | PBA | 1 normal / 0 OFF | — | OFF / FAIL | `ac.ecs.pack_l_sw`, `ac.ecs.pack_r_sw` | |
+| BLEED / AIR COND | TRIM AIR, RECIRC | PBA | 1 normal / 0 OFF | — | OFF | `ac.ecs.trim_air_sw`, `ac.ecs.recirc_sw` | |
+| BLEED / AIR COND | RAM AIR | PBA | 1 ON | guarded | ON | `ac.ecs.ram_air_sw` | |
+| BLEED / AIR COND | L / R MAN TEMP | toggle HOT / COLD | +1 HOT / 0 / −1 COLD | spring to centre | — | `V.packManTempSw('l'/'r')` (slews `V.packManTemp` 0.1 / s EST, used with PACK CONTROL MAN) | either side of AUX PRESS |
+| BLEED / AIR COND | AUX PRESS | PBA | 1 ON | clear guard (`V.auxPressGuard`) | ON; status AUX PRESS ON | `V.auxPress` = `ac.ecs.aux_press_sw` (GX PTG 13-24: trim air to the cabin, EST 0.2 kg/s) | between L / R MAN TEMP (photo e_bleed) |
+| BLEED / AIR COND | PACK CONTROL | rotary | 0 LO / 1 NORM / 2 HIGH / 3 MAN | — | status L / R PACK LOW FLOW, HIGH FLOW, MAN TEMP | `V.packFlowSel` (flow ×0.67 / ×1 / ×1.33, PTG 13-21; single pack: HIGH schedule) | above the L / R PACK row |
+| BLEED / AIR COND | TEMPERATURE COCKPIT / FWD CABIN / AFT CABIN | knob | 16–30 °C | — | — | `ac.ecs.zone{1,2,3}_temp_c` | |
+| ANTI-ICE | WING | rotary | 0 OFF / 1 AUTO / 2 ON | — | — | `ac.ice.wing_sw` | |
+| ANTI-ICE | L / R COWL | rotary | 0 OFF / 1 AUTO / 2 ON | — | — | `ac.ice.cowl_l_sw`, `ac.ice.cowl_r_sw` | |
+| ANTI-ICE | WING XBLEED | PBA | 1 ON | — | ON | `V.wingXbleed` | |
+| PRESSURIZATION | AUTO / MAN | PBA | 0 AUTO / 2 MAN | — | MAN | `ac.press.mode_sw` | |
+| PRESSURIZATION | MAN ALT | toggle | −1 DN / 0 / +1 UP | spring to centre | — | `ac.press.manual_cmd` | |
+| PRESSURIZATION | RATE | toggle | 0 NORM / 1 HIGH | — | status HIGH PRESS RATE | `V.pressRateHigh`: AUTO cabin descent limit 300 → 800 fpm (GX PTG 13-57) | |
+| PRESSURIZATION | LDG ELEV MAN / FMS, LDG ELEV UP / DN | toggle + spring toggle | 1 FMS / 0 MAN; slew −1,000 … 14,000 ft | UP / DN spring to centre | — | `V.ldgElevFms`, `V.ldgElevSlew` → `ac.press.ldg_elev_ft` | order AUTO/MAN, MAN ALT, LDG ELEV MAN/FMS + UP/DN, RATE (photo e_press_lts) |
+| PRESSURIZATION | OUTFLOW VALVE 1 / 2 CLOSED | PBA | 1 closed | — | CLOSED | `V.outflowClosed(1/2)` | |
+| PRESSURIZATION | EMERG DEPRESS | PBA | 1 ON | yellow guard (`V.emerDepressGuard`) | ON | `ac.press.dump_sw` | |
+| PRESSURIZATION | DITCHING | PBA | 1 ON | clear guard | ON | `V.ditching` | |
+| PRESSURIZATION | WARNING placard | placard | — | — | — | — | "WARNING - PRESSURE DIFFERENTIAL SHALL NOT EXCEED 0.1 PSI DURING TAXI AND 1.0 PSI ON INITIAL LANDING" above the module |
+| ENGINE | START | rotary | −1 L CRANK / 0 AUTO / +1 R CRANK | — | — | `V.engStartSel` (AUTO + ENGINE RUN ON = auto start; CRANK = starter motoring, manual start) | left of IGNITION (photo e_elec_eng; GX PTG 17-41) |
+| ENGINE | IGNITION | PBA | 1 ON (continuous) / 0 AUTO | — | ON | `ac.eng.ign_sw` | |
+| ENGINE | MODE L / R | toggles | 1 N1 (up) / 0 EPR (down) | — | status L / R ENG N1 MODE | `ac.eng1.n1_mode`, `ac.eng2.n1_mode` | right of IGNITION (was PBAs on the pedestal) |
+| APU | APU | rotary | 0 OFF / 1 RUN / 2 START | START springs back to RUN | — | `ac.apu.master_sw` | |
+| EXTERNAL LIGHTS | LANDING L WING / NLG / R WING | toggles | 2 PULSE (up) / 0 OFF / 1 STEADY | — | — | `ac.light.landing_l_sw`, `…_nose_sw`, `…_r_sw` (PULSE: 45 / min, L / R alternately, GX PTG 15-28) | second row |
+| EXTERNAL LIGHTS | TAXI/RECOG | toggle | 2 WINGTIP (up) / 0 OFF / 1 ON | — | — | `ac.light.taxi_sw` (ON wing taxi / recognition, WINGTIP wingtip taxi lights) | |
+| EXTERNAL LIGHTS | NAV, BEACON (RED / OFF / WHT), STROBE, WING INSP, LOGO | toggles | 1 ON | — | — | `nav_sw`, `beacon_sw`, `strobe_sw`, `wing_sw`, `logo_sw` | first row |
+| PASS SIGNS | NO SMKG / SEAT BLTS | toggles | 0 OFF / 1 AUTO / 2 ON | — | — | `ac.cabin.nosmoke_sw`, `ac.cabin.seatbelt_sw` | |
+| EMER LIGHTS | EMER LIGHTS | toggle | 0 OFF / 1 ARM / 2 ON | guarded at ARM | — | `ac.light.emer_sw` | |
+| ELT | ELT | toggle | 0 ARM / 1 ON | guarded | — | `V.elt` | |
+| Forward fitting strip | READING LIGHT (pilot / copilot) | toggles | 1 ON | — | lamp head beside it | `V.ltMap(1/2)` | forward corners above the windshield (photo N835GL) |
+| Forward fitting strip | STANDBY COMPASS | pull-down housing | 1 open | — | — | `V.compassOpen`; card `V.compassHdg` (magnetic heading, EST deviation / damping) | centre, "PULL DOWN TO OPEN" |
+| Forward fitting strip | NO SMOKING sign | lit sign | — | — | lit with the NO SMKG logic | `ac.light.no_smoking` | below the compass |
+| Gaspers | overhead aft corners, forward strip, main-panel wings | eyeballs (twist) | 0 closed … 1 open | — | — | `V.gasper(id)` (`G6K_GASPERS`; cockpit zone EST −0.4 °C per open gasper) | 6 |
+
+### 12.2 Glareshield
+
+Global Vision layout (photo N835GL, crops c_gs_l / c_gs_r); hardware `src/avionics/collins-fusion/visionHardware.ts`.
+
+| Label | Type | Positions | Spring / guard | Lighting | Var / event | Location |
+|---|---|---|---|---|---|---|
+| FCP-5120: FD, SPD knob (push FMS / MAN), HDG / NAV / APPR, HDG knob (push SYNC), B/C, 1/2 BANK, AP, YD, CPL, EDM (red border), FLC, ALT, VNAV, ALT knob (FT / M, push fine), VS, DN / UP wheel, BRT, FD | keys / knobs / wheel | momentary / clicks | — | bar lights `ap.btn_*`, `fusion.edm` | events `fusion.fcp.<id>`; BRT `fusion.fcp.brt` | centre, 0.62 × 0.08 m |
+| FCP readout windows IAS, HDG, ALT, VS | LCD | — | — | FCP BRT | `ap.sel_*` (VS blank unless VS active) | above the knobs |
+| CTP 1 / 2: NAV SRC [NAV] [FMS], PFD [FULL/HALF] [MAP], RANGE [−] [+], BARO (IN / HPA, push STD), 4 line keys, TUNE/MENU, IDENT, 1/2, BRT/OFF, TUNE/DATA | keys / knobs | — | — | — | `fusion.ctp{s}.*`; BRT `V.ltCtp(s)`; TUNE/DATA sets the course on the PFD page (`ctpCourseOnPfdPage`) | y ∓0.47 |
+| MASTER WARNING/CAUTION | one switchlight per side, red WARNING over amber CAUTION | momentary (press `cas.ack_warning`, release `cas.ack_caution`) | — | `alert.master_warning` / `alert.master_caution` | events | directly outboard of each CTP, y ∓0.61 |
+| HUD knob | knob DIM – BRT, PUSH/MODE | 0 … 1; push cycles the mode | — | — | `V.hudBrt`, `V.hudModeBtn` → `V.hudMode` | pilot's end |
+| EVS knob | knob MIN – MAX, PUSH/EVS CAL | 0 … 1; push 10 s calibration (EST) | — | — | `V.evsGain`, `V.evsCal` | pilot's end, outboard |
+| HUD combiner | PUSH latch | 1 stowed / 0 deployed | — | symbology while `V.hudOn` | `V.hudStow` | ceiling ahead of the pilot |
+| ROLL SPLRS PLT CONT / CPLT CONT | Korry switchlights (one per side) | toggle: 1 = that pilot's wheel commands the roll spoilers | — | ROLL SEL amber (roll disconnect, no priority selected), PLT ROLL / CPLT ROLL white (selected) | `V.rollSplr(1/2)` → `V.rollPriority` (systems/flightControlExtras.ts; GX PTG 10-48) | between the CTP and the HUD knob, each side |
+
+### 12.3 Main instrument panel
+
+Global Vision layout (photo N835GL, crops c_centre / c_lwing / c_rwing).
+
+| Label | Type | Positions | Var | Location |
+|---|---|---|---|---|
+| AFD 1, 2, 4 | displays | — | `display.fusion.afdN.power` / `.brt` | upper row, centres y ∓0.43 / 0 |
+| AFD 3 | display | — | same | pedestal forward face |
+| IESI with BARO knob (push STD); CAGE / BARO captions | display + knob | clicks | `fusion.iesi.baro_inc/_dec/_push` | top of the left centre column |
+| TAWS: G/S, FLAPS, TERRAIN | PBAs (no guard) | G/S momentary; FLAPS 1 OVRD; TERRAIN 1 OFF | `V.gsMute`, `V.flapOvrd`, `V.terrOff` | under the IESI |
+| AIRSPEED LIMITS placard; CREW LIFE VEST UNDER SEAT | placards | — | — | left centre column |
+| GEAR AND BRAKES: NOSE STEER | lever-lock toggle | 1 ARMED / 0 OFF | `V.nwsArm` | right centre column, top row |
+| HORN | PBA | 1 muted (only with both RAs invalid) | `V.hornMute` (legend MUTED) | top row |
+| BTMS OVHT WARN RESET | round button | momentary 1 (red when overheated) | `V.btmsReset` | top row |
+| LDG GEAR handle (chrome wheel, dark shaft, UP arrow placard) | gear handle | 1 DN / 0 UP; red in-handle light | `V.gearHandle` | middle |
+| DN LCK RELEASE | red round button | momentary 1 | `V.gearDnLckRel` | lower left of the handle |
+| AUTOBRAKE | rotary | 0 OFF / 1 LO / 2 MED / 3 HI | `ac.autobrake_sel` | below the handle |
+| STATIC GROUND OPERATION PROHIBITED BETWEEN 66-80% N1 | placard | — | — | bottom |
+| Gear position | — | — | no three-green lights on the Vision panel: gear status on the EICAS / synoptic | — |
+| Wings: STALL PUSHER ON / OFF | toggle | 1 ON / 0 OFF | `V.pusher(1/2)` | outboard top plate |
+| Wings: gasper | eyeball | 0 … 1 | `V.gasper('wing_l'/'wing_r')` | inboard top, beside the PFD |
+| Wings: EMS CDU 1 / 2 | landscape CDU: 6 + 6 line keys, STAT, SYS, BUS, PREV / NEXT PAGE, CNTL, TEST, EMER CNTL (red border), BRT ▲ ▼ | — | `side/emsCdu.ts` (SSPC pages; SWITCH CONTROL 1/2 SLAT/FLAP RESET, STALL WARN ADVANCE NORM / REV, L / R FOOTWARMER, 2/2 CABIN PWR; TEST 1/2 FIRE / STALL / AURAL / LAMP TEST 1 / 2 (20 s), 2/2 RAT TEST; EMER CNTL (max 3 AC buses MAN OFF); units linked M / S; brightness × L / R DISPLAY knob) | below the STALL PUSHER plate |
+
+### 12.4 Pedestal
+
+Global Vision layout (photos N835GL c_ped, EB190582 e_ped_mid / e_ped_aft / e_ped_l / e_acp); 0.54 m wide.
+
+| Label | Type | Positions | Spring / guard | Var | Location |
+|---|---|---|---|---|---|
+| Thrust levers L / R (chrome drum grips) | levers | 0 IDLE … 1 MAX (one MAX gate; take-off minimum 0.67 in the FADEC logic, not marked) | — | `ac.tla1`, `ac.tla2` | ~0.14 m centre channel, side by side; MAX THRUST gate placard |
+| Reverse levers (piggy-back) | levers | 0 stowed … 1 MAX REV (IDLE REV about 0.1); only at IDLE on the ground | — | `V.revLever(1/2)` | IDLE REV / MAX REV marks |
+| A/T disconnect, TO/GA | buttons on the grips | momentary | spring | `at.disc`, `ap.toga` | drum ends / fronts |
+| EVENT | button | momentary 1 | — | `V.fdrEvent` → `V.fdrEventCount` (SCOPE: no recorder) | forward end of the quadrant |
+| FLIGHT SPOILER lever | lever | 0 (gate) / 0.25 1/4 / 0.5 1/2 / 0.75 3/4 / 0.9 FULL / 1.0 MAX (gate) | detents | `V.flightSpoiler` | own slot at the left edge of the quadrant, RETRACT arrow |
+| ENGINE RUN L / R | toggles (lift to move) | 1 ON / 0 OFF | lift-lock | `V.engRun(1/2)` | aft end of the quadrant |
+| MKP 1 / 2 | keyboards + scratchpad strip | Vision key set (ROUTE, FMS, DEP/ARR, CNCL, EXEC, letters, digits, CAS, CNS, CHART, ECL/EXT, arrows, PREV, NEXT); black key caps, white legends (photo c_ped) | — | `fusion.mkp{s}.key` | forward, y ∓0.17 |
+| CCP 1 / 2 | palm-rest cursor device, DSPL SEL < > ∨, ESC, DATA knob, PTT buttons | — | — | `fusion.ccp{s}.*`; PTT `V.yokePtt(s)` | aft of the MKPs |
+| Reversion panel: DISPLAYS NORM / REV, TUNE VHF / NORM / DSPL, L PFD ADC / IRS, AFCS 1/2, R PFD ADC / IRS | rotaries + Korry keys | DISPLAYS 0 / 1; TUNE 1 VHF / 0 NORM / 2 DSPL; keys toggle | — | `V.displaysRev`, `V.tuneSel` → `V.tuneSrc` (VHF / DSPL inhibits CTP tuning, annunciated on the CTP - G3-11), `V.rspAdc(s)`, `V.rspAtt(s)`, `V.rspAfcs` → Fusion `fusion.rsp{s}.adc/att/dspl`, `fusion.rsp.afcs` (systems/reversion.ts; GX PTG 16) | left, forward of the dimmers |
+| Display dimmers L / CTR / R DSPL, LWR DSPL | knobs | 0 … 1 | — | `V.ltDisplay(z)` (L / R also dim EMS CDU 1 / 2), `V.ltDisplayLwr` (AFD 3) | left, below the reversion keys |
+| ACP 1 / 2 | audio control panels: 7 transmitter keys (VHF1..3, HF1 / 2, SAT, PA), 14 receiver knobs (push in off / pull out on, turn volume: VHF1..3, HF1 / 2, SAT, PA, NAV1 / 2, ADF1 / 2, MKR, DME1 / 2), R/T - IC toggle, ID / BOTH / VOICE, MKR HI / LO, MASK / BOOM, SPKR | keys / push-pull knobs / toggles | — | spring R/T and IC to centre | `V.acpMic(s)`, `V.acpSel(s, ch)`, `V.acpVol(s, ch)`, `V.acpRtIc(s)`, `V.acpFilter(s)`, `V.acpMkrHi(s)`, `V.acpMask(s)`, `V.acpSpkr(s)` (systems/audioControl.ts: NAV / ADF Morse idents, marker tones, keyed radio) | either side of the park brake, aft of the CCPs (photo e_acp) |
+| PARK/EMER BRAKE | handle (black grip, red band, chrome base) | 0 stowed … 1 locked (proportional below the lock) | gate | `V.parkBrake` | centre, recessed gate, captions both sides |
+| SLAT/FLAP lever | lever | 0 (SLAT IN / FLAP 0) / 1 (OUT / 0) / 2 (OUT / 6) / 3 (OUT / 16) / 4 (OUT / 30) | gates at 0 OUT and 6 | `ac.flap_lever` | aft of ENGINE RUN, right of the park brake |
+| COCKPIT LIGHTS: AREA, OVHD / CB / L / CTR / R INTEG | knobs | 0 … 1 | — | `V.ltArea`, `V.ltIntegral(z)` | right |
+| COCKPIT LIGHTS: PBA DIM / BRT, EYE REF, MASTER INTEG, FOOT | toggles | 0 DIM / 1 BRT; 1 ON; 0 OFF / 1 AUTO / 2 ON; 1 ON | — | `V.ltPbaDim`, `V.ltEyeRef`, `V.ltMaster`, `V.ltFoot` | right, bottom row |
+| STAB CH 1 / CH 2 | PBAs, PUSH OFF/RESET | 1 = disconnected (OFF white legend, status STAB CH n OFF) | unguarded (GX PTG 10-24) | `V.stabCh(1/2)` | aft (EST) |
+| AIL trim | split switch | −1 LWD / 0 / +1 RWD | spring to centre | `V.ailTrimSw` | aft (EST) |
+| RUD trim | rotary | −1 NL / 0 / +1 NR | spring to centre | `V.rudTrimSw` | aft (EST) |
+| GND LIFT DUMPING | 3-position toggle | MANUAL ARM (up, 1) / AUTO (0) / OFF (down, 2) (GX PTG 10-50) | — | `V.gldSw` → `V.gldManArm`, `V.gldOff` (logic.ts); statuses GLD MANUAL ARM / GND LIFT DUMP OFF | forward quadrant strip between the FLIGHT SPOILER slot and the levers, EVENT to its right (photo e_ped_mid; identity EST from the partially legible caption, round 3) |
+| IRS 1 / 2 / 3 | rotaries | 0 OFF / 1 ALN / 2 NAV / 3 ATT | — | `ac.irs1_mode` … `ac.irs3_mode` | aft (EST) |
+| RAT manual deploy, LDG GEAR manual release | T-handles | 1 pulled | latched | `V.ratDeploy`, `V.gearManRelease` | aft face |
+
+Moved off the pedestal by the Vision layout: EPR / N1 (overhead MODE), EMER DC PWR (overhead ELECTRICAL), TAWS
+(main panel), AUTOBRAKE (GEAR AND BRAKES), EMS CDU (main-panel wings; the pedestal unit was removed). LAMP TEST 1 / 2
+are EMS CDU TEST CONTROL entries (GX PTG 15-19). The ACPs and the reversion panel were added in fix round 2 (§19).
+
+### 12.5 Side panels, control wheels, others
+
+| Label | Type | Positions | Var | Location |
+|---|---|---|---|---|
+| STALL PUSHER (pilot / copilot) | toggle | 1 ON / 0 OFF | `V.pusher(1/2)` | main-panel wings (§12.3) |
+| RSP 1 / 2 (ADC, ATT/HDG, DSPL, AFCS) | switches | Fusion RSP | Fusion RSP vars | side panels |
+| Oxygen masks | stowage box | 1 in use | `V.oxyMask(1/2)`, regulator `V.oxyMaskMode` (0 N / 1 100 %); EMERGENCY push `V.oxyEmer(1/2)` (mode 2, overpressure) | outboard |
+| OXYGEN SUPPLY LOWER DISCONNECT (pilot / copilot) | toggle | 1 ON / 0 OFF (each gates its own mask) | `ac.oxy.crew_sw` (`g6k.side.crew_oxy`), `ac.oxy.crew_r_sw` (`g6k.side.crew_oxy_r`) | each side console (GX PTG 15-10) |
+| PASSENGER OXYGEN | rotary | 0 CLOSED / 1 NORMAL / 2 OVERRIDE | `ac.oxy.pax_sw` | side panel |
+| NOSE STEER tiller | D-loop crank on a flush hub | ±75° | `V.tiller3d` → `V.tillerCmd` | forward end of the pilot's tan side console |
+| HUD power (optional) | — | 1 ON | `V.hudPower` (no cockpit switch on the Vision deck; set with aircraft power) | — |
+| Control wheel: MSTR DISC, NOSE DN / NOSE UP trim (split), TCS, FPV CAGE, R/T / IC rocker | switches | momentary | `V.yokeDisc`, `V.yokeTrim`, `ap.cws`, `fusion.s{s}.fpv_cage`, `V.yokePtt(s)` | yokes (no hub CHRONO on the Vision wheel) |
+| Doors (exterior / cabin agents) | — | 1 open | `ac.door.pax_open`, `emer`, `bag`, `aft_eqpt`, `svc_large`, `svc_small` | — |
+| PAX DOOR latch (fix round P10) | toggle handle | OPEN (1) / CLOSED (0) | `ac.door.pax_open` (`g6k.side.pax_door`) | aft bulkhead beside the doorway; SCOPE stand-in for the entry-door latch so BEFORE START "Doors - CLOSED" is performable |
+
+## 13. Known simplifications and open points
+
+**Estimated values (no public source)**
+
+- The pressurization, bleed and ice architecture details are EST; the public GX chapters for these systems were not
+  available.
+- The EST text messages are marked in `cas.ts`.
+- Take-off, landing and climb tables are not public. V-speeds come from the CLmax calibration (§3), and climb and
+  cruise from the fdm calibration against SPEC / AOPA.
+- The cockpit geometry (§10) is EST from photographs and the GXAG eye-position figure.
+
+**Engines and electrical `SCOPE` items**
+
+- EPR mode drives the physics through N1. EPR is displayed as derived by the Fusion suite.
+- The SSPCs are modelled as network breakers.
+- The battery chargers are modelled as floating batteries.
+
+**Model choices**
+
+- The TRU feeder mapping (§5.1) is EST.
+- The ACMP breakers are single-phase equivalents of 3-phase breakers.
+- The IAC aural mute gates only the CAS voices and chimes. TAWS / TCAS / stall aurals are unaffected.
+
+## 14. Main cockpit, exterior and module (cockpit agent)
+
+**Files**
+
+| File | Contents |
+|---|---|
+| `index.ts` | `AircraftModule`: systems + cockpit + exterior + `applyG6kState` + checklists + input map |
+| `cockpit/layout.ts` | flight-deck geometry: fuselage sections (shared with the exterior), eye points, main panel, AFD / IESI / gear-panel positions, glareshield, windshield and side-window glazing, pedestal, yokes, pedals, seats, tiller, overhead / side mounts |
+| `cockpit/context.ts` | builder context, legend helpers, cockpit-derived lamp vars (`ac.g6k.ck.*`, never read by systems), overhead / side extension contract |
+| `cockpit/index.ts` | `buildG6kCockpit(ctx, sys, { mainOnly?, canvas? })`, lighting zones and lights, preset views `G6K_VIEWS`, glob-loads `cockpit/overhead/index.ts` and `cockpit/side/index.ts` |
+| `cockpit/shell.ts` | walls, headliner, frames, floor, bulkhead, crackle glareshield hood, pedestal body, knee panels, seats |
+| `cockpit/mainPanel.ts` | Vision main panel: AFD 1 / 2 / 4, IESI + TAWS column, GEAR AND BRAKES column, placards, outboard wings (STALL PUSHER, gasper; EMS CDUs mounted by the side builder), AFD 3 on the pedestal face |
+| `cockpit/glareshield.ts` | Vision FCP / CTP (collins-fusion `visionHardware.ts`), MASTER WARNING/CAUTION, HUD / EVS knobs, HUD combiner |
+| `cockpit/pedestal.ts` | Vision pedestal: MKP / CCP (Vision variants), quadrant (spoiler, drum-grip thrust levers, reversers, EVENT, ENGINE RUN), display dimmers, PARK/EMER BRAKE gate, SLAT/FLAP, COCKPIT LIGHTS, trims, GLD, IRS, RAT / gear release handles |
+| `cockpit/finish.ts` | Vision finish: palette (charcoal panels, cream seats), tan leather, carbon, black frames |
+| `cockpit/overhead/compass.ts` | standby compass card display |
+| `systems/vision.ts` | `G6kVisionLogic`: PACK CONTROL flow, MAN TEMP slew, landing-light PULSE, compass, HUD, A/T take-off engage, FDR EVENT, gaspers, PTT, EVS CAL |
+| `cockpit/flightControls.ts` | yokes (MSTR DISC, pitch trim, TCS, FPV CAGE, R/T / IC), pedals, NOSE STEER tiller |
+| `systems/cockpitInputs.ts` | merges the 3D wheel trim / AP-SP DISC / tiller vars with the hardware inputs (the input module rewrites `input.*` every frame) |
+| `exterior.ts` | procedural exterior (§14.3) |
+
+**14.1 Geometry decisions (EST)**
+
+- Design eye from §10 (x 10.9, y ∓0.49, z −1.02). With the GXAG eye height the inner crown is only ~0.34 m above
+  the eye, so the overhead mount sits ~0.27 m above the eye (not the 0.50–0.60 m of §10), and the floor is 1.22 m
+  below the eye.
+- Glareshield brow 0.19 m below and 0.70 m ahead of the eye (15° over-the-nose line); §10's "0.05 m below the eye"
+  would block the forward view. Upper AFD row 0.40 m below the eye at 0.78 m; AFD 3 directly under AFD 2; the
+  pedestal top 0.41 m above the floor runs under AFD 3.
+- Windshield: two main panes with a centre post and wrap-round side panes (loft band ±0.8 rad), two side windows per
+  side. The exterior glazing uses the same regions.
+
+**14.2 Control coverage**
+
+`tests/aircraft/global6000/cockpit-main/coverage.test.ts` actuates every main-cockpit control (≈130 incl. the
+Fusion hardware) and requires each to change a var a system reads or emit a handled event: 0 unbound.
+`functional.test.ts` checks system reactions (EMS CDU bus isolation and fire test, wheel trim and AP/SP DISC
+interrupt, tiller steering and the gear-handle lock, reverse-lever / thrust-lever interlock, flap lever, ENG RUN
+shutdown, master warning acknowledge, lamp test, FCP AP). Built here but placed on panels that belong to other
+inventory sections: the tiller (§12.5) and the EMS CDU (§12.1 / §12.4 TEST and EMER CNTL functions).
+
+SCOPE: control-wheel push-to-talk / intercom switches are not built (no radio-transmit model); the EMS CDU has no
+SSPC (circuit-breaker) pages; the handwheel has no centring spring.
+
+**14.3 Exterior**
+
+Length 30.3 m, span 28.65 m, height ~7.7 m (tested). Kinked planform (LE ~37°), four slat segments (extend and
+droop with `surf.slats`), inboard / outboard Fowler flaps (rotation + aft travel), ailerons, 4 MFS + 2 ground
+spoilers per wing, blended winglets, T-tail with a trimmable stabilizer (`trim.pitch_units` 0–14 = −2…+12°),
+elevators, rudder, BR710 nacelles on pylons with target-type reverser doors (Hurel-Dubois nacelle), twin-wheel
+gear retracting with `gear.pos*`, doors, compression, steering and wheel spin, 27 cabin windows (14 R / 13 L),
+entry / baggage / emergency-exit seams. Lights from `light.*` (systems/lighting.ts): nav, wing-tip and tail strobes,
+upper / lower beacons, wing-root landing lights and nose-gear landing lights (real spot lights, candela ×
+`world.render_units_per_lux`), taxi / recognition, wing inspection, logo, emergency.
+
+## 15. Overhead panel, side consoles and circuit breakers (overhead agent)
+
+**Sources**
+
+| Tag | Source |
+|---|---|
+| FCOM-AG | Bombardier Global Express FCOM CSP 700-6 Vol. 2 "Airplane General", Rev 51 (Aug 2006): 01-10-35 flight compartment arrangement (GF0110_018), 01-10-36 aft view of the 280 bulkhead (CCBP), 01-10-37 / -38 pilot's side console and side panel, 01-10-41 overhead panel drawing GF0110_024, 01-10-45 / -46 copilot's side panel and console |
+| FCOM-EL | Global 5000 / Express FCOM CSP 700-5000-6 Vol. 2 chapter 7 "Electrical": 07-10-9 .. 12 EMS CDU (SSPC control, STATUS page, "THERM CB CANT BE CHANGED FROM CDU"), 07-10-36 RAT TEST, 07-20-1 CCBP drawing FGF0720_005, 07-20-2 .. 38 breaker lists by system and bus (names, bus, location SSPC / CCBP / ACPC / DCPC / ASCA), 07-20-39 SWITCH CONTROL, 07-20-40 .. 42 TEST CONTROL (FIRE TEST 10 s, STALL TEST 20 s ground only) |
+
+**Files**
+
+| File | Contents |
+|---|---|
+| `cockpit/overhead/layout.ts` | drawing-to-panel transform (GF0110_024 text positions in PDF points, 0.78 m / 385 pt), plate modules |
+| `cockpit/overhead/index.ts` | `buildOverhead`: FIRE DISCH handles L / APU / R with bottle 1 / 2 PBAs, DOME, TEMPERATURE, RECIRC / TRIM AIR / RAM AIR (guarded), AURAL WARNING IAC 1 / 2, ELT (guarded), HYDRAULIC (SOVs, pumps 1B / 3A / 3B / 2B), ELECTRICAL (BATT MASTER, EXT AC / DC, GEN 1-4, APU GEN, RAT GEN), FUEL (WING XFER, AUX / PRI PUMP, XFEED SOV, AFT XFER, RECIRC), ENGINE (IGNITION, CRANK, START), APU rotary, BLEED / AIR COND (MAN TEMP, PACK CONTROL, PACKs, ENG BLEED, XBLEED, APU BLEED), ANTI-ICE (COWLs, WING, WING XBLEED), PRESSURIZATION (AUTO/MAN, MAN ALT, LDG ELEV slew, RATE, LDG ELEV FMS/MAN, EMER DEPRESS and DITCHING guarded, OUTFLOW VALVE 1 / 2), WINDSHIELD HEAT, EXTERNAL LIGHTS, PASS SIGNS, EMER LIGHTS (guarded at ARM); derived legend vars `ac.g6k.ck.oh.*` |
+| `cockpit/side/index.ts` | side consoles (mask stowage, N / 100 % regulator, RESET / TEST, flow blinker, headset panel, crew oxygen supply, PASSENGER OXYGEN with PASS ON / LOW), side panels (EMS CDU 1 / 2, STALL PUSHER, MAP LT, HUD power, map-light heads), CCBP on the 280 bulkhead |
+| `cockpit/side/emsCdu.ts` | EMS CDU logic (SYS / BUS / STAT / CNTL / TEST / EMER CNTL pages, SSPC pull / reset, auto STATUS on a trip, 2 min blanking) and screen |
+| `cockpit/side/cbTable.ts` | every network breaker (`cb.<load>`) with its EMS name, system group, bus and location |
+| `cockpit/side/oxygenMask.ts` | quick-donning mask stowage box control |
+| `cockpit/side/auralTest.ts` | AURAL WARNING TEST 1 / 2 sequencer (IAC 1 / 2 generators) |
+| `tests/aircraft/global6000/cockpit-overhead/*` | coverage (0 unbound of 120), breakers (directory = network, CCBP pull, EMS SSPC pull / reset, thermal lock-out, trip + STATUS + reset), flows (power-up BATT -> EXT AC -> APU GEN -> VFGs with legends, fire test / handle / bottle, IAC mute, LDG ELEV slew, lamp test and INTEGRAL OVHD) |
+
+**Differences from the §12.1 / §12.5 inventory (FCOM drawing wins)**
+
+- Hydraulic pumps 1B / 3B / 2B and 3A, PASS SIGNS and EXTERNAL LIGHTS are toggle switches (legends stacked ON / OFF / AUTO), not rotaries.
+- WING XBLEED is a rotary FROM L / AUTO / FROM R (`V.wingXbleed` 1 / 0 / 2); logic.ts feeds the other wing from the selected
+  engine and opens it automatically in AUTO with one engine bleed.
+- BEACON is RED / OFF / WHT (`V.ltBeacon` 1 / 0 / 2); lighting.ts treats both as on. SCOPE: one beacon colour is rendered.
+- PACK CONTROL NORM / MAN (`V.packCtlMan`, new): the L / R MAN TEMP knobs act only in MAN (environment.ts).
+- LDG ELEV is a spring-loaded UP / DN toggle (`V.ldgElevSlew`, new; logic.ts slews 500 ft/s EST and selects MAN) plus
+  the LDG ELEV FMS / MAN switchlight; RATE is NORM / HIGH (`V.pressRateHigh` since fix round 2; `V.pressManRate` is no
+  longer driven by a control).
+- Each crew mask has its own N / 100 % regulator (`V.oxyMaskModeR` for the copilot, new) and RESET / TEST
+  (`V.oxyTest(n)`, new; OxygenSystem mask test flow).
+- CABIN PWR is on the EMS CDU SWITCH CONTROL page (07-20-39) and, on the Vision deck, the CABIN POWER PBA of the
+  overhead CABIN SYSTEMS module (same var).
+- The EMS CDUs: GX FCOM side panels (07-10-9); on the Vision deck they are in the main-panel wings (§12.3), and the
+  pedestal EMS unit of the first build was removed (fix round 1).
+
+**Circuit protection**
+
+- The network's ~120 breakers are listed in `cbTable.ts`. SSPC breakers (DC loads) are pulled / reset from either EMS
+  CDU. CCBP breakers (13 modelled thermal breakers: windshield / window / probe heat, SLAT/FLAP PWR 1 / 2, STAB TRIM
+  CH 1 / 2, ICE DETECTOR, STBY ADI, battery chargers) are physical `CircuitBreaker`s on the bulkhead panel. ACPC / DCPC /
+  ASCA breakers are thermal breakers outside the flight deck: the EMS shows them but cannot change them (FCOM).
+- A trip (over-current, `fail.elec.<load>.short`) brings up the STATUS page on both CDUs with the trip highlighted.
+
+**AURAL WARNING TEST 1 / 2** (`cockpit/side/auralTest.ts`, FCOM CSP 700-5000-6 Rev 2A 03-10-16 / -17): the EMS CDU
+TEST page activation key starts (or terminates) IAC n's test sequence in the FCOM priority order ("AURAL WARNING TEST n",
+STALL + shaker, overspeed, triple chime, NO TAKEOFF, fire / smoke / cabin altitude / gear bay / reverser / brake voices,
+single chime, GEAR, cavalry charge, AUTOTHROTTLE, ALTITUDE, C-chord, double C-chord, chime, trim clacker, MINIMUMS,
+SELCAL). It is silent with that IAC muted on the overhead or its breaker out (`elec.iac<n>_powered`); step timing EST;
+`ac.g6k.ck.ems.aural_test<n>` = 1 while it runs. Test: `cockpit-overhead/auralTest.test.ts`.
+
+Overhead back-lighting gain 1.9 (EST, was 1.4 like the main panel): the night legends were barely legible from the seat.
+
+**Systems fixes made with the overhead build**
+
+- `logic.ts` G6kPostLogic: APU fuel supply ride-through (`V.apuFuelOk`, 2 s EST). Selecting APU GEN OFF with the APU
+  generator as the only AC source used to flame the APU out in one step (the AC PRI pumps stopped one step before
+  the DC AUX pump was commanded).
+
+**SCOPE / not built**
+
+The "EMS" position of BATT MASTER, CVR area microphone, clock, CVR panel, pitot-static SELECT VALVE, printer (AUX PRESS,
+PACK CONTROL LO / HIGH, gaspers and the standby compass were added in fix round 1, §18). RAT TEST
+(maintenance BIT) is not on the TEST page; the two EMS CDUs are not linked. No windshield wipers (none on
+the FCOM overhead). No cockpit-door control (the FCOM lists none). Map lights are emissive lamp heads only (the
+cockpit's real-light budget is used by the floods and dome light).
+
+
+## 16. Check-ride verification (adversarial review pass)
+
+`tests/aircraft/global6000/verify/fullFlight.test.ts` (rig `verify/flightRig.ts`) flies one continuous flight
+KTEB 24 → RAV → NASTY → ILS 28R KPIT at FL350 from cold & dark to cold & dark. The crew acts only through the cockpit
+control vars, the FCP / CTP / MKP events the 3D panels emit and FMS-window line selects (the CCP cursor ENTER), plus
+yoke, pedals, toe brakes and the NOSE STEER handwheel. The checklists' live auto-checks (checklists.ts) are asserted at
+COCKPIT PREPARATION, BEFORE START, ENGINE START, AFTER START, BEFORE TAKEOFF, AFTER TAKEOFF, DESCENT, APPROACH and
+LANDING. Steps: BATT MASTER → APU battery start (APU battery dips to ~20 V while cranking) → APU GEN → hydraulics, IRS
+NAV, fuel, pushers, windshield heat → APU BLEED / XBLEED → R then L auto start (peak ITT 559 °C) → APU off (60 s
+cooldown) → IRS alignment → FMS: FPLN origin / destination, DEPARTURE runway 24, RAV on the first free VIA / TO row,
+ARRIVAL I28R via NASTY, EXEC, PERF INIT (BOW, payload, FL350, CONFIRM INIT), TAKEOFF REF V1 / VR / V2 and flaps 6 → FCP
+ALT / HDG / SPD knobs → taxi on the handwheel → A/T, TOGA (TO / TO, A/T TO → HOLD), LNAV armed → rotate at VR → gear up →
+AP, LNAV, FLC, slats / flaps up, VNAV (VFLC, 250 → 300 KIAS / M0.80) → baro STD (CTP) → FL350 CRZ rating, RVSM hold,
+M0.85, fuel tanks decrement at the engine flow → VNAV path descent with FLIGHT SPOILER use → baro QNH → APPROACH REF
+VREF / VAPP → slats / flaps 6 → APPR (nav-to-nav: NAV1 tuned, PFD NAV SRC LOC1, `ap.nav_source` 1) → LOC / GS capture →
+flaps 16, gear, flaps 30, VAPP → AP/SP DISC at 200 ft → hand flare (A/T RETARD) → GLD, reversers (N1 ≤ 70 %), autobrake
+MED → taxi clear → APU start, ENG RUN OFF → IRS / APU / BATT MASTER OFF (cold & dark, no CAS, no master caution).
+
+`verify/inventory.test.ts` is the reverse audit of the §12 inventory: every `G6K_CONTROL_VARS` entry is written by a 3D
+control of the complete flight deck (exempt: ground carts, doors, EMS CDU page entries, LDG ELEV ft which the slew switch
+drives).
+
+`verify/drawcalls.test.ts` guards the render budget: 1,153 draw calls for the complete flight deck (static parts
+consolidated into 56 meshes); 254 of them are the two Fusion MKP keyboards (one mesh per key, collins-fusion
+cockpit.ts). Headless SwiftShader measured 1,041 calls / 769 k triangles in the pilot view. Visual check
+(scripts/lon-shots.mjs on a scratch build, KTEB, day 15:00 and night 03:30): pilot / copilot, glareshield, centre
+panel, pedestal, overhead, side panels, CCBP, chase view. The Pedestal preset view was moved inboard (it looked through
+the pilot's inboard armrest).
+
+**Defects found and fixed in this pass**
+
+| Defect | Fix |
+|---|---|
+| A/T could not be engaged for take-off: the ground placement looked like a touchdown to the A/T, which auto-disengaged every ground engagement | states.ts snaps the squat state and resets the A/T bookkeeping |
+| YD OFF on the take-off after a cold start: the power-up YD engagement happened before the IRS alignment and dropped out | logic.ts waits for a valid attitude before the automatic engagement |
+| LNAV armed on the ground captured immediately (lateral TO replaced on the runway) | `nav.groundCapture: false` |
+| VNAV press in a climb only armed the path (no VFLC climb) | `vnavClimb: true` |
+| VNAV (VALTS) followed the next approach constraint through the 5,000 ft FCP altitude | `altvBoundBySel: true` |
+| SPD MAN on the FCP was ignored in VPATH (A/T kept the FMS speed) | `vnavSpeedFromSelected` (AFCS and A/T) |
+| CONFIRM INIT replaced the Global speed schedule with the suite's generic one (VNAV climbed at 250 KIAS to FL300) | Fusion perf defaults set from `FMS_SPEEDS` |
+| A/T speed loop hunted ±15 % N1 (20 s period) on the flaps-30 approach | A/T gains Kp 0.01 (EST) |
+| Coupled ILS pitch oscillation ±3.5° (8 s period, VS −150 … −1,150 fpm) | `alphaTauS` 4 s |
+| Glide-path attitude ~0.5–1° (AAIB: ~4°) | flaps-30 lift curve cl0 1.05 → 0.80, stall 10 → 11° (CLmax unchanged) |
+| Late lift-off with flaps 6 (CL ~1.4 at the lift-off AoA) | flaps-6 cl0 0.62 → 0.80, stall 11 → 9° (CLmax unchanged) |
+| MASTER CAUTION lit in a cold & dark cockpit (CAS powered from the hot DC EMER bus) | CAS on DC ESS / BATT bus only |
+
+**Remaining gaps found by the check ride**
+
+- ~~Waypoint idents shared with an airport's FAA LID resolve to the airport first (JST → KJST, HAR → KCXY)~~ fixed
+  (round 3, G3-14): the Fusion FMS now presents a SELECT WPT duplicate-ident page (nearest first, Collins CDU
+  convention; `src/avionics/collins-fusion/fms/pages.ts`, additive shared change), tested in
+  `tests/aircraft/global6000/fidelity/audit3-fms-ctp.test.ts`.
+- The AP/SP DISC var alone does not disconnect the AP; the 3D button emits `ap.disc` itself. Hardware bindings
+  work through `input.ap_disc`, which the AFCS reads directly (checked in §17).
+- ~~Engaging the AP in the TO vertical mode reverts to PITCH~~ fixed (round 3, G3-13): the shared Afcs takes the
+  additive `to.keepModeOnApEngage` option (FSB appendix 6: TO pitch mode held after AP engagement until another
+  vertical mode is selected), configured in createSystems.ts.
+- The light-weight (73,000 lb) lift-off comes ~VR + 16 kt after a 2.5 °/s rotation (high thrust-to-weight
+  acceleration during the rotation); take-off V-speeds remain the CLmax-derived EST values.
+
+## 17. Second adversarial review (abnormal items, rating logic, power transfers)
+
+`tests/aircraft/global6000/verify/abnormal.test.ts` (4 tests, ~16 s) adds the check-ride items the normal-procedure ride
+does not cover. Results with this build:
+
+| Item | Result |
+|---|---|
+| V1 cut at MTOW, SL ISA, slats / flaps 6 (failure `eng1.flameout` at V1 134 KIAS), rudder / 3° bank into the live engine, V2 + 3 | continued take-off; L ENG FLAMEOUT; windmill N1 ~11 %; ACMP 1B AUTO holds HYD 1 > 2,900 psi; AC buses back on VFG 3 / 4 after a one-to-two-frame transfer; TO rating held; **OEI gradient 400–1,000 ft 4.8 %** (14 CFR 25.121(b): ≥ 2.4 %) |
+| Engine failure at FL350 with the AP engaged | AP, ADC 1 / 2 and all four AFDs stay on through the ACPC / DCPC transfer |
+| Go-around on TO/GA from 1,500 ft (flaps 30, AP + A/T) | GA / GA, A/T GA, AP stays engaged, gear up at a positive rate, GA rating held, > 1,000 fpm, < 150 ft height loss |
+| EMER DEPRESS at FL410 | CABIN ALT (master warning), passenger masks + PASS OXY ON, cabin held at ~14,500 ft |
+
+**Defects found and fixed**
+
+| Defect | Fix |
+|---|---|
+| No engine failure in the failures catalogue: the classic V1 cut could not be given (only fire, FADEC freeze, starter) | `eng1.flameout` / `eng2.flameout` (createSystems.ts) gate the engine fuel consumer (fuel.ts); the FADEC latch posts L / R ENG FLAMEOUT |
+| An engine failure disconnected the autopilot: the break-power ACPC / DCPC transfer left DC ESS / DC BUS 1 dead for 1–2 steps, ADC 1 rebooted (3 s invalid), RA 1 rebooted, AFCS power dropped | `PowerHoldup` (systems/electrical.ts, EST 0.2 s, DO-160 section 16 power-interrupt ride-through) keeps the electronic boxes' `elec.<load>_powered` through a transfer; motors, lights and heaters still drop with the bus |
+| FADEC rating switched TO → GA → CLB at lift-off (gear down → GA, gear up → CLB) with the levers at MAX, so the EICAS target and the A/T N1 limit dropped to CLB at 400 ft | take-off thrust phase `V.toPhase` (logic.ts): TO held from the take-off roll to 1,500 ft RA or until both levers come back below the take-off position (EST thrust reduction altitude); `climbWhen: !toPhase` |
+| GA rating dropped to CLB as soon as the gear came up in a go-around (A/T still at MAX) | GA held while the AFCS vertical mode is GA (`ap.vert_code == 15`) |
+| EMER DEPRESS took the cabin to ~38,600 ft at FL410 (the outflow valves dumped to ambient) | EST outflow-valve cabin altitude limiter at 14,500 ft (`G6K_LIMITS.cabinLimiterFt`; Bombardier CRJ / Challenger EMER DEPRESS figure, 14 CFR 25.841(a)(2)), with 5 s rate anticipation (no overshoot above ~15,500 ft) |
+| Default pilot view level: the upper AFD row (19–34° below the eye) was half out of frame | `build.eyePitchDeg = -12` (G6K_EYE_PITCH_DEG, also the Copilot preset) |
+| Night: glareshield / main panel / pedestal legends barely legible (gain 1.4, INTEGRAL 0.6) | main-panel zones at gain 1.9 like the overhead; night initial states set INTEGRAL 0.8 |
+
+**Re-checked and left as they are**
+
+- The AP/SP DISC hardware binding does disconnect the AP: the AFCS reads `input.ap_disc` rising edges directly
+  (§16 note). The check ride emits `ap.disc` because it writes the 3D button's var, which the button itself turns
+  into the event.
+- Performance vs published data (§3): MTOW take-off, accelerate-stop, stall speeds, climb to FL410 and FL410 / FL350
+  cruise TAS and fuel flow still match. The light-weight lift-off ~VR + 15 kt matches the ~5–6 kt/s acceleration
+  at T/W 0.4 over a ~3 s rotation.
+- Light-weight climb 5,600 fpm at 250 KIAS / 4,500 ft (73,000 lb): consistent with the thrust lapse
+  (≈ 0.72 of static at M0.4, CLB) and L/D ≈ 15.6. AOPA gives only "> 3,000 fpm".
+- The passenger masks deploy at ~14,500 ft cabin (GX PTG 8-4, sourced since fix round P09; the CABIN ALT checklist
+  check uses the same `paxMaskFt`).
+- Render budget: 1,035 draw calls / 769 k triangles in the pilot view under SwiftShader (≈ 4 fps software). 254 calls
+  are the collins-fusion MKP keyboards (one mesh per key, other module). The Global's own static geometry is
+  already consolidated (§16).
+
+**Still open**
+
+- ~~The touchdown in the check ride is ~VAPP − 14 kt~~ fixed (round 4, G3-17): the scripted flare now starts at
+  30 ft and holds +3° (no float); the check ride asserts touchdown within VAPP − 8 … VAPP + 5.
+- ~~No automatic relight after `engN.flameout` is cleared~~: the shared start controller auto-relights a
+  windmilling engine (probed in `fidelity/audit3-probes.test.ts`); the TCDS 850 °C air-start ITT limit is applied
+  in flight since round 3 (G3-06, `hotStartIttAirC`).
+- ~~The EMER DEPRESS dump rate (up to ~80,000 fpm cabin climb)~~ fixed (round 3, G3-12): the OFV area is an EST
+  value tuned so the dump transient is a plausible few thousand fpm sustained (pinned in
+  `fidelity/audit3-probes.test.ts`); no public Global outflow-valve data was found.
+- No rudder bias or thrust asymmetry compensation (the Global has none that is public). OEI directional control is
+  the pilot's.
+
+## 18. Global Vision layout fix round 1
+
+The first cockpit followed the Global Express FCOM drawings; this round re-lays out the flight deck after Global 6000
+Vision photographs (Wikimedia Commons N835GL and EB190582, crops in the audit) and the GX pilot training guide
+chapters 13 (IAMS), 15 (Lighting) and 17 (Power plant). Control inventory in §12, procedures in §7.
+
+**Systems changes**
+
+- `systems/vision.ts` (new, after `G6kLogic`): PACK CONTROL LO / NORM / HIGH / MAN (PTG 13-21 flows 20 / 30 / 40 lb/min
+  per pack at sea level; single pack selects the high schedule; MAN = flow valve full open, manual temperature); MAN
+  TEMP HOT / COLD slew (EST 0.1 / s); landing-light PULSE 45 / min L / R alternately (PTG 15-28); standby compass card;
+  HUD on; A/T engage on the take-off thrust advance (AOPA 2012); FDR EVENT count; gasper sum; R/T / IC; EVS CAL.
+- `environment.ts`: AUX PRESS trim-air consumer (EST 0.2 kg/s) added to the pressurization inflow and a hot (EST 30 °C)
+  supply with both packs off (PTG 13-24); pack flow × `V.packFlowFactor`; cockpit zone −0.4 °C per open gasper (EST).
+- `engines.ts`: START selector (AUTO + ENGINE RUN ON = FADEC auto start, L / R CRANK = motoring / manual start, PTG
+  17-42 .. 17-48); the legacy `V.engStart` / `V.engCrank` inputs stay for scripted tests.
+- `lighting.ts`: MASTER INTEG OFF / AUTO (photocell, EST < 35 % ambient) / ON; AREA drives the floods; EYE REF, FOOT,
+  PBA DIM / BRT (`ac.light.pba`), CTP BRT / OFF.
+- `electrical.ts`: CABIN OUTLETS (AC 3, EST 1,000 VA, shed on a single generator); EYE REF / FOOT on DOME/MAP LTS;
+  flood load from AREA.
+- CAS status: AUX PRESS ON, L / R PACK LOW FLOW / HIGH FLOW / MAN TEMP (PTG 13 status list).
+
+**Audit points not taken literally (evidence)**
+
+- TAXI/RECOG (G6K-L36): the switch is TAXI/RECOG with positions WINGTIP / OFF / ON (PTG 15-28 "TAXI/RECOG Switch:
+  WINGTIP, ON"); built so, not renamed RECOG/WINGTIP.
+- PACK CONTROL (G6K-L34): the GX PTG lists NORM, LO, HIGH and MAN; MAN is kept as a fourth position (hidden under the
+  knob in the photo, EST angle).
+- LAMP TEST (G6K-L26): the lamp test is LAMP TEST 1 / 2 on the EMS CDU TEST CONTROL page (PTG 15-19), so the pedestal
+  LAMP TEST switchlight was removed rather than moved.
+- Fire handles (G6K-L38): the Vision photos do not show the aft overhead strip; the GX FCOM positions are kept.
+
+**Tests**: `tests/aircraft/global6000/cockpit-overhead/vision.test.ts` (AUX PRESS, PACK CONTROL, MAN TEMP, CABIN
+SYSTEMS, PULSE, WINGTIP, EMER DC PWR / RAT GEN guards, WINDSHIELD HEAT, MODE, compass, HUD, layout geometry, A/T
+engage); `fidelity/procedures.test.ts` (START AUTO + ENGINE RUN, L CRANK); `fidelity/probes.test.ts` (MASTER INTEG);
+coverage / inventory / functional tests updated for the moved controls.
+
+
+## 19. Function fix round 2
+
+This round goes through the function-lens audit (gaps G6K-L01 .. L51 and G6K-F-01 .. F-37). It follows the GX pilot
+training guide (GX PTG) chapters 4, 6, 9 .. 16 and 18, and the FCOM CSP 700-6 with SB 700-21-034. The control
+inventory is §12; the procedures are §7 and `checklists.ts`.
+
+**New cockpit controls**
+
+The table conventions are those of §12.
+
+- Pedestal reversion panel (GX PTG 16):
+  - DISPLAYS NORM / REV and TUNE VHF / NORM / DSPL.
+  - L / R PFD ADC and IRS keys, and the AFCS 1/2 key.
+  - These drive the Fusion RSP vars in `systems/reversion.ts`, which runs before the suite.
+  - LWR DSPL dimmer for AFD 3.
+- ACP 1 / 2 (`systems/audioControl.ts`), details in §12.4:
+  - NAV1 / 2 and ADF1 / 2 Morse idents, gated by the knob pulled out, the volume and ID / BOTH / VOICE (VOICE removes
+    the NAV ident).
+  - Marker tones, with MKR HI / LO setting `nav.marker_hi_sens`.
+  - The keyed radio: `ac.g6k.acp.tx_radio`, `ic`, `mic_src`.
+  - Per-receiver monitored levels: `ac.g6k.acp.level_<ch>`. SCOPE: no voice audio is synthesised.
+- Glareshield ROLL SPLRS PLT CONT / CPLT CONT (GX PTG 10-48; `systems/flightControlExtras.ts`):
+  - With the roll disconnect and no priority selected, the MFS roll command is the average of both wheels (half
+    authority from one wheel).
+  - ROLL SEL amber shows, and the ROLL SELECT caution posts after 30 s.
+  - A priority switch gives full authority to that wheel.
+- Fire handles (GX PTG 9-12 .. 9-14):
+  - The handle is pulled, then rotated.
+  - Rotated left and held ≥ 1 s discharges bottle 1; right discharges bottle 2.
+  - The handle is solenoid-locked unless its FIRE warning is on. The MANUAL OVERRIDE push releases it.
+  - The APU handle turns right only with the lockout pin released.
+  - The separate DISCH push-buttons were removed.
+- BATT MASTER OFF / EMS / ON:
+  - EMS feeds only the EMS CDUs from the AV BATT DIR bus.
+  - BATT MASTER OFF with no AC power shuts the APU down at once (GX PTG 4-18).
+- Other overhead changes:
+  - RATE NORM / HIGH replaces the MAN RATE knob.
+  - L / R WING FEED INHIBIT legends.
+  - RAT GEN legends are ON / OFF.
+  - GEN FAIL lights with the fire handle pulled.
+  - DOME toggle removed; the dome is on AREA.
+- Pedestal changes:
+  - GND LIFT DUMPING is one MANUAL ARM / AUTO / OFF switch.
+  - STAB CH 1 / 2 are unguarded PUSH OFF/RESET PBAs.
+  - FLIGHT SPOILER detents are 0 / 1/4 / 1/2 / 3/4 / FULL / MAX.
+- Side consoles: per-side OXYGEN SUPPLY LOWER DISCONNECT, and the crew mask EMERGENCY push (regulator mode 2).
+- EMS CDU (GX PTG 10-62, 15-19, 6-15):
+  - SWITCH CONTROL 1/2: SLAT/FLAP RESET, STALL WARN ADVANCE NORM / REV, L / R FOOTWARMER. 2/2: CABIN PWR.
+  - TEST 2/2: RAT TEST (EST 10 s ground BIT).
+  - LAMP TEST lasts 20 s.
+  - The two units are linked (M / S).
+  - Brightness is the BRT keys × the L / R DISPLAY knob.
+  - EMER CNTL refuses a fourth AC bus.
+
+**Systems changes**
+
+- Pressurization (GX PTG 13-57 .. 13-66). The shared library change is additive: the optional `outflowLimit` and
+  `maxCabinDescentFpmBinding` bindings.
+  - RATE HIGH raises the AUTO descent limit to 800 fpm.
+  - EMER DEPRESS works in AUTO and MAN.
+  - Cabin altitude limiter: 14,500 ft with a 5 s anticipation, EST.
+  - 3,000 fpm rate limiter: MAN only, EST.
+  - OFV travel limiter: ≤ 50 % above 7 psid.
+  - OUTFLOW VALVE n CLOSED halves the outflow area; both closed shuts it.
+  - DITCHING sequence: inhibited above 15,000 ft; packs off, dump to < 0.1 psid, then both OFVs closed.
+  - The limiters, the ditching close stage and both-closed use the override path at the auto valve rate in either
+    mode.
+  - Door-open protection.
+  - Relief 10.63 psid; CABIN DELTA P > 10.85 psid.
+  - CABIN ALT caution 8,200 ft and warning 9,000 ft, raised for fields ≥ 7,230 ft (CAB ALT LEVEL HI).
+  - Passenger masks at 14,500 ft.
+  - Messages: AUTO PRESS FAIL / FAULT, MAN PRESS CONTROL, HIGH PRESS RATE, LDG ELEV MAN, SET LDG ELEV, OUTFLOW VLV n
+    CLSD / FAIL, SAFETY VALVE OPEN, EMER DEPRESS.
+  - The cabin is settled at the published zone temperature on a state load. The stale 0 °C used before gave a
+    ~1,500 ft transient.
+- Air conditioning:
+  - RAM AIR no longer shuts the packs. The ram valve opens only with both packs off, below 15,000 ft and airborne.
+  - TRIM AIR OFF: every zone gets the cockpit-zone supply.
+  - Recirculation fans on AC 1 / AC 4. The recirculation state sets the AUX PRESS supply temperature.
+  - Statuses RECIRC FAN OFF and TRIM AIR OFF; cautions RECIRC FAN FAIL and L / R PACK TEMP.
+- Bleed (GX PTG 13-5 / 13-9, 4-13):
+  - ENG BLEED AUTO vs ON: AUTO closes the starting side's PRV; ON keeps it open. PRV regulation at 43 psi.
+  - XBLEED OPEN closes one PRV; both engine bleeds manually ON with XBLEED OPEN gives BLEED MISCONFIG.
+  - LCV interlocks.
+  - The fire handle closes the PRV.
+  - Messages: L / R BLEED SYS FAIL, XBLEED FAIL, XBLEED OPEN / CLOSED.
+- Hydraulics (GX PTG 12-23 .. 12-29):
+  - ACMP priority on the APU generator alone: 3A, 3B, 2B, 1B.
+  - Per-system LO QTY levels, HYD 3 LO QTY with the gear uplocked, HYD 3 OVERFILLED.
+  - L / R HYD SOV FAIL; HYD PUMP n OFF / ON statuses.
+- Fuel (GX PTG 11):
+  - Per-side recirculation.
+  - Wing transfer inhibited while that side's AUX pump backs up the PRI pumps.
+  - ENG FUEL SOV caution on a commanded / actual mismatch. The SOV holds its position unpowered.
+  - L / R FUEL RECIRC FAIL, FUEL XFER FAIL, FUEL COMPUTR FAIL, AFT XFER OFF SCHED, APU FUEL SOV.
+- Fire / APU (GX PTG 9-20, 4-16):
+  - On the ground the FADEC shuts the APU down after a 5 s fire signal; the APU handle shuts it down immediately.
+  - In flight there is no automatic shutdown.
+  - A pulled engine fire handle trips that side's VFGs.
+- Flight controls (GX PTG 10-24 .. 10-69):
+  - Spoiler schedule with FULL at 0.9.
+  - SPLRS/STAB IN TEST for 20 s after hydraulic power-up; stab trim is inhibited during it.
+  - Mach trim (`systems/flightControlExtras.ts`): nose-up with Mach, AP off. The FDM Cm_mach tuck was re-fitted to
+    it.
+  - SLAT/FLAP fault latches, cleared by the EMS SLAT/FLAP RESET. They latch after 2 s with a powered SFCU; the
+    flap-waits-for-slats sequencing is excluded.
+  - STAB CH n FAIL / OFF; STAB TRIM after the MASTER DISC is held > 5 s; FLT SPLR DEPLOYED.
+- Stall protection (GX PTG 10-55 .. 10-63):
+  - STALL WARN ADVANCE (EMS REV): trips advanced, factor 0.9 EST.
+  - SPC continuous ignition at high AoA (EST 0.75 of the shaker scale) and with the shaker.
+  - The shaker or pusher disconnects the AP.
+  - STALL PROTECT FAIL after the MASTER DISC is held about 12 s.
+  - SCOPE: the stall-test pusher sequence is the existing EMS STALL TEST only.
+- Electrical (EMS breaker lists, GX PTG 6, 10-71, 15-41):
+  - Stab trim CH 1 on AC 1 and CH 2 on AC ESS.
+  - SLAT/FLAP PWR 1 on AC 1 and PWR 2 on AC ESS.
+  - SFCU 1 on BATT and SFCU 2 on DC ESS.
+  - Ail trim on DC 2 and rud trim on DC ESS.
+  - Ram air, engine bleed and crossbleed valves on DC ESS / BATT.
+  - NAV lights on BATT, strobe on DC 1, beacon on DC 2.
+  - Landing / taxi lights and footwarmers split AC 1 / AC 4.
+  - Battery chargers on AC 3 / AC 2; area lights on AV BATT DIR.
+  - Emergency lights draw charging current only.
+  - RAT GEN FAIL is posted on the ground only.
+- Warnings and aurals:
+  - One NO TAKEOFF voice (the CAS). The take-off configuration monitor has no horn of its own.
+  - CONFIG SLAT/FLAP.
+  - Gear horn secondary mode (no RA): mutable, and the mute is cancelled by gear down.
+  - Autobrake selector springs back to OFF on the ground.
+- Lighting:
+  - PASS SIGNS AUTO: gear down, flaps, or cabin > 8,000 ft.
+  - Beacon RED / WHT colour on the exterior.
+  - Wing-tip taxi lamps.
+  - EMER LIGHTS OFF caution (engines running, EST colour) and EMER LIGHTS ON status.
+- Checklists (`checklists.ts`):
+  - Fire items are "PULL, ROTATE LEFT (bottle 1)"; the APU fire item includes the lockout pin.
+  - BATT MASTER and GND LIFT DUMPING checks follow the new switches.
+  - An ACP item was added to APPROACH.
+  - New CABIN ALT, EMER DEPRESS and ROLL SELECT checklists.
+
+**Not done, or kept as SCOPE**
+
+- G6K-F-37 (AP engagement in TO mode, FMS duplicate idents): fixed in round 3 (G3-13 / G3-14) through additive
+  shared-module options (`to.keepModeOnApEngage`; Fusion FMS SELECT WPT page).
+- G6K-F-24: auto relight uses the shared start controller, which is on by default, and the SPC ignition is added.
+  The TCDS 850 °C air-start ITT limit is modelled since round 3 (G3-06): the shared controller takes the additive
+  `hotStartIttAirC` (700 °C ground / 850 °C in flight, TCDS 3.2).
+- G6K-F-19: WING TO CTR LEAK, L / R WING FULL and XFER VALVE OPEN are not modelled; there is no leak or level-switch
+  model.
+- G6K-F-09: MAN PRESS FAULT is not modelled.
+- G6K-F-12: recirculation affects only the AUX PRESS supply temperature, not full zone mixing.
+
+**Tests**
+
+- `fidelity/probes.test.ts`: 22 function-fix tests (hydraulics, bleed, ECS, pressurization, fire, APU, electrical,
+  flight controls, gear horn).
+- `fidelity/round2-systems.test.ts`: status messages, load buses, SPC ignition, MASTER DISC hold, single NO TAKEOFF
+  voice, PASS SIGNS AUTO, ENG BLEED AUTO vs ON.
+- `cockpit-main/round2.test.ts`: reversion panel, ACP, ROLL SPLRS, GND LIFT DUMPING, 3/4 detent, EMS CDU pages,
+  linking, 4th-bus refusal, RAT TEST, dimming, oxygen.
+- Coverage, inventory, flows, failures, states and abnormal tests were updated for the new controls.
+
+## 20. Layout fix round 3 (LENS audit)
+
+Fixes for the round-3 layout audit (gaps G6K-L3-01 .. -18, G3-16/-18), verified against the photo set
+(N835GL crops, EB190582 crops, eb3840) and re-shot screenshots (`tests/output/g6k-r3-day`, `g6k-r3-night2`).
+
+- **MKP key caps black** (L3-01): `addMkpVision` passes `keyMaterial: 'plasticBlack'` (shared
+  `collins-fusion/visionHardware.ts`, opt-in - other keypads keep the KeyPad default grey).
+- **Night pedestal legends** (L3-02, G3-16): centre back-lighting zone gain raised to 3.4 (EST; `cockpit/index.ts`);
+  together with the black caps the MKP legends and the quadrant / ACP captions now show at night. Remaining dimness
+  in the audit shots is screenshot resolution (an MKP key is ~8 px in the preset views).
+- **Dark-cockpit unlit lenses** (L3-03, L3-13): MASTER WARNING/CAUTION `unlitTint: 0.04`; ROLL SPLRS, all overhead
+  korries and standalone annunciators `unlitTint: 0.05`; shared `guardClear` material opacity 0.28 → 0.15, and the
+  overhead clear guards are built thinner (height 0.014).
+- **AFD 3 default layout** (L3-04): the shared Fusion `defaultLayout()` now puts the FMS window beside a map on
+  AFD 3 (`L:FMS R:MAP`), matching the e_ped_mid photo; both FMS text windows remain one `showWindow` away. Fusion
+  is used only by this aircraft; the shared layout/suite tests were updated.
+- **GND LIFT DUMPING moved** (L3-05): from the EST aft plate to the photographed forward quadrant strip beside
+  EVENT; same id / var / logic.
+- **Thrust levers** (L3-06): drum grips enlarged (r 0.018 → 0.026, chrome), reverse levers thickened
+  (armWidth 0.013, full-size reverser knobs).
+- **Yokes** (L3-07): style 'ramshorn' with chrome hub trim ring, embossed oval hub cap (no trademark text) and
+  white stitch seam rings at the grip bases (`flightControls.ts`).
+- **Interior palette** (L3-08): tan leather darkened to 0x9a7546 at roughness 0.92; seats split into cream
+  sheepskin pan / back (0xcfc0a4) over the tan-leather frame (`shell.ts`).
+- **Overhead paint** (L3-09): modules 0x42454a → 0x6a675f gull-grey against the carbon surround.
+- **Headliner / pillars** (L3-10): carbon centre band around the overhead console; pillar and window-frame lofts
+  re-tessellated (no more faceted polygons).
+- **Pressure-differential placard** (L3-11): white plate, red two-line text ('inverse' placard style).
+- **Fire handles** (L3-12): new shared `fireCap: 'round'` TBarHandle cap - cylindrical round-grip T with the FIRE
+  lamp in the grip face; pull / rotate interaction unchanged.
+- **Side console** (L3-14): mask box recessed under a tan leather lid (`MaskStowage` `recess` / `doorMaterial`
+  options), regulator controls grouped on one recessed plate, chrome cup holder aft of the NOSE STEER hub.
+- **CCBP density** (L3-15): empty drawing positions filled with non-functional collared dummy breakers (one merged
+  mesh; SCOPE - no invented load names). The modelled breakers stay interactive.
+- **AREA knob** (L3-16): FLOOR / CEILING split legend engraved beside it.
+- **Favicon** (L3-17, G3-18): `index.html` ships an inline empty favicon; screenshot runs now log no errors.
+- **Draw calls** (L3-18, G3-18): re-measured at 604 for the full deck - the MKP/CTP/CCP keys are already drawn as
+  instanced batches (`src/cockpit/instancing.ts`); the budget guard was tightened from 1,200 to 800.
+
+Tests: `fidelity/round3-layout.test.ts` (AFD 3 default, GLD position, black MKP caps, favicon);
+`verify/drawcalls.test.ts` guard tightened; shared `tests/avionics/collins-fusion/layout.test.ts` /
+`suite.test.ts` updated for the AFD 3 default.
+
+## 21. Function fix round 3 (LENS audit)
+
+Fixes for the round-3 function audit (gaps G3-01 .. G3-15, G3-21), tested in
+`tests/aircraft/global6000/fidelity/audit3-probes.test.ts` and `audit3-fms-ctp.test.ts`.
+
+- **G3-01 HYD 1/2 LO PRESS gate** (major): the caution posts whenever any engine or AC bus is powered, not only
+  with that system's engine running - the eng-out + ACMP-fail compound case now alerts (`systems/cas.ts`).
+- **G3-02 APU envelope** (major): start refused above 37,000 ft, automatic shutdown above 45,000 ft (GXAPU / TCDS
+  5.2); additive `startCeilingFt` / `operatingCeilingFt` on the shared `src/systems/apu/Apu.ts`.
+- **G3-03 oil-pressure schedule** (major): the L/R ENG OIL LO PRESS caution follows the E018 N2 schedule
+  (35 psid to 72.3 % N2 → 45 psid at 90 %) instead of a fixed 35 psid.
+- **G3-13 AP in TO mode** (major): additive `to.keepModeOnApEngage` in the shared Afcs; the TO pitch mode survives
+  AP engagement (FSB appendix 6), configured in createSystems.ts.
+- **G3-14 duplicate idents** (major): SELECT WPT page in the shared Fusion FMS (`fms/pages.ts`, page id `SEL`):
+  several database matches for an entered ident present a nearest-first list (JST offers the VOR, the NDB and the
+  airport KJST).
+- **G3-04 APU OVERTEMP**: 1,020 °C during the start, 714 °C continuous once `apu.avail`.
+- **G3-05 reverse 30 s**: max reverse ramps to idle reverse after 30 s (TCDS 3.2; SCOPE on the post-limit ramp).
+- **G3-06 air-start ITT**: additive `hotStartIttAirC` on the shared EngineStartController (700 °C ground / 850 °C
+  in flight, TCDS 3.2).
+- **G3-07 HYD n HI TEMP reachable**: new `hyd.sysN_hitemp` overheat failures bias the fluid-temperature model past
+  96 °C.
+- **G3-08 RAT accumulator**: SCOPE comment - system 3's brake and RAT accumulators are merged at the brake
+  precharge (one accumulator per system in the shared block).
+- **G3-09 EMS CDU 2 power**: gated like CDU 1 - BATT MASTER OFF leaves both CDUs dark; the EMS position powers
+  CDU 2 from the APU battery direct bus (GX PTG 6-8).
+- **G3-10 APU fuel SOV**: modelled as a held-position motor-driven valve (DC EMER); a bus loss no longer flames
+  the APU out, and APU FUEL SOV posts on a command / position mismatch.
+- **G3-11 TUNE reversion**: `V.tuneSrc` is consumed by the Fusion suite (`tuneReversionVar`): VHF / DSPL inhibits
+  CTP radio tuning and the CTP annunciates the source; the reversionary tune window itself remains SCOPE.
+- **G3-12 EMER DEPRESS rate**: OFV area is an EST value (environment.ts) tuned to a plausible few-thousand-fpm
+  sustained dump that still reaches the 14,500 ft limiter.
+- **G3-15 avionics hold-up**: kept as EST (DO-160 §16 rationale; no type-specific figure is public).
+- **G3-21 dossier**: the stale FCP AT-button sentence in §5.11 replaced (the Vision FCP has no A/T key).

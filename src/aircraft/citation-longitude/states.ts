@@ -1,0 +1,415 @@
+/**
+ * Citation Longitude initial states (cold & dark, ready to taxi, takeoff,
+ * cruise, approach). Every cockpit control of the inventory
+ * (docs/aircraft/citation-longitude.md) is set to its normal position for the
+ * phase, following the OG Section 17 normal procedures; system internals are
+ * then snapped so the indications match at once. Free of Three.js (used by
+ * the headless tests, docs/modules/qa.md §6).
+ *
+ * Contract (docs/modules/app.md §2.4): the app has already called
+ * `fdm.reposition(...)`. In-air states are trimmed here (stabilizer from
+ * `computeTrim`, thrust levers from the FADEC lever law by bisection).
+ */
+import type { InitialState } from '../types';
+import type { SimContext } from '../../core/SimContext';
+import { ENG, ENV, FDM } from '../../core/vars';
+import type { FlightModel } from '../../physics/FlightModel';
+import type { Turbofan } from '../../physics/engines/Turbofan';
+import { LON_VARS as V } from './vars';
+import { STAB_RANGE, type LongitudeSystems } from './createSystems';
+import { ApuState } from '../../systems/apu';
+import { TLA } from './systems/logic';
+import { CITATION_LONGITUDE_FDM } from './fdm';
+
+/** Stabilizer position (deg) giving the normalized pitch-trim command `n` (bisection on TrimAxis.normalize). */
+export function stabUnitsFor(sys: LongitudeSystems, n: number): number {
+  let lo = STAB_RANGE[0];
+  let hi = STAB_RANGE[1];
+  // normalize() decreases with units (nose up = more negative incidence).
+  for (let i = 0; i < 40; i++) {
+    const mid = (lo + hi) / 2;
+    if (sys.stab.normalize(mid) > n) lo = mid;
+    else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+
+/**
+ * OG 17-3 Cockpit Preparation takeoff stab-trim chart (read off the published graph): -6.45 deg at 24 % MAC,
+ * -5.15 at 28 %, -3.9 at 32 %, -2.5 at 36 % and flat to 40 %.
+ */
+export const TAKEOFF_STAB_CHART = { cgPctMac: [24, 28, 32, 36, 40], stabDeg: [-6.45, -5.15, -3.9, -2.5, -2.5] };
+
+export function takeoffStabDeg(cgPctMac: number): number {
+  const { cgPctMac: x, stabDeg: y } = TAKEOFF_STAB_CHART;
+  if (!(cgPctMac > x[0])) return y[0];
+  for (let i = 1; i < x.length; i++) if (cgPctMac <= x[i]) return y[i - 1] + ((y[i] - y[i - 1]) * (cgPctMac - x[i - 1])) / (x[i] - x[i - 1]);
+  return y[y.length - 1];
+}
+
+/** Loaded CG (% MAC) straight from the mass model (the fdm.* vars are published only on the next step). */
+function currentCgPctMac(ctx: Pick<SimContext, 'vars'> & Partial<Pick<SimContext, 'fdm'>>): number {
+  const fm = ctx.fdm as Partial<FlightModel> | undefined;
+  if (fm?.massModel) {
+    fm.massModel.update();
+    return fm.massModel.cgPercentMac(CITATION_LONGITUDE_FDM.aero.mac_m);
+  }
+  return ctx.vars.get(FDM.cgPctMac, 28);
+}
+
+/** Thrust-lever position giving N1 `n1` in the current conditions (bisection on the FADEC lever law). */
+export function leverForN1(sys: LongitudeSystems, ctx: SimContext, n1: number): number {
+  const v = ctx.vars;
+  sys.ratings.update(1 / 60);
+  const idle = sys.fadec.idleN1(v.get(FDM.pressAlt), v.get('gear.air_ground') !== 0);
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 30; i++) {
+    const mid = (lo + hi) / 2;
+    if (sys.fadec.forwardN1(mid, idle) < n1) lo = mid;
+    else hi = mid;
+  }
+  return lo;
+}
+
+/** Writes every cockpit switch/lever var for the state (no system snapping). */
+export function setLongitudeSwitches(ctx: Pick<SimContext, 'vars'>, sys: LongitudeSystems, s: InitialState): void {
+  const v = ctx.vars;
+  const powered = s !== 'cold_dark';
+  const moving = s === 'takeoff' || s === 'cruise' || s === 'approach';
+  const inAir = s === 'cruise' || s === 'approach';
+  const night = v.get('env.ambient_light', 1) < 0.5;
+
+  // ---- electrical (pilot lower sub-panel). GEN switches live at ON (OG 5-5: safe to leave ON).
+  v.set(V.battL, powered ? 1 : 0);
+  v.set(V.battR, powered ? 1 : 0);
+  v.set(V.genL, 1);
+  v.set(V.genR, 1);
+  v.set(V.genApu, 1);
+  v.set(V.busTieBtn, 0);
+  v.set(V.mainL, 1);
+  v.set(V.mainR, 1);
+  v.set(V.elecL, 1);
+  v.set(V.elecR, 1);
+  v.set(V.interior, 1);
+  v.set(V.stbyPwr, powered ? 1 : 0);
+  v.set(V.extPwr, 0);
+  v.set(V.extPwrAvail, 0);
+  // ---- hydraulics / fuel
+  v.set(V.hydPumpA, 0);
+  v.set(V.hydPumpB, 0);
+  v.set(V.ptcu, 2);
+  v.set(V.rudderStby, 1);
+  v.set(V.boostL, 0);
+  v.set(V.boostR, 0);
+  v.set(V.gravXflow, 0);
+  v.set(V.fuelTransfer, 0);
+  v.set(V.fuelRecirc, 1);
+  // ---- engines
+  v.set(V.runL, powered ? 1 : 0);
+  v.set(V.runR, powered ? 1 : 0);
+  v.set(V.runGuardL, 0);
+  v.set(V.runGuardR, 0);
+  v.set(V.startL, 0);
+  v.set(V.startR, 0);
+  v.set(V.tla(1), 0);
+  v.set(V.tla(2), 0);
+  // ---- APU (LON-P3-09): started in Cockpit Preparation and left running for the start and takeoff; first commanded
+  // OFF in After Takeoff/Climb "APU Knob (prior to climb above FL350) - OFF" (OG 17-3 / 17-6). In-air states model
+  // the crew choice after that item: OFF.
+  v.set(V.apuKnob, s === 'ready_to_taxi' || s === 'takeoff' ? 1 : 0);
+  // ---- bleed / ECS / pressurization
+  v.set(V.bleedEngL, 1);
+  v.set(V.bleedEngR, 1);
+  v.set(V.bleedApu, 1);
+  v.set(V.bleedIsolate, 0);
+  v.set(V.pressSrcL, 1);
+  v.set(V.pressSrcR, 1);
+  v.set(V.flow, 0);
+  v.set(V.cabinTempKnob, 0);
+  v.set(V.ckptTempKnob, 0);
+  v.set(V.ecsMode, 0);
+  v.set(V.cabinSetC, 22);
+  v.set(V.ckptSetC, 21);
+  v.set(V.recircFan, 0);
+  v.set(V.pressDump, 0);
+  v.set(V.pressDumpGuard, 0);
+  v.set(V.pressMode, 0);
+  v.set(V.cabinAltSw, 0);
+  v.set(V.pressSelMode, 0);
+  v.set(V.pressLdgElevFt, -9999); // use the FMS destination
+  v.set(V.pressSelCabinFt, 0);
+  // ---- ice protection: OFF (conditions decide; OG 1-5), pitot/static NORM
+  v.set(V.aiEngL, 0);
+  v.set(V.aiEngR, 0);
+  v.set(V.aiWing, 0);
+  v.set(V.aiStab, 0);
+  v.set(V.pitotStatic, 0);
+  // ---- fire
+  v.set(V.fireEngL, 0);
+  v.set(V.fireEngR, 0);
+  v.set(V.bottle1, 0);
+  v.set(V.bottle2, 0);
+  v.set(V.fireTest, 0);
+  // ---- flight controls
+  const flapLever = s === 'cold_dark' || s === 'cruise' ? 0 : 2; // flaps 2 for takeoff (FPG preferred) and the approach
+  v.set(V.flapLever, flapLever);
+  sys.flaps.setPosition([0, 7, 15, 35][flapLever]);
+  v.set(V.speedbrake, 0);
+  v.set(V.ailTrimSw, 0);
+  v.set(V.rudTrimSw, 0);
+  v.set(V.stabSecSw, 0);
+  v.set(V.stabSecGuard, 0);
+  v.set(V.pitchRollDisc, 0); // PITCH/ROLL DISCONNECT stowed (columns connected)
+  sys.ailTrim.setPosition(0);
+  sys.rudTrim.setPosition(0);
+  // OG 17-3 "Trims - Check/Set for Takeoff" chart: stabilizer for the loaded CG (in-air states are retrimmed below).
+  sys.stab.setPosition(takeoffStabDeg(currentCgPctMac(ctx)));
+  // ---- gear / brakes
+  const gearDown = s !== 'cruise';
+  v.set(V.gearHandle, gearDown ? 1 : 0);
+  v.set(V.gearEmer, 0);
+  sys.gear.setDown(gearDown);
+  v.set(V.parkBrake, moving ? 0 : 1);
+  // ---- lights (OG 16): nav auto-on with the G5000; beacon NORM; anti-coll for takeoff/flight; landing lights below FL180
+  v.set(V.ltNav, powered ? 1 : 0);
+  v.set(V.ltBeaconMode, 1);
+  v.set(V.ltAutoPulse, 1);
+  v.set(V.ltAntiColl, moving ? 1 : 0);
+  const ldg = s === 'takeoff' || s === 'approach';
+  v.set(V.ltLdgL, ldg ? 1 : 0);
+  v.set(V.ltLdgR, ldg ? 1 : 0);
+  v.set(V.ltRecog, 0);
+  v.set(V.ltPulse, 0);
+  v.set(V.ltTaxi, s === 'ready_to_taxi' || s === 'takeoff' ? 1 : 0);
+  v.set(V.ltWingInsp, 0);
+  v.set(V.ltTailFlood, powered && night && !inAir ? 1 : 0);
+  v.set(V.ltPanel, powered ? (night ? 0.6 : 1) : 0);
+  v.set(V.ltFlood, powered && night ? 0.25 : 0);
+  v.set(V.ltAux, powered && night ? 0.3 : 0);
+  v.set(V.ltEmer, powered ? 1 : 0);
+  v.set(V.ltSeatBelt, moving ? 1 : 0);
+  for (const k of [V.ltPfdL, V.ltGtcL, V.ltMfd, V.ltGtcC, V.ltPfdR, V.ltGtcR]) v.set(k, night ? 0.7 : 1);
+  v.set(V.ltMapL, 0);
+  v.set(V.ltMapR, 0);
+  // ---- oxygen
+  v.set(V.oxyPax, 0);
+  v.set(V.oxyMaskL, 0);
+  v.set(V.oxyMaskR, 0);
+  v.set(V.oxyMode, 0);
+  v.set(V.oxyModeR, 0);
+  v.set(V.oxyTestL, 0);
+  v.set(V.oxyTestR, 0);
+  v.set(V.ltDome, 0);
+  v.set(V.lampTest, 0);
+  // ---- fix round 1 controls (glareshield lower tier, pedestal, overhead, wheels)
+  v.set(V.fireApu, 0);
+  v.set(V.aprAuto, 1); // POWER RESERVE AUTO armed for every takeoff (EST normal position)
+  v.set(V.aprManual, 0);
+  v.set(V.stabChan, 1);
+  v.set(V.stabSecArm, 0);
+  v.set(V.autoGndSplr, 1);
+  v.set(V.stbyYd, 0);
+  v.set(V.flapReset, 0);
+  // CONTROL LOCK: engaged while parked cold & dark, released in the preflight (checklists.ts).
+  v.set(V.controlLock, s === 'cold_dark' ? 1 : 0);
+  for (const k of [V.cvrTest, V.cvrErase, V.eventMarker, V.pttL, V.pttR, V.yokeIcsL, V.yokeIcsR, V.visorL, V.visorR]) v.set(k, 0);
+  v.set(V.gasperL, 0.5);
+  v.set(V.gasperR, 0.5);
+  v.set(V.ltStby, night ? 0.7 : 1);
+  v.set(V.altFine, 0);
+  v.set(V.ltSeatBelts, moving ? 1 : 0);
+  v.set(V.ltPaxSafety, moving ? 1 : 0);
+  // ---- function fix round 1: crew audio (BOOM mic, MIC/INPH inboard)
+  for (const k of [V.micSelL, V.micSelR, V.micInphL, V.micInphR]) v.set(k, 0);
+}
+
+/**
+ * Re-reads the squat switches after the reposition (the systems were built before the FDM published
+ * weight-on-wheels) and re-arms the A/T touchdown logic from that air/ground state. Without it the first
+ * frames saw AIR, the A/T latched a "touchdown" and auto-disengaged 2 s later on every ground engagement,
+ * so A/T + TO/GA takeoffs were impossible (found by verify/fullFlight.test.ts).
+ */
+function resetAirGround(ctx: SimContext, sys: LongitudeSystems, onGround: boolean): void {
+  // The FDM writes gear.wow* only when it steps; seed them with the placement the app just made.
+  for (const i of [0, 1, 2]) ctx.vars.set(`gear.wow${i}`, onGround ? 1 : 0);
+  sys.gear.reset();
+  sys.gear.update(0);
+  sys.at.reset();
+}
+
+/** `AircraftInstance.applyState` of the Longitude. */
+export function applyLongitudeState(ctx: SimContext, sys: LongitudeSystems, s: InitialState): void {
+  const v = ctx.vars;
+  setLongitudeSwitches(ctx, sys, s);
+  const coldDark = s === 'cold_dark';
+  const inAir = s === 'cruise' || s === 'approach';
+  // Before anything reads gear.air_ground (pressurization settle, A/T, CAS inhibits).
+  resetAirGround(ctx, sys, !inAir);
+  const fm = ctx.fdm as Partial<FlightModel> & SimContext['fdm'];
+
+  sys.fuel.snapValves();
+  sys.lights.snap();
+
+  if (coldDark) {
+    for (const i of [1, 2]) {
+      v.set(`fadec.eng${i}.fuel_cmd`, 0);
+      v.set(ENG.fuelOn(i), 0);
+    }
+    ctx.fdm.setEnginesRunning?.(false);
+    sys.apu.setRunning(false);
+    sys.hyd.setPressure('a', 0);
+    sys.hyd.setPressure('b', 0);
+    for (const st of sys.starts) st.reset();
+    for (const a of sys.ahrs) a.reset(false);
+    sys.elec.settle();
+    sys.elec.reset();
+    sys.logic.reset();
+    sys.post.reset();
+    sys.pneu.snap(v.get('fdm.sat_c', 15));
+    // The pressurization mass balance uses the published cabin temperature: publish the snapped zone
+    // temperature first (it was still 0 degC here, so the cabin started ~1.1 psid above ambient on the ramp).
+    v.set('pneu.cabin_temp_c', v.get('fdm.sat_c', 15));
+    sys.press.settle();
+    sys.suite?.applyState(s);
+    return;
+  }
+
+  // ---- engines running
+  if (inAir) {
+    // Re-place the aircraft so its trimmed attitude reflects the flap/gear configuration of the state.
+    const ias = Math.max(120, v.get(FDM.ias));
+    ctx.fdm.reposition({ lat: v.get(FDM.lat), lon: v.get(FDM.lon), altFtMsl: v.get(FDM.altMsl), headingTrue: v.get(FDM.headingTrue), iasKt: ias });
+  }
+  for (const i of [1, 2]) {
+    v.set(`fadec.eng${i}.fuel_cmd`, 1);
+    v.set(ENG.fuelOn(i), 1);
+  }
+  sys.logic.update(1 / 60);
+  sys.ratings.update(1 / 60);
+  sys.fadec.update(1 / 60);
+  ctx.fdm.setEnginesRunning?.(true);
+  if (inAir) {
+    const trim = fm.computeTrim?.({ iasKt: Math.max(120, v.get(FDM.ias)) });
+    if (trim?.converged && fm.engines && fm.engineEnv) {
+      sys.stab.setPosition(stabUnitsFor(sys, Math.max(-1, Math.min(1, trim.pitchTrim))));
+      const n1 = (fm.engines[0] as Turbofan).n1ForThrust(trim.thrustN / 2, fm.engineEnv);
+      const lever = leverForN1(sys, ctx, n1);
+      v.set(V.tla(1), lever);
+      v.set(V.tla(2), lever);
+      sys.logic.update(1 / 60);
+      sys.fadec.update(1 / 60);
+      ctx.fdm.setEnginesRunning?.(true);
+    }
+  }
+  sys.hyd.setPressure('a', 3000);
+  sys.hyd.setPressure('b', 3000);
+  // LON-P3-09: APU running on the ground (knob set above); the generator/bleed come online in elec.settle()/pneu.snap().
+  // Publish apu.state and re-snap the fuel valves before the first APU update, or the APU fuel feed (fuel.apu_on,
+  // snapped while apu.state still read 0) flames it out on the first frame.
+  const apuOn = s === 'ready_to_taxi' || s === 'takeoff';
+  sys.apu.setRunning(apuOn);
+  v.set('apu.state', apuOn ? ApuState.Running : ApuState.Off);
+  if (apuOn) v.set('fuel.apu_on', 1); // the APU feed (published by the fuel system after the APU in the list)
+  for (const st of sys.starts) st.reset();
+  sys.elec.settle();
+  sys.elec.reset();
+  sys.logic.reset();
+  sys.post.reset();
+  for (const a of sys.ahrs) {
+    a.reset(true);
+    a.update(1 / 60); // publish the aligned attitude (valid) before the AFCS set-up below
+  }
+  for (const a of sys.adc) {
+    a.reset();
+    // Run the 3 s power-up self test now so the air data (and the AFCS) are valid when the state starts.
+    for (let i = 0; i < 200; i++) a.update(1 / 60);
+  }
+  sys.pneu.snap(22);
+  v.set('pneu.cabin_temp_c', 22); // see the cold & dark branch
+  // LON-P3-19: "Pressurization LDG ELEV - Verify/Set" (OG 17-3 item 11 / 17-7 Descent item 1). The presets load no
+  // flight plan, so the FMS-destination setting (-9999) would leave the controller without a landing elevation;
+  // the crew of the preset has set the selector to the reposition field instead.
+  const fieldElevFt = Math.round(ctx.world.elevationAt(v.get(FDM.lat), v.get(FDM.lon)) / 0.3048 / 10) * 10;
+  v.set(V.pressLdgElevFt, fieldElevFt);
+  sys.press.settle();
+  sys.suite?.applyState(s);
+  applyPresetTold(ctx, sys, s, fieldElevFt);
+
+  // ---- AFCS / autothrottle set-up (G5000 GMC 710: selected values; OG 17: SPD knob FMS)
+  const hdg = v.get(FDM.headingMag);
+  v.set('ap.sel_hdg_deg', Math.round(hdg));
+  v.set('ap.fd1_on', 1);
+  v.set('ap.fd2_on', 1);
+  if (s === 'cruise') {
+    const alt = Math.round(v.get(FDM.altMsl) / 100) * 100;
+    v.set('ap.sel_alt_ft', alt);
+    sys.afcs.update(1 / 60); // read the sensors so ALT captures the present altitude
+    v.set('ap.sel_mach', Math.round(v.get(FDM.mach) * 100) / 100);
+    v.set('ap.spd_is_mach', v.get(FDM.pressAlt) > 29000 ? 1 : 0);
+    v.set('ap.sel_spd_kt', Math.round(v.get(FDM.ias)));
+    sys.afcs.engage();
+    sys.afcs.press('HDG');
+    sys.afcs.press('ALT');
+    sys.at.pressEngage();
+  } else if (s === 'approach') {
+    v.set('ap.sel_alt_ft', Math.round((v.get(FDM.altMsl) - 1500) / 100) * 100);
+    v.set('ap.sel_spd_kt', Math.round(v.get(FDM.ias)));
+    v.set('ap.spd_is_mach', 0);
+  } else {
+    v.set('ap.sel_alt_ft', 10000);
+    v.set('ap.sel_spd_kt', 200);
+    v.set('ap.spd_is_mach', 0);
+  }
+  // LON-P3-10: "SPD Knob - FMS" (OG 17-5 Before Takeoff item 6; FMS speed is also normal in cruise, OG 7-4).
+  if (s === 'takeoff' || s === 'cruise') v.set('g3k.spd_fms', 1);
+}
+
+const KG_TO_LB = 1 / 0.45359237;
+
+/**
+ * LON-P3-11/-19: the presets leave "Takeoff Data - Completed" / "V Speeds - Verify/Set" (OG 17-3 items 9/10) and
+ * "Landing data - Confirm" (Approach) done, so compute TOLD for the actual weight and reposition field through the
+ * aircraft's own provider (performance.ts) instead of showing the shared static default v-speeds (~15 kt high at
+ * light weights). The runway is unknown in a reposition, so the field-length check is left out (length NaN).
+ */
+function applyPresetTold(ctx: SimContext, sys: LongitudeSystems, s: InitialState, fieldElevFt: number): void {
+  const suite = sys.suite;
+  if (!suite) return;
+  const v = ctx.vars;
+  const fm = ctx.fdm as Partial<FlightModel>;
+  fm.massModel?.update();
+  const weightLb = (fm.massModel?.mass ?? v.get(FDM.mass, 15500)) * KG_TO_LB;
+  const told = suite.system.told;
+  const common = {
+    airport: '',
+    runway: '',
+    runwayLengthFt: NaN,
+    runwayElevFt: fieldElevFt,
+    runwayHeadingMag: Math.round(v.get(FDM.headingMag)),
+    windDirMag: v.get(ENV.surfaceWindDir, 0),
+    windKt: v.get(ENV.surfaceWindKt, 0),
+    oatC: Math.round(v.get(FDM.sat, 15)),
+    qnhInHg: v.get(ENV.qnhInHg, 29.92),
+    weightLb: Math.round(weightLb),
+    antiIce: false,
+    wet: false,
+  };
+  if (s === 'ready_to_taxi' || s === 'takeoff') {
+    Object.assign(told.inputs.takeoff, common, { flaps: '2', slope: 0 }); // flaps 2 preferred (FPG)
+    const res = told.computeTakeoff();
+    if (res) {
+      suite.system.vspeeds.applyTold(res.vspeeds);
+      told.takeoffConfirmed = true;
+    }
+  } else if (s === 'approach') {
+    Object.assign(told.inputs.landing, common, { flaps: 'FULL' });
+    const res = told.computeLanding();
+    if (res) {
+      suite.system.vspeeds.applyTold(res.vspeeds);
+      told.landingConfirmed = true;
+    }
+  }
+}
+
+export { TLA };

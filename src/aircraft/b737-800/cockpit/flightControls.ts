@@ -1,0 +1,150 @@
+/**
+ * 737-800 primary flight controls in the flight deck: the two control
+ * columns with Boeing ram's-horn wheels (FCOM 9.10), rudder pedals with toe
+ * brakes, and the Captain's nose-wheel steering tiller (FCOM 14.10 "tiller
+ * ... +/-78 deg"; the F/O tiller is an option not fitted here).
+ *
+ * Wheel switches (FCOM 9.10 / 4.10; dossier §10.16):
+ *  - Stabilizer trim switches on the outboard horn (split switch: both halves
+ *    move together here), spring-loaded to neutral: `yoke_trim{1,2}`
+ *    (NOSE DN -1 / NOSE UP +1), read by the stabilizer TrimAxis.
+ *  - A/P disengage switch on the outboard horn: event `ap.disc` (AFDS
+ *    disconnect; a second push silences the warning).
+ *  - Microphone switch on the inboard horn: MIC / OFF / INT (`yoke_mic{1,2}`),
+ *    spring-loaded to OFF; the ACP logic publishes the keyed transmitter
+ *    (SCOPE: no radio transmission / audio model).
+ *
+ * The wheels and columns are animated from the surface positions
+ * (`surf.elevator` / `surf.aileron`): the 737 columns are back-driven by the
+ * autopilot actuators.
+ */
+import * as THREE from 'three';
+import { RotaryKnob, RudderPedals, Yoke } from '../../../cockpit/controls';
+import { SURF } from '../../../core/vars';
+import { B738 } from '../vars';
+import type { B738CockpitContext } from './context';
+import { PEDALS_L, PEDALS_R, TILLER, YOKE_HUB_L, YOKE_HUB_R, FLOOR_Z } from './layout';
+
+export function buildFlightControls(c: B738CockpitContext): void {
+  const { b, env } = c;
+  for (const s of [1, 2] as const) {
+    const L = s === 1;
+    const outboard = L ? 'left' : 'right';
+    const inboard = L ? 'right' : 'left';
+    const name = L ? 'CAPT' : 'F/O';
+    const hub = L ? YOKE_HUB_L : YOKE_HUB_R;
+    const yoke = b.place(
+      new Yoke(env, {
+        id: `b738.fc.yoke${s}`,
+        label: `${name} CONTROL WHEEL`,
+        style: 'boeing',
+        // Column pivots at the floor torque tube (EST 0.72 m below the hub).
+        column: { kind: 'pivot', length: FLOOR_Z - hub[2] + 0.02, aftDeg: 11, fwdDeg: 9 },
+        rollDeg: 90,
+        pitchVar: SURF.elevator,
+        rollVar: SURF.aileron,
+        switches: [
+          {
+            anchor: `${outboard}Top`,
+            kind: 'rocker',
+            options: {
+              id: `b738.fc.trim${s}`,
+              label: `${name} STAB TRIM`,
+              var: B738.yokeTrim(s),
+              positions: ['NOSE UP', 'OFF', 'NOSE DN'],
+              values: [1, 0, -1],
+              initial: 1,
+              springs: { 0: 1, 2: 1 },
+            },
+          },
+          {
+            // Microphone switch on the inboard horn (FCOM 5.10): MIC keys the ACP-selected transmitter, INT the
+            // flight interphone; spring-loaded to OFF.
+            anchor: `${inboard}Top`,
+            kind: 'rocker',
+            options: {
+              id: `b738.fc.mic${s}`,
+              label: `${name} MIC / INT`,
+              var: B738.yokeMic(s),
+              positions: ['MIC', 'OFF', 'INT'],
+              values: [1, 0, -1],
+              initial: 1,
+              springs: { 0: 1, 2: 1 },
+            },
+          },
+          {
+            anchor: `${outboard}Outboard`,
+            kind: 'button',
+            options: { id: `b738.fc.ap_disc${s}`, label: `${name} A/P DISENGAGE`, mode: 'momentary', event: 'ap.disc', capMaterial: 'knobRed' },
+          },
+        ],
+      }),
+      { center_m: hub, facing: 'aft' },
+    );
+    // Hub chart clip with checklist card (both NG control wheels carry one on the hub: deck1.jpg / deck2.jpg;
+    // static geometry riding the wheel, no control).
+    {
+      const g = new THREE.Group();
+      g.name = `yoke_clip${s}`;
+      const back = new THREE.Mesh(new THREE.BoxGeometry(0.105, 0.125, 0.004), env.materials.get('plasticBlack'));
+      const card = new THREE.Mesh(new THREE.BoxGeometry(0.095, 0.112, 0.0015), env.materials.custom('paint', 0xe8e6da, 0.85));
+      card.position.z = 0.0029;
+      const clip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.012, 0.006), env.materials.get('chrome'));
+      clip.position.set(0, 0.055, 0.003);
+      g.add(back, card, clip);
+      b.trackGeometry(back.geometry, card.geometry, clip.geometry);
+      // On the hub face toward the pilot, below the wheel centre, tilted back with the wheel plane (EST).
+      g.position.set(0, -0.01, 0.055);
+      g.rotation.x = -0.15;
+      yoke.wheel.add(g);
+    }
+    b.place(new RudderPedals(env, { id: `b738.fc.pedals${s}`, label: `${name} RUDDER / BRAKE PEDALS`, style: 'hanging', spacing: 0.3 }), {
+      center_m: L ? PEDALS_L : PEDALS_R,
+      facing: 'aft',
+    });
+  }
+  // Captain tiller (left sidewall shelf).
+  const mount = b.panel({ name: 'b738.tiller_mount', center_m: TILLER.center_m, facing: 'up', width: 0.12, height: 0.14, material: 'panelDark', screws: false, radius: 0.012 });
+  // 737NG tiller: a ~0.11 m handwheel with a perpendicular crank grip (b737.org.uk flight deck photographs). The
+  // knob's flat hub disc is the hit target; the rim, spokes and grip ride on its rotating group.
+  const tiller = mount.add(
+    new RotaryKnob(env, {
+      id: 'b738.fc.tiller',
+      label: 'NOSE WHEEL STEERING TILLER',
+      cap: 'smooth',
+      diameter: 0.11,
+      height: 0.004,
+      pointer: 'none',
+      material: 'panelDark',
+      dragPxPerClick: 6,
+      outer: { var: B738.tiller3d, min: -1, max: 1, step: 0.05, angleRange: [-95, 95], label: 'TILLER', format: (v) => `${Math.round(v * 78)}°` },
+    }),
+    0,
+    0,
+  );
+  {
+    const g = tiller.outer.group;
+    const knobMat = env.materials.get('knob');
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.0065, 10, 40), knobMat);
+    rim.position.z = 0.02;
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.016, 0.02, 20).rotateX(Math.PI / 2), knobMat);
+    hub.position.z = 0.012;
+    g.add(rim, hub);
+    for (let k = 0; k < 3; k++) {
+      const a = (k * 2 * Math.PI) / 3 + Math.PI / 2;
+      const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.046, 0.007, 0.005), knobMat);
+      spoke.position.set(Math.cos(a) * 0.028, Math.sin(a) * 0.028, 0.019);
+      spoke.rotation.z = a;
+      g.add(spoke);
+      b.trackGeometry(spoke.geometry);
+    }
+    // Crank grip standing up from the rim at the 12 o'clock position.
+    const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.04, 16).rotateX(Math.PI / 2), env.materials.get('knobWhite'));
+    grip.position.set(0, 0.05, 0.043);
+    g.add(grip);
+    b.trackGeometry(rim.geometry, hub.geometry, grip.geometry);
+  }
+  mount.label('NOSE WHEEL STEERING', 0, 0.058, { height: 0.0024 });
+  mount.label('L', -0.05, 0.035, { height: 0.003 });
+  mount.label('R', 0.05, 0.035, { height: 0.003 });
+}

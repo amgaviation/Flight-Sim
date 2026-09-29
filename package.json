@@ -1,0 +1,44 @@
+{
+  "name": "amg-flight-sim",
+  "productName": "AMG Flight Simulator",
+  "version": "0.1.0",
+  "private": true,
+  "description": "High-fidelity flight simulator with fully functional 3D cockpits",
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:long": "cross-env AMG_LONG_TESTS=1 vitest run fullFlight.test performance.test",
+    "test:all": "cross-env AMG_LONG_TESTS=1 vitest run",
+    "jets-qa": "node scripts/jets-qa.mjs",
+    "navdata": "node scripts/build-navdata.mjs",
+    "smoke": "node scripts/smoke.mjs",
+    "electron:dev": "concurrently -k \"vite\" \"wait-on tcp:5173 && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .\"",
+    "electron:start": "npm run build && electron .",
+    "dist:win": "npm run build && electron-builder --win --x64",
+    "dist:linux": "npm run build && electron-builder --linux --x64"
+  },
+  "author": "AMG Aviation Group",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.3",
+    "@types/three": "^0.186.0",
+    "concurrently": "^10.0.5",
+    "cross-env": "^10.1.0",
+    "electron": "^44.4.5",
+    "electron-builder": "^26.15.3",
+    "playwright-core": "^1.63.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.1",
+    "vitest": "^5.0.2",
+    "wait-on": "^9.1.0"
+  }
+}

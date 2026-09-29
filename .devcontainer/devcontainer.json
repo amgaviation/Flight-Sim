@@ -1,0 +1,15 @@
+{
+  "name": "AMG Flight Simulator",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:22",
+  "hostRequirements": { "cpus": 4, "memory": "8gb" },
+  "containerEnv": {
+    // The Electron binary is only needed for the desktop build, not the browser dev server.
+    "ELECTRON_SKIP_BINARY_DOWNLOAD": "1"
+  },
+  "postCreateCommand": "npm install",
+  "postAttachCommand": "npm run dev",
+  "forwardPorts": [5173],
+  "portsAttributes": {
+    "5173": { "label": "Flight Simulator", "onAutoForward": "openBrowser" }
+  }
+}

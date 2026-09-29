@@ -1,0 +1,60 @@
+import { describe, it } from 'vitest';
+import { appendFileSync } from 'node:fs';
+import { B738, APU_SW } from '../../../../src/aircraft/b737-800/vars';
+import { makeB738 } from '../helpers';
+const log = (...a: unknown[]) => appendFileSync('/tmp/ref/b737/nnc.log', a.map(String).join(' ') + '\n');
+const air = { altFtMsl: 35000, iasKt: 270, headingTrue: 90 };
+describe('nnc probes', () => {
+  it('failure list', () => {
+    const r = makeB738({ state: 'cruise', air });
+    const fm = r.sys.failures as unknown as Record<string, unknown>;
+    const defs = (fm['defs'] ?? fm['list'] ?? fm['failures']) as unknown;
+    let ids: string[] = [];
+    if (defs instanceof Map) ids = [...defs.keys()].map(String);
+    else if (Array.isArray(defs)) ids = defs.map((d: { id?: string; var?: string }) => d.id ?? d.var ?? '?');
+    log('failure keys:', Object.keys(fm).join(','), '\nids:', ids.join(' '));
+  });
+  it('engine failure: pack off -> other pack high flow; iso', () => {
+    const r = makeB738({ state: 'cruise', air });
+    const v = r.vars;
+    r.run(6);
+    v.set('fail.fadec.eng1', 1);
+    r.run(20);
+    log('eng1 fail: running', v.get('eng1.running'), 'n2', v.get('eng1.n2_pct')?.toFixed?.(1), 'MC', v.get(B738.lt.masterCaution), 'gen off bus', v.get(B738.lt.genOffBus(1)), 'lp eng1 hyd', v.get(B738.lt.hydLowPress('eng1')), 'bleed1 valve', v.get('pneu.bleed1_valve_open'));
+    r.events.emit('at.disc'); v.set(B738.tla(1), 0); v.set(B738.startLever(1), 0); v.set(B738.pack(1), 0);
+    r.run(5);
+    const pk = [...r.vars.keys()].filter((k) => /pack/.test(k) && k.startsWith('pneu')).map((k) => `${k}=${v.get(k).toFixed?.(2)}`);
+    log('after pack1 OFF:', pk.join(' '));
+    v.set(B738.apuSw, APU_SW.start); r.run(0.5); v.set(B738.apuSw, APU_SW.on);
+    const t = r.run(180, () => v.get('apu.avail') === 1);
+    log('APU in-flight start FL350: avail', v.get('apu.avail'), 'after', t.toFixed(0), 's');
+    v.set(B738.xpdrModeSel, 3); r.run(1);
+    log('xpdr TA ONLY -> tcas mode', v.get('tcas.mode'), v.get('xpdr.mode'));
+  });
+  it('cabin altitude: MAN + outflow close; masks; pass oxy', () => {
+    const r = makeB738({ state: 'cruise', air });
+    const v = r.vars;
+    r.run(6);
+    v.set(B738.bleed(1), 0); v.set(B738.bleed(2), 0);
+    let horn = 0; r.run(300, () => { if (v.get(B738.lt.cabinAltFt) > 10000) { horn = 1; return true; } });
+    log('bleeds off: cabin', v.get(B738.lt.cabinAltFt).toFixed(0), 'horn var alert.cabin_alt?', v.get('alert.cabin_altitude'), v.get('press.cabin_alt_warn'), v.get('ac.b738.lt.cabin_altitude'), horn);
+    const keys = [...v.keys()].filter((k) => /cabin_alt|alt_horn|pax_oxy|pass_oxy|masks/.test(k)).map((k) => `${k}=${v.get(k)}`);
+    log('cabin keys', keys.join(' '));
+    v.set(B738.oxyMask(1), 1); v.set(B738.oxyMask(2), 1); r.run(1);
+    log('masks: flow', v.get('oxy.capt_flowing'), v.get('oxy.fo_flowing'));
+    v.set(B738.pressMode, 2); v.set(B738.outflowSw, -1); r.run(20); v.set(B738.outflowSw, 0);
+    log('MAN close: outflow', v.get('press.outflow').toFixed(2), 'cabin', v.get(B738.lt.cabinAltFt).toFixed(0), 'manual light', v.get('ac.b738.lt.manual'));
+    v.set(B738.passOxy, 1); r.run(2);
+    log('PASS OXY ON: light', v.get('ac.b738.lt.pass_oxy_on'), [...v.keys()].filter((k) => /pass_oxy|pax/.test(k)).map((k) => `${k}=${v.get(k)}`).join(' '));
+  });
+  it('APU fire', () => {
+    const r = makeB738({ state: 'ready_to_taxi' });
+    const v = r.vars;
+    v.set(B738.apuSw, APU_SW.start); r.run(0.5); v.set(B738.apuSw, APU_SW.on);
+    r.run(120, () => v.get('apu.avail') === 1);
+    v.set('fail.fire.apu', 1); r.run(3);
+    log('APU fire on ground: warn', v.get('fire.apu_warn'), 'apu running', v.get('apu.running'), 'bottle auto?', v.get('fire.apu_btl_discharged'), 'horn wheel well?', v.get('fire.apu_horn'));
+    v.set(B738.fireHandleApu, 1); r.run(0.5); v.set(B738.fireRotApu, 1); r.run(0.5); v.set(B738.fireRotApu, 0); v.set(B738.apuSw, 0); r.run(10);
+    log('after handle: warn', v.get('fire.apu_warn'), 'disch', v.get('fire.apu_btl_discharged'), v.get('fire.apu_btl_discharged'));
+  });
+});
