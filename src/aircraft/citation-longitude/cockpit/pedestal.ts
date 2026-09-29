@@ -7,9 +7,10 @@
  *  forward left    : MFD / GTCs dimmer, STABILIZER PRIMARY TRIM CHANNEL SELECT, SECONDARY TRIM (yellow frame) with
  *                    the NOSE DOWN / NOSE UP rocker, AUTO GROUND SPOILERS, STANDBY YAW DAMP (L36/L37).
  *  quadrant        : SPEEDBRAKE (RET .. EXT wedge scale), thrust levers with horizontal cylindrical grips (TO/GA on
- *                    the outboard end, AT DISC on the inboard top, AT paddle on the arm; L32/L33), FUEL RECIRC PUMP.
- *  forward right   : HYDRAULIC PUMP A / B, POWER TRANSFER (PTCU knob), RUDDER STANDBY, then FUEL: BOOST PUMP L / R,
- *                    GRAVITY XFLOW, TRANSFER (L34/L35).
+ *                    the outboard end, AT DISC on the inboard top, AT paddle on the arm, black piggyback reverse
+ *                    lever on the grip front; L32/L33, L2-02), FUEL RECIRC PUMP.
+ *  forward right   : HYDRAULIC PUMP A / B, POWER TRANSFER (two PTCU switchlights, L2-01), RUDDER STANDBY, then FUEL:
+ *                    BOOST PUMP L / R, GRAVITY XFLOW, TRANSFER (L34/L35).
  *  aft left        : EMER / PARK BRAKE lever (red / white grip) and CONTROL LOCK lever (L22/L42).
  *  aft centre      : ENGINE (RUN/STOP L, STARTER L / R, RUN/STOP R), PRESSURIZATION / ECS / bleed grid with the
  *                    duct mimic (L45/L46), COCKPIT VOICE RECORDER row (L43), storage bin.
@@ -21,6 +22,7 @@ import * as THREE from 'three';
 import { GuardedButton, Lever, PushButton, RockerSwitch, RotaryKnob, SelectorKnob, ToggleSwitch, AnnunciatorLight } from '../../../cockpit/controls';
 import type { Panel } from '../../../cockpit/CockpitBuilder';
 import { bl } from '../../../cockpit/frame';
+import { leverKnobGeometry } from '../../../cockpit/geometry/levers';
 import { INPUT } from '../../../core/vars';
 import { LON_VARS as V } from '../vars';
 import { TLA } from '../systems/logic';
@@ -259,6 +261,7 @@ function quadrant(c: LonCockpitContext, ped: Panel): void {
     { value: 1, label: 'TO' },
   ];
   const tlY = 0.16;
+  const revLevers: { g: THREE.Group; v: string }[] = [];
   for (const i of [1, 2] as const) {
     const lv = ped.add(
       new Lever(env, {
@@ -314,8 +317,51 @@ function quadrant(c: LonCockpitContext, ped: Panel): void {
       [out * 0.009, 0, L * 0.72],
       new THREE.Euler(0, (out * Math.PI) / 2, 0),
     );
+    // Reverse piggyback lever on the forward face of the grip (L2-02; _pedfwd / a21_004 show a separate black lever
+    // on each grip; OG 7-3: "reverser levers are lifted, then the throttles pulled aft"). Pivots up as the thrust
+    // lever enters the reverse range, and is a priority click / drag target for the lever (reverse range).
+    const rev = new THREE.Group();
+    rev.name = `tl${i}_rev_lever`;
+    rev.position.set(0, -0.0155, gz - 0.004);
+    rev.userData.cockpitDynamic = true;
+    lv.handle.add(rev);
+    const revArm = new THREE.Mesh(new THREE.BoxGeometry(0.007, 0.005, 0.03), env.materials.get('handleBlack'));
+    b.trackGeometry(revArm.geometry);
+    revArm.position.z = 0.015;
+    revArm.userData.cockpitDynamic = true;
+    rev.add(revArm);
+    const revGrip = new THREE.Mesh(leverKnobGeometry('reverser', 1.1), env.materials.get('plasticBlack'));
+    b.trackGeometry(revGrip.geometry);
+    revGrip.position.z = 0.03;
+    revGrip.userData.cockpitDynamic = true;
+    rev.add(revGrip);
+    const revHit = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.02, 0.048), env.materials.get('hitbox'));
+    b.trackGeometry(revHit.geometry);
+    revHit.position.z = 0.02;
+    revHit.userData.hitPriority = 1;
+    revHit.userData.cockpitDynamic = true;
+    rev.add(revHit);
+    lv.hitTargets.push(revHit);
+    revLevers.push({ g: rev, v: V.tla(i) });
   }
-  ped.label('AT DISC', 0.185, 0.035, { height: 0.0024 });
+  // Raise the reverse levers with the reverse range (visual only; the FDM reads ac.tla*).
+  const vars = c.ctx.vars;
+  c.b.onUpdate(() => {
+    for (let k = 0; k < revLevers.length; k++) {
+      const r = revLevers[k];
+      const t = vars.get(r.v);
+      const f = t < 0 ? Math.min(1, -t * 4) : 0;
+      r.g.rotation.x = 0.95 - 1.05 * f;
+    }
+  });
+  // TO/GA engraved outboard of each lever slot, AT DISC inboard (L2-12, a21_004).
+  for (const [slotX, out] of [
+    [0.152, -1],
+    [0.218, 1],
+  ] as const) {
+    ped.label('TO/GA', slotX + out * 0.027, 0.035, { height: 0.0024 });
+    ped.label('AT DISC', slotX - out * 0.024, 0.035, { height: 0.0024 });
+  }
   // FUEL RECIRC PUMP (OG 2-3: under the speedbrake handle).
   pb(c, ped, 'lon.ped.fuel_recirc', 'FUEL RECIRC PUMP', V.fuelRecirc, 0.1, 0.262, [seg.eq('NORM', 'cyan', V.fuelRecirc, 1), seg.eq('OFF', 'white', V.fuelRecirc, 0)], 'FUEL RECIRC PUMP');
 }
@@ -351,29 +397,50 @@ function forwardRight(c: LonCockpitContext, ped: Panel): void {
   pump('lon.ped.hyd_pump_b', V.hydPumpB, 'B', x + 0.018);
   const mid = 'MIN';
   for (let i = 0; i < mid.length; i++) ped.label(mid[i], x, 0.029 + i * 0.0045, { height: 0.0022 });
-  // POWER TRANSFER (PTCU). SCOPE / photo conflict: the Textron photograph shows two switchlights under a POWER TRANSFER
-  // bracket (legends not legible); the OG (Fig 6-3-1, 13-3) describes a PTCU knob OFF / AUX A / NORM / AUX B / HYD GEN,
-  // whose functions are modelled (logic.ts). The knob is kept under the photograph's bracket.
+  // POWER TRANSFER (PTCU): TWO stacked square switchlights under the bracket, as the Textron production photograph
+  // (_pedfwd; a21_004 shows the same station) consistently shows — L2-01. SCOPE / OG conflict recorded: the OG
+  // (Fig 6-3-1, 13-3) describes an OFF / AUX A / NORM / AUX B / HYD GEN rotary; both drive the same `ac.lon.hyd.ptcu`
+  // states (0 OFF / 1 AUX A / 2 NORM / 3 AUX B / 4 HYD GEN, logic.ts), so systems/hydraulic.ts is untouched.
+  // Legends EST (not legible in the photographs): upper NORM/OFF alternate action, lower steps AUX A -> AUX B ->
+  // HYD GEN -> back to NORM.
   ped.bracket('POWER TRANSFER', x, 0.058, 0.07, { height: 0.0021 });
   ped.add(
-    new SelectorKnob(env, {
-      id: 'lon.ped.ptcu',
+    new PushButton(env, {
+      id: 'lon.ped.ptcu_norm',
+      label: 'PTCU NORM / OFF',
       var: V.ptcu,
-      label: 'PTCU (POWER TRANSFER)',
-      cap: 'pointer',
-      diameter: 0.014,
-      labelHeight: 0.0016,
-      positions: [
-        { value: 0, label: 'OFF', angle: -90 },
-        { value: 1, label: 'AUX A', angle: -45 },
-        { value: 2, label: 'NORM', angle: 0 },
-        { value: 3, label: 'AUX B', angle: 45 },
-        { value: 4, label: 'HYD GEN', angle: 90 },
-      ],
-      initial: 2,
+      mode: 'toggle',
+      values: [0, 2],
+      initial: 1,
+      stateNames: ['OFF', 'NORM'],
+      style: 'korry',
+      width: PB,
+      height: PB * 0.85,
+      layout: 'stack',
+      unlitTint: 0.05,
+      segments: [seg.eq('NORM', 'cyan', V.ptcu, 2), seg.eq('OFF', 'amber', V.ptcu, 0)],
     }),
     x,
-    0.083,
+    0.07,
+  );
+  ped.add(
+    new PushButton(env, {
+      id: 'lon.ped.ptcu_aux',
+      label: 'PTCU AUX / HYD GEN',
+      var: V.ptcu,
+      mode: 'cycle',
+      values: [1, 3, 4, 2],
+      initial: 3,
+      stateNames: ['AUX A', 'AUX B', 'HYD GEN', 'NORM'],
+      style: 'korry',
+      width: PB,
+      height: PB * 0.85,
+      layout: 'stack',
+      unlitTint: 0.05,
+      segments: [seg.eq('AUX A', 'white', V.ptcu, 1), seg.eq('AUX B', 'white', V.ptcu, 3), seg.eq('HYD GEN', 'white', V.ptcu, 4)],
+    }),
+    x,
+    0.091,
   );
   ped.label('RUDDER STANDBY', x, 0.108, { height: 0.0022 });
   pb(c, ped, 'lon.ped.rudder_stby', 'RUDDER STANDBY', V.rudderStby, x, 0.122, [seg.eq('NORM', 'cyan', V.rudderStby, 1), seg.eq('OFF', 'amber', V.rudderStby, 0)], '');
@@ -416,6 +483,8 @@ function aftLeft(c: LonCockpitContext, ped: Panel): void {
   // Slotted recess (dark) behind the park-brake lever.
   ped.subPanel({ name: 'park_recess', x: 0.058, y: 0.45, width: 0.05, height: 0.2, material: M.trim, screws: false, radius: 0.012, thickness: 0.002 });
   ped.label('EMER / PARK BRAKE', 0.06, 0.335, { height: 0.0026 });
+  // L2-08 (_pedaft): a long (~180 mm) red / white candy-striped shaft standing nearly upright in the slotted well,
+  // with a black grip on top; the stripes run along the shaft, not just the grip.
   ped.add(
     new Lever(env, {
       id: 'lon.ped.park_brake',
@@ -429,14 +498,14 @@ function aftLeft(c: LonCockpitContext, ped: Panel): void {
       ],
       softWidth: 0.08,
       step: 0.1,
-      travel: { kind: 'arc', minDeg: 30, maxDeg: -25, pivotDepth: 0.03 },
-      armLength: 0.07,
-      armWidth: 0.012,
-      armMaterial: 'handleBlack',
+      travel: { kind: 'arc', minDeg: 16, maxDeg: -20, pivotDepth: 0.05 },
+      armLength: 0.18,
+      armWidth: 0.014,
+      armMaterial: stripeMaterial(c),
       knob: 'condition',
-      knobScale: 1.5,
-      knobMaterial: stripeMaterial(c),
-      slot: { width: 0.012, plateWidth: 0.03 },
+      knobScale: 1.4,
+      knobMaterial: 'handleBlack',
+      slot: { width: 0.014, plateWidth: 0.032 },
       detentLabels: 'right',
     }),
     0.058,
@@ -619,7 +688,11 @@ function engineAndPressurization(c: LonCockpitContext, ped: Panel): void {
   const cy = 0.607;
   ped.label('COCKPIT VOICE', 0.19, 0.588, { height: 0.0021 });
   ped.label('RECORDER', 0.19, 0.592, { height: 0.0021 });
-  ped.add(new PushButton(env, { id: 'lon.ped.cvr_test', label: 'CVR TEST', var: V.cvrTest, mode: 'momentary', style: 'round', width: 0.011, capMaterial: 'knobGrey', segments: [{ text: '', color: 'green', var: V.cvrTest }], unlitTint: 0.35 }), 0.132, cy);
+  // L2-10 (_pedaft): the TEST pushbutton cap is green (ERASE red).
+  const cvrGreen = new THREE.MeshStandardMaterial({ color: 0x1c6b34, roughness: 0.5 });
+  cvrGreen.name = 'lon.cvrGreen';
+  env.materials.track(cvrGreen);
+  ped.add(new PushButton(env, { id: 'lon.ped.cvr_test', label: 'CVR TEST', var: V.cvrTest, mode: 'momentary', style: 'round', width: 0.011, capMaterial: cvrGreen, segments: [{ text: '', color: 'green', var: V.cvrTest }], unlitTint: 0.35 }), 0.132, cy);
   ped.add(new AnnunciatorLight(env, { id: 'lon.ped.cvr_status', label: 'CVR STATUS (HOLD 5 SEC)', width: 0.0055, height: 0.0055, unlitTint: 0.06, segments: [{ text: '', color: 'green', var: V.cvrTestOk }] }), 0.151, cy);
   ped.label('HOLD', 0.162, cy - 0.003, { height: 0.0018, align: 'left' });
   ped.label('5 SEC', 0.162, cy + 0.002, { height: 0.0018, align: 'left' });

@@ -112,8 +112,11 @@ export function buildShell(b: CockpitBuilder): void {
   // Leather sidewall trim band just below the sill (armrest height).
   add(loftFuselage(F, X_AFT, ws.headerX, sw.sill, sw.sill + 0.28, 16, 3, { inset: INSET + 0.006, inward: true }), leather, 'sidewall_leather_r');
   add(loftFuselage(F, X_AFT, ws.headerX, -sw.sill - 0.28, -sw.sill, 16, 3, { inset: INSET + 0.006, inward: true }), leather, 'sidewall_leather_l');
-  // Headliner between the side windows, aft bulkhead to the windshield header.
-  add(loftFuselage(F, X_AFT, ws.headerX, -sw.roof, sw.roof, 16, 14, inward), head, 'headliner');
+  // Headliner between the side windows, aft bulkhead to the windshield header. The centre band around the overhead
+  // console is black carbon trim continuing into the windshield header (photo eb3840); the outboard strips stay light.
+  add(loftFuselage(F, X_AFT, ws.headerX, -sw.roof * 0.45, sw.roof * 0.45, 16, 8, inward), wall, 'headliner_carbon');
+  add(loftFuselage(F, X_AFT, ws.headerX, -sw.roof, -sw.roof * 0.45, 16, 5, inward), head, 'headliner_l');
+  add(loftFuselage(F, X_AFT, ws.headerX, sw.roof * 0.45, sw.roof, 16, 5, inward), head, 'headliner_r');
   // Walls beside the windshield below the side-pane line (A-pillar to the sill).
   add(loftFuselage(F, ws.headerX, noseX, ws.halfAngle + A_PILLAR, sw.sill, 8, 4, inward), frame, 'ws_side_r');
   add(loftFuselage(F, ws.headerX, noseX, -sw.sill, -ws.halfAngle - A_PILLAR, 8, 4, inward), frame, 'ws_side_l');
@@ -125,17 +128,19 @@ export function buildShell(b: CockpitBuilder): void {
   add(loftFuselage(F, sw.fwd.x1, ws.headerX, sw.roof, sw.sill, 1, 6, inward), frame, 'b_post_r');
   add(loftFuselage(F, sw.fwd.x1, ws.headerX, -sw.sill, -sw.roof, 1, 6, inward), frame, 'b_post_l');
   // Frames: A-pillars, centre post, header, window posts, sills and roof rails (proud of the skin by 14 mm).
+  // Higher tessellation than the first pass: the 2-segment pillar strips read as jagged faceted polygons in the
+  // audit shots (view_10 / view_11); interior pillar surfaces are smooth (photo eb3840).
   const fi = { inset: INSET - 0.014, inward: true };
-  add(loftFuselage(F, ws.headerX, ws.baseX, ws.halfAngle, ws.halfAngle + A_PILLAR, 10, 2, fi), frame, 'a_pillar_r');
-  add(loftFuselage(F, ws.headerX, ws.baseX, -ws.halfAngle - A_PILLAR, -ws.halfAngle, 10, 2, fi), frame, 'a_pillar_l');
-  add(loftFuselage(F, ws.headerX, ws.baseX, -ws.postHalf, ws.postHalf, 10, 2, fi), frame, 'centre_post');
-  add(loftFuselage(F, ws.headerX - 0.07, ws.headerX, -ws.halfAngle - A_PILLAR, ws.halfAngle + A_PILLAR, 2, 20, fi), frame, 'ws_header');
+  add(loftFuselage(F, ws.headerX, ws.baseX, ws.halfAngle, ws.halfAngle + A_PILLAR, 16, 5, fi), frame, 'a_pillar_r');
+  add(loftFuselage(F, ws.headerX, ws.baseX, -ws.halfAngle - A_PILLAR, -ws.halfAngle, 16, 5, fi), frame, 'a_pillar_l');
+  add(loftFuselage(F, ws.headerX, ws.baseX, -ws.postHalf, ws.postHalf, 16, 5, fi), frame, 'centre_post');
+  add(loftFuselage(F, ws.headerX - 0.07, ws.headerX, -ws.halfAngle - A_PILLAR, ws.halfAngle + A_PILLAR, 4, 28, fi), frame, 'ws_header');
   for (const [x0, x1, n] of [
     [sw.aft.x1, sw.fwd.x0, 'mid_post'],
     [sw.aft.x0 - 0.04, sw.aft.x0, 'aft_post'],
   ] as [number, number, string][]) {
-    add(loftFuselage(F, x0, x1, sw.roof, sw.sill, 1, 6, fi), frame, `${n}_r`);
-    add(loftFuselage(F, x0, x1, -sw.sill, -sw.roof, 1, 6, fi), frame, `${n}_l`);
+    add(loftFuselage(F, x0, x1, sw.roof, sw.sill, 2, 10, fi), frame, `${n}_r`);
+    add(loftFuselage(F, x0, x1, -sw.sill, -sw.roof, 2, 10, fi), frame, `${n}_l`);
   }
   add(loftFuselage(F, X_AFT, ws.headerX, sw.sill, sw.sill + 0.05, 18, 1, fi), frame, 'sill_r');
   add(loftFuselage(F, X_AFT, ws.headerX, -sw.sill - 0.05, -sw.sill, 18, 1, fi), frame, 'sill_l');
@@ -200,7 +205,16 @@ export function buildShell(b: CockpitBuilder): void {
     add(well, 'panelDark', 'footwell').position.copy(bl(11.95, side * (yIn + kw / 2), kneeTop + kneeH / 2));
   }
 
-  // Crew seats.
-  b.seat('bizjet', SEAT_L);
-  b.seat('bizjet', SEAT_R);
+  // Crew seats: cream sheepskin pan / back over tan-leather-trimmed frame (photo eb3840 - the palette leather
+  // material alone rendered the whole seat near-white). The seat group's meshes are cushion, back, frame in order.
+  const sheepskin = m.custom('plastic', 0xcfc0a4, 0.98);
+  for (const pos of [SEAT_L, SEAT_R]) {
+    const seat = b.seat('bizjet', pos);
+    const meshes = seat.children.filter((ch): ch is THREE.Mesh => (ch as THREE.Mesh).isMesh);
+    if (meshes.length >= 3) {
+      meshes[0].material = sheepskin;
+      meshes[1].material = sheepskin;
+      meshes[2].material = leather;
+    }
+  }
 }

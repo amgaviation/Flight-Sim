@@ -15,8 +15,13 @@
  * shared by both masks (the OxygenSystem crew-mask model has a single mode binding), so both selectors
  * show and set the same mode; ACP audio is state only (systems/audio.ts).
  */
+import * as THREE from 'three';
 import { AnnunciatorLight, RotaryKnob, SelectorKnob } from '../../../../cockpit/controls';
 import type { Panel } from '../../../../cockpit/CockpitBuilder';
+import { CanvasDisplay, type DisplayCanvas } from '../../../../avionics/common/CanvasDisplay';
+import type { Ctx2D } from '../../../../avionics/common/draw/context';
+import type { SimVars } from '../../../../core/SimVars';
+import { trimBoxGeometry } from '../../../../cockpit/geometry/structure';
 import { addCcd } from '../../../../avionics/honeywell-epic/cockpit';
 import { ACP_CHANNELS, G650_VARS as V, type AcpChannel } from '../../vars';
 import { CONSOLE } from '../layout';
@@ -37,18 +42,71 @@ const MIC: [number, string][] = [
 ];
 const CH_LABEL: Record<AcpChannel, string> = { vhf1: 'VHF1', vhf2: 'VHF2', vhf3: 'VHF3', nav1: 'NAV1', nav2: 'NAV2', adf: 'ADF', mkr: 'MKR' };
 
-/** Audio control panel (EST Primus Epic ACP layout): MIC select keys and receiver volume knobs. */
+/**
+ * ACP display window (right-console photograph Flickr 52948762561: the PlaneView ACP has a display window
+ * above the key field). Shows the selected transmitter, the keyed state and the receiver volumes as a bar
+ * row. EST format (the real page layout is not published). Powered from the audio panel's bus.
+ */
+class AcpDisplay extends CanvasDisplay {
+  private readonly v: SimVars;
+  private readonly n: 1 | 2;
+  constructor(n: 1 | 2, vars: SimVars, canvas?: DisplayCanvas) {
+    super({ id: `g650.acp${n}.display`, width: 256, height: 96, vars, refreshHz: 5, powerVar: 'elec.acp_powered', brightnessVar: null, canvas, background: '#04120a' });
+    this.v = vars;
+    this.n = n;
+    this.watch(V.acpTx(n), 0);
+    this.watch(V.acpKeyed(n), 0);
+    for (const ch of ACP_CHANNELS) this.watch(V.acpVol(n, ch), 0.02);
+  }
+  protected draw(ctx: Ctx2D): void {
+    const tx = this.v.get(V.acpTx(this.n));
+    const keyed = this.v.get(V.acpKeyed(this.n));
+    ctx.fillStyle = '#5ee08a';
+    ctx.font = 'bold 20px monospace';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    const name = MIC.find(([k]) => k === tx)?.[1] ?? 'NONE';
+    ctx.fillText(`TX ${name}`, 8, 16);
+    if (keyed > 0) {
+      ctx.textAlign = 'right';
+      ctx.fillText('MIC', 248, 16);
+    } else if (keyed < 0) {
+      ctx.textAlign = 'right';
+      ctx.fillText('INT', 248, 16);
+    }
+    ctx.font = '12px monospace';
+    ctx.textAlign = 'center';
+    ACP_CHANNELS.forEach((ch, i) => {
+      const x = 22 + i * 34;
+      const vol = this.v.get(V.acpVol(this.n, ch));
+      ctx.fillStyle = '#2c5c40';
+      ctx.fillRect(x - 6, 38, 12, 34);
+      ctx.fillStyle = '#5ee08a';
+      ctx.fillRect(x - 6, 38 + (1 - vol) * 34, 12, vol * 34);
+      ctx.fillText(CH_LABEL[ch], x, 84);
+    });
+  }
+}
+
+/**
+ * Audio control panel (EST Primus Epic ACP layout, right-console photograph Flickr 52948762561: a display
+ * window over a field of full-size keys and knobs): display, MIC select keys, receiver volume knobs.
+ */
 function buildAcp(c: G650CockpitContext, parent: Panel, x: number, y: number, n: 1 | 2): void {
   const { env } = c;
-  const W = 0.1;
-  const H = 0.14;
+  const W = 0.125;
+  const H = 0.205;
   const p = parent.subPanel({ name: `g650.acp${n}`, x, y, width: W, height: H, origin: 'top-left', material: 'panelDark', thickness: 0.006, screws: { kind: 'dzus', diameter: 0.005, inset: 0.005, positions: [[0.005, 0.005], [W - 0.005, 0.005], [0.005, H - 0.005], [W - 0.005, H - 0.005]] } });
   p.label(`AUDIO ${n}`, W / 2, 0.011, { height: 0.0026, weight: 800 });
-  p.label('MIC', W / 2, 0.021, { height: 0.002 });
+  // ---- display window
+  const disp = new AcpDisplay(n, c.ctx.vars, c.canvas?.(256, 96));
+  p.display(disp, W / 2, 0.031, 0.085, 0.032, { bezel: { border: 0.003, depth: 0.003, material: 'bezel' }, display: { glass: true, powerVar: 'elec.acp_powered' } });
+  // ---- MIC select keys (full-size square keys, 2 rows of 3)
+  p.label('MIC', W / 2, 0.055, { height: 0.002 });
   const mic = V.acpMic(n);
   MIC.forEach(([k, name], i) => {
-    const kx = 0.02 + (i % 3) * 0.03;
-    const ky = 0.033 + Math.floor(i / 3) * 0.018;
+    const kx = 0.03 + (i % 3) * 0.033;
+    const ky = 0.072 + Math.floor(i / 3) * 0.026;
     p.add(
       new SwitchLight(env, {
         id: `g650.acp${n}.mic_${k}`,
@@ -59,8 +117,8 @@ function buildAcp(c: G650CockpitContext, parent: Panel, x: number, y: number, n:
         initial: 1,
         stateNames: ['NONE', ...MIC.map((m) => m[1])],
         style: 'korry',
-        width: 0.024,
-        height: 0.012,
+        width: 0.028,
+        height: 0.02,
         layout: 'stack',
         segments: [{ text: name, color: 'green', var: V.acpTx(n), test: (t: number) => t === k }],
       }),
@@ -68,25 +126,26 @@ function buildAcp(c: G650CockpitContext, parent: Panel, x: number, y: number, n:
       ky,
     );
   });
-  p.label('VOLUME', W / 2, 0.066, { height: 0.002 });
+  // ---- receiver volume knobs (4 + 3)
+  p.label('VOLUME', W / 2, 0.116, { height: 0.002 });
   ACP_CHANNELS.forEach((ch, i) => {
     const row = i < 4 ? 0 : 1;
     const col = row === 0 ? i : i - 4;
-    const kx = row === 0 ? 0.016 + col * 0.0227 : 0.027 + col * 0.0227;
-    const ky = 0.083 + row * 0.03;
+    const kx = row === 0 ? 0.019 + col * 0.029 : 0.0335 + col * 0.029;
+    const ky = 0.134 + row * 0.037;
     p.add(
       new RotaryKnob(env, {
         id: `g650.acp${n}.vol_${ch}`,
         label: `ACP ${n} ${CH_LABEL[ch]} VOLUME`,
         cap: 'knurled',
-        diameter: 0.0105,
-        height: 0.009,
+        diameter: 0.014,
+        height: 0.011,
         outer: { var: V.acpVol(n, ch), min: 0, max: 1, step: 0.05, initial: ch === 'mkr' || ch === 'adf' ? 0 : 0.5, angleRange: [-135, 135], format: (t) => `${Math.round(t * 100)} %` },
       }),
       kx,
       ky,
     );
-    p.label(CH_LABEL[ch], kx, ky + 0.0105, { height: 0.0017 });
+    p.label(CH_LABEL[ch], kx, ky + 0.0125, { height: 0.0017 });
   });
 }
 
@@ -114,7 +173,22 @@ function buildConsole(c: G650CockpitContext, side: 1 | 2): void {
 
   // ---- CCD (forward, inboard) and ACP (outboard).
   if (suite) addCcd(b, p, X(0.07), 0.09, suite, side);
-  buildAcp(c, p, X(0.235), 0.09, side);
+  buildAcp(c, p, X(0.235), 0.12, side);
+
+  // ---- quilted armrest pad and filler trim panels (right-console photograph Flickr 52948762561: a multi-
+  // panel console with a quilted armrest pad and blank trim plates filling the top; EST sizes).
+  {
+    const padG = trimBoxGeometry(0.09, 0.03, 0.34, 0.013);
+    b.trackGeometry(padG);
+    const pad = new THREE.Mesh(padG, env.materials.get('leather'));
+    pad.name = `g650.side${side}.armrest_pad`;
+    pad.userData.cockpitStatic = true;
+    // trimBox axes: x = width, y = thickness, z = length; lay the length along the console (panel y).
+    pad.rotation.x = Math.PI / 2;
+    p.addObject(pad, X(0.06), 0.55, { z: 0.014 });
+    p.subPanel({ name: `g650.side${side}.filler_fwd`, x: X(0.24), y: 0.7, width: 0.22, height: 0.16, material: 'panelDark', screws: { kind: 'dzus', diameter: 0.005, inset: 0.006 }, radius: 0.006 });
+    p.subPanel({ name: `g650.side${side}.filler_aft`, x: X(0.18), y: 0.9, width: 0.3, height: 0.12, material: 'panelDark', screws: { kind: 'dzus', diameter: 0.005, inset: 0.006 }, radius: 0.006 });
+  }
 
   // ---- map light dimmer.
   p.add(

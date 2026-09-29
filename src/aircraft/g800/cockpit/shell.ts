@@ -34,8 +34,10 @@ function hoodGeometry(): THREE.BufferGeometry {
   const nx = 14;
   const zb = GLAZING.baseZ;
   const x0 = GLARE_HOOD.browX + 0.04;
-  // Half-width of the hood at the brow line (limited by the cockpit wall at the hood height).
-  const wBrow = halfWidth(aPillarX(zb) - 0.01, zb, SHELL_INSET) - 0.004;
+  // Half-width of the hood at the brow line: overlaps INTO the interior skin by ~2 cm so no exterior
+  // white shows through at the A-pillar corners (fix round 1 L04; the real glareshield rolls into the
+  // A-pillar trim with no daylight gaps, g800_flying_cockpit.jpg).
+  const wBrow = halfWidth(aPillarX(zb) - 0.01, zb, SHELL_INSET) + 0.02;
   const pos: number[] = [];
   const uv: number[] = [];
   const idx: number[] = [];
@@ -50,7 +52,8 @@ function hoodGeometry(): THREE.BufferGeometry {
       if (halfWidth(m, zb, SHELL_INSET) > Math.abs(y)) lo = m;
       else hi = m;
     }
-    const xEnd = Math.max(x0 + 0.01, lo + 0.01);
+    // The forward edge runs 2 cm past the windshield base line into the skin (closes the corner gaps, L04).
+    const xEnd = Math.max(x0 + 0.01, lo + 0.03);
     for (let i = 0; i <= nx; i++) {
       const t = i / nx;
       const x = x0 + (xEnd - x0) * t;
@@ -111,7 +114,9 @@ export function buildShell(b: CockpitBuilder): void {
 
   // ---- glareshield hood (black crackle) and its rolled brow
   add(hoodGeometry(), 'glareshield', 'glareshield').castShadow = true;
-  const hw = halfWidth(aPillarX(GLAZING.baseZ) - 0.01, GLAZING.baseZ, SHELL_INSET) - 0.004;
+  // Brow / soffit width overlaps the interior skin by ~2 cm each side (fix round 1 L04: closes the
+  // daylight gaps between hood, soffit and sidewall at the A-pillar junction).
+  const hw = halfWidth(aPillarX(GLAZING.baseZ) - 0.01, GLAZING.baseZ, SHELL_INSET) + 0.02;
   const brow = new THREE.CylinderGeometry(0.014, 0.014, 2 * hw, 16, 1);
   brow.rotateZ(Math.PI / 2);
   add(brow, 'glareshield', 'glareshield_brow', [GLARE_HOOD.browX + 0.04, 0, GLARE_HOOD.topZ + 0.012]);

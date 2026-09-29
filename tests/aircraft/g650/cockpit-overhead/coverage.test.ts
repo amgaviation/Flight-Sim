@@ -147,6 +147,8 @@ describe('Gulfstream G650 overhead / breakers / side consoles: control coverage'
     const INDICATORS: Record<string, string[]> = {
       'g650.oh.fire.bottle_l': ['fire.bottle_l_discharged'],
       'g650.oh.fire.bottle_r': ['fire.bottle_r_discharged'],
+      'g650.oh.systest.door': [V.doorMain, V.doorBaggage],
+      'g650.oh.systest.dump_vlv': [V.gearEmer],
       'g650.side.mask_flow_l': ['oxy.pilot_flowing'],
       'g650.side.mask_flow_r': ['oxy.copilot_flowing'],
     };

@@ -150,7 +150,7 @@ describe('Fusion suite composition', () => {
     t.suite.layout.select(3, 'R', Win.Vsd);
     key('MEM');
     key('4');
-    expect(t.suite.layout.selected(3, 'R')).toBe(Win.Fms);
+    expect(t.suite.layout.selected(3, 'R')).toBe(Win.Map); // default AFD 3: FMS left, map right (layout.ts)
   });
 
   it('transponder IDENT times out after 18 s; chronometer; FPV cage; IESI baro', () => {

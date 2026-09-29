@@ -268,6 +268,19 @@ export class G650Logic implements Subsystem {
     const sbOk = v.get(V.speedbrake) < 0.05;
     const park = v.get('brakes.parking_set') !== 0;
     v.set(V.noTakeoff, ground && (!flapsTo || !trimOk || !sbOk || park || fbwMode !== 0) ? 1 : 0);
+
+    // ---------------- TEMP DISPLAY row (overhead TEMP CONTROL section, Flickr 52948516166 "TEMP DISPLAY"):
+    // publishes the selected zone's measured temperature for the overhead readout.
+    const tSel = v.get(V.tempDispSel);
+    v.set(V.tempDispC, v.get(tSel >= 2 ? 'pneu.aft_cabin_temp_c' : tSel === 1 ? 'pneu.fwd_cabin_temp_c' : 'pneu.cockpit_temp_c'));
+
+    // ---------------- SYSTEM TEST block (overhead aft-left, Flickr 52948516166). Holding a key runs the
+    // system's self-test: the pass lamp lights while the key is held and the tested channel is powered and
+    // not failed (EST pass logic per system; the real BIT sequences are not published).
+    v.set(V.sysTestPass('stall'), v.get(V.sysTest('stall')) !== 0 && v.get('elec.stall_warn_powered') !== 0 ? 1 : 0);
+    v.set(V.sysTestPass('gpws'), v.get(V.sysTest('gpws')) !== 0 && v.get('elec.taws_powered') !== 0 ? 1 : 0);
+    v.set(V.sysTestPass('antiskid'), v.get(V.sysTest('antiskid')) !== 0 && (v.get('elec.bcu_a_powered') !== 0 || v.get('elec.bcu_b_powered') !== 0) ? 1 : 0);
+    v.set(V.sysTestPass('ice_det'), v.get(V.sysTest('ice_det')) !== 0 && (v.get('elec.ice_det_l_powered') !== 0 || v.get('elec.ice_det_r_powered') !== 0) ? 1 : 0);
   }
 
   /** Anti-ice rotary knob: OFF 0 / AUTO 1 / ON 2. */

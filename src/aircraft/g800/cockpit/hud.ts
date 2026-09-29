@@ -24,30 +24,43 @@ const DASH: number[] = [10, 8];
 const SOLID: number[] = [];
 
 export const HUD_DISPLAY_ID = 'g800.hud';
+/** Copilot HUD display (dual HUD, fix round 1 L02). */
+export const HUD_DISPLAY_ID_R = 'g800.hud2';
 
 export class G800HudDisplay extends CanvasDisplay {
   private readonly v: SimVars;
+  /** Side 1 pilot (adc1/ahrs1/ra1, FD1), side 2 copilot (adc2/ahrs2/ra2, FD2). Appended (dual HUD, L02). */
+  private readonly side: 1 | 2;
+  private readonly videoVar: string;
+  private readonly fdOnVar: string;
+  private readonly raAltVar: string;
+  private readonly raValidVar: string;
 
-  constructor(vars: SimVars, canvas?: DisplayCanvas) {
-    super({ id: HUD_DISPLAY_ID, width: W, height: H, vars, refreshHz: 30, canvas, background: '#000000', brightnessVar: 'ac.g800.hud_lum' });
+  constructor(vars: SimVars, canvas?: DisplayCanvas, side: 1 | 2 = 1) {
+    super({ id: side === 1 ? HUD_DISPLAY_ID : HUD_DISPLAY_ID_R, width: W, height: H, vars, refreshHz: 30, canvas, background: '#000000', brightnessVar: side === 1 ? 'ac.g800.hud_lum' : 'ac.g800.hud2_lum' });
     this.v = vars;
+    this.side = side;
+    this.videoVar = side === 1 ? 'ac.g800.hud_video' : 'ac.g800.hud2_video';
+    this.fdOnVar = `ap.fd${side}_on`;
+    this.raAltVar = `ra${side}.alt_ft`;
+    this.raValidVar = `ra${side}.valid`;
     for (const [n, q] of [
-      [ADC.pitch(1), 0.05],
-      [ADC.bank(1), 0.1],
-      [ADC.heading(1), 0.2],
-      [ADC.ias(1), 0.5],
-      [ADC.baroAlt(1), 5],
-      [ADC.vs(1), 20],
+      [ADC.pitch(side), 0.05],
+      [ADC.bank(side), 0.1],
+      [ADC.heading(side), 0.2],
+      [ADC.ias(side), 0.5],
+      [ADC.baroAlt(side), 5],
+      [ADC.vs(side), 20],
       [GPS.gs, 1],
       [GPS.trackMag, 0.2],
       [GPS.vs, 20],
       [AP.fdPitch, 0.1],
       [AP.fdBank, 0.2],
-      ['ap.fd1_on', 0],
+      [this.fdOnVar, 0],
       ['ap.sel_alt_ft', 0],
       ['ap.sel_spd_kt', 0],
-      ['ra1.alt_ft', 5],
-      ['ac.g800.hud_video', 0.02],
+      [this.raAltVar, 5],
+      [this.videoVar, 0.02],
     ] as [string, number][])
       this.watch(n, q);
   }
@@ -59,12 +72,13 @@ export class G800HudDisplay extends CanvasDisplay {
 
   protected draw(ctx: Ctx2D): void {
     const v = this.v;
-    const pitch = v.get(ADC.pitch(1));
-    const bank = v.get(ADC.bank(1));
-    const hdg = v.get(ADC.heading(1));
+    const side = this.side;
+    const pitch = v.get(ADC.pitch(side));
+    const bank = v.get(ADC.bank(side));
+    const hdg = v.get(ADC.heading(side));
     const dcl = 0;
     // EVS / CVS video raster (dim green scan lines, SCOPE: no imagery).
-    const video = v.get('ac.g800.hud_video');
+    const video = v.get(this.videoVar);
     if (video > 0.01) {
       ctx.fillStyle = `rgba(40, 160, 70, ${(0.25 * video).toFixed(3)})`;
       for (let y = 0; y < H; y += 4) ctx.fillRect(0, y, W, 2);
@@ -150,7 +164,7 @@ export class G800HudDisplay extends CanvasDisplay {
       ctx.lineTo(fx, fy - 18);
       ctx.stroke();
       // Flight director guidance cue (small circle to be captured with the FPV).
-      if (v.get('ap.fd1_on') !== 0) {
+      if (v.get(this.fdOnVar) !== 0) {
         const gx = fx + Math.max(-60, Math.min(60, (v.get(AP.fdBank) - bank) * 2));
         const gy = fy - Math.max(-80, Math.min(80, (v.get(AP.fdPitch) - pitch) * PPD));
         ctx.beginPath();
@@ -183,19 +197,19 @@ export class G800HudDisplay extends CanvasDisplay {
 
     // ---- airspeed (left) and altitude (right) boxes with the selected values; VS; heading; RA.
     ctx.textAlign = 'center';
-    this.box(ctx, 70, cy, 80, String(Math.round(v.get(ADC.ias(1)))));
+    this.box(ctx, 70, cy, 80, String(Math.round(v.get(ADC.ias(side)))));
     ctx.fillText(String(Math.round(v.get('ap.sel_spd_kt'))), 70, cy - 40);
-    const alt = v.get(ADC.baroAlt(1));
+    const alt = v.get(ADC.baroAlt(side));
     this.box(ctx, W - 70, cy, 96, String(Math.round(alt / 10) * 10));
     ctx.fillText(String(Math.round(v.get('ap.sel_alt_ft') / 100) * 100), W - 70, cy - 40);
     ctx.font = 'bold 16px monospace';
-    const vs = Math.round(v.get(ADC.vs(1)) / 10) * 10;
+    const vs = Math.round(v.get(ADC.vs(side)) / 10) * 10;
     ctx.fillText(`${vs > 0 ? '+' : ''}${vs}`, W - 70, cy + 34);
     const hd = Math.round(((hdg % 360) + 360) % 360) || 360;
     ctx.font = 'bold 20px monospace';
     this.box(ctx, cx, 22, 60, String(hd).padStart(3, '0'));
-    const ra = v.get('ra1.alt_ft', 9999);
-    if (ra < 2500 && v.get('ra1.valid', 1) !== 0) ctx.fillText(`${Math.round(ra / 5) * 5}R`, cx, H - 60);
+    const ra = v.get(this.raAltVar, 9999);
+    if (ra < 2500 && v.get(this.raValidVar, 1) !== 0) ctx.fillText(`${Math.round(ra / 5) * 5}R`, cx, H - 60);
     ctx.textAlign = 'left';
     ctx.font = 'bold 16px monospace';
     ctx.fillText(`GS ${Math.round(gs)}`, 16, H - 24);

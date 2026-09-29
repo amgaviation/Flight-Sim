@@ -25,6 +25,10 @@ export interface MaskStowageOptions extends ControlOptions {
   size?: [number, number, number];
   /** +1: the mask comes out toward +x (inboard for the pilot box on the left console), -1 toward -x. */
   inboard?: 1 | -1;
+  /** Sink the box body this far into the console so only the lid shows (m). Default 0 (box proud of the panel). */
+  recess?: number;
+  /** Lid (door) material (default 'plasticGrey'). Tan leather on the Vision consoles (photo e_lconsole). */
+  doorMaterial?: THREE.Material | 'plasticGrey';
 }
 
 const DEFAULT_SIZE: [number, number, number] = [0.105, 0.125, 0.05]; // EST from photographs of EROS MC20 stowage boxes
@@ -40,20 +44,24 @@ export class MaskStowage extends ControlBase {
     super(env, o);
     this.o = o;
     this.initVar(o.var, 0);
-    const [w, l, h] = o.size ?? DEFAULT_SIZE;
-    // Box body (static).
-    this.mesh(this.geo(`g6k.maskbox.${w}.${l}.${h}`, () => roundedBox(w, l, h, 0.006)), 'plasticBlack', this.object, true).position.z = h / 2;
+    const [w, l, hRaw] = o.size ?? DEFAULT_SIZE;
+    // Recessed: the body sinks into the console and only the lid sits at panel level (Vision consoles are flush
+    // tan leather with the mask under a leather lid, photo e_lconsole).
+    const sunk = o.recess ?? 0;
+    const h = hRaw - sunk;
+    this.mesh(this.geo(`g6k.maskbox.${w}.${l}.${hRaw}.${sunk}`, () => roundedBox(w, l, hRaw, 0.006)), 'plasticBlack', this.object, true).position.z = hRaw / 2 - sunk;
     // Doors on top, hinged along the outer long edges; open while the mask is out.
     const doorG = this.geo(`g6k.maskdoor.${w}.${l}`, () => new THREE.BoxGeometry(w / 2 - 0.002, l - 0.006, 0.003).translate((w / 2 - 0.002) / 2, 0, 0));
     this.doorL.position.set(-w / 2 + 0.001, 0, h + 0.0015);
     this.doorR.position.set(w / 2 - 0.001, 0, h + 0.0015);
     this.doorR.rotation.z = Math.PI;
-    this.mesh(doorG, 'plasticGrey', this.doorL);
-    this.mesh(doorG, 'plasticGrey', this.doorR);
+    const doorM = o.doorMaterial ?? 'plasticGrey';
+    this.mesh(doorG, doorM, this.doorL);
+    this.mesh(doorG, doorM, this.doorR);
     this.object.add(this.doorL, this.doorR);
     // Red release tabs at the front edge.
     const tabG = this.geo('g6k.masktab', () => new THREE.BoxGeometry(0.018, 0.006, 0.008));
-    for (const s of [-1, 1]) this.mesh(tabG, 'knobRed', this.object, true).position.set(s * 0.022, l / 2 - 0.003, h + 0.006);
+    for (const s of [-1, 1]) this.mesh(tabG, 'knobRed', this.object, true).position.set(s * 0.022, l / 2 - 0.003, h + 0.004);
     // Mask: oro-nasal cup + inflatable harness ring (EST shapes).
     const cupG = this.geo('g6k.maskcup', () => new THREE.SphereGeometry(0.038, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 1.2, 0.9));
     const ringG = this.geo('g6k.maskring', () => new THREE.TorusGeometry(0.045, 0.006, 8, 24));
@@ -96,7 +104,7 @@ export class MaskStowage extends ControlBase {
 
   private apply(): void {
     const k = this.pos;
-    const [, , h] = this.o.size ?? DEFAULT_SIZE;
+    const h = (this.o.size ?? DEFAULT_SIZE)[2] - (this.o.recess ?? 0);
     const s = this.o.inboard ?? 1;
     // Lifted up and toward the crew member (toward -y = aft, and inboard), tipped toward the face.
     this.mask.position.set(s * 0.12 * k, -0.06 * k, h - 0.02 + 0.3 * k);

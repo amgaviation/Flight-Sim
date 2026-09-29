@@ -229,6 +229,9 @@ export class MapWindow extends EpicWindow {
     }
     m.tawsLevel = v.get('alert.taws_warning') !== 0 ? 2 : v.get('alert.taws_caution') !== 0 ? 1 : 0;
     m.gearDown = v.get('gear.pos0', 1) > 0.5;
+    // Weight on wheels (air/ground sensor, not FDM truth): the EGPWS terrain layer blanks the airport
+    // surroundings against the aircraft's own elevation while on the ground (fix round 1 L05).
+    m.onGround = v.get('gear.air_ground') !== 0;
     m.showAirports = v.get(EPIC_VARS.mapShowAirports(side)) !== 0;
     m.showNavaids = v.get(EPIC_VARS.mapShowNavaids(side)) !== 0;
     m.showFixes = v.get(EPIC_VARS.mapShowFixes(side)) !== 0;

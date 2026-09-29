@@ -93,7 +93,10 @@ export function buildG6kCockpit(ctx: SimContext, sys: G6kSystems, o: G6kCockpitO
   };
 
   // ---- lighting zones (systems/lighting.ts dimmer outputs) and real lights (<= 5, docs/modules/cockpit.md §11)
-  b.zone({ id: ZONE.centre, intensityVar: 'ac.light.panel_c', lagS: 0, gain: 1.9 }); // LED edge-lit panels (EST gain: 1.4 left the night legends barely legible from the seat; same as the overhead)
+  // LED edge-lit panels. EST gain: 1.4 left the night legends barely legible from the seat, and at 1.9 the pedestal /
+  // MKP captions were still unreadable in the night audit shots (view_4 / view_5) - the centre zone also lights the
+  // pedestal, viewed from further away, so it runs brighter than the side zones.
+  b.zone({ id: ZONE.centre, intensityVar: 'ac.light.panel_c', lagS: 0, gain: 2.5 });
   b.zone({ id: ZONE.left, intensityVar: 'ac.light.panel_l', lagS: 0, gain: 1.9 });
   b.zone({ id: ZONE.right, intensityVar: 'ac.light.panel_r', lagS: 0, gain: 1.9 });
   for (const z of ['flood_l', 'flood_c', 'flood_r', 'dome']) b.zone({ id: z, intensityVar: `ac.light.${z}`, lagS: 0, color: 0xfff1dc });

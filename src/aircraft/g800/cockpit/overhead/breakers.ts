@@ -51,7 +51,8 @@ export function buildOverheadBreakers(c: G800CockpitContext, ov: Panel, paint: T
         const legend = CB_LEGEND[name] ?? name.toUpperCase();
         out.push(
           p.add(
-            new CircuitBreaker(env, { id: `g800.cb.${name}`, label: `CB ${legend}`, var: `cb.${name}`, trippedVar: `cb.${name}_tripped`, rating: ratings.get(name) ?? '', diameter: 0.0095, collar: 'round' }),
+            // Red collar rings and amp numerals on the caps (fix round 1 L08; p_cb.jpg).
+            new CircuitBreaker(env, { id: `g800.cb.${name}`, label: `CB ${legend}`, var: `cb.${name}`, trippedVar: `cb.${name}_tripped`, rating: ratings.get(name) ?? '', diameter: 0.0095, collar: 'round', ring: 'red' }),
             x,
             y,
           ) as CircuitBreaker,

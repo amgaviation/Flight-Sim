@@ -49,7 +49,10 @@ export type ScrewKind = 'phillips' | 'slot' | 'hex' | 'dzus';
 
 /**
  * Screw head geometry standing on z = 0 with groups for multi-material:
- * group 0 = side (plain metal), group 1 = top (recess texture), group 2 = bottom.
+ * group 0 = side (plain metal), group 1 = top (recess texture).
+ * The bottom cap is dropped (it sits flush against the panel, never visible),
+ * so every panel's screw instanced mesh renders in 2 draws instead of 3
+ * (fix round 1: merge static geometry to stay inside the draw-call budgets).
  */
 export function screwHeadGeometry(kind: ScrewKind, diameter: number): THREE.BufferGeometry {
   const r = diameter / 2;
@@ -59,6 +62,17 @@ export function screwHeadGeometry(kind: ScrewKind, diameter: number): THREE.Buff
   const g = new THREE.CylinderGeometry(kind === 'dzus' ? r * 0.92 : r * 0.9, r, h, kind === 'hex' ? 6 : 20, 1, false);
   g.rotateX(Math.PI / 2);
   g.translate(0, 0, h / 2);
+  // Keep groups 0 (side) and 1 (top cap); drop group 2 (bottom cap, hidden in the panel).
+  const idx = g.getIndex();
+  if (idx && g.groups.length >= 3) {
+    const [side, top] = g.groups;
+    const keep: number[] = [];
+    for (const gr of [side, top]) for (let i = gr.start; i < gr.start + gr.count; i++) keep.push(idx.getX(i));
+    g.setIndex(keep);
+    g.clearGroups();
+    g.addGroup(0, side.count, 0);
+    g.addGroup(side.count, top.count, 1);
+  }
   return g;
 }
 
@@ -92,7 +106,7 @@ export function screwPattern(width: number, height: number, inset: number, maxPi
 export function screwInstances(
   positions: [number, number][],
   geometry: THREE.BufferGeometry,
-  materials: [THREE.Material, THREE.Material, THREE.Material],
+  materials: THREE.Material[],
   seed = 1,
 ): THREE.InstancedMesh {
   const mesh = new THREE.InstancedMesh(geometry, materials, positions.length);

@@ -33,7 +33,8 @@ export function buildMainPanel(c: G800CockpitContext): void {
   const main = b.panel({ name: 'g800.main', center_m: mp.center_m, facing: 'aft', tiltDeg: mp.tiltDeg, width: mp.width, height: mp.height, material: 'panel', screws: false, radius: 0.01 });
   if (suite) addDisplayUnits(main, suite, DU_U.map((u) => [u, 0] as const));
 
-  // ---- outboard TSCs (toed-in housings directly outboard of DU1 / DU4)
+  // ---- outboard TSCs (toed-in portrait housings directly outboard of DU1 / DU4; fix round 1 L01: the real units
+  // are tall portrait tablets, G800 demonstrator flight-deck photograph)
   for (const side of [-1, 1] as const) {
     const t = OUTBOARD_TSC;
     const wing = b.panel({
@@ -42,13 +43,13 @@ export function buildMainPanel(c: G800CockpitContext): void {
       facing: 'aft',
       yawDeg: -side * t.yawDeg,
       tiltDeg: t.tiltDeg,
-      width: EPIC_HW.tsc.w + 0.03,
-      height: EPIC_HW.tsc.h + 0.05,
+      width: EPIC_HW.tsc.h + 0.03,
+      height: EPIC_HW.tsc.w + 0.05,
       material: 'panelDark',
       screws: false,
       radius: 0.012,
     });
-    if (suite) addTsc(wing, 0, 0.004, suite, side < 0 ? 1 : 4);
+    if (suite) addTsc(wing, 0, 0.004, suite, side < 0 ? 1 : 4, true);
   }
 
   // ---- lower centre panel
@@ -69,10 +70,17 @@ export function buildMainPanel(c: G800CockpitContext): void {
         valueOut: 1,
         rotateVar: i === 1 ? V.fireRotL : V.fireRotR,
         style: 'fire',
+        // Shaped stalk grip with a bright white L / R letter over a red fire-warning strip (fix round 1
+        // L17; G600 crop p_pedmid: red stalk handles with rounded grip faces and lit white L / R legends).
+        fireCap: 'stalk',
         rotate: 'discharge',
         unlockVar: `ac.g800.fire_${lc2}_unlock`,
         lightVar: `fire.eng${i}_warn`,
         lightColor: 'red',
+        segments: [
+          { text: s, color: 'white', var: CK.annunPower, style: 'field' },
+          { text: '', color: 'red', var: `fire.eng${i}_warn`, style: 'field' },
+        ],
         legend: s,
         scale: 0.62,
       }),
@@ -110,16 +118,18 @@ export function buildMainPanel(c: G800CockpitContext): void {
       positions: ['DN', 'UP'],
       values: [1, 0],
       initial: 0,
-      length: 0.05,
-      swingDeg: 28,
-      knobScale: 0.6,
+      // Compact white paddle within the panel face (fix round 1 L16, c_glare.jpg: the wheel knob sits at
+      // panel level, not dangling below it).
+      length: 0.032,
+      swingDeg: 24,
+      knobScale: 0.55,
       labels: false,
       // Ground lock solenoid (LandingGear handleLock; LOCK RELEASE overrides it in the system).
       inhibit: (to, _from, vars) => !(to === 1 && vars.get(V.gearHandleLocked) !== 0), // ground lock or stuck solenoid (logic.ts)
       lights: [{ var: CK.gearRed, color: 'red' }],
     }),
     0.1,
-    0.002,
+    0.012,
   );
   const lamps: [string, number, number, number][] = [
     ['NOSE', 0, 0.1, 0.036],

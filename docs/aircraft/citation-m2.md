@@ -624,7 +624,8 @@ Abnormal (phase "Abnormal", EST CJ-family wording): fuel transfer (boost OFF on 
 light tank), landing gear emergency extension (T-handle free fall, then blow down), hydraulic failure, ANTISKID INOP,
 single-engine approach and landing.
 `M2_CAS_CHECKLIST` maps the CAS messages (CABIN ALT, BATT O'TEMP, GEN OFF L-R, FUEL IMBALANCE, ANTISKID INOP,
-HYD PRESS LOW, GEAR UNSAFE, PITCH TRIM, AP FAIL) to their lists. The engine-failure, fire and evacuation paths are
+HYD PRESS LOW, GEAR UNSAFE, PITCH TRIM, AP FAIL) to their lists; the G3000 consumes it (`casChecklists` config):
+opening the GTC Checklist screen with such a message active pre-selects the linked electronic checklist. The engine-failure, fire and evacuation paths are
 exercised end to end in `failures.test.ts` and `fixround1-procedures.test.ts`.
 
 ## 11. Simulation model summary and verification

@@ -25,6 +25,7 @@ import * as THREE from 'three';
 import { AnnunciatorLight, GearHandle, PushButton, RotaryKnob, TBarHandle, ToggleSwitch, type LegendSegment } from '../../../cockpit/controls';
 import type { Panel } from '../../../cockpit/CockpitBuilder';
 import { trimBoxGeometry } from '../../../cockpit/geometry/structure';
+import { cylinderZ, merge, torusZ, transform } from '../../../cockpit/geometry/primitives';
 import { LON_VARS as V } from '../vars';
 import { lonMaterials, seg, type LonCockpitContext } from './context';
 import { FLOOR_Z, GTC, GTC_WEDGE, LOWER_PANEL, MAIN_PANEL, PFD_U, GDU } from './layout';
@@ -165,7 +166,9 @@ function buildLowerLeft(c: LonCockpitContext): void {
     p.add(new ToggleSwitch(env, { id, var: v, label: name, positions, values, initial, springs, labels: { name: false, positions: false } }), x, y);
     p.label(name, x, y - 0.024, { height: 0.0027 });
     p.label('ON', x, y - 0.018, { height: 0.0026 });
-    vertical(p, 'OFF', x + offSide * 0.011, y);
+    // L2-15 / LON4-11: the vertical OFF sits 13.5 mm out so it clears the switch nut / bushing (c_lowL21 engraves
+    // OFF beside the lever; the lever itself still crowds ON in the photo, so only the OFF offset is widened).
+    vertical(p, 'OFF', x + offSide * 0.0135, y);
     p.label(bottom, x, y + 0.019, { height: 0.0026 });
   };
   toggle('lon.lp.stby_pwr', V.stbyPwr, 'STBY PWR', 0.026, r2, ['TEST', 'OFF', 'ON'], [2, 0, 1], { 0: 1 }, 1, -1, 'TEST');
@@ -234,6 +237,21 @@ function buildLowerRight(c: LonCockpitContext): void {
       // Down-lock solenoid: UP blocked on the ground (LandingGear gear.handle_lock).
       inhibit: (to, _from, v) => !(to === 1 && v.get('gear.handle_lock') !== 0),
       length: 0.065,
+      // L2-07 (a21_004 / c_lowR21): the lever ends in a chunky wheel-profile knob, a flattened white disc ~30 mm
+      // across, not the small default wheel. Additive GearHandle.knobGeometry override.
+      knobGeometry: {
+        key: 'lon.gear.knob',
+        build: () => {
+          const tyre = torusZ(0.0095, 0.0055, 12, 36);
+          tyre.scale(1, 1, 0.75); // flattened disc profile
+          transform(tyre, 0, 0, 0.009);
+          const hub = cylinderZ(0.0078, 0.0082, 0.003, 0.0145, 24);
+          const g = merge([tyre, hub]);
+          tyre.dispose();
+          hub.dispose();
+          return g;
+        },
+      },
     }),
     gx,
     0.105,

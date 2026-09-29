@@ -184,6 +184,8 @@ export function createG800Systems(ctx: SimContext, opts: G800SystemsOptions = {}
       { vars: ctx.vars, events: ctx.events, nav: ctx.nav, world: ctx.world, fms, canvas: opts.canvas },
       {
         variant: 'symmetry',
+        // The real Symmetry TSCs are tall portrait tablets (G800 demonstrator flight-deck photograph; fix round 1 L01).
+        tscPortrait: true,
         // PFD flap-limit placards from the G800 limits (FSB App. 4: flaps 39 190 KCAS; the shared G800_AIRFRAME
         // default carries the G650 180 kt value).
         // showPlacardLimit: the PFD speed tape draws the placard of the current flap position / VLE (function fix round 1).

@@ -343,7 +343,12 @@ export class TerrainRaster {
     const cosSector = Math.cos((30 * Math.PI) / 180);
     const onGround = this.onGround;
     const greenBand = this.relativeGreenBand;
-    const rwy = mode === 'egpws' && Number.isFinite(this.runwayElevFt) ? this.runwayElevFt : NaN;
+    // EGPWS runway blanking reference: the nearest runway elevation, or - on the ground, when no airport
+    // is known yet - the aircraft's own altitude (on the ground the aircraft IS at runway elevation, so
+    // the airport surroundings stay black instead of a solid caution field; MK VI/VIII Pilot Guide
+    // 060-4314-000 Rev C p.32; fix round 1 L05).
+    let rwy = mode === 'egpws' && Number.isFinite(this.runwayElevFt) ? this.runwayElevFt : NaN;
+    if (mode === 'egpws' && !Number.isFinite(rwy) && onGround && Number.isFinite(altFt)) rwy = altFt;
     const rwyBlank = Number.isFinite(rwy);
     for (let i = 0; i < n; i++) {
       for (let j = 0; j < n; j++) {
@@ -467,7 +472,11 @@ const TMP = [0, 0, 0];
 
 /** Options of {@link terrainBand} (see the TerrainRaster properties of the same names). */
 export interface TerrainBandOptions {
-  /** 'relative': Garmin G3000/G5000 on-ground legend (red above +400 ft only). */
+  /**
+   * 'relative': Garmin G3000/G5000 on-ground legend (red above +400 ft only).
+   * 'egpws' (appended): on the ground with no known runway elevation, the aircraft's own altitude stands
+   * in as the runway-blanking reference (the aircraft is at runway elevation; fix round 1 L05).
+   */
   onGround?: boolean;
   /** 'relative': Garmin G3000/G5000 in-air green band -1000..-2000 ft. */
   greenBand?: boolean;
@@ -490,7 +499,8 @@ export function terrainBand(mode: 'relative' | 'egpws', d: number, gearDown = fa
     return { band: 0, density: 0 };
   }
   const el = o.elevFt ?? NaN;
-  const rwy = o.runwayElevFt ?? NaN;
+  let rwy = o.runwayElevFt ?? NaN;
+  if (!Number.isFinite(rwy) && o.onGround && Number.isFinite(el)) rwy = el - d; // own altitude = runway elevation on the ground
   if (Number.isFinite(el) && Number.isFinite(rwy) && Math.abs(el - rwy) <= EGPWS_RUNWAY_BLANK_FT) return { band: 0, density: 0 };
   if (d > 2000) return { band: 2, density: 0.5 };
   if (d > 1000) return { band: 1, density: 0.5 };

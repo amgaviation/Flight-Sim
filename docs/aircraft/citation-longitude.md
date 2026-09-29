@@ -555,11 +555,11 @@ Plate 260 × 180 mm under the inboard half of the L PFD, white bus mimic joining
 | Left column | AUTO GROUND SPOILERS | Switchlight, dark when armed, OFF (amber) disarmed (EST legend) | `ac.lon.fc.auto_gnd_splr` |
 | Left column | STANDBY YAW DAMP | Switchlight NORM (cyan) / ON (white) (EST legends) | `ac.lon.fc.stby_yd` |
 | Quadrant | SPEEDBRAKE | Lever RET (fwd) .. EXT (aft), continuous, wedge scale, vertical engraving, cylindrical grip | `ac.lon.speedbrake` 0..1 |
-| Quadrant | Thrust levers L / R | Silver arms, horizontal cylindrical grips; IDLE 0 .. TO 1 (CRU ≈ 0.62, CLB ≈ 0.80), lift the reverse range −1..0; held at idle by CONTROL LOCK | `ac.tla1`, `ac.tla2` |
-| Quadrant | TO/GA (outboard end of each grip), AT DISC (inboard top, black), AT paddle (outboard side of the arm) | Momentary | events `ap.toga`, `at.disc`, `at.engage` |
+| Quadrant | Thrust levers L / R | Satin-grey arms, horizontal cylindrical grips with a black piggyback reverse lever on the grip front (raises in the reverse range, click/drag target for it); IDLE 0 .. TO 1 (CRU ≈ 0.62, CLB ≈ 0.80), lift the reverse range −1..0; held at idle by CONTROL LOCK | `ac.tla1`, `ac.tla2` |
+| Quadrant | TO/GA (outboard end of each grip), AT DISC (inboard top, black), AT paddle (outboard side of the arm); TO/GA engraved outboard and AT DISC inboard of each lever slot | Momentary | events `ap.toga`, `at.disc`, `at.engage` |
 | Quadrant | FUEL RECIRC PUMP | NORM (cyan) / OFF | `ac.lon.fuel.recirc` |
 | Right column | HYDRAULIC PUMP A / B | Toggles NORM / MIN / SHUTOFF (lever-locked), MIN engraved between | `ac.lon.hyd.pump_a/_b` |
-| Right column | POWER TRANSFER (PTCU) | Rotary OFF / AUX A / NORM / AUX B / HYD GEN (photo shows two switchlights under this bracket, legends illegible; the OG knob is kept) | `ac.lon.hyd.ptcu` |
+| Right column | POWER TRANSFER (PTCU) | TWO stacked switchlights per the Textron photograph (_pedfwd): upper NORM (cyan) / OFF (amber) alternate action, lower steps AUX A → AUX B → HYD GEN → NORM (legends EST). The OG Fig 6-3-1 / 13-3 rotary description conflicts with the production photos; the photographed switchlights are modelled, driving the same states | `ac.lon.hyd.ptcu` (0 OFF / 1 AUX A / 2 NORM / 3 AUX B / 4 HYD GEN) |
 | Right column | RUDDER STANDBY | NORM (cyan) / OFF (amber) | `ac.lon.hyd.rudder_stby` |
 | Right column | FUEL: BOOST PUMP L / R | NORM (cyan, upper) / ON (amber) | `ac.lon.fuel.boost_l/_r` |
 | Right column | GRAVITY XFLOW | OPEN (upper) / CLOSED (cyan, lower) | `ac.lon.fuel.grav_xflow` |
@@ -569,7 +569,7 @@ Plate 260 × 180 mm under the inboard half of the L PFD, white bus mimic joining
 
 | Area | Control | Type / legends | Var |
 |---|---|---|---|
-| Aft left | EMER / PARK BRAKE | Lever with red / white striped grip in a slotted recess, OFF .. PARK | `ac.lon.park_brake` |
+| Aft left | EMER / PARK BRAKE | Long (~180 mm) red / white candy-striped shaft standing nearly upright in the slotted well, black grip on top, OFF .. PARK (_pedaft) | `ac.lon.park_brake` |
 | Aft left | CONTROL LOCK | Lever UNLOCK (up / fwd) / LOCK (down / aft); only with both levers at idle; LOCK holds the surfaces, keeps the thrust at idle, AP inhibit, NO TAKEOFF (EST) | `ac.lon.fc.control_lock` |
 | Centre | ENGINE: L RUN/STOP · STARTER L / R · R RUN/STOP | RUN (cyan) / STOP, clear guards; START (white) momentary | `ac.lon.eng.run_l/_r`, `start_l/_r` |
 | Centre | PRESSURIZATION: CKPT TEMP · ECS · CABIN TEMP | Temp knobs NORM / COLD / HOT / MANUAL; ECS NORM (top) / HEAT EXCHG ONLY (left) / ACM ONLY (right). Photo order followed (OG MSFS art: CABIN left / CKPT right, ACM left) | `ac.lon.ecs.ckpt_temp`, `ecs.mode`, `ecs.cabin_temp` |
@@ -603,7 +603,7 @@ PASS OXY, FIRE WARN TEST, ANNUN TEST.
   SCOPE). Inboard grip face: MIC/INPH rocker (inboard MIC / outboard INPH = hot intercom; `ac.lon.audio.mic_inph_l/_r`
   → `ac.lon.audio.intercom_hot_l/_r`; DGAC CABIN ALTITUDE step 3; EST position, SCOPE no audio model).
 - **Rudder pedals**: `input.yaw`, toe brakes.
-- **Tiller**: black finger-grip knob in the forward left console (`ac.lon.tiller`, ±81°).
+- **Tiller**: large (~90 mm) black five-lobe scalloped grip lying on the forward left console top (c_lcon / OEG crop; `ac.lon.tiller`, ±81°).
 - **Oxygen**: mask in a console cup with the white hose loop and red squeeze tabs (`ac.lon.oxy.mask_l/_r`); regulator
   NORM / 100 % / EMER, PRESS TO TEST and FLOW beside the cup (EST positions). MIC SEL switchlight aft of them (MASK green /
   BOOM white, `ac.lon.audio.mic_sel_l/_r` → mask mic live `ac.lon.audio.mask_mic_l/_r` with the mask in use; DGAC CABIN
@@ -907,8 +907,8 @@ This pass re-walked the control inventory against the code (every `LON_VARS` con
 ### 13.4 Remaining gaps (honest list)
 - **Longitudinal trim model.** Resolved in the function fix round (§4.10, §15): `Cm0` 0.10 / `Cm_trim` 0.203 trim to the OG 17-3 chart (read off the graph: ~0.33° per % MAC, flat above 36 %), and the ground states set the chart value. `Cm_de` unchanged (it does not set the liftoff speed, §15.2).
 - **Liftoff speed** is still VR + 14-17 kt with the scripted 3°/s rotation (unchanged by the CG move). All-engine distances meet the FPG.
-- **Draw calls.** The remaining ~700 cockpit meshes are per-control moving parts: 58 breakers × 3 meshes, and ~250 push-button caps, lenses and legends. Instancing them needs per-instance transforms in the shared control library (not an additive change). The panels' static parts are already consolidated (`merge.ts`).
-- **Toggle middle-position legends** (GEN OFF, STBY PWR ON) are partly under the switch nut: this is the shared ToggleSwitch layout. They are still readable.
+- **Draw calls.** Resolved by the shared control library's per-instance-transform instancing (`src/cockpit/instancing.ts`, owned by the cockpit-library agent): keypad keys, breakers, push-button caps/lenses and annunciators are batched. The Longitude cockpit now builds at ~290 node-side draw calls (budget 380, guarded by `tests/cockpit/jetDrawCalls.test.ts`). The panels' static parts were already consolidated (`merge.ts`).
+- **Toggle middle-position legends.** The panel-drawn vertical OFF is now 13.5 mm out from the switch centre, clear of the nut, and the shared ToggleSwitch gained an additive `labels.midOffset` option for its own 3-position centre legend. The lever itself still crowds ON, as it does in c_lowL21.
 - **MFD terrain on the ground**: fixed in the integration QA (maps default to Absolute terrain, see above).
 - The PITCH/ROLL DISCONNECT handle position, and whether the Longitude posts a CAS message for it, are not published. No CAS message was invented.
 
@@ -949,10 +949,10 @@ the resulting inventory. Main points:
 ### 14.2 Remaining gaps (honest list)
 - Legends of the bottle, POWER RESERVE, STAB CHANNEL, SECONDARY TRIM, AUTO GROUND SPOILERS, STANDBY YAW DAMP and FLAP
   RESET switchlights are not legible in the photographs: EST.
-- The POWER TRANSFER area shows two switchlights in the Textron photograph; the OG PTCU knob is kept.
+- The POWER TRANSFER station is modelled as the photographed two switchlights (fix round 2, L2-01); their legends are EST, and the OG rotary description remains recorded as a conflict in pedestal.ts.
 - The EMER GEAR handle, aileron / rudder trim controls and the PITCH/ROLL DISCONNECT mount position are EST.
 - "TRIM" under the MFD / GTCs dimmer (c_pedFL2) is not engraved (meaning unclear).
-- The pilot's default view still shows the lower side windshield left of the panel wrap (cheek loft, EST shape).
+- The panel cheek wrap was re-lofted (fix round 2, L2-03): it now starts below the A-pillar band, so the pilot sees glass left of the panel; the loft shape itself remains EST.
 
 ## 15. Function-audit fix round 1 (OG / DGAC / BCA function lens)
 
@@ -1007,3 +1007,37 @@ Tests: `tests/aircraft/citation-longitude/functionFix1.test.ts` (each fails with
 - `systems/fadec/Autothrottle.ts`: `holdAfterDescentIdle`.
 - `systems/warning/FlightPhase.ts`: `takeoffInhibit.latch`, `landingInhibit.latch`.
 
+
+## 16. Layout-audit fix round 2 (LENS layout, gaps LON-L2-01..17)
+
+Tests: `tests/aircraft/citation-longitude/fixRound2.test.ts`; screenshots re-taken to `tests/output/citation-longitude`
+(day), `tests/output/lon-night2` (02:00, PANEL 0.8) and `tests/output/lon-colddark`.
+
+- **L2-01 POWER TRANSFER**: the OG rotary was replaced with the two stacked switchlights the Textron production
+  photograph shows (upper NORM/OFF, lower AUX A → AUX B → HYD GEN → NORM, legends EST); same `ac.lon.hyd.ptcu` states,
+  systems untouched. The OG/photo conflict stays recorded in pedestal.ts.
+- **L2-02 Reverse levers**: black piggyback reverse lever on each grip front (OG 7-3), animated up in the reverse
+  range and a priority click / drag target for it.
+- **L2-03/04 Shell**: cheek wrap re-lofted (14 × 22 sections) and dropped below the A-pillar band so the pilot sees
+  glass left of the panel; A-pillar narrowed 0.08 → 0.045 rad (~80 mm); pillar grey darkened toward 0x9a9a96 with the
+  band next to the glareshield in dark trim.
+- **L2-05 CB panels**: 5-row grid tightened (28 / 31 mm pitch), panel lowered to just above the console, and a black
+  sidewall band (`cb_wall_*`, shell.ts) put behind it per the OEG p.12 crop.
+- **L2-06 Tiller**: five-lobe scalloped grip (~90 mm) on the same RotaryKnob drag logic, hit target widened.
+- **L2-07 Gear handle**: flattened ~30 mm wheel-profile knob (additive `GearHandle.knobGeometry` override).
+- **L2-08 Park brake**: 0.18 m candy-striped shaft standing nearly upright (stripes along the shaft, black grip).
+- **L2-09 Silver finish**: satin grey 0x63676d, roughness 0.55, metalness 0.35 (was near-white in day shots).
+- **L2-10 CVR TEST**: green cap (`lon.cvrGreen`).
+- **L2-11 Fire switchlights**: unlit tint 0.08 → 0.03 (deep opaque red; the remaining lightness in day shots is the
+  clear guard's reflection).
+- **L2-12 Quadrant placards**: TO/GA outboard and AT DISC inboard of each lever slot.
+- **L2-13 Yokes**: stitched-leather grip material (procedural, EST) and a TEXTRON hub badge.
+- **L2-14 Night backlighting**: panel zone gain 1.5 → 4; legends readable at 02:00 with PANEL 0.8 and no floods.
+- **L2-15 / LON4-11 Toggle legends**: OFF moved clear of the nut; additive `ToggleSwitch labels.midOffset`.
+- **L2-16 PITCH/ROLL DISCONNECT mount**: kept EST (no wider-angle photo has surfaced).
+- **L2-17 / LON4-10 Instancing**: already resolved by the shared library's `src/cockpit/instancing.ts` (Longitude
+  ~290 draw calls, budget test `tests/cockpit/jetDrawCalls.test.ts`); §13.4 updated.
+
+### 16.1 Shared-library changes (additive, default behaviour unchanged)
+- `src/cockpit/controls/GearHandle.ts`: optional `knobGeometry` `{ key, build }` factory replacing the default wheel.
+- `src/cockpit/controls/ToggleSwitch.ts`: optional `labels.midOffset` for the 3-position centre legend.

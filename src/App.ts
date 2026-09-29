@@ -694,6 +694,22 @@ export class App {
     // from the air (gear up), the first settle rests the aircraft on its belly, and the gear snapping down
     // under it threw it into the air and triggered the structural-failure crash check.
     if (p.onGround) fdm.reposition(where);
+    // Terrain re-settle (jets fix round 1, additive): a ground start whose z14 tiles had not all arrived was
+    // settled on the fallback (airport) elevation; when the real terrain later loads a few feet lower the
+    // aircraft would drop onto it and could register a hard landing or a crash (seen at KSAV). When the wait
+    // in loadScenery timed out, re-settle once the world reports the tiles in, while still stationary.
+    if (p.onGround && this.groundLoadIncomplete) {
+      this.groundLoadIncomplete = false;
+      void this.world.ensureLoadedWithin(p.lat, p.lon, 2500, 600_000).then(() => {
+        const active = !this.session || this.session.fdm === fdm;
+        if (!active) return;
+        if (this.vars.get(FDM.onGround) !== 0 && this.vars.get(FDM.gs) < 3) {
+          fdm.reposition(where);
+          this.loop.resetAccumulator();
+          this.vehicle.resetInterpolation();
+        }
+      });
+    }
     if (p.ils) {
       // Auto-tune NAV1 to the approach ILS and set the course (magnetic).
       const mv = airport.magVar ?? this.vars.get(FDM.magVar);
@@ -735,12 +751,17 @@ export class App {
    */
   private async loadScenery(lat: number, lon: number, onGround: boolean): Promise<void> {
     if (!onGround) {
+      this.groundLoadIncomplete = false;
       await this.world.ensureLoaded(lat, lon, 1500);
       return;
     }
     const complete = await this.world.ensureLoadedWithin(lat, lon, 2500, GROUND_START_WAIT_MS);
-    if (!complete) console.warn(`Terrain around the start position did not finish loading in ${GROUND_START_WAIT_MS / 1000} s; using the fallback elevation`);
+    this.groundLoadIncomplete = !complete;
+    if (!complete) console.warn(`Terrain around the start position did not finish loading in ${GROUND_START_WAIT_MS / 1000} s; using the fallback elevation (the aircraft is re-settled when the tiles arrive)`);
   }
+
+  /** Set by loadScenery: the last on-ground scenery wait timed out (placeAndApply then re-settles later). */
+  private groundLoadIncomplete = false;
 
   private unloadSession(): void {
     const s = this.session;

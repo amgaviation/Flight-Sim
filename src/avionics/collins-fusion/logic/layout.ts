@@ -123,9 +123,12 @@ export function defaultLayout(): AfdSelection[] {
   const a2 = base();
   a2.l = Win.Eicas;
   a2.r = Win.Sys;
+  // AFD 3 (lower centre): FMS window on the pilot's half beside a map (photo EB190582 e_ped_mid shows AFD 3
+  // dominated by a chart/map; the FMS text windows are brought up over it as needed). Both-halves-FMS left the
+  // display nearly black; either side's FMS window is still one MKP FMS key away (showWindow).
   const a3 = base();
   a3.l = Win.Fms;
-  a3.r = Win.Fms;
+  a3.r = Win.Map;
   const a4 = base();
   a4.l = Win.Map;
   a4.r = Win.Pfd;

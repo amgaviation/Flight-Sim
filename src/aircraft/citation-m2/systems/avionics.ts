@@ -22,6 +22,7 @@ import { M2_LIMITS } from '../data';
 import { M2, TEST_SEL } from '../vars';
 import { M2_EIS_CONFIG, M2_SYNOPTICS } from './eis';
 import { M2_PERFORMANCE } from './told';
+import { M2_CAS_CHECKLIST } from '../checklists';
 import type { Checklist } from '../../types';
 
 export interface AvionicsOptions {
@@ -71,6 +72,8 @@ export function createAvionics(ctx: SimContext, opts: AvionicsOptions = {}): Avi
     synoptics: M2_SYNOPTICS,
     performance: M2_PERFORMANCE,
     checklists: opts.checklists,
+    // CAS warnings / cautions link to their emergency / abnormal electronic checklist (G3000 M2).
+    casChecklists: M2_CAS_CHECKLIST,
     speedTape: { vmoKt: M2_LIMITS.vmoKt, shakerNorm: 0.88, cautionNorm: 0.8 },
     power: {
       pfd1: 'elec.pfd1_powered',

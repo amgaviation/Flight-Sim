@@ -275,6 +275,25 @@ export function buildPedestal(c: G6kCockpitContext): void {
   // EVENT (flight-data recorder event marker) at the forward end. SCOPE: no recorder model (count V.fdrEventCount).
   quad.add(new PushButton(env, { id: 'g6k.ped.event', label: 'EVENT (FDR event marker)', var: V.fdrEvent, mode: 'momentary', style: 'round', width: 0.009, capMaterial: 'plasticBlack' }), 0.093, 0.012);
   quad.label('EVENT', 0.093, 0.0045, { height: 0.0019, zone: zc });
+  // GND LIFT DUMPING on the forward quadrant strip between the FLIGHT SPOILER slot and the thrust levers (photos
+  // EB190582 e_ped_mid / e_ped_aft: bat-handle toggle with EVENT engraved to its right; the partially legible caption
+  // is most plausibly this switch - GX PTG 10-50 puts GND LIFT DUMPING MANUAL ARM / AUTO / OFF on the quadrant).
+  quad.label('GND LIFT', 0.048, 0.0025, { height: 0.0017, zone: zc });
+  quad.label('DUMPING', 0.048, 0.0055, { height: 0.0017, zone: zc });
+  quad.add(
+    new ToggleSwitch(env, {
+      id: 'g6k.ped.gld',
+      var: V.gldSw,
+      label: 'GND LIFT DUMPING',
+      positions: ['OFF', 'AUTO', 'MANUAL ARM'],
+      values: [2, 0, 1],
+      initial: 1,
+      labels: { positions: true, height: 0.0016, zone: zc },
+      scale: 0.7,
+    }),
+    0.048,
+    0.021,
+  );
 
   // Thrust levers (GX_01_018: one MAX detent; IDLE; the minimum take-off position TLA.toMin stays in the FADEC logic,
   // engines.ts, with no pedestal marking: photo). Brushed-chrome drum grips side by side (photo c_ped).
@@ -282,7 +301,9 @@ export function buildPedestal(c: G6kCockpitContext): void {
     { value: 0, label: '' },
     { value: 1, label: '', kind: 'gate' as const, direction: 'increasing' as const },
   ];
-  const drumG = env.geometry.get('g6k.tl.drum', () => new THREE.CylinderGeometry(0.018, 0.018, 0.038, 28).rotateZ(Math.PI / 2));
+  // Large brushed-chrome drum grips dominate the levers (photo e_ped_mid: the drum face is roughly twice an MKP
+  // key across, with the piggy-back reverse levers reading clearly against it).
+  const drumG = env.geometry.get('g6k.tl.drum', () => new THREE.CylinderGeometry(0.026, 0.026, 0.039, 32).rotateZ(Math.PI / 2));
   const L = 0.14;
   const tlU = [0.0, 0.04];
   for (const i of [1, 2] as const) {
@@ -329,12 +350,12 @@ export function buildPedestal(c: G6kCockpitContext): void {
     // A/T disconnect on the outboard end of each drum (thumb), TO/GA on the front of the drum (fingers) (GXAF).
     onHandle(
       new PushButton(env, { id: `g6k.ped.at_disc${i}`, label: `A/T DISC (${s})`, mode: 'momentary', event: G6K_EVENTS.atDisc, style: 'small', width: 0.01, capMaterial: 'knobRed' }),
-      [out * 0.0195, 0, L + 0.004],
+      [out * 0.02, 0, L + 0.004],
       new THREE.Euler(0, (out * Math.PI) / 2, 0),
     );
     onHandle(
       new PushButton(env, { id: `g6k.ped.toga${i}`, label: `TO/GA (${s})`, mode: 'momentary', event: G6K_EVENTS.toga, style: 'small', width: 0.009, capMaterial: 'plasticBlack' }),
-      [0, 0.0185, L + 0.004],
+      [0, 0.0265, L + 0.004],
       new THREE.Euler(-Math.PI / 2, 0, 0),
     );
     // Piggy-back reverse lever on the front of the thrust lever: lifted up and aft, only at IDLE and on the ground
@@ -353,11 +374,12 @@ export function buildPedestal(c: G6kCockpitContext): void {
       softWidth: 0.02,
       step: 0.1,
       travel: { kind: 'arc', minDeg: 6, maxDeg: -70, pivotDepth: 0 },
-      armLength: 0.065,
-      armWidth: 0.008,
-      armThickness: 0.005,
+      armLength: 0.07,
+      // Thick piggy-back levers that read clearly against the drum grips (photo e_ped_mid).
+      armWidth: 0.013,
+      armThickness: 0.009,
       knob: 'reverser',
-      knobScale: 0.6,
+      knobScale: 1.0,
       armMaterial: 'chrome',
       slot: false,
       detentLabels: false,
@@ -519,6 +541,9 @@ export function buildPedestal(c: G6kCockpitContext): void {
   const lp = plate(ped, 'cockpit_lights', ux(0.08), REV_Y, 0.185, 0.2);
   const lx = [0.035, 0.0925, 0.15];
   dimmer(c, lp, 'g6k.ped.area', 'AREA (FLOOR / CEILING)', V.ltArea, lx[0], 0.035, 'AREA', 'OFF');
+  // FLOOR / CEILING split legend beside the AREA knob (photo EB190582 e_ped_aft COCKPIT LIGHTS panel).
+  lp.label('FLOOR', lx[0] - 0.0155, 0.03, { height: 0.0016, zone: zc });
+  lp.label('CEILING', lx[0] - 0.0155, 0.037, { height: 0.0016, zone: zc });
   dimmer(c, lp, 'g6k.ped.integral_ovhd', 'OVHD INTEG', V.ltIntegral('ovhd'), lx[1], 0.035, 'OVHD INTEG');
   dimmer(c, lp, 'g6k.ped.integral_cb', 'CB INTEG', V.ltIntegral('cb'), lx[2], 0.035, 'CB INTEG');
   dimmer(c, lp, 'g6k.ped.integral_l', 'L INTEG', V.ltIntegral('l'), lx[0], 0.09, 'L INTEG');
@@ -581,23 +606,7 @@ export function buildPedestal(c: G6kCockpitContext): void {
     0.3,
     ty2,
   );
-  // GND LIFT DUMPING (GX PTG 10-50, GX_10_049): one three-position switch MANUAL ARM / AUTO / OFF.
-  ap.label('GND LIFT', 0.43, ty2 - 0.03, { height: 0.0026, zone: zc });
-  ap.label('DUMPING', 0.43, ty2 - 0.025, { height: 0.0026, zone: zc });
-  ap.add(
-    new ToggleSwitch(env, {
-      id: 'g6k.ped.gld',
-      var: V.gldSw,
-      label: 'GND LIFT DUMPING',
-      positions: ['OFF', 'AUTO', 'MANUAL ARM'],
-      values: [2, 0, 1],
-      initial: 1,
-      labels: { positions: true, height: 0.0021, zone: zc },
-      scale: 0.9,
-    }),
-    0.43,
-    ty2,
-  );
+  // GND LIFT DUMPING is on the forward quadrant strip beside EVENT (photo e_ped_mid), not in this aft section.
   // IRS 1 / 2 / 3 mode selectors.
   const iy = 0.14;
   for (const n of [1, 2, 3] as const) {

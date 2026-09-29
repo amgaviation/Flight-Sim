@@ -67,6 +67,13 @@ export interface SidestickOptions extends ControlOptions {
   backDriveRollVar?: string;
   /** Pixels of drag for full deflection (default 220). */
   dragPxFull?: number;
+  /**
+   * Grip shape (appended, additive; default 'box' keeps the original geometry).
+   * 'contoured': lathe-profile grip with a curved neck, sculpted palm swell and
+   * a stepped upper aft face carrying the top-anchor switches (BAE active
+   * sidestick as in the Gulfstream G500-G800, G600 flight-deck photographs).
+   */
+  grip?: 'box' | 'contoured';
   /** Also write input.pitch / input.roll directly while dragging. */
   writeInput?: boolean;
   switches?: SidestickSwitchSpec[];
@@ -112,17 +119,55 @@ export class Sidestick extends ControlBase implements CompositeControl {
     gripGroup.position.y = shaft;
     gripGroup.rotation.x = -cant; // top leans forward (-z)
     this.stick.add(gripGroup);
-    const gripKey = `sidestick.grip.${gh}`;
-    this.mesh(
-      this.geo(gripKey, () =>
-        merge([
-          transform(roundedBox(0.042, gh, 0.05, 0.018, 4), 0, gh / 2, 0),
-          transform(roundedBox(0.07, 0.018, 0.075, 0.008, 2), 0.004 * mir, 0.009, 0.006),
-        ]),
-      ),
-      'yokeGrip',
-      gripGroup,
-    );
+    if (o.grip === 'contoured') {
+      // Contoured BAE-style grip: lathe profile (curved neck under a palm swell, tapered crown), slightly
+      // flattened fore-aft, plus a stepped upper aft face for the trim switch / AP DISC and a palm-rest flare.
+      const gripKey = `sidestick.grip.contoured.${gh}.${mir}`;
+      this.mesh(
+        this.geo(gripKey, () => {
+          const pts: THREE.Vector2[] = [];
+          // (radius, height) pairs of the profile, scaled to the grip height.
+          const prof: [number, number][] = [
+            [0.001, 0],
+            [0.02, 0.01],
+            [0.021, 0.06],
+            [0.016, 0.22], // neck
+            [0.0165, 0.36],
+            [0.022, 0.58], // palm swell
+            [0.0235, 0.72],
+            [0.021, 0.86],
+            [0.015, 0.97],
+            [0.001, 1],
+          ];
+          for (const [r, t] of prof) pts.push(new THREE.Vector2(r / 0.021 * 0.021, t * gh));
+          const lathe = new THREE.LatheGeometry(pts, 24);
+          lathe.scale(0.92, 1, 1.15); // slightly flattened side-to-side, fuller fore-aft
+          // Stepped upper aft face (switch shelf), tilted back toward the pilot.
+          const shelf = roundedBox(0.03, 0.045, 0.012, 0.005, 2);
+          shelf.rotateX(0.62);
+          shelf.translate(0, gh * 0.86, 0.017);
+          // No crossbar / palm flare: the real BAE grip flows straight into the boot (G600 crop p_stick).
+          const g = merge([lathe, shelf]);
+          lathe.dispose();
+          shelf.dispose();
+          return g;
+        }),
+        'yokeGrip',
+        gripGroup,
+      );
+    } else {
+      const gripKey = `sidestick.grip.${gh}`;
+      this.mesh(
+        this.geo(gripKey, () =>
+          merge([
+            transform(roundedBox(0.042, gh, 0.05, 0.018, 4), 0, gh / 2, 0),
+            transform(roundedBox(0.07, 0.018, 0.075, 0.008, 2), 0.004 * mir, 0.009, 0.006),
+          ]),
+        ),
+        'yokeGrip',
+        gripGroup,
+      );
+    }
     const hb = hitBox(env.materials.get('hitbox'), 0.06, gh + 0.03, 0.07, 0, gh / 2, 0);
     hb.userData.hitPriority = -1;
     gripGroup.add(hb);
@@ -142,12 +187,22 @@ export class Sidestick extends ControlBase implements CompositeControl {
       gripGroup.add(a);
       return a;
     };
-    this.anchors = {
-      top: mk('top', [0, gh, 0], [0, 1, 0]),
-      thumb: mk('thumb', [thumbX, gh * 0.8, 0.004], [mir, 0, 0.3]),
-      trigger: mk('trigger', [0, gh * 0.62, -0.025], [0, 0, -1]),
-      side: mk('side', [-thumbX, gh * 0.7, 0], [-mir, 0, 0]),
-    };
+    this.anchors =
+      o.grip === 'contoured'
+        ? {
+            // Contoured grip: the 'top' anchor sits on the stepped upper aft face (switches inset into the
+            // sculpted face, not perched on a flat crown).
+            top: mk('top', [0, gh * 0.88, 0.021], [0, 0.55, 0.84]),
+            thumb: mk('thumb', [thumbX, gh * 0.78, 0.006], [mir, 0, 0.3]),
+            trigger: mk('trigger', [0, gh * 0.6, -0.024], [0, 0, -1]),
+            side: mk('side', [-thumbX * 0.95, gh * 0.68, 0], [-mir, 0, 0]),
+          }
+        : {
+            top: mk('top', [0, gh, 0], [0, 1, 0]),
+            thumb: mk('thumb', [thumbX, gh * 0.8, 0.004], [mir, 0, 0.3]),
+            trigger: mk('trigger', [0, gh * 0.62, -0.025], [0, 0, -1]),
+            side: mk('side', [-thumbX, gh * 0.7, 0], [-mir, 0, 0]),
+          };
     for (const sw of o.switches ?? []) this.addSwitch(sw);
   }
 

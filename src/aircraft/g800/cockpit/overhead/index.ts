@@ -75,20 +75,30 @@ export function buildOverhead(c: G800CockpitContext): void {
   const paint = env.materials.custom('paint', '#34373b', 0.62);
   const ov = b.panel({ name: 'g800.ovhd', center_m: P.center_m, facing: 'down', tiltDeg: P.tiltDeg, width: P.width, height: P.length, material: paint, screws: false, radius: 0.02 });
 
-  // ---- structure: the overhead console body behind the panel face, closing it up to the curved headliner.
+  // ---- structure: the overhead console body behind the panel face, closing it up to the curved headliner,
+  // with a dark charcoal surround band against the mid-grey headliner (fix round 1 L15,
+  // g800_flying_cockpit.jpg: charcoal border around the overhead console).
   const bodyMesh = new THREE.Mesh(trimBoxGeometry(P.width + 0.03, P.length + 0.02, P.bodyDepth, 0.012), env.materials.get('panelDark'));
   bodyMesh.name = 'overhead_body';
   b.trackGeometry(bodyMesh.geometry);
   ov.addObject(bodyMesh, 0, 0, { z: -P.bodyDepth / 2 - 0.004 });
+  const surround = new THREE.Mesh(trimBoxGeometry(P.width + 0.14, P.length + 0.12, 0.008, 0.03), env.materials.custom('paint', '#232527', 0.7));
+  surround.name = 'overhead_surround';
+  surround.userData.cockpitStatic = true;
+  b.trackGeometry(surround.geometry);
+  ov.addObject(surround, 0, 0, { z: -P.bodyDepth - 0.006 });
 
   const nameAbove = (panel: Panel, text: string, x: number, y: number, up = 1) => panel.label(text, x, y + up * (KH / 2 + 0.0055), { height: NAME_H, weight: 700 });
+  // Unlit Korry lenses show their legends as faint engraving in daylight (fix round 1 L11; p_elec2.jpg:
+  // OFF / ON / AUTO readable when not illuminated) -> raised unlit lens tint.
+  const UNLIT = 0.38;
   const korry = (panel: Panel, x: number, y: number, o: ConstructorParameters<typeof PushButton>[1], name: string | null, up = 1) => {
     if (name) nameAbove(panel, name, x, y, up);
-    return panel.add(new PushButton(env, { style: 'korry', width: KW, height: KH, layout: 'split', ...o }), x, y);
+    return panel.add(new PushButton(env, { style: 'korry', width: KW, height: KH, layout: 'split', unlitTint: UNLIT, ...o }), x, y);
   };
   const guarded = (panel: Panel, x: number, y: number, o: ConstructorParameters<typeof GuardedButton>[1], name: string | null, color: 'clear' | 'red' = 'clear', up = 1) => {
     if (name) nameAbove(panel, name, x, y, up);
-    return panel.add(new GuardedButton(env, { style: 'korry', width: KW, height: KH, layout: 'split', name: false, ...o, guard: { color, close: 'free' } }), x, y);
+    return panel.add(new GuardedButton(env, { style: 'korry', width: KW, height: KH, layout: 'split', name: false, unlitTint: UNLIT, ...o, guard: { color, close: 'free' } }), x, y);
   };
 
   // =============================================================== forward strip
@@ -192,7 +202,9 @@ export function buildOverhead(c: G800CockpitContext): void {
     const r3 = -0.05;
     guarded(ep, -0.05, r1, { id: 'g800.oh.rat_gen', label: 'RAT GEN', var: V.ratGen, mode: 'toggle', initial: 1, stateNames: ['OFF', 'AUTO'], segments: [lit('OFF', 'amber', V.ratGen, isZero), lit('ON', 'white', 'ac.g800.rat_mode')] }, 'RAT GEN');
     ep.line(0.0, r1 + 0.02, -0.012, r1 - 0.02, 0.0009);
-    korry(ep, 0.05, r1, { id: 'g800.oh.elec_reset', label: 'AC / DC RESET', var: V.elecReset, mode: 'momentary', segments: [lit('AC', 'white', V.elecReset), lit('DC', 'white', V.elecReset)] }, 'RESET');
+    // RESET: tall two-step key, AC segment above DC (fix round 1 L12; p_elec2.jpg shows a taller
+    // stacked key above the generator row).
+    korry(ep, 0.05, r1, { id: 'g800.oh.elec_reset', label: 'AC / DC RESET', var: V.elecReset, mode: 'momentary', height: 0.03, layout: 'stack', segments: [lit('AC', 'white', V.elecReset), lit('DC', 'white', V.elecReset)] }, 'RESET');
     const gx = [-0.072, -0.024, 0.024, 0.072];
     // Generator switchlights: amber OFF when not on line (pushed out or tripped), green ON on line (code450 G700/G800).
     korry(ep, gx[0], r2, { id: 'g800.oh.gen_l', label: 'L GEN', var: V.genL, mode: 'toggle', segments: [lit('ON', 'green', 'elec.idg1_online'), lit('OFF', 'amber', 'elec.idg1_online', isZero)] }, 'L GEN');
@@ -273,31 +285,43 @@ export function buildOverhead(c: G800CockpitContext): void {
 }
 
 /**
- * Chrome eyeball gasper (and, for the large aft assemblies, a reading-light lens beside it): structure only
- * (SCOPE: air outlets and the reading lights are not modelled; the reading lights share the 'flood' zone look).
+ * Gasper / reading-light assembly (fix round 1 L13; c_ovhd.jpg): a chrome EYEBALL vent seated in a socket
+ * plus a separate reading-light lens, both on ONE oval chrome bezel plate per side. The small forward-strip
+ * gaspers (reading = false) are a lone eyeball in its socket.
+ * SCOPE: air outlets and the reading lights are not modelled; the reading lights share the 'flood' zone look.
  */
 function addGasper(c: G800CockpitContext, panel: Panel, u: number, v: number, r: number, reading: boolean): void {
   const { b, env } = c;
-  const geo = env.geometry.get(`g800.gasper.${r}`, () => {
-    const ring = new THREE.CylinderGeometry(r, r * 1.08, r * 0.35, 28);
-    ring.rotateX(Math.PI / 2);
-    ring.translate(0, 0, r * 0.17);
-    return ring;
-  });
-  const ball = env.geometry.get(`g800.gasper_ball.${r}`, () => new THREE.SphereGeometry(r * 0.62, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2).rotateX(Math.PI / 2).translate(0, 0, r * 0.2));
   const g = new THREE.Group();
-  const m1 = new THREE.Mesh(geo, env.materials.get('chrome'));
-  const m2 = new THREE.Mesh(ball, env.materials.get('chrome'));
-  g.add(m1, m2);
   if (reading) {
-    const lens = new THREE.Mesh(env.geometry.get('g800.reading_lens', () => new THREE.CircleGeometry(r * 0.55, 20).translate(0, 0, 0.004)), env.materials.get('plasticBlack'));
-    lens.position.x = u < 0 ? r * 1.6 : -r * 1.6;
-    const bezel = new THREE.Mesh(geo, env.materials.get('chrome'));
-    bezel.scale.setScalar(0.7);
-    bezel.position.x = lens.position.x;
-    g.add(bezel, lens);
+    // Oval chrome bezel plate holding both fittings.
+    const plate = new THREE.Mesh(env.geometry.get(`g800.gasper_plate.${r}`, () => new THREE.CylinderGeometry(r * 1.7, r * 1.8, r * 0.16, 32).rotateX(Math.PI / 2).scale(1.7, 1, 1).translate(0, 0, r * 0.08)), env.materials.get('chrome'));
+    g.add(plate);
   }
-  for (const o of g.children) o.userData.cockpitStatic = true;
+  // Eyeball vent: socket ring + swivelling ball nose.
+  const socket = new THREE.Mesh(env.geometry.get(`g800.gasper_socket.${r}`, () => {
+    const ring = new THREE.CylinderGeometry(r, r * 1.08, r * 0.4, 28, 1, true);
+    ring.rotateX(Math.PI / 2);
+    ring.translate(0, 0, r * 0.32);
+    return ring;
+  }), env.materials.get('chrome'));
+  const ball = new THREE.Mesh(env.geometry.get(`g800.gasper_ball.${r}`, () => new THREE.SphereGeometry(r * 0.86, 22, 14).translate(0, 0, r * 0.3)), env.materials.get('chrome'));
+  const nozzle = new THREE.Mesh(env.geometry.get(`g800.gasper_nozzle.${r}`, () => new THREE.CylinderGeometry(r * 0.4, r * 0.46, r * 0.2, 18).rotateX(Math.PI / 2).translate(0, 0, r * 1.05)), env.materials.get('plasticBlack'));
+  const eye = new THREE.Group();
+  eye.add(ball, nozzle);
+  if (reading) eye.position.x = u < 0 ? r * 0.8 : -r * 0.8;
+  socket.position.x = eye.position.x;
+  g.add(socket, eye);
+  if (reading) {
+    // Reading-light lamp: recessed lens in its own small chrome ring on the shared plate.
+    const lx = u < 0 ? -r * 0.9 : r * 0.9;
+    const ring = new THREE.Mesh(env.geometry.get(`g800.reading_ring.${r}`, () => new THREE.CylinderGeometry(r * 0.55, r * 0.6, r * 0.18, 20, 1, true).rotateX(Math.PI / 2).translate(0, 0, r * 0.2)), env.materials.get('chrome'));
+    const lens = new THREE.Mesh(env.geometry.get(`g800.reading_lens.${r}`, () => new THREE.CircleGeometry(r * 0.48, 20).translate(0, 0, r * 0.24)), env.materials.get('plasticBlack'));
+    ring.position.x = lx;
+    lens.position.x = lx;
+    g.add(ring, lens);
+  }
+  g.traverse((o) => void (o.userData.cockpitStatic = true));
   panel.addObject(g, u, v);
   void b;
 }

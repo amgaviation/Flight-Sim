@@ -23,7 +23,7 @@ import { bl } from '../../../cockpit/frame';
 import type { DisplayCanvas } from '../../../avionics/common/CanvasDisplay';
 import { FDM } from '../../../core/vars';
 import { G800_VARS as V } from '../vars';
-import { G800HudDisplay, HUD_DISPLAY_ID } from './hud';
+import { G800HudDisplay, HUD_DISPLAY_ID, HUD_DISPLAY_ID_R } from './hud';
 import { placePanel } from '../../../cockpit/frame';
 import type { SimContext } from '../../../core/SimContext';
 import type { EpicSuite } from '../../../avionics/honeywell-epic/suite';
@@ -49,14 +49,16 @@ export interface G800CockpitOptions {
 }
 
 /**
- * G800 flight-deck palette (G600 / G500 EBACE photographs): charcoal sidewalls, window surrounds and pillars, light-grey
- * headliner, black leather crew seats; panels as the shared Gulfstream palette. EST sRGB values.
+ * G800 flight-deck palette (G600 / G500 EBACE photographs; fix round 1 L15: the demonstrator photograph
+ * g800_flying_cockpit.jpg shows a MID-GREY headliner, not cream, with dark charcoal around the overhead
+ * console and window line): charcoal sidewalls, window surrounds and pillars, mid-grey headliner, black
+ * leather crew seats; panels as the shared Gulfstream palette. EST sRGB values.
  */
 export const G800_PALETTE: PaletteDef = {
   ...PALETTES.gulfstream,
-  name: 'Gulfstream G800 Symmetry (charcoal / light grey)',
+  name: 'Gulfstream G800 Symmetry (charcoal / mid grey)',
   interior: '#2e3032',
-  headliner: '#c8c8c4',
+  headliner: '#9a9a96',
   seat: '#1b1b1c',
 };
 
@@ -118,7 +120,8 @@ export function buildG800Cockpit(ctx: SimContext, sys: G800Systems, o: G800Cockp
   buildGlareshield(c);
   buildPedestal(c);
   buildFlightControls(c);
-  const hud = buildHud(c, o.canvas);
+  // Dual HUD (fix round 1 L02): combiner, projector and control panel on BOTH sides.
+  const huds = [buildHud(c, 1, o.canvas), buildHud(c, 2, o.canvas)];
   const anim = buildCabinFittings(c);
   if (!o.mainOnly) {
     for (const m of Object.values(OVERHEAD)) m.buildOverhead?.(c);
@@ -127,25 +130,28 @@ export function buildG800Cockpit(ctx: SimContext, sys: G800Systems, o: G800Cockp
 
   // ---- derived annunciator states (display-side only; systems never read these)
   const vars = ctx.vars;
-  const hudPower = DISPLAY_VARS.power(HUD_DISPLAY_ID);
-  let deploy = vars.get(V.hudStow, 1) > 0.5 ? 1 : 0;
+  const hudPower = [DISPLAY_VARS.power(HUD_DISPLAY_ID), DISPLAY_VARS.power(HUD_DISPLAY_ID_R)];
+  const deploy = [vars.get(V.hudStowS(1), 1) > 0.5 ? 1 : 0, vars.get(V.hudStowS(2)) > 0.5 ? 1 : 0];
   b.onUpdate((dt) => {
-    // HUD combiner: swings 80 deg up / aft about its hinge when stowed (EST); symbology on while the HUD computer says so.
-    const target = vars.get(V.hudStow) > 0.5 ? 1 : 0;
-    deploy += Math.max(-dt * 1.5, Math.min(dt * 1.5, target - deploy));
-    hud.pivot.rotation.x = (1 - deploy) * 80 * (Math.PI / 180);
-    vars.set(hudPower, vars.get(V.hudOn) !== 0 && deploy > 0.98 ? 1 : 0);
-    if (hud.screen) {
-      // The display manager replaces the screen material: make it additive (black = transparent combiner glass).
-      const m = hud.screen.material as THREE.MeshBasicMaterial;
-      if (m.map && !m.userData.g800Hud) {
-        m.userData.g800Hud = true;
-        m.blending = THREE.AdditiveBlending;
-        m.transparent = true;
-        m.depthWrite = false;
-        m.side = THREE.DoubleSide;
-        m.needsUpdate = true;
-        hud.screen.renderOrder = 5;
+    for (const s of [1, 2] as const) {
+      const hud = huds[s - 1];
+      // HUD combiner: swings 80 deg up / aft about its hinge when stowed (EST); symbology on while the HUD computer says so.
+      const target = vars.get(V.hudStowS(s)) > 0.5 ? 1 : 0;
+      deploy[s - 1] += Math.max(-dt * 1.5, Math.min(dt * 1.5, target - deploy[s - 1]));
+      hud.pivot.rotation.x = (1 - deploy[s - 1]) * 80 * (Math.PI / 180);
+      vars.set(hudPower[s - 1], vars.get(V.hudOnS(s)) !== 0 && deploy[s - 1] > 0.98 ? 1 : 0);
+      if (hud.screen) {
+        // The display manager replaces the screen material: make it additive (black = transparent combiner glass).
+        const m = hud.screen.material as THREE.MeshBasicMaterial;
+        if (m.map && !m.userData.g800Hud) {
+          m.userData.g800Hud = true;
+          m.blending = THREE.AdditiveBlending;
+          m.transparent = true;
+          m.depthWrite = false;
+          m.side = THREE.DoubleSide;
+          m.needsUpdate = true;
+          hud.screen.renderOrder = 5;
+        }
       }
     }
     anim(dt);
@@ -164,33 +170,36 @@ export function buildG800Cockpit(ctx: SimContext, sys: G800Systems, o: G800Cockp
  * of the overhead (crop p_hdliner): CONTR, VIDEO BRT, HUD BRT knobs and a MAN / AUTO switch. The hinge knob deploys /
  * stows the combiner (`ac.g800.hud_deploy`). The HUD computer (systems/hud.ts) reads every control.
  */
-function buildHud(c: G800CockpitContext, canvas?: (w: number, h: number) => DisplayCanvas): { pivot: THREE.Group; screen: THREE.Mesh | null } {
+function buildHud(c: G800CockpitContext, side: 1 | 2, canvas?: (w: number, h: number) => DisplayCanvas): { pivot: THREE.Group; screen: THREE.Mesh | null } {
   const { b, env, ctx } = c;
+  const sg = side === 1 ? -1 : 1;
+  const sfx = side === 1 ? '' : '2';
   const w = 2 * HUD.eyeDist * Math.tan((HUD.fovHDeg / 2) * (Math.PI / 180));
   const h = 2 * HUD.eyeDist * Math.tan((HUD.fovVDeg / 2) * (Math.PI / 180));
-  const [ex, ey, ez] = EYE_L;
+  const [ex, ey, ez] = side === 1 ? EYE_L : EYE_R;
   const pivot = new THREE.Group();
-  pivot.name = 'hud_pivot';
+  pivot.name = `hud_pivot${sfx}`;
   pivot.position.copy(bl(ex + HUD.eyeDist, ey, ez - h / 2 - 0.07));
   pivot.userData.cockpitDynamic = true;
   b.root.add(pivot);
   let screen: THREE.Mesh | null = null;
   const canDraw = !!canvas || typeof document !== 'undefined' || typeof OffscreenCanvas !== 'undefined';
   if (canDraw) {
-    const disp = new G800HudDisplay(ctx.vars, canvas?.(600, 480));
-    screen = new THREE.Mesh(new THREE.PlaneGeometry(w, h), env.materials.get('lcdOff'));
-    screen.name = `display:${HUD_DISPLAY_ID}`;
+    const disp = new G800HudDisplay(ctx.vars, canvas?.(600, 480), side);
+    // Base material before the display texture arrives: fully transparent, so an unpowered combiner is just glass
+    // (fix round 1 L18: the 'lcdOff' grey rectangle glowed green at night).
+    const offMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0 });
+    offMat.name = 'g800.hudOff';
+    screen = new THREE.Mesh(new THREE.PlaneGeometry(w, h), offMat);
+    screen.name = `display:${side === 1 ? HUD_DISPLAY_ID : HUD_DISPLAY_ID_R}`;
     screen.position.set(0, -0.07 - h / 2, 0);
     pivot.add(screen);
     b.trackGeometry(screen.geometry);
     b.addDisplay(disp, screen, { glass: false, boot: false });
   }
-  // Combiner frame and arms (dark), faintly tinted glass behind the symbology.
+  // Combiner frame and arms (dark). No tinted glass pane: real HUD combiner glass is nearly invisible -
+  // only the stroke symbology glows (fix round 1 L18; also saves two draw calls with the dual HUD).
   const frameMat = env.materials.get('bezel');
-  const glass = new THREE.Mesh(new THREE.PlaneGeometry(w, h), env.materials.get('windowGlass'));
-  glass.position.set(0, -0.07 - h / 2, -0.002);
-  pivot.add(glass);
-  b.trackGeometry(glass.geometry);
   // Frame (top rim + two arms) as one mesh.
   const frameGeo = merge([
     new THREE.BoxGeometry(w + 0.01, 0.006, 0.008).translate(0, -0.07 + 0.004, 0),
@@ -201,23 +210,23 @@ function buildHud(c: G800CockpitContext, canvas?: (w: number, h: number) => Disp
   pivot.add(frame);
   b.trackGeometry(frameGeo);
   // Overhead projector unit behind the pilot's head and the combiner mount at the headliner.
-  b.structureMesh(new THREE.BoxGeometry(0.18, 0.1, 0.3), 'panelDark', [ex - 0.12, ey, GLAZING.headerZ - 0.12]).name = 'hud_projector';
-  b.structureMesh(new THREE.BoxGeometry(0.06, 0.08, 0.05), 'panelDark', [ex + HUD.eyeDist, ey, ez - h / 2 - 0.11]).name = 'hud_mount';
+  b.structureMesh(new THREE.BoxGeometry(0.18, 0.1, 0.3), 'panelDark', [ex - 0.12, ey, GLAZING.headerZ - 0.12]).name = `hud_projector${sfx}`;
+  b.structureMesh(new THREE.BoxGeometry(0.06, 0.08, 0.05), 'panelDark', [ex + HUD.eyeDist, ey, ez - h / 2 - 0.11]).name = `hud_mount${sfx}`;
   // Hinge knob: deploys / stows the combiner.
   b.place(
-    new PushButton(env, { id: 'g800.hud.stow', label: 'HUD COMBINER (DEPLOY / STOW)', var: V.hudStow, mode: 'toggle', initial: 1, stateNames: ['STOWED', 'DEPLOYED'], style: 'round', width: 0.014, capMaterial: 'knobGrey' }),
-    { center_m: [ex + HUD.eyeDist - 0.035, ey + 0.05, ez - h / 2 - 0.1], facing: 'aft', tiltDeg: -30 },
+    new PushButton(env, { id: `g800.hud${sfx}.stow`, label: `${side === 1 ? 'PILOT' : 'COPILOT'} HUD COMBINER (DEPLOY / STOW)`, var: V.hudStowS(side), mode: 'toggle', initial: side === 1 ? 1 : 0, stateNames: ['STOWED', 'DEPLOYED'], style: 'round', width: 0.014, capMaterial: 'knobGrey' }),
+    { center_m: [ex + HUD.eyeDist - 0.035, ey - sg * 0.05, ez - h / 2 - 0.1], facing: 'aft', tiltDeg: -30 },
   );
-  // HUD control panel on the left headliner.
-  const hp = b.panel({ name: 'g800.hud_ctl', center_m: [12.8, -0.45, -1.245], facing: 'down', tiltDeg: -8, rollDeg: -10, width: 0.13, height: 0.06, material: 'panelDark', screws: { kind: 'hex', diameter: 0.003, inset: 0.005 }, radius: 0.006 });
+  // HUD control panel on this side's headliner corner (identical panels both sides, g800_flying_cockpit.jpg).
+  const hp = b.panel({ name: `g800.hud_ctl${sfx}`, center_m: [12.8, sg * 0.45, -1.245], facing: 'down', tiltDeg: -8, rollDeg: sg * -10, width: 0.13, height: 0.06, material: 'panelDark', screws: { kind: 'hex', diameter: 0.003, inset: 0.005 }, radius: 0.006 });
   const knob = (id: string, label: string, v: string, x: number) => {
     hp.add(new RotaryKnob(env, { id, label, outer: { var: v, min: 0, max: 1, step: 0.05, angleRange: [-135, 135], label, format: (q) => `${Math.round(q * 100)} %` }, cap: 'knurled', diameter: 0.013, pointer: 'line' }), x, -0.004);
     hp.label(label, x, 0.017, { height: 0.0019 });
   };
-  knob('g800.hud.contr', 'CONTR', V.hudContr, -0.045);
-  knob('g800.hud.video_brt', 'VIDEO BRT', V.hudVideoBrt, -0.012);
-  knob('g800.hud.brt', 'HUD BRT', V.hudBrt, 0.021);
-  hp.add(new ToggleSwitch(env, { id: 'g800.hud.auto', label: 'HUD BRT MAN / AUTO', var: V.hudAuto, positions: ['MAN', 'AUTO'], initial: 1, scale: 0.7, labels: { positions: true, height: 0.0018 } }), 0.05, -0.004);
+  knob(`g800.hud${sfx}.contr`, 'CONTR', V.hudContrS(side), -0.045);
+  knob(`g800.hud${sfx}.video_brt`, 'VIDEO BRT', V.hudVideoBrtS(side), -0.012);
+  knob(`g800.hud${sfx}.brt`, 'HUD BRT', V.hudBrtS(side), 0.021);
+  hp.add(new ToggleSwitch(env, { id: `g800.hud${sfx}.auto`, label: `HUD BRT MAN / AUTO (${side === 1 ? 'L' : 'R'})`, var: V.hudAutoS(side), positions: ['MAN', 'AUTO'], initial: 1, scale: 0.7, labels: { positions: true, height: 0.0018 } }), 0.05, -0.004);
   return { pivot, screen };
 }
 

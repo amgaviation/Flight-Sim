@@ -50,10 +50,12 @@ export const SIDE_CONSOLE = {
  * wedge and ahead of the seat, turned ~30 deg toward the pilot; breakers on a lettered-column / numbered-row grid
  * (left columns N.. / right AA.. in the photographs), the breaker name engraved under each. Position EST.
  */
-export const CB_PANEL = { x: 7.76, y: 0.93, z: -0.03, yawDeg: 30, tiltDeg: 10 };
+// L2-05 (crop_rcon / OEG p.12): the grid sits LOW on the black forward sidewall, just above the console (z moved
+// from -0.03 down to 0.02; the black wall band behind it is shell.ts 'cb_wall_*').
+export const CB_PANEL = { x: 7.76, y: 0.93, z: 0.02, yawDeg: 30, tiltDeg: 10 };
 
-/** CB grid: rows of breakers at `pitch`, `rowPitch` (name under each). */
-const CB = { rows: 5, pitch: 0.032, rowPitch: 0.036, diameter: 0.0095, margin: 0.024 };
+/** CB grid: rows of breakers at `pitch`, `rowPitch` (name under each). Tight ~5-row pitch per crop_rcon (L2-05). */
+const CB = { rows: 5, pitch: 0.028, rowPitch: 0.031, diameter: 0.0095, margin: 0.02 };
 /** Column letters (photographs: left panel N, O, P, ...; right panel AA, BB, CC, ...). */
 const CB_LETTERS = {
   left: ['N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y'],

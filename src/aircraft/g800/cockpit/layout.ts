@@ -109,8 +109,8 @@ export const MAIN_PANEL = {
 export const DU_U = [-0.4875, -0.1625, 0.1625, 0.4875] as const;
 /**
  * Outboard TSCs: directly outboard of DU1 / DU4 on the DU centreline, toed in toward each pilot (G600 BL7C0704 /
- * BL7C0705; BJT500 "one each outboard"). SCOPE: the real units are portrait; the shared Symmetry TSC page layouts
- * are landscape (800 x 480), so the screen stays landscape in a housing at the portrait unit's position.
+ * BL7C0705; BJT500 "one each outboard"). Portrait units (fix round 1 L01): tall tablets raked toward the pilots
+ * (G800 demonstrator flight-deck photograph; G600 BL7C0705 crop p_pedmid), pages laid out 480 x 800.
  */
 export const OUTBOARD_TSC = { y: 0.755, x: 13.335, z: -0.35, yawDeg: 20, tiltDeg: 12 };
 
@@ -137,8 +137,11 @@ export const GLARE_HOOD = { browX: 13.2, topZ: -0.636 };
  */
 export const PEDESTAL = {
   width: 0.44,
-  /** Sloped forward face carrying the two pedestal TSCs on the wings, tilted up toward the crew. [x, z] */
-  fwdTop: [13.27, -0.105] as [number, number],
+  /**
+   * Sloped forward face carrying the two pedestal TSCs on the wings, tilted up toward the crew. [x, z]
+   * Long enough for the portrait TSC units (fix round 1 L01: 0.152 m active + bezels).
+   */
+  fwdTop: [13.29, -0.115] as [number, number],
   fwdBottom: [13.12, -0.03] as [number, number],
   /** Top surface, sloping down aft. */
   topFwd: [13.12, -0.03] as [number, number],

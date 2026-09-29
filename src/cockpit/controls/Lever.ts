@@ -60,6 +60,12 @@ export interface LeverOptions extends ControlOptions {
   armThickness?: number;
   knob?: LeverKnobStyle;
   knobScale?: number;
+  /**
+   * (Appended by g800, additive.) Custom knob geometry factory replacing the `knob` style geometry;
+   * built centred on the arm tip, extending +Z, adopted by the environment cache under `key`
+   * (must be unique per shape). Used for the Gulfstream piggy-back reverser paddles.
+   */
+  knobGeometry?: { key: string; build: () => THREE.BufferGeometry };
   knobMaterial?: MaterialName | THREE.Material;
   armMaterial?: MaterialName | THREE.Material;
   /** Quadrant slot cover around the lever (default true). */
@@ -275,7 +281,8 @@ export class Lever extends ControlBase {
     const style = o.knob ?? 'throttle';
     const ks = o.knobScale ?? 1;
     const km = o.knobMaterial ?? (style === 'gear' ? 'knobWhite' : 'plasticBlack');
-    const knob = this.mesh(this.geo(`lever.knob.${style}.${ks}`, () => leverKnobGeometry(style, ks)), typeof km === 'string' ? this.env.materials.get(km) : km, this.arm);
+    const kg = o.knobGeometry;
+    const knob = this.mesh(kg ? this.geo(kg.key, kg.build) : this.geo(`lever.knob.${style}.${ks}`, () => leverKnobGeometry(style, ks)), typeof km === 'string' ? this.env.materials.get(km) : km, this.arm);
     knob.position.z = armLen;
     // Hit box around the knob and the upper arm (moves with the lever).
     this.addHitBox(0.05 * ks, 0.04 * ks, 0.05 * ks, 0, 0, armLen + 0.012 * ks, this.arm);

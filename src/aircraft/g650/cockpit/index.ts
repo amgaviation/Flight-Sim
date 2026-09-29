@@ -29,6 +29,7 @@ import { buildGlareshield } from './glareshield';
 import { buildPedestal } from './pedestal';
 import { buildFlightControls } from './flightControls';
 import { G650HudDisplay, HUD_DISPLAY_ID } from './hud';
+import { MagneticCompass } from '../../../avionics/analog';
 
 type OverheadModule = { buildOverhead?: (c: G650CockpitContext) => void };
 type SideModule = { buildSideConsoles?: (c: G650CockpitContext) => void };
@@ -62,6 +63,10 @@ export const G650_PALETTE: PaletteDef = {
   panelDark: '#3a4047',
   glareshield: '#1d1f22',
   bezel: '#1b1d20',
+  // A-pillars, centre post and headliner trimmed light grey, not cream (Flickr 52948762561 / N520GA:
+  // grey pillar and header trim against the panels). EST sRGB sampled from the photographs.
+  interior: '#8f9296',
+  headliner: '#a5a8ab',
 };
 
 /** Pitch of the default pilot view (deg, + up). */
@@ -102,6 +107,17 @@ function buildHud(c: G650CockpitContext, canvas?: (w: number, h: number) => Disp
   screen.position.set(0, -0.07 - h / 2, 0);
   pivot.add(screen);
   b.trackGeometry(screen.geometry);
+  // Faint tinted combiner glass just behind the symbology plane, so the HGS combiner reads as a visible
+  // glass plate ahead of the pilot and the symbology as projected onto it (Rockwell Collins HGS installs:
+  // the combiner is a distinctly visible green-tinted plate). Stowing the pivot carries it away with the
+  // symbology (epic.hud.on = 0).
+  const combinerTint = new THREE.MeshBasicMaterial({ color: 0x2a4034, transparent: true, opacity: 0.18, depthWrite: false, side: THREE.DoubleSide });
+  const combiner = new THREE.Mesh(new THREE.PlaneGeometry(w + 0.004, h + 0.004), combinerTint);
+  combiner.name = 'hud_combiner_glass';
+  combiner.position.set(0, -0.07 - h / 2, -0.0015);
+  combiner.renderOrder = 4;
+  pivot.add(combiner);
+  b.trackGeometry(combiner.geometry);
   // Combiner frame (thin dark rim) and the arm to the hinge.
   const frameMat = env.materials.get('bezel');
   const rim = new THREE.Mesh(new THREE.BoxGeometry(w + 0.01, 0.005, 0.006), frameMat);
@@ -145,7 +161,10 @@ export function buildG650Cockpit(ctx: SimContext, sys: G650Systems, o: G650Cockp
   };
 
   // ---- lighting zones and real lights (<= 5, docs/modules/cockpit.md §11). LED backlighting (no lag).
-  b.zone({ id: 'panel', intensityVar: 'ac.light.panel', lagS: 0, gain: 1.5 });
+  // Panel backlight gain 3.0 / gamma 0.7 (was 1.5): with the night MASTER range set the engraved legends and
+  // key labels must read clearly in the night cockpit (G650 training material: night setting = "panel
+  // backlighting illuminates"; the earlier gain left every legend dark in the night captures). EST level.
+  b.zone({ id: 'panel', intensityVar: 'ac.light.panel', lagS: 0, gain: 3.0, gamma: 0.7 });
   b.zone({ id: 'flood', intensityVar: 'ac.light.flood', lagS: 0, color: 0xfff1dc });
   b.zone({ id: 'dome', intensityVar: 'ac.light.dome', lagS: 0, color: 0xfff1dc });
   b.zone({ id: 'map_l', intensityVar: 'ac.light.map_l', lagS: 0, color: 0xfff1dc });
@@ -160,6 +179,15 @@ export function buildG650Cockpit(ctx: SimContext, sys: G650Systems, o: G650Cockp
   env.lighting.addMapLight('map.r', 'map_r', [13.7, 0.95, -1.2], [14.0, 0.55, -0.1], b.root, 3);
 
   buildShell(b);
+  // Standby magnetic compass on the windshield centre post (an object is visible on the post in the N520GA
+  // photograph; 14 CFR 25.1303(a)(3) requires a magnetic direction indicator). EST position / size.
+  {
+    // The MagneticCompass includes its own FOR / STEER correction card below the housing.
+    // Mounted against the centre post: the windshield glass at the centreline is at x ~14.73 for z -1.08
+    // (G650_FUSELAGE with SHELL_INSET), so the case front sits ~70 mm aft of it.
+    const compass = new MagneticCompass({ id: 'g650.compass', vars: ctx.vars, lightVar: 'ac.light.panel', width: 0.058 });
+    b.place(compass, { center_m: [14.66, 0, -1.08], facing: 'aft', tiltDeg: -8 });
+  }
   buildMainPanel(c);
   buildGlareshield(c);
   buildPedestal(c);

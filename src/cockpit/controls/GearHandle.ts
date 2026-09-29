@@ -42,6 +42,12 @@ export interface GearHandleOptions extends ControlOptions {
   /** (Appended by global6000.) Knob (wheel) material, default 'knobWhite'; arm material, default 'chrome'. */
   knobMaterial?: MaterialName;
   armMaterial?: MaterialName;
+  /**
+   * (Appended by citation-longitude, additive.) Custom knob geometry factory replacing the default 25.781 wheel
+   * (`leverKnobGeometry('gear', knobScale)`); built centred on the arm tip, extending +Z. The geometry is adopted by
+   * the environment's cache under `key` (must be unique per shape).
+   */
+  knobGeometry?: { key: string; build: () => THREE.BufferGeometry };
 }
 
 export class GearHandle extends ControlBase {
@@ -165,7 +171,8 @@ export class GearHandle extends ControlBase {
     this.object.add(this.swing);
     this.swing.add(this.slide);
     this.mesh(this.geo(`gear.arm.${len}`, () => leverArmGeometry(len, 0.012, 0.009)), this.o.armMaterial ?? 'chrome', this.slide);
-    const knob = this.mesh(this.geo(`lever.knob.gear.${ks}`, () => leverKnobGeometry('gear', ks)), this.o.knobMaterial ?? 'knobWhite', this.slide);
+    const kg = this.o.knobGeometry;
+    const knob = this.mesh(kg ? this.geo(kg.key, kg.build) : this.geo(`lever.knob.gear.${ks}`, () => leverKnobGeometry('gear', ks)), this.o.knobMaterial ?? 'knobWhite', this.slide);
     knob.position.z = len;
     // Hub lamps: a lens disc on the wheel face.
     const lights = this.o.lights ?? [];

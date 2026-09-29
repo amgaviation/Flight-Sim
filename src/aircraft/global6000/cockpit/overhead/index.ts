@@ -95,7 +95,9 @@ function cap(k: Ctx, text: string, x: number, y: number, h = SZ.label): void {
 /** Korry switchlight at drawing (x, y) pt with its name engraved above (aft of) it. */
 function pba(k: Ctx, o: { id: string; label: string; v: string; x: number; y: number; segs: Seg[]; name?: string; mode?: 'toggle' | 'momentary'; values?: [number, number] }): PushButton {
   const btn = k.p.add(
-    new PushButton(k.c.env, { id: o.id, label: o.label, var: o.v, mode: o.mode ?? 'toggle', values: o.values, style: 'korry', width: SZ.pba, height: SZ.pba, layout: 'stack', segments: o.segs, zone: Z }),
+    // unlitTint 0.05: dark cockpit - the FAIL / OFF / AVAIL legends are invisible until lit (photo e_elec_eng shows
+    // uniformly dark korries in daylight); the default 0.2 tint read as lit.
+    new PushButton(k.c.env, { id: o.id, label: o.label, var: o.v, mode: o.mode ?? 'toggle', values: o.values, style: 'korry', width: SZ.pba, height: SZ.pba, layout: 'stack', segments: o.segs, unlitTint: 0.05, zone: Z }),
     px(o.x),
     py(o.y),
   );
@@ -116,7 +118,9 @@ function guardedPba(k: Ctx, o: { id: string; label: string; v: string; x: number
       height: SZ.pba,
       layout: 'stack',
       segments: o.segs,
-      guard: { color: o.color ?? 'red', hinge: 'top', close: 'free', var: o.guardVar },
+      unlitTint: 0.05, // dark cockpit (see pba)
+      // Clear guards are thin transparent flip covers (photo e_elec_eng RAT GEN), not tall boxes.
+      guard: { color: o.color ?? 'red', hinge: 'top', close: 'free', var: o.guardVar, ...(o.color === 'clear' ? { height: 0.014 } : {}) },
     }),
     px(o.x),
     py(o.y),
@@ -214,8 +218,9 @@ export function buildOverhead(c: G6kCockpitContext): void {
     invisible: true,
     screws: false,
   });
-  // EST: Bombardier dark-grey overhead paint, a shade lighter than the glareshield (photographs).
-  const paint = env.materials.custom('paint', 0x42454a, 0.6);
+  // Light warm gull-grey module paint standing out against the black carbon surround (photo e_ovhd / e_elec_eng;
+  // EST shade matched to e_ovhd - the earlier 0x42454a charcoal read almost black in the day screenshots).
+  const paint = env.materials.custom('paint', 0x6a675f, 0.6);
   for (const [name, m] of Object.entries(MODULES)) {
     const w = px(m.x1) - px(m.x0);
     const h = py(m.y1) - py(m.y0);
@@ -381,6 +386,9 @@ function buildFire(k: Ctx): void {
         unlockVar: V.fireUnlock(f.z),
         lightVar: f.warn,
         legend: f.name,
+        // Round-grip pull T-handle with the FIRE lamp in the grip face (dossier 12.1; GX PTG 9-12 handle drawing),
+        // replacing the earlier red block shape.
+        fireCap: 'round',
         scale: 0.8,
       }),
       px(f.x),
@@ -516,7 +524,7 @@ function buildFuel(k: Ctx): void {
   // inhibited (no boost pump feeds the engine from the wing).
   for (const s of ['l', 'r'] as const) {
     k.p.add(
-      new AnnunciatorLight(k.c.env, { id: `g6k.ovhd.wing_feed_${s}`, label: `${s.toUpperCase()} WING FEED INHIBIT`, width: 0.02, height: 0.009, segments: [seg.on(['WING FEED', 'INHIBIT'], 'white', OH.wingFeedInhibit(s))] }),
+      new AnnunciatorLight(k.c.env, { id: `g6k.ovhd.wing_feed_${s}`, label: `${s.toUpperCase()} WING FEED INHIBIT`, width: 0.02, height: 0.009, unlitTint: 0.05, segments: [seg.on(['WING FEED', 'INHIBIT'], 'white', OH.wingFeedInhibit(s))] }),
       px(s === 'l' ? 241 : 297),
       py(492),
     );
@@ -653,8 +661,13 @@ function buildAir(k: Ctx): void {
 
 /** PRESSURIZATION and WINDSHIELD HEAT. */
 function buildPress(k: Ctx): void {
-  // Placard above the module (photo e_press_lts, red border).
-  k.p.placard({ text: 'WARNING - PRESSURE DIFFERENTIAL SHALL NOT EXCEED\n0.1 PSI DURING TAXI AND 1.0 PSI ON INITIAL LANDING', height: 0.0019, style: 'warning', zone: Z }, px(466), py(532));
+  // Wide white placard with red text spanning the PRESSURIZATION module (photos e_press_lts / eb3840: white strip,
+  // red engraved two-line text; the earlier red-plate style read as a small solid-red block).
+  k.p.placard(
+    { text: 'WARNING - PRESSURE DIFFERENTIAL SHALL NOT EXCEED\n0.1 PSI DURING TAXI AND 1.0 PSI ON INITIAL LANDING', height: 0.0019, style: 'inverse', color: '#a01410', padding: 0.0022, zone: Z },
+    px(466),
+    py(532),
+  );
   title(k, 'PRESSURIZATION', 466, 514, 60);
   cap(k, 'MAN', 432, 514, 0.0026);
   cap(k, 'AUTO', 504, 514, 0.0026);

@@ -78,6 +78,7 @@ export function buildGlareshield(c: G800CockpitContext): void {
         var: V.warnInhibit,
         mode: 'toggle',
         style: 'korry',
+        unlitTint: 0.38, // faint legend when unlit (fix round 1 L11)
         width: 0.018,
         height: 0.018,
         layout: 'stack',
@@ -94,6 +95,7 @@ export function buildGlareshield(c: G800CockpitContext): void {
         event: 'cas.ack_warning',
         releaseEvent: 'cas.ack_caution',
         style: 'korry',
+        unlitTint: 0.38,
         width: 0.018,
         height: 0.018,
         layout: 'stack',
@@ -112,6 +114,7 @@ export function buildGlareshield(c: G800CockpitContext): void {
         mode: 'momentary',
         event: 'taws.gs_cancel',
         style: 'korry',
+        unlitTint: 0.38,
         width: 0.018,
         height: 0.018,
         layout: 'stack',
@@ -176,12 +179,14 @@ function addSymmetryGuidancePanel(c: G800CockpitContext, face: Panel, suite: Epi
   gp.line(0.21, 0.012, 0.21, 0.07, 0.0008);
   gp.line(0.316, 0.012, 0.316, 0.07, 0.0008);
   // Knobs (encoders to the guidance logic).
+  // Knurled knob caps with backlit arc markings beside them (fix round 1 L14; BL7C0704 crop gpcore:
+  // knurled knobs, 'FULL SCALE UP' arc at the ALT knob, HDG / TRK arc at LATERAL).
   const knob = (id: string, label: string, x: number, push: string | null, pushLabel: string, inner?: { id: string; label: string }) =>
     gp.add(
       new RotaryKnob(env, {
         id: `${pfx}.${id}`,
         label,
-        cap: 'fluted',
+        cap: 'knurled',
         diameter: 0.017,
         outer: { incEvent: ev(`${id}_inc`), decEvent: ev(`${id}_dec`), label },
         inner: inner ? { incEvent: ev(`${inner.id}_inc`), decEvent: ev(`${inner.id}_dec`), label: inner.label } : undefined,
@@ -196,6 +201,8 @@ function addSymmetryGuidancePanel(c: G800CockpitContext, face: Panel, suite: Epi
   gp.label('TRK', 0.123, 0.059, { height: 0.0018 });
   gp.add(new Thumbwheel(env, { id: `${pfx}.vs`, label: 'VERTICAL wheel', channel: { incEvent: ev('vs_inc'), decEvent: ev('vs_dec'), label: 'VS' }, diameter: 0.02, width: 0.009, orientation: 'vertical' }), 0.262, 0.047);
   knob('alt', 'ALTITUDE', 0.334, null, '', { id: 'alt_fine', label: 'ALT 100 FT' });
+  // 'FULL SCALE UP' arc marking at the ALT knob (backlit panel label; BL7C0704 crop gpcore).
+  gp.label('FULL SCALE UP', 0.334, 0.0625, { height: 0.0016, weight: 700 });
   // Keys with separate light bars above them.
   for (const [id, legend, x, y, ctl] of KEYS) {
     const light = GP_LIGHTS[ctl];

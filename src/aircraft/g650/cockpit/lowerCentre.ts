@@ -12,10 +12,13 @@
  *    RELEASE, placard "DO NOT OPERATE WITH L/G EXTENDED ABOVE 20,000 FT" (photograph; LIM: 20,000 ft max with
  *    the gear extended);
  *  - R ENG FIRE handle.
- * Knee panels: right, inboard: EMER LDG GEAR (red handle in a black box, photograph); left: NWS POWER (red
- * guard, LUC) and the CAS scroll switch (EST position, not identified in the photographs).
+ * Right of the strip, at strip level: EMER LDG GEAR (red T-handle in a grey fabric boot with a red placard
+ * band, photographs 52948656184 / 52948762561). Knee panels (grey, screw rows, filling the region below the
+ * main panel): left holds NWS POWER (red guard, LUC) and the CAS scroll switch (EST positions, not identified
+ * in the photographs); SELCAL / registration data placards flank the strip (N520GA photograph, EST values).
  * Positions inside the strip are scaled from the photographs (EST).
  */
+import * as THREE from 'three';
 import { AnnunciatorLight, GearHandle, GuardedSwitch, PushButton, SelectorKnob, TBarHandle } from '../../../cockpit/controls';
 import type { Panel } from '../../../cockpit/CockpitBuilder';
 import { CanvasDisplay } from '../../../avionics/common/CanvasDisplay';
@@ -176,7 +179,9 @@ export function buildLowerCentre(c: G650CockpitContext): void {
         width: 0.019,
         height: 0.019,
         layout: 'stack',
-        segments: [seg.on('ON BAT', 'amber', LC.irsOnBat(n)), seg.eq('ON', 'cyan', V.irsMode(n), 2)],
+        // Green ON (G650ER photograph Flickr 52948656184: the three IRS keys show green-lit legends in the
+        // powered aircraft; amber ON BAT per the SmartCockpit G650 avionics quiz).
+        segments: [seg.on('ON BAT', 'amber', LC.irsOnBat(n)), seg.eq('ON', 'green', V.irsMode(n), 2)],
       }),
       u,
       -0.021,
@@ -187,8 +192,25 @@ export function buildLowerCentre(c: G650CockpitContext): void {
 
   // ---- landing gear panel
   const gx = 0.145;
+  // Three distinct green down-lock lights with legible legends (G650ER photograph Flickr 52948656184 /
+  // N520GA lower panel: clearly readable green gear-position lights beside the handle). 'field' style:
+  // the whole lens glows green with a dark "DN" legend; the red segment shows "UNLK" in transit.
   const lamp = (id: string, label: string, i: number, x: number, y: number) =>
-    p.add(new AnnunciatorLight(env, { id, label, width: 0.012, height: 0.009, layout: 'stack', segments: [seg.on('', 'green', `gear.green${i}`), seg.on('', 'red', `gear.red${i}`)] }), x, y);
+    p.add(
+      new AnnunciatorLight(env, {
+        id,
+        label,
+        width: 0.018,
+        height: 0.014,
+        layout: 'stack',
+        segments: [
+          { text: 'DN', color: 'green', var: `gear.green${i}`, style: 'field' },
+          { text: 'UNLK', color: 'red', var: `gear.red${i}` },
+        ],
+      }),
+      x,
+      y,
+    );
   lamp('g650.lc.gear_lt_n', 'NOSE GEAR', 0, gx, 0.033);
   lamp('g650.lc.gear_lt_l', 'LEFT MAIN GEAR', 1, gx - 0.03, 0.022);
   lamp('g650.lc.gear_lt_r', 'RIGHT MAIN GEAR', 2, gx + 0.03, 0.022);
@@ -246,14 +268,30 @@ export function buildLowerCentre(c: G650CockpitContext): void {
   });
 }
 
-/** Knee panels either side of the lower centre panel (below the MFD outer halves / PFD inner edges). */
+/**
+ * Knee panels either side of the lower centre panel (below the MFD outer halves / PFD inner edges).
+ * Extended to fill the region from the display-band lower edge down toward the floor consoles (G650ER
+ * photograph Flickr 52948656184: grey panels with screw rows sweep from the main panel lower edge down
+ * around the yoke columns; the earlier small floating plates read as dark trim). Material 'panel' = the
+ * lighter G650_PALETTE grey the photographs show.
+ */
 function buildKneePanels(c: G650CockpitContext): void {
   const { b, env } = c;
   const kneeTop = MAIN_PANEL.center_m[2] + (MAIN_PANEL.height / 2) * Math.cos((MAIN_PANEL.tiltDeg * Math.PI) / 180);
   const kneeX = MAIN_PANEL.center_m[0] - (MAIN_PANEL.height / 2) * Math.sin((MAIN_PANEL.tiltDeg * Math.PI) / 180) + 0.02;
   const knee = (side: -1 | 1): Panel =>
-    b.panel({ name: side < 0 ? 'g650.knee_l' : 'g650.knee_r', center_m: [kneeX + 0.024, side * 0.375, kneeTop + 0.085], facing: 'aft', width: 0.13, height: 0.085, material: 'panel', radius: 0.006, screws: { kind: 'hex', diameter: 0.003 } });
-  // Left: NWS POWER (red guard, closed = ON, LUC) and the CAS scroll switch (EST position).
+    b.panel({
+      name: side < 0 ? 'g650.knee_l' : 'g650.knee_r',
+      center_m: [kneeX + 0.024, side * 0.39, kneeTop + 0.1],
+      facing: 'aft',
+      width: 0.18,
+      height: 0.18,
+      material: 'panel',
+      radius: 0.006,
+      screws: { kind: 'hex', diameter: 0.003, pitch: 0.11, inset: 0.007 },
+    });
+  // Left: NWS POWER (red guard, closed = ON, LUC) and the CAS scroll switch (EST position: neither is
+  // identifiable in the photographs, see the dossier's open issues).
   const l = knee(-1);
   l.add(
     new GuardedSwitch(env, {
@@ -266,14 +304,27 @@ function buildKneePanels(c: G650CockpitContext): void {
       labels: { name: 'NWS', positions: true, height: 0.0024 },
       guard: { color: 'red', guardedPosition: 1, close: 'returns' },
     }),
-    0.03,
-    -0.004,
+    0.045,
+    -0.02,
   );
-  addCasScrollSwitch(b, l, -0.03, -0.004);
-  l.label('SCROLL', -0.03, -0.036, { height: 0.0022 });
-  // Right, inboard: EMER LDG GEAR (red T-handle in a black box, photograph; LUC: <= 175 KCAS, one shot).
+  addCasScrollSwitch(b, l, -0.045, -0.02);
+  l.label('SCROLL', -0.045, -0.052, { height: 0.0022 });
+  // SELCAL data placard (N520GA photograph: 'SELCAL JKGR' placard left of the lower centre area; EST code).
+  l.placard({ text: 'SELCAL AG-KM', style: 'plate', height: 0.0026 }, 0.0, 0.055);
+  // Right: EMER LDG GEAR at strip level, inboard end (G650ER photograph Flickr 52948656184 top-right /
+  // 52948762561: the red emergency gear T-handle sits in a grey fabric boot labelled 'EMER LDG GEAR' at
+  // the right end of the lower-centre area, beside the copilot yoke; LUC: <= 175 KCAS, one N2 shot).
   const r = knee(1);
-  r.subPanel({ name: 'g650.emer_gear_box', x: -0.02, y: 0, width: 0.075, height: 0.05, material: 'panelDark', screws: false, radius: 0.006 });
-  r.add(new TBarHandle(env, { id: 'g650.lc.gear_emer', var: V.gearEmer, label: 'EMER LDG GEAR', style: 'tbar', legend: 'EMER LDG GEAR', material: 'knobRed', scale: 0.85 }), -0.02, -0.005);
-  r.label('EMER LDG GEAR', -0.02, 0.017, { height: 0.0026, color: '#ff6a5a' });
+  // Grey soft-cover boot (truncated fabric cone) with the red placard band across its base.
+  const bootG = new THREE.CylinderGeometry(0.014, 0.032, 0.05, 12);
+  b.trackGeometry(bootG);
+  const boot = new THREE.Mesh(bootG, env.materials.get('fabric'));
+  boot.name = 'g650.emer_gear_boot';
+  boot.rotation.x = Math.PI / 2;
+  boot.userData.cockpitStatic = true;
+  r.addObject(boot, -0.045, 0.062, { z: 0.02 });
+  r.add(new TBarHandle(env, { id: 'g650.lc.gear_emer', var: V.gearEmer, label: 'EMER LDG GEAR', style: 'tbar', legend: 'EMER LDG GEAR', material: 'knobRed', scale: 0.85 }), -0.045, 0.062, { z: 0.045 });
+  r.placard({ text: 'EMER LDG GEAR', style: 'warning', height: 0.0024 }, -0.045, 0.035);
+  // Registration data placard (N520GA photograph: registration placard right of the lower centre area).
+  r.placard({ text: 'N650AG', style: 'plate', height: 0.003 }, 0.045, 0.055); // EST: sim registration
 }

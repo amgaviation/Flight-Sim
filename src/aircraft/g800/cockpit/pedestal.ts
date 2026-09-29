@@ -59,8 +59,9 @@ export function buildPedestal(c: G800CockpitContext): void {
   const fp = slopePlacement(P.fwdTop, P.fwdBottom);
   const fwd = b.panel({ name: 'g800.ped_fwd', center_m: fp.center_m, facing: 'up', tiltDeg: fp.tiltDeg, width: W, height: fp.length, material: 'panelDark', screws: false, radius: 0.008 });
   if (suite) {
-    addTsc(fwd, -P.tscU, 0.006, suite, 2);
-    addTsc(fwd, P.tscU, 0.006, suite, 3);
+    // Portrait pedestal TSC units raked toward the crew (fix round 1 L01; G600 BL7C0705 crop p_pedmid).
+    addTsc(fwd, -P.tscU, 0.004, suite, 2, true);
+    addTsc(fwd, P.tscU, 0.004, suite, 3, true);
   }
 
   // ---- top surface (origin top-left: x right from the left edge, y aft from the forward edge)
@@ -124,7 +125,9 @@ export function buildPedestal(c: G800CockpitContext): void {
     const at = new PushButton(env, { id: `g800.ped.at_disc${i}`, label: `A/T ENG / DISENG (${s})`, mode: 'momentary', event: EPIC_EVENTS.gp('at'), style: 'small', width: 0.008, capMaterial: 'plasticBlack' });
     onHandle(at, [out * 0.012, 0.012, L + 0.006], new THREE.Euler(-Math.PI / 2, 0, 0));
     b.add(at);
-    // Piggy-back reverse lever riding on the power-lever grip: lifted aft / up to deploy (only at IDLE).
+    // Piggy-back reverse lever: a flat paddle FOLDED ON TOP of the chrome grip, hinged at the top rear and
+    // lifted aft / up to deploy, stowed flush (fix round 1 L10; G500 c_ped / G600 p_pedmid photographs).
+    // Only at IDLE.
     const tlaVar = V.tla(i);
     const rev = new Lever(env, {
       id: `g800.ped.rev${i}`,
@@ -139,17 +142,21 @@ export function buildPedestal(c: G800CockpitContext): void {
       ],
       softWidth: 0.03,
       step: 0.05,
-      travel: { kind: 'arc', minDeg: 10, maxDeg: -60, pivotDepth: 0.01 },
-      armLength: 0.045,
+      travel: { kind: 'arc', minDeg: 4, maxDeg: -64, pivotDepth: 0.005 },
+      armLength: 0.012,
       armWidth: 0.006,
-      knob: 'reverser',
-      knobScale: 0.55,
+      knobGeometry: {
+        key: 'g800.rev.paddle',
+        // Paddle plate lying forward over the grip top from the aft hinge (+Z toward the front of the grip).
+        build: () => roundedBox(0.024, 0.007, 0.056, 0.003, 2).translate(0, 0, 0.026),
+      },
+      knobMaterial: 'plasticBlack',
       slot: false,
       detentLabels: false,
       limit: (vars: SimVars) => (vars.get(tlaVar) <= 0.05 ? REV_FREE : REV_LOCKED),
       format: (x) => (x <= 0.01 ? 'STOWED' : `REV ${Math.round(x * 100)} %`),
     });
-    onHandle(rev, [0, 0.013, L - 0.055], new THREE.Euler(-Math.PI / 2, 0, 0));
+    onHandle(rev, [0, 0.014, L - 0.006], new THREE.Euler(-Math.PI / 2, 0, 0));
     b.add(rev);
   }
 
@@ -241,10 +248,11 @@ export function buildPedestal(c: G800CockpitContext): void {
   // ---- trim sub-panel: PITCH TRIM split switch (both halves), FLT CTRL RESET (clear guard), YAW TRIM knob.
   const ty = 0.47;
   const tr = ped.subPanel({ name: 'g800.ped_trim', x: cx, y: ty + 0.03, width: 0.095, height: 0.12, material: 'panelDark', radius: 0.008 });
-  tr.label('PITCH TRIM', -0.02, 0.045, { height: 0.0022 });
+  tr.label('PITCH TRIM', -0.022, 0.045, { height: 0.0022 });
+  // Two large square paddle halves side by side (~20 mm each, G600 crop p_pedaft; fix round 1 L09).
   for (const [k, dx, v] of [
-    ['a', -0.026, V.altTrimA],
-    ['b', -0.014, V.altTrimB],
+    ['a', -0.033, V.altTrimA],
+    ['b', -0.011, V.altTrimB],
   ] as const) {
     tr.add(
       new RockerSwitch(env, {
@@ -255,8 +263,8 @@ export function buildPedestal(c: G800CockpitContext): void {
         values: [1, 0, -1],
         initial: 1,
         springs: { 0: 1, 2: 1 },
-        width: 0.011,
-        height: 0.024,
+        width: 0.02,
+        height: 0.02,
       }),
       dx,
       0.025,
@@ -270,6 +278,7 @@ export function buildPedestal(c: G800CockpitContext): void {
       var: V.fltCtrlReset,
       mode: 'momentary',
       style: 'korry',
+      unlitTint: 0.38, // faint legend when unlit (fix round 1 L11)
       width: 0.016,
       height: 0.016,
       layout: 'stack',

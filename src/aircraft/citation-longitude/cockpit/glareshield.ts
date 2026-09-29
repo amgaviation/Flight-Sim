@@ -46,7 +46,7 @@ function buildGmcTier(c: LonCockpitContext): void {
         mode: 'toggle',
         width: 0.036,
         height: 0.027,
-        unlitTint: 0.08, // red-tinted cover lens (c_gs21 shows a dark red lens when unlit)
+        unlitTint: 0.03, // deep opaque red, legend barely visible unlit (L2-11: OEG p.12 / a21_004)
         segments: [{ text: side < 0 ? ['L ENG', 'FIRE'] : ['ENG R', 'FIRE'], color: 'red', var: `fire.eng${i}_warn`, style: 'field' }],
         guard: { color: 'clear', hinge: 'top', close: 'free' },
       }),
@@ -82,7 +82,7 @@ function buildGmcTier(c: LonCockpitContext): void {
       mode: 'toggle',
       width: 0.034,
       height: 0.027,
-      unlitTint: 0.08,
+      unlitTint: 0.03, // L2-11: matches the ENG FIRE lenses
       segments: [{ text: ['APU', 'FIRE'], color: 'red', var: 'fire.apu_warn', style: 'field' }],
       guard: { color: 'clear', hinge: 'top', close: 'free' },
     }),

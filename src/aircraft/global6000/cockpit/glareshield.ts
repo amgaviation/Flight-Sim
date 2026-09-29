@@ -62,6 +62,9 @@ export function buildGlareshield(c: G6kCockpitContext): void {
         width: 0.024,
         height: 0.024,
         layout: 'stack',
+        // Unlit lens is near-black dark red/amber with no readable legend (photo N835GL c_gs_l; Bombardier
+        // dark-cockpit convention) - the default field tint 0.16 read as lit in daylight.
+        unlitTint: 0.04,
         segments: [
           { text: 'WARNING', color: 'red', var: 'alert.master_warning', style: 'field' },
           { text: 'CAUTION', color: 'amber', var: 'alert.master_caution', style: 'field' },
@@ -84,6 +87,7 @@ export function buildGlareshield(c: G6kCockpitContext): void {
         width: 0.019,
         height: 0.019,
         layout: 'stack',
+        unlitTint: 0.05, // dark cockpit: legends invisible until lit (photo c_gs_l)
         segments: [
           { text: ['ROLL', 'SEL'], color: 'amber', var: V.rollSelReq },
           { text: [n === 1 ? 'PLT' : 'CPLT', 'ROLL'], color: 'white', var: V.rollPriority, test: (x: number) => x === n },

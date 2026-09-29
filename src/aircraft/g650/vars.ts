@@ -75,6 +75,10 @@ export const G650_VARS = {
   ramAir: 'ac.ecs.ram_air_sw', // RAM AIR (guarded): 1 ON (RAM amber)
   zoneTemp: (z: 1 | 2 | 3) => `ac.ecs.zone${z}_temp_c`, // COLD/HOT knob: 1 cockpit, 2 fwd cabin, 3 aft cabin (16..30 degC)
   zoneMan: (z: 1 | 2 | 3) => `${P}ecs.zone${z}_man_sw`, // AUTO/MAN: 0 AUTO, 1 MAN (knob then commands the supply temperature)
+  // TEMP DISPLAY row (G650ER overhead photograph: a "TEMP DISPLAY" row beside the TEMP CONTROL zone knobs;
+  // EST legends): selects the zone whose measured temperature the readout shows (0 CKPT, 1 FWD, 2 AFT).
+  tempDispSel: `${P}ecs.temp_disp_sel`,
+  tempDispC: `${P}ecs.temp_disp_c`, // derived by systems/environment.ts: selected zone temperature (degC)
 
   // ---- CABIN PRESSURE CONTROL (LUC press)
   pressMode: 'ac.press.mode_sw', // AUTO/SEMI + FAULT/MANUAL: 0 AUTO, 1 SEMI, 2 MANUAL
@@ -100,6 +104,14 @@ export const G650_VARS = {
   startL: 'ac.eng.start_l_btn', // L ENG (start) switchlight: momentary 1
   startR: 'ac.eng.start_r_btn',
   contIgn: 'ac.eng.ign_sw', // CONT IGN: 1 ON (blue)
+
+  // ---- SYSTEM TEST block (overhead systems panel aft-left; G650ER overhead photograph, Flickr jeffatchison
+  // 52948516166: a labelled "SYSTEM TEST" block of square test switchlights with adjacent DOOR and
+  // LDG GEAR / DUMP VLV items). Legends of the individual keys are not readable in the photograph: the keys
+  // model the testable systems the sim has (EST selection). Momentary 1 while held; logic.ts runs the test
+  // and writes the `sysTestPass` result lamps while the tested system is powered.
+  sysTest: (k: SystemTestKey) => `${P}test.${k}_btn`,
+  sysTestPass: (k: SystemTestKey) => `${P}test.${k}_pass`, // derived by logic.ts: 1 while the test passes
 
   // ---- ENGINE FIRE TEST (LUC fire)
   fireTestLA: `${P}fire.test_l_a`, // L ENG LOOP A test: momentary
@@ -260,6 +272,9 @@ export const ACP_CHANNELS = ['vhf1', 'vhf2', 'vhf3', 'nav1', 'nav2', 'adf', 'mkr
 export type AcpChannel = (typeof ACP_CHANNELS)[number];
 /** COCKPIT CALL panel buttons (pedestal, G650ER photograph: CREW, RESET, PRIVACY, AFT PRIVACY). */
 export type CockpitCallKey = 'crew' | 'reset' | 'privacy' | 'aft_privacy';
+/** SYSTEM TEST block keys (overhead; EST selection: the testable systems modelled). */
+export type SystemTestKey = 'stall' | 'gpws' | 'antiskid' | 'ice_det';
+export const SYSTEM_TEST_KEYS: SystemTestKey[] = ['stall', 'gpws', 'antiskid', 'ice_det'];
 
 /** Every cockpit control var (inputs), for the "every control is consumed" audit test. */
 export const G650_CONTROL_VARS: string[] = [
@@ -279,6 +294,8 @@ export const G650_CONTROL_VARS: string[] = [
   G650_VARS.wshldL, G650_VARS.wshldR, G650_VARS.cabinWdo, G650_VARS.evsWdo,
   G650_VARS.startMaster, G650_VARS.crankMaster, G650_VARS.startL, G650_VARS.startR, G650_VARS.contIgn,
   G650_VARS.fireTestLA, G650_VARS.fireTestLB, G650_VARS.fireTestRA, G650_VARS.fireTestRB, G650_VARS.fireFaultTest,
+  G650_VARS.sysTest('stall'), G650_VARS.sysTest('gpws'), G650_VARS.sysTest('antiskid'), G650_VARS.sysTest('ice_det'),
+  G650_VARS.tempDispSel,
   G650_VARS.crewOxy, G650_VARS.paxOxy, G650_VARS.paxShutoff, G650_VARS.oxyMaskL, G650_VARS.oxyMaskR, G650_VARS.oxyMaskMode,
   G650_VARS.ltNav, G650_VARS.ltBeacon, G650_VARS.ltStrobe, G650_VARS.ltLdgL, G650_VARS.ltLdgR, G650_VARS.ltTaxi, G650_VARS.ltRecog,
   G650_VARS.ltLogo, G650_VARS.ltWing, G650_VARS.ltEmer, G650_VARS.seatBelt, G650_VARS.noSmoke, G650_VARS.ltPanel, G650_VARS.ltFlood,

@@ -17,7 +17,7 @@ describe('Pro Line Fusion window layout', () => {
     const { lay, vars } = setup();
     expect(contents(lay, 1)).toBe(`L:${Win.Pfd} R:${Win.Map}`);
     expect(contents(lay, 2)).toBe(`L:${Win.Eicas} R:${Win.Sys}`);
-    expect(contents(lay, 3)).toBe(`L:${Win.Fms} R:${Win.Fms}`);
+    expect(contents(lay, 3)).toBe(`L:${Win.Fms} R:${Win.Map}`); // FMS beside a map on AFD 3 (photo EB190582 e_ped_mid)
     expect(contents(lay, 4)).toBe(`L:${Win.Map} R:${Win.Pfd}`);
     expect(vars.get(FUSION_VARS.pfdOn(1))).toBe(1);
     expect(vars.get(FUSION_VARS.pfdOn(2))).toBe(4);
@@ -76,7 +76,7 @@ describe('Pro Line Fusion window layout', () => {
     lay.select(3, 'R', Win.Chkl);
     lay.store(1, 5);
     lay.reset();
-    expect(lay.selected(3, 'R')).toBe(Win.Fms);
+    expect(lay.selected(3, 'R')).toBe(Win.Map);
     expect(lay.recall(1, 5)).toBe(true);
     expect(lay.selected(3, 'R')).toBe(Win.Chkl);
     // Memory 2 preset: full PFDs, synoptics on the lower centre display (AIN 2012).

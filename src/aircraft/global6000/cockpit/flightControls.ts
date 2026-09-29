@@ -44,7 +44,9 @@ export function buildFlightControls(c: G6kCockpitContext): void {
     const yoke = new Yoke(env, {
       id: `g6k.fc.yoke_${S.toLowerCase()}`,
       label: `${who} CONTROL WHEEL`,
-      style: 'bizjet',
+      // Sculpted ram's-horn wheel (photo N835GL c_lwing: tall leather-wrapped grips rising from a wide hub),
+      // not the M-shaped 'bizjet' wheel of the first pass.
+      style: 'ramshorn',
       column: { kind: 'pivot', length: 0.62 },
       pitchVar: SURF.elevator,
       rollVar: SURF.aileron,
@@ -93,6 +95,29 @@ export function buildFlightControls(c: G6kCockpitContext): void {
       ],
     });
     b.place(yoke, { center_m: s === 1 ? YOKE_HUB_L : YOKE_HUB_R, facing: 'aft' });
+    // Wheel dressing (photo N835GL c_lwing): chrome trim ring round the hub face and an embossed oval hub cap
+    // (the BOMBARDIER GLOBAL badge reads as an embossed oval; no trademark text) plus a white stitch seam ring
+    // at the base of each grip on the leather wrap.
+    const ringG = env.geometry.get('g6k.yoke.ring', () => new THREE.TorusGeometry(0.052, 0.0028, 10, 40).scale(1.5, 0.62, 1));
+    const ring = new THREE.Mesh(ringG, env.materials.get('chrome'));
+    ring.position.set(0, -0.035, 0.0395);
+    yoke.wheel.add(ring);
+    const capG = env.geometry.get('g6k.yoke.cap', () => new THREE.CylinderGeometry(0.03, 0.032, 0.004, 32).rotateX(Math.PI / 2).scale(1.55, 0.6, 1));
+    const cap = new THREE.Mesh(capG, env.materials.get('plasticBlack'));
+    cap.position.set(0, -0.035, 0.041);
+    yoke.wheel.add(cap);
+    const embG = env.geometry.get('g6k.yoke.emb', () => new THREE.TorusGeometry(0.021, 0.0012, 8, 32).scale(1.6, 0.55, 1));
+    const emb = new THREE.Mesh(embG, env.materials.get('chrome'));
+    emb.position.set(0, -0.035, 0.0435);
+    yoke.wheel.add(emb);
+    const stitchG = env.geometry.get('g6k.yoke.stitch', () => new THREE.TorusGeometry(0.0185, 0.0007, 6, 24));
+    const stitchM = env.materials.custom('plastic', 0xe8e2d4, 0.9);
+    for (const sx of [-1, 1]) {
+      const st = new THREE.Mesh(stitchG, stitchM);
+      st.position.set(sx * 0.154, 0.0, 0);
+      st.rotation.x = Math.PI / 2;
+      yoke.wheel.add(st);
+    }
     b.place(new RudderPedals(env, { id: `g6k.fc.pedals_${S.toLowerCase()}`, label: `${who} RUDDER PEDALS`, style: 'hanging', spacing: 0.3 }), { center_m: s === 1 ? PEDALS_L : PEDALS_R, facing: 'aft' });
   }
   // NOSE STEER tiller (GXLG: +/-75 deg; tiller -1..1 = +/-75 deg via cockpitInputs.ts): a black D-loop crank handle on a

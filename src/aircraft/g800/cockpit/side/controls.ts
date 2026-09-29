@@ -129,24 +129,37 @@ export class Tiller extends ControlBase {
     super(env, o);
     this.o = o;
     this.initVar(o.var, 0);
-    const d = o.diameter ?? 0.09;
+    // Crank-style steer handle (fix round 1 L06; BJT500: tiller "in the normal place on the left side
+    // ledge, aft of the sidestick"; the GV-family / G500 tiller is a hand-sized sculpted crank, not a
+    // small disc): chrome hub with a contoured black grip lever sweeping ~12 cm, rotated about the
+    // console normal. EST shapes from GV / G500 flight-deck photographs.
+    const d = o.diameter ?? 0.12;
     const r = d / 2;
     // Fixed boss and escutcheon ring.
-    this.mesh(this.geo('g800.tiller.boss', () => cylinderZ(0.022, 0.02, 0, 0.012, 24)), 'panelDark', this.object, true);
-    // Wheel: rim, hub and a crank knob near the rim (pointer to the steering direction).
-    const rimG = this.geo(`g800.tiller.rim.${d}`, () => new THREE.TorusGeometry(r - 0.006, 0.0065, 10, 36));
-    const hubG = this.geo(`g800.tiller.hub.${d}`, () => cylinderZ(r - 0.006, r - 0.008, 0, 0.008, 36));
-    const knobG = this.geo('g800.tiller.knob', () => cylinderZ(0.009, 0.008, 0, 0.03, 16));
-    this.mesh(rimG, 'handleBlack', this.wheel).position.z = 0.006;
-    this.mesh(hubG, 'plasticBlack', this.wheel);
-    const knob = this.mesh(knobG, 'knobMetal', this.wheel);
-    knob.position.set(0, r - 0.014, 0.008);
-    this.wheel.position.z = 0.014;
+    this.mesh(this.geo('g800.tiller.boss', () => cylinderZ(0.026, 0.023, 0, 0.014, 24)), 'panelDark', this.object, true);
+    // Chrome hub cap.
+    const hubG = this.geo('g800.tiller.hub2', () => cylinderZ(0.02, 0.018, 0.012, 0.012, 24));
+    this.mesh(hubG, 'chrome', this.wheel);
+    // Crank arm: tapers out of the hub, then the sculpted grip lever the hand wraps around.
+    const armG = this.geo(`g800.tiller.arm.${d}`, () => {
+      const a = roundedBox(0.02, r - 0.014, 0.012, 0.005, 2);
+      a.translate(0, (r - 0.014) / 2 + 0.008, 0.019);
+      return a;
+    });
+    this.mesh(armG, 'plasticBlack', this.wheel);
+    const gripG = this.geo(`g800.tiller.grip.${d}`, () => {
+      // Contoured grip: fat capsule with a finger relief underside, standing proud of the arm end.
+      const g = roundedBox(0.03, 0.075, 0.028, 0.013, 3);
+      g.translate(0, r + 0.018, 0.03);
+      return g;
+    });
+    this.mesh(gripG, 'handleBlack', this.wheel);
+    this.wheel.position.z = 0.006;
     this.wheel.userData.cockpitDynamic = true;
     this.object.add(this.wheel);
-    this.addHitBox(d + 0.01, d + 0.01, 0.05, 0, 0, 0.025);
-    this.engrave('L', -r - 0.008, 0, { height: 0.003 });
-    this.engrave('R', r + 0.008, 0, { height: 0.003 });
+    this.addHitBox(d + 0.05, d + 0.09, 0.07, 0, 0.03, 0.035);
+    this.engrave('L', -r - 0.014, 0, { height: 0.003 });
+    this.engrave('R', r + 0.014, 0, { height: 0.003 });
   }
 
   protected stateText(): string {

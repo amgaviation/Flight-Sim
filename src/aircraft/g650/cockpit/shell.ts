@@ -113,7 +113,9 @@ export function buildShell(b: CockpitBuilder): void {
     return me;
   };
   // ---- skin: solid parts of the flight-deck section (walls, headliner, nose closure), openings cut.
-  add(carvedSkin(X_AFT, X_FWD, { inset: SHELL_INSET, keep: 'solid', inward: true, dx: 0.025, segT: 256 }), wall, 'shell');
+  // segT 360 (was 256): finer sampling keeps the centre-post cladding near GLAZING.postHalf instead of a
+  // wide tapered wedge (Flickr 52948762561: slim constant-width post).
+  add(carvedSkin(X_AFT, X_FWD, { inset: SHELL_INSET, keep: 'solid', inward: true, dx: 0.02, segT: 360 }), wall, 'shell');
   // Window reveals (frames around every opening, 45 mm band just proud of the wall).
   add(frameBand(X_AFT + 0.4, X_FWD, { inset: SHELL_INSET - 0.012, width: 0.022, inward: true, dx: 0.012, segT: 360, theta: [-2.2, 2.2] }), frame, 'window_frames');
   // Faint glass on the inside (reflections), non-occluding.

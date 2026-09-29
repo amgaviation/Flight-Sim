@@ -365,6 +365,11 @@ export interface G3000Config {
   /** Synoptic pages available on the MFD (aircraft-supplied data providers). */
   synoptics?: SynopticPageDef[];
   checklists?: Checklist[];
+  /**
+   * CAS message id -> checklist title: opening the GTC Checklist screen with such a message active pre-selects
+   * the linked electronic checklist (G3000 CAS-linked checklists, e.g. the M2 / Latitude; empty = no links).
+   */
+  casChecklists?: Readonly<Record<string, string>>;
   /** Power bindings per unit (default: always powered). */
   power?: Partial<Record<GduId | GtcId, Binding>>;
   /** GMC 710 AFCS controller power (default: always powered). */
@@ -436,6 +441,7 @@ export interface G3000Resolved {
   afcs: Required<AfcsUiConfig>;
   synoptics: SynopticPageDef[];
   checklists: Checklist[];
+  casChecklists: Readonly<Record<string, string>>;
   power: Partial<Record<GduId | GtcId, Binding>>;
   gmcPower: Binding | undefined;
   radioPower: Partial<Record<'nav1' | 'nav2' | 'gps' | 'marker' | 'adf', Binding>>;
@@ -551,6 +557,7 @@ export function resolveConfig(c: G3000Config): G3000Resolved {
     },
     synoptics: c.synoptics ?? [],
     checklists: c.checklists ?? [],
+    casChecklists: c.casChecklists ?? {},
     power: c.power ?? {},
     gmcPower: c.gmcPower,
     radioPower: c.radioPower ?? {},

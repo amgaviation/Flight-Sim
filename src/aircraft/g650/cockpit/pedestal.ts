@@ -14,13 +14,15 @@
  *                           (amber OFF / blue ARMED); COCKPIT CALL (CREW, RESET, PRIVACY, AFT PRIVACY) with the
  *                           satcom handset ("DO NOT OPERATE SATCOM IN HANGAR").
  *  top, aft centre        : TRIM: aileron trim rocker, ROLL MOTOR CONTROL, RUDDER knob (NOSE L / NOSE R), AUTO
- *                           CENTER, BACKUP PITCH (guarded, NOSE DOWN / NOSE UP).
+ *                           CENTER, BACKUP PITCH knurled thumbwheel (NOSE DOWN / NOSE UP arrows, Flickr 52948654839).
  *  top, aft right         : blank panel; cup holders at the aft end.
  * The AUTOBRAKE selector is on the lower centre instrument panel (lowerCentre.ts). Positions are scaled from
  * the photographs (EST).
  */
 import * as THREE from 'three';
-import { GuardedSwitch, Lever, PushButton, SelectorKnob, TBarHandle, ToggleSwitch, RockerSwitch, type LegendSegment } from '../../../cockpit/controls';
+import { GuardedSwitch, Lever, PushButton, SelectorKnob, TBarHandle, Thumbwheel, ToggleSwitch, RockerSwitch, type LegendSegment } from '../../../cockpit/controls';
+import type { CockpitEnv } from '../../../cockpit/env';
+import type { ControlPointer } from '../../../cockpit/types';
 import type { Panel } from '../../../cockpit/CockpitBuilder';
 import { trimBoxGeometry } from '../../../cockpit/geometry/structure';
 import { INPUT } from '../../../core/vars';
@@ -38,6 +40,58 @@ function sl(c: G650CockpitContext, panel: Panel, id: string, label: string, v: s
     lines.forEach((ln, i) => panel.label(ln, x, y - 0.0142 - (lines.length - 1 - i) * 0.003, { height: 0.0021 }));
   }
   return btn;
+}
+
+/**
+ * BACKUP PITCH thumbwheel (photograph: black ridged thumb-wheel with NOSE DOWN / NOSE UP arrows). Rolling
+ * the wheel writes the momentary trim command (+1 NOSE UP rolling aft/down, -1 NOSE DOWN rolling fwd/up,
+ * matching the arrow legends), spring-returning to 0 shortly after the input stops (the FBW consumes the
+ * command in systems/logic.ts G650PostLogic).
+ */
+class G650BackupPitchWheel extends Thumbwheel {
+  private holdT = 0;
+  private readonly cmdVar: string;
+
+  constructor(env: CockpitEnv, cmdVar: string) {
+    super(env, {
+      id: 'g650.ped.backup_pitch',
+      label: 'BACKUP PITCH trim wheel (NOSE DOWN fwd / NOSE UP aft)',
+      diameter: 0.03,
+      width: 0.012,
+      channel: { min: -1e6, max: 1e6, step: 1, degPerClick: 10, label: 'BACKUP PITCH' },
+    });
+    this.cmdVar = cmdVar;
+    this.initVar(cmdVar, 0);
+  }
+
+  private cmd(dir: number): void {
+    this.writeVar(this.cmdVar, dir);
+    this.holdT = 0.25;
+  }
+
+  override onPointerDown(p: ControlPointer): void {
+    super.onPointerDown(p);
+    // Click top half / left button rolls forward = NOSE DOWN (-1); right button = NOSE UP (+1).
+    this.cmd(p.button === 2 ? 1 : -1);
+  }
+
+  override onDrag(dx: number, dy: number, p?: ControlPointer): void {
+    super.onDrag(dx, dy, p);
+    if (Math.abs(dy) > 0.5) this.cmd(dy < 0 ? -1 : 1); // drag up = roll fwd = NOSE DOWN
+  }
+
+  override onWheel(delta: number, p?: ControlPointer): void {
+    super.onWheel(delta, p);
+    if (delta !== 0) this.cmd(delta > 0 ? -1 : 1);
+  }
+
+  override update(dt: number): void {
+    super.update(dt);
+    if (this.holdT > 0) {
+      this.holdT -= dt;
+      if (this.holdT <= 0) this.writeVar(this.cmdVar, 0);
+    }
+  }
 }
 
 function slopePlacement(top: [number, number], bottom: [number, number]) {
@@ -353,23 +407,12 @@ export function buildPedestal(c: G650CockpitContext): void {
   ped.label('AUTO CENTER', tx - 0.03, ay + 0.172, { height: 0.0019 });
   ped.label('BACKUP', tx + 0.042, ay + 0.085, { height: 0.0024 });
   ped.label('PITCH', tx + 0.042, ay + 0.09, { height: 0.0024 });
-  ped.add(
-    new GuardedSwitch(env, {
-      id: 'g650.ped.backup_pitch',
-      var: V.backupPitch,
-      label: 'BACKUP PITCH',
-      // Bottom to top (photograph: NOSE DOWN at the top, NOSE UP at the bottom).
-      positions: ['NOSE UP', 'OFF', 'NOSE DOWN'],
-      values: [1, 0, -1],
-      initial: 1,
-      springs: { 0: 1, 2: 1 },
-      labels: { positions: true, height: 0.0019 },
-      scale: 0.85,
-      guard: { color: 'black', guardedPosition: 1, hinge: 'top' },
-    }),
-    tx + 0.042,
-    ay + 0.14,
-  );
+  // Black knurled thumbwheel with NOSE DOWN / NOSE UP arrow legends, no guard (G650ER pedestal photograph
+  // Flickr 52948654839 bottom-centre: a ridged thumb-wheel, not a guarded rocker). Spring behaviour: rolling
+  // commands the trim direction momentarily (V.backupPitch -1 NOSE DN / +1 NOSE UP, released to 0).
+  ped.label('NOSE DOWN', tx + 0.042, ay + 0.108, { height: 0.0019 });
+  ped.add(new G650BackupPitchWheel(env, V.backupPitch), tx + 0.042, ay + 0.14);
+  ped.label('NOSE UP', tx + 0.042, ay + 0.172, { height: 0.0019 });
 
   // ---- right block: blank panel.
   ped.subPanel({ name: 'g650.ped_blank', x: (bx2 + W) / 2, y: (ay + 0.575) / 2, width: W - bx2 - 0.02, height: 0.575 - ay - 0.02, material: 'panel', screws: { kind: 'dzus', diameter: 0.006, inset: 0.008 }, radius: 0.004 });

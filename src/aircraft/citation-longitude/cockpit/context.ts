@@ -91,8 +91,12 @@ export function lonMaterials(env: CockpitEnv): LonMaterials {
     deck: mk('deck', 0x131416, 0.7),
     trim: mk('trim', 0x18191b, 0.8),
     unit: mk('unit', 0x111213, 0.78),
-    silver: mk('silver', 0x8d9197, 0.38, 0.55),
-    pillar: mk('pillar', 0xa4a6a8, 0.7),
+    // L2-09: the GTC surround / lever arms read satin medium grey in _pedfwd / OEG p.12, not near-white; darker base
+    // and higher roughness so daylight speculars do not blow it out.
+    silver: mk('silver', 0x63676d, 0.55, 0.35),
+    // L2-04: interior framing next to the glareshield is dark charcoal, light grey only on the upper frame /
+    // headliner (a21_004, OEG p.12): darker grey base, the lower pillar band uses `trim` (shell.ts).
+    pillar: mk('pillar', 0x9a9a96, 0.7),
     fixture: mk('fixture', 0x3a3c3f, 0.45, 0.3),
   };
   LON_MATS.set(env, m);

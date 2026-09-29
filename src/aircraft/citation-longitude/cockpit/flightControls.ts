@@ -16,6 +16,7 @@
  * surf.aileron) so the autopilot back-drives them, as with the real
  * cable-connected controls.
  */
+import * as THREE from 'three';
 import { RudderPedals, RotaryKnob, Yoke } from '../../../cockpit/controls';
 import { SURF } from '../../../core/vars';
 import { LON_VARS as V } from '../vars';
@@ -28,8 +29,7 @@ export function buildFlightControls(c: LonCockpitContext): void {
     const s = side < 0 ? 'L' : 'R';
     const outboard = side < 0 ? 'left' : 'right';
     const lower = s.toLowerCase();
-    b.place(
-      new Yoke(env, {
+    const yoke = new Yoke(env, {
         id: `lon.fc.yoke_${lower}`,
         label: side < 0 ? 'PILOT CONTROL WHEEL' : 'COPILOT CONTROL WHEEL',
         style: 'ramshorn',
@@ -89,9 +89,53 @@ export function buildFlightControls(c: LonCockpitContext): void {
             options: { id: `lon.fc.ptt_${lower}`, label: `PTT (${s})`, var: side < 0 ? V.pttL : V.pttR, mode: 'momentary', style: 'key', width: 0.014, height: 0.02, capMaterial: 'plasticBlack' },
           },
         ],
-      }),
-      { center_m: side < 0 ? YOKE_HUB_L : YOKE_HUB_R, facing: 'aft' },
-    );
+      });
+    // L2-13 (c_yokeL21 / a21_004): leather-wrapped horns with white stitching and the Textron badge on the hub cap.
+    // The grips mesh (shared 'yokeGrip' material) gets a per-aircraft stitched-leather material; a badge placard
+    // goes on the hub face. EST finish values (no material spec published).
+    const gripShared = env.materials.get('yokeGrip');
+    let leather = env.materials.get('yokeGrip');
+    {
+      const m = new THREE.MeshStandardMaterial({ color: 0x1a1714, roughness: 0.92 });
+      m.name = 'lon.yokeLeather';
+      env.materials.track(m);
+      // Stitch rows: dashed light thread on a leather-grain base (procedural, headless-safe DataTexture).
+      const n = 32;
+      const data = new Uint8Array(n * n * 4);
+      for (let yPix = 0; yPix < n; yPix++)
+        for (let xPix = 0; xPix < n; xPix++) {
+          const i = (yPix * n + xPix) * 4;
+          const grain = 20 + ((xPix * 7 + yPix * 13) % 5) * 2;
+          const stitch = yPix === 4 && xPix % 6 < 2;
+          const v0 = stitch ? 120 : grain;
+          data[i] = v0;
+          data[i + 1] = stitch ? 116 : grain - 2;
+          data[i + 2] = stitch ? 104 : grain - 3;
+          data[i + 3] = 255;
+        }
+      const tex = new THREE.DataTexture(data, n, n);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      tex.needsUpdate = true;
+      m.map = tex;
+      leather = m;
+    }
+    yoke.wheel.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (mesh.isMesh && mesh.material === gripShared && (mesh.geometry.getAttribute('uv') ? true : false)) mesh.material = leather;
+    });
+    // Hub badge: brushed cap with the Textron Aviation wordmark (the real hub carries the Textron badge).
+    const badge = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.002, 24), env.materials.get('steel'));
+    b.trackGeometry(badge.geometry);
+    badge.rotation.x = Math.PI / 2;
+    badge.position.set(0, -0.035, 0.0405); // hub block front face (geometry/yokes.ts ramshorn: 0.05 deep at z 0.014)
+    badge.userData.cockpitDynamic = true;
+    yoke.wheel.add(badge);
+    const mark = env.labels.text('TEXTRON', { height: 0.0028, anchor: 'middle', align: 'center', zone: null, color: '#2b2b2b' });
+    mark.position.set(0, -0.035, 0.0418);
+    mark.userData.cockpitStatic = false; // moves with the wheel
+    yoke.wheel.add(mark);
+    b.place(yoke, { center_m: side < 0 ? YOKE_HUB_L : YOKE_HUB_R, facing: 'aft' });
     b.place(new RudderPedals(env, { id: `lon.fc.pedals_${lower}`, label: side < 0 ? 'PILOT RUDDER PEDALS' : 'COPILOT RUDDER PEDALS', style: 'hanging', spacing: 0.3 }), {
       center_m: side < 0 ? PEDALS_L : PEDALS_R,
       facing: 'aft',
@@ -100,19 +144,42 @@ export function buildFlightControls(c: LonCockpitContext): void {
   // Nosewheel tiller (L50, c_lcon / AOPA "tiller knob"): a small black finger-grip knob set in the forward left
   // console top, just aft of the PFD GTC wedge: -1..1 = +-81 deg nosewheel (NosewheelSteering, via
   // systems/cockpitInputs.ts). SCOPE: the handle stays where it is left (no centring spring modelled).
-  const mount = b.panel({ name: 'tiller_mount', center_m: [TILLER.center_m[0], TILLER.center_m[1], TILLER.center_m[2] - 0.004], facing: 'up', width: 0.07, height: 0.07, material: lonMaterials(env).deck, screws: false, radius: 0.03 });
-  mount.add(
-    new RotaryKnob(env, {
-      id: 'lon.tiller',
-      label: 'NOSEWHEEL TILLER',
-      cap: 'skirted',
-      diameter: 0.045,
-      height: 0.022,
-      pointer: 'line',
-      dragPxPerClick: 6,
-      outer: { var: V.tiller3d, min: -1, max: 1, step: 0.05, angleRange: [-110, 110], label: 'TILLER', format: (v) => `${Math.round(v * 81)}°` },
-    }),
-    0,
-    0,
-  );
+  const mount = b.panel({ name: 'tiller_mount', center_m: [TILLER.center_m[0], TILLER.center_m[1], TILLER.center_m[2] - 0.004], facing: 'up', width: 0.11, height: 0.11, material: lonMaterials(env).deck, screws: false, radius: 0.05 });
+  const tiller = new RotaryKnob(env, {
+    id: 'lon.tiller',
+    label: 'NOSEWHEEL TILLER',
+    cap: 'skirted',
+    diameter: 0.045,
+    height: 0.016,
+    pointer: 'line',
+    dragPxPerClick: 6,
+    outer: { var: V.tiller3d, min: -1, max: 1, step: 0.05, angleRange: [-110, 110], label: 'TILLER', format: (v) => `${Math.round(v * 81)}°` },
+  });
+  // L2-06 (c_lcon / OEG crop): the tiller is a large (~90 mm) black five-lobe scalloped grip lying on the console
+  // top, not a small pointer knob. The grip rotates with the knob's outer channel (same drag logic).
+  {
+    const shape = new THREE.Shape();
+    const N = 80;
+    for (let k = 0; k <= N; k++) {
+      const a = (k / N) * Math.PI * 2;
+      const r = 0.037 + 0.008 * Math.cos(5 * a); // five lobes, 90 mm across the lobes
+      const px = r * Math.cos(a);
+      const py = r * Math.sin(a);
+      if (k === 0) shape.moveTo(px, py);
+      else shape.lineTo(px, py);
+    }
+    const g = new THREE.ExtrudeGeometry(shape, { depth: 0.016, bevelEnabled: true, bevelSize: 0.005, bevelThickness: 0.006, bevelSegments: 3, curveSegments: 2 });
+    b.trackGeometry(g);
+    const grip = new THREE.Mesh(g, env.materials.get('handleBlack'));
+    grip.position.z = 0.014;
+    grip.userData.cockpitDynamic = true;
+    tiller.outer.group.add(grip);
+    // Widen the click target to the grip diameter.
+    const hit = new THREE.Mesh(new THREE.BoxGeometry(0.095, 0.095, 0.03), env.materials.get('hitbox'));
+    b.trackGeometry(hit.geometry);
+    hit.position.z = 0.02;
+    tiller.object.add(hit);
+    tiller.hitTargets.push(hit);
+  }
+  mount.add(tiller, 0, 0);
 }

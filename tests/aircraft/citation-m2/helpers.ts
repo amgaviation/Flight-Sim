@@ -12,6 +12,7 @@ import { ENV, FUEL } from '../../../src/core/vars';
 import { FlightModel } from '../../../src/physics/FlightModel';
 import { CITATION_M2_FDM } from '../../../src/aircraft/citation-m2/fdm';
 import { createSystems, type M2Systems } from '../../../src/aircraft/citation-m2/createSystems';
+import { M2_CHECKLISTS } from '../../../src/aircraft/citation-m2/checklists';
 import { applyM2State } from '../../../src/aircraft/citation-m2/states';
 import { M2_INPUT_MAP } from '../../../src/aircraft/citation-m2/inputMap';
 import { CommandRouter } from '../../../src/input/CommandRouter';
@@ -101,7 +102,7 @@ export function makeM2(o: RigOptions): Rig {
     fdm,
     storage: { get: <T>(k: string, f: T) => (store.has(k) ? (store.get(k) as T) : f), set: (k, x) => void store.set(k, x) },
   };
-  const sys = createSystems(ctx, { noDisplays: true });
+  const sys = createSystems(ctx, { noDisplays: true, checklists: M2_CHECKLISTS });
   const a = o.air;
   if (a) fdm.reposition({ lat: a.lat ?? field.lat, lon: a.lon ?? field.lon, altFtMsl: a.altFtMsl, iasKt: a.iasKt, headingTrue: a.headingTrue ?? field.courseTrue });
   else fdm.reposition({ lat: field.lat, lon: field.lon, onGround: true, headingTrue: field.courseTrue });

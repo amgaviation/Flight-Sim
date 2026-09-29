@@ -210,8 +210,10 @@ export const G800_VARS = {
   // Left side ledge
   pedalSteer: `${P}pedal_steer`, // PEDAL STEER switchlight: 1 ON, 0 OFF (amber OFF); pedals +/-7 deg only
   pedalSteerCmd: `${P}pedal_steer_cmd`, // derived: pedal input to the steering (0 when PEDAL STEER is OFF)
-  // HUD (left headliner HUD control panel and combiner, pilot side)
-  hudStow: `${P}hud_deploy`, // combiner: 1 deployed, 0 stowed
+  // HUD (headliner HUD control panels and combiners; the G800 has DUAL HUDs - fix round 1 L02: the demonstrator
+  // flight-deck photograph shows identical CONTR / VIDEO BRT / HUD BRT + MAN/AUTO panels in BOTH headliner corners
+  // with overhead projector housings above both seats). Side 1 keeps the original names (append-only).
+  hudStow: `${P}hud_deploy`, // pilot combiner: 1 deployed, 0 stowed
   hudBrt: `${P}hud_brt`, // HUD BRT knob 0..1 (MAN)
   hudAuto: `${P}hud_auto`, // MAN / AUTO: 1 AUTO (brightness follows ambient light)
   hudContr: `${P}hud_contr`, // CONTR knob 0..1 (symbology contrast against the video)
@@ -219,6 +221,15 @@ export const G800_VARS = {
   hudOn: `${P}hud_on`, // derived: HUD powered and combiner deployed
   hudLum: `${P}hud_lum`, // derived: symbology luminance 0..1
   hudVideo: `${P}hud_video`, // derived: video luminance 0..1 (0 when no EVS/CVS selected)
+  /** Per-side HUD control / state (s = 1 pilot, 2 copilot); side 1 aliases the original names above. */
+  hudStowS: (s: 1 | 2) => (s === 1 ? `${P}hud_deploy` : `${P}hud2_deploy`),
+  hudBrtS: (s: 1 | 2) => (s === 1 ? `${P}hud_brt` : `${P}hud2_brt`),
+  hudAutoS: (s: 1 | 2) => (s === 1 ? `${P}hud_auto` : `${P}hud2_auto`),
+  hudContrS: (s: 1 | 2) => (s === 1 ? `${P}hud_contr` : `${P}hud2_contr`),
+  hudVideoBrtS: (s: 1 | 2) => (s === 1 ? `${P}hud_video_brt` : `${P}hud2_video_brt`),
+  hudOnS: (s: 1 | 2) => (s === 1 ? `${P}hud_on` : `${P}hud2_on`),
+  hudLumS: (s: 1 | 2) => (s === 1 ? `${P}hud_lum` : `${P}hud2_lum`),
+  hudVideoS: (s: 1 | 2) => (s === 1 ? `${P}hud_video` : `${P}hud2_video`),
   // Cabin / flight deck (state only)
   visor: (s: 1 | 2) => `${P}visor${s}`, // sun visor: 0 stowed, 1 down (SCOPE: no glare model)
   table: (s: 1 | 2) => `${P}table${s}`, // pull-out meal / desk table: 0 stowed, 1 out (SCOPE: state and animation only)

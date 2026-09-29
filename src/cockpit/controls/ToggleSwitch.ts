@@ -50,8 +50,12 @@ export interface ToggleSwitchOptions extends ControlOptions {
   throwDeg?: number;
   /** Static side protection. */
   fence?: 'none' | 'plates' | 'wire';
-  /** Engraved labels: name above, position legends beside the positions. */
-  labels?: { name?: string | boolean; positions?: boolean; height?: number; zone?: string | null };
+  /**
+   * Engraved labels: name above, position legends beside the positions. `midOffset` (appended by citation-longitude,
+   * additive) moves a 3-position switch's centre legend laterally (m) so it clears the nut / bushing; default keeps
+   * the historic 0.0085 * scale offset.
+   */
+  labels?: { name?: string | boolean; positions?: boolean; height?: number; zone?: string | null; midOffset?: number };
   /** Draw nut/bushing (default true). */
   base?: boolean;
   /** Interlock: return false to forbid a move. */
@@ -279,7 +283,7 @@ export class ToggleSwitch extends ControlBase {
         if (this.vertical) {
           this.engrave(this.positions[n - 1], 0, 0.0118 * s, style2);
           this.engrave(this.positions[0], 0, -0.0118 * s, style2);
-          if (n === 3) this.engrave(this.positions[1], 0.0085 * s, 0, { ...style2, align: 'left' });
+          if (n === 3) this.engrave(this.positions[1], lab.midOffset ?? 0.0085 * s, 0, { ...style2, align: 'left' });
         } else {
           this.engrave(this.positions[0], -0.0105 * s, 0, { ...style2, align: 'right' });
           this.engrave(this.positions[n - 1], 0.0105 * s, 0, { ...style2, align: 'left' });

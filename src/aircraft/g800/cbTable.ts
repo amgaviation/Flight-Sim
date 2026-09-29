@@ -14,6 +14,8 @@
  *  - BJT500: "The banks of mechanical circuit breakers are almost gone now, with 45
  *    percent replaced by electronic circuit breakers." Here 37 of the 87 modelled
  *    breakers (43 %) are ECBs.
+ *  - EST: WHICH loads are electronic vs mechanical is not published; the split here keeps the
+ *    published proportion but the per-load allocation is an estimate (fix round 1 L21).
  *  - EST: the assignment of each modelled load to a group and grid cell (the photo
  *    legends are not legible); legend texts in Gulfstream CB style.
  */
@@ -77,8 +79,14 @@ export function electronicBreakers(all: readonly string[]): string[] {
   return all.filter((n) => !mech.has(n));
 }
 
-/** Grid cell (row, column) of item `i` of a group. */
+/**
+ * Grid cell (row, column) of item `i` of a group. Items are spread evenly over the group's cells
+ * (fix round 1 L08: the photographed panels are a filled grid, p_cb.jpg; with fewer modelled loads than
+ * cells, even spacing keeps the photographed density instead of leaving large empty areas).
+ */
 export function cbCell(g: CbGridGroup, i: number): [number, number] {
   const w = g.cols[1] - g.cols[0] + 1;
-  return [g.rows[0] + Math.floor(i / w), g.cols[0] + (i % w)];
+  const cells = w * (g.rows[1] - g.rows[0] + 1);
+  const k = g.items.length >= cells ? i : Math.floor((i * cells) / g.items.length);
+  return [g.rows[0] + Math.floor(k / w), g.cols[0] + (k % w)];
 }

@@ -8,7 +8,11 @@ import { createFileLoader } from '../../../../src/nav/data/nodeLoader';
 import type { InitialState } from '../../../../src/aircraft/types';
 import { buildG650Cockpit, type G650Cockpit } from '../../../../src/aircraft/g650/cockpit';
 import { fakeCanvas } from '../../../avionics/honeywell-epic/helpers';
+import { installDomStubs } from '../../c172-steam/domStubs';
 import { makeRig, type Rig } from '../helpers';
+
+// The standby magnetic compass (cockpit/index.ts) paints its card on an OffscreenCanvas at build time.
+installDomStubs();
 
 let db: NavDatabaseImpl | null = null;
 

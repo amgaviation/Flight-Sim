@@ -86,7 +86,9 @@ export function buildLongitudeCockpit(ctx: SimContext, sys: LongitudeSystems, su
   };
 
   // ---- lighting zones and real lights (<= 5, docs/modules/cockpit.md §11)
-  b.zone({ id: 'panel', intensityVar: 'ac.light.panel', lagS: 0, gain: 1.5 }); // LED edge-lit panels (EST gain)
+  // L2-14: gain raised 1.5 -> 4 so engraved legends read at night with the PANEL knob up (OG 16-2: the PANEL knob
+  // backlights all panel legends); EST gain tuned on the 02:00 screenshots (tests/output/lon-night2).
+  b.zone({ id: 'panel', intensityVar: 'ac.light.panel', lagS: 0, gain: 4 }); // LED edge-lit panels
   b.zone({ id: 'flood', intensityVar: 'ac.light.flood', lagS: 0, color: 0xfff1dc });
   b.zone({ id: 'aux', intensityVar: 'ac.light.aux', lagS: 0, color: 0xfff1dc });
   b.zone({ id: 'map_l', intensityVar: 'ac.light.map_l', lagS: 0, color: 0xfff1dc });

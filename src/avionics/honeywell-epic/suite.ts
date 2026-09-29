@@ -53,7 +53,7 @@ import { McduDisplay } from './displays/mcduDisplay';
 import { SfdDisplay, SmcDisplay } from './displays/standby';
 import { GP_WINDOW_KINDS, GpWindowDisplay } from './displays/gpDisplay';
 import { TouchDisplay } from './displays/touchDisplay';
-import { buildTscPages, TSC_H, TSC_TITLE_H, TSC_W } from './touch/tscPages';
+import { buildTscPages, TSC_H, TSC_PORTRAIT_H, TSC_PORTRAIT_W, TSC_TITLE_H, TSC_W } from './touch/tscPages';
 import { resolveEngineNames } from './displays/engineWindows';
 
 /** What the suite needs from the aircraft (a SimContext satisfies it; add the aircraft's FMS). */
@@ -196,6 +196,8 @@ export class EpicSuite {
         this.addPower(id, pw.mcdu?.[n - 1]);
       }
     } else {
+      // Portrait TSC units (fix round 1, additive config option): the real Symmetry TSCs are portrait tablets.
+      const tp = config.tscPortrait === true;
       for (let n = 1; n <= 4; n++) {
         const id = `${p}.tsc${n}`;
         const side: 1 | 2 = n <= 2 ? 1 : 2;
@@ -204,13 +206,13 @@ export class EpicSuite {
         this.mcdus.push(m);
         let logic: TouchScreenLogic | null = null;
         const pages = buildTscPages(
-          { vars, events, cfg, dc: this.dc, gp: this.gp, checklist: this.checklist, windows: this.windows, mcdu: m, side, brightnessIds: side === 1 ? [duIds[0], duIds[1]] : [duIds[3], duIds[2]] },
+          { vars, events, cfg, dc: this.dc, gp: this.gp, checklist: this.checklist, windows: this.windows, mcdu: m, side, brightnessIds: side === 1 ? [duIds[0], duIds[1]] : [duIds[3], duIds[2]], portrait: tp },
           () => logic!,
         );
         logic = new TouchScreenLogic(pages, () => ev() >= 0.5);
         logic.show(n === 2 || n === 3 ? 'FMS' : 'HOME', false);
         this.tscLogic.push(logic);
-        this.tsc.push(new TouchDisplay({ id, width: TSC_W, height: TSC_H, vars, logic, pixelRatio: pr, canvas: canvasOf(), titleH: TSC_TITLE_H, home: 'HOME', bootS: 8 }));
+        this.tsc.push(new TouchDisplay({ id, width: tp ? TSC_PORTRAIT_W : TSC_W, height: tp ? TSC_PORTRAIT_H : TSC_H, vars, logic, pixelRatio: pr, canvas: canvasOf(), titleH: TSC_TITLE_H, home: 'HOME', bootS: 8 }));
         this.addPower(id, pw.tsc?.[n - 1]);
       }
       for (let n = 1; n <= 3; n++) {

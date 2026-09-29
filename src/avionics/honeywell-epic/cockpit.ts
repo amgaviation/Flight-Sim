@@ -62,11 +62,18 @@ export function addDisplayUnits(panel: Panel, suite: EpicSuite, at: readonly (re
   return out;
 }
 
-/** Symmetry touch-screen controller `n` (1..4, TSC_POSITIONS order). */
-export function addTsc(panel: Panel, x: number, y: number, suite: EpicSuite, n: number): THREE.Mesh | null {
+/**
+ * Symmetry touch-screen controller `n` (1..4, TSC_POSITIONS order).
+ * `portrait` (appended, additive, fix round 1) rotates the active area to the
+ * tall portrait orientation of the real units; the suite must be configured
+ * with `tscPortrait` so the page layouts match.
+ */
+export function addTsc(panel: Panel, x: number, y: number, suite: EpicSuite, n: number, portrait = false): THREE.Mesh | null {
   const d = suite.tsc[n - 1];
   if (!d) return null;
-  return panel.display(d, x, y, EPIC_HW.tsc.w, EPIC_HW.tsc.h, { bezel: { border: 0.01, material: 'bezelGloss' } });
+  const w = portrait ? EPIC_HW.tsc.h : EPIC_HW.tsc.w;
+  const h = portrait ? EPIC_HW.tsc.w : EPIC_HW.tsc.h;
+  return panel.display(d, x, y, w, h, { bezel: { border: 0.01, material: 'bezelGloss' } });
 }
 
 /** Symmetry overhead panel touch screen `n` (1..3). */

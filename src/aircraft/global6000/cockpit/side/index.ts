@@ -36,6 +36,7 @@
  *    compartment chapter, which lists no door control), so none is built.
  */
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { AnnunciatorLight, CircuitBreaker, PushButton, RotaryKnob, SelectorKnob, ToggleSwitch } from '../../../../cockpit/controls';
 import type { Panel } from '../../../../cockpit/CockpitBuilder';
 import { trimBoxGeometry } from '../../../../cockpit/geometry/structure';
@@ -138,11 +139,18 @@ function buildSide(c: G6kCockpitContext, side: 'left' | 'right'): void {
     hp.label(j, -0.03 + i * 0.03, 0.011, { height: 0.0018, zone });
   });
 
-  // ---- oxygen mask stowage box with its regulator selector, RESET / TEST and flow blinker
+  // ---- oxygen mask stowage box (recessed under a tan leather lid: the Vision console top is flush leather with
+  // the mask out of sight, photo EB190582 e_lconsole) with its regulator selector, RESET / TEST and flow blinker
   const boxY = 0.2;
-  con.add(new MaskStowage(env, { id: `g6k.side.mask${n}`, label: `${who} OXYGEN MASK`, var: V.oxyMask(n), inboard: side === 'left' ? 1 : -1, size: [0.1, 0.12, 0.05] }), inb(0.13), boxY);
+  con.add(
+    new MaskStowage(env, { id: `g6k.side.mask${n}`, label: `${who} OXYGEN MASK`, var: V.oxyMask(n), inboard: side === 'left' ? 1 : -1, size: [0.1, 0.12, 0.05], recess: 0.044, doorMaterial: fin.tan }),
+    inb(0.13),
+    boxY,
+  );
   con.label('OXYGEN MASK', inb(0.13), boxY - 0.075, { height: 0.0024, zone });
   const regY = boxY + 0.1;
+  // Regulator controls grouped on one recessed dark plate instead of scattered proud of the leather (photo).
+  con.subPanel({ name: `g6k.oxyreg_${side}`, x: inb(0.1225), y: regY + 0.011, width: 0.115, height: 0.075, origin: 'center', z: -0.0008, material: 'panelDark', radius: 0.006, screws: false });
   con.add(
     new ToggleSwitch(env, {
       id: `g6k.side.oxy_mode${n}`,
@@ -214,10 +222,21 @@ function buildSide(c: G6kCockpitContext, side: 'left' | 'right'): void {
       py,
     );
     con.label('PASSENGER OXYGEN', inb(0.1), py - 0.035, { height: 0.0023, zone });
-    con.add(new AnnunciatorLight(env, { id: 'g6k.side.pax_on', label: 'PASS OXY ON', width: 0.014, height: 0.01, segments: [seg.on(['PASS', 'ON'], 'white', 'oxy.pax_on')] }), inb(0.175), py + 0.012);
-    con.add(new AnnunciatorLight(env, { id: 'g6k.side.pax_low', label: 'PASS OXY LOW', width: 0.014, height: 0.01, segments: [seg.on('LOW', 'amber', 'oxy.pax_low')] }), inb(0.175), py - 0.004);
+    con.add(new AnnunciatorLight(env, { id: 'g6k.side.pax_on', label: 'PASS OXY ON', width: 0.014, height: 0.01, unlitTint: 0.05, segments: [seg.on(['PASS', 'ON'], 'white', 'oxy.pax_on')] }), inb(0.175), py + 0.012);
+    con.add(new AnnunciatorLight(env, { id: 'g6k.side.pax_low', label: 'PASS OXY LOW', width: 0.014, height: 0.01, unlitTint: 0.05, segments: [seg.on('LOW', 'amber', 'oxy.pax_low')] }), inb(0.175), py - 0.004);
   }
 
+  if (side === 'left') {
+    // Chrome cup holder just aft of the NOSE STEER hub (photo EB190582 e_tiller: chrome ring set into the leather).
+    const ringG = env.geometry.get('g6k.cup.ring', () => new THREE.TorusGeometry(0.036, 0.0035, 10, 32));
+    const cupG = env.geometry.get('g6k.cup.cup', () => new THREE.CylinderGeometry(0.034, 0.03, 0.05, 28, 1, true).rotateX(Math.PI / 2).translate(0, 0, -0.025));
+    const ring = new THREE.Mesh(ringG, env.materials.get('chrome'));
+    ring.userData.cockpitStatic = true;
+    con.addObject(ring, inb(0.065), 0.135, { z: 0.0015 });
+    const cup = new THREE.Mesh(cupG, env.materials.get('steel'));
+    cup.userData.cockpitStatic = true;
+    con.addObject(cup, inb(0.065), 0.135, { z: 0.0015 });
+  }
 }
 
 /** CCBP: thermal breakers grouped by bus, with the rating on each collar (07-20-1). */
@@ -243,6 +262,16 @@ function buildCcbp(c: G6kCockpitContext): void {
   const secW = (C.width - 0.016) / cols;
   const secH = 0.062;
   let k = 0;
+  // SCOPE: only the modelled loads get interactive breakers (cbTable.ts). The real CCBP (FCOM 07-20-1 drawing
+  // FGF0720_005) is a dense panel of several dozen thermal breakers in 8 lettered bus sections, so the remaining
+  // drawing positions are filled with engraved, non-functional collared dummies (one merged mesh) to keep the
+  // panel's density without inventing load names.
+  const dummies: THREE.BufferGeometry[] = [];
+  const dummyAt = (bx: number, by: number) => {
+    const collar = new THREE.CylinderGeometry(0.0062, 0.0062, 0.0022, 18).rotateX(Math.PI / 2).translate(bx, -by, 0.0011);
+    const button = new THREE.CylinderGeometry(0.0038, 0.0038, 0.0075, 14).rotateX(Math.PI / 2).translate(bx, -by, 0.0037);
+    dummies.push(collar, button);
+  };
   for (const [bus, list] of groups) {
     const col = k % cols;
     const row = Math.floor(k / cols);
@@ -250,6 +279,7 @@ function buildCcbp(c: G6kCockpitContext): void {
     const y0 = 0.026 + row * (secH + 0.004);
     p.label(`${'ABCDEFGH'[k]}   ${bus} BUS`, x0 + secW / 2, y0 + 0.004, { height: 0.0024, zone: 'panel_cb' });
     p.line(x0 + 0.004, y0 + 0.009, x0 + secW - 0.004, y0 + 0.009, 0.0004, 'panel_cb');
+    for (let i = list.length; i < 6; i++) dummyAt(x0 + 0.014 + (i % 3) * 0.024, y0 + 0.024 + Math.floor(i / 3) * 0.034);
     list.forEach((e, i) => {
       const bx = x0 + 0.014 + (i % 3) * 0.024;
       const by = y0 + 0.024 + Math.floor(i / 3) * 0.034;
@@ -273,5 +303,14 @@ function buildCcbp(c: G6kCockpitContext): void {
       if (words.length > 1) p.label(words.slice(half).join(' '), bx, by + 0.0155, { height: 0.0017, zone: 'panel_cb' });
     });
     k++;
+  }
+  if (dummies.length) {
+    const g = mergeGeometries(dummies, false)!;
+    for (const d of dummies) d.dispose();
+    b.trackGeometry(g);
+    const mesh = new THREE.Mesh(g, env.materials.get('plasticBlack'));
+    mesh.userData.cockpitStatic = true;
+    mesh.name = 'ccbp_dummy_breakers';
+    p.addObject(mesh, 0, 0, { z: 0.0005 });
   }
 }

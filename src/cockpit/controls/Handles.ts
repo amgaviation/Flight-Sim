@@ -55,6 +55,19 @@ export interface TBarHandleOptions extends ControlOptions {
   lightColor?: LampColor;
   /** Legend on the handle face. */
   legend?: string;
+  /**
+   * (Appended by g800, additive.) 'fire' style cap shape: 'stalk' = shaped stalk grip with a rounded
+   * grip face (Gulfstream engine fire handles, G600 crop p_pedmid); default 'block' keeps the original box.
+   * (Appended by global6000, additive.) 'round' = cylindrical round-grip T-handle on a narrow neck with the
+   * lamp legend in the grip face (Bombardier FIRE DISCH handles, GX PTG 9-12).
+   */
+  fireCap?: 'block' | 'stalk' | 'round';
+  /**
+   * (Appended by g800, additive.) Explicit legend-face segments replacing the default single
+   * `legend`/`lightVar` segment (e.g. a white L / R letter lit from annunciator power while the red
+   * fire flood lights from the fire warning).
+   */
+  segments?: import('./Annunciator').LegendSegment[];
   material?: MaterialName | THREE.Material;
   scale?: number;
   /** 'tbar' style: grip bar width (m, before `scale`). Default 0.056. Appended (Cessna 172S wide parking-brake bar). */
@@ -252,6 +265,41 @@ export class TBarHandle extends ControlBase {
         break;
       }
       case 'fire': {
+        if (this.o.fireCap === 'stalk') {
+          // Shaped stalk grip: narrow neck rising into a rounded grip head with a slightly domed face.
+          this.mesh(this.geo(`tbar.firestalk.${s}`, () => {
+            const neck = roundedBox(0.03 * s, 0.02 * s, 0.02 * s, 0.006 * s, 2);
+            transform(neck, 0, 0, 0.01 * s);
+            const head = roundedBox(0.06 * s, 0.032 * s, 0.024 * s, 0.011 * s, 3);
+            transform(head, 0, 0, 0.028 * s);
+            const g = merge([neck, head]);
+            neck.dispose();
+            head.dispose();
+            return g;
+          }), m, this.turn);
+          faceZ = 0.0402 * s;
+          faceW = 0.046 * s;
+          faceH = 0.02 * s;
+          break;
+        }
+        if (this.o.fireCap === 'round') {
+          // Round-grip T: a lateral cylinder grip on a narrow neck; the lamp legend sits in the grip face.
+          this.mesh(this.geo(`tbar.fireround.${s}`, () => {
+            const neck = roundedBox(0.022 * s, 0.018 * s, 0.016 * s, 0.005 * s, 2);
+            transform(neck, 0, 0, 0.008 * s);
+            const grip = cylinderZ(0.014 * s, 0.014 * s, -0.026 * s, 0.026 * s, 24);
+            grip.rotateY(Math.PI / 2); // axis lateral (grip bar across the pull direction)
+            transform(grip, 0, 0, 0.028 * s);
+            const g = merge([neck, grip]);
+            neck.dispose();
+            grip.dispose();
+            return g;
+          }), m, this.turn);
+          faceZ = 0.0422 * s;
+          faceW = 0.044 * s;
+          faceH = 0.019 * s;
+          break;
+        }
         this.mesh(this.geo(`tbar.fire.${s}`, () => {
           const body = roundedBox(0.072 * s, 0.03 * s, 0.026 * s, 0.006 * s, 3);
           transform(body, 0, 0, 0.018 * s);
@@ -287,8 +335,8 @@ export class TBarHandle extends ControlBase {
         break;
       }
     }
-    if (this.o.lightVar || (style === 'fire' && this.o.legend)) {
-      this.face = new LegendFace(env, [{ text: this.o.legend ?? '', color: this.o.lightColor ?? 'red', whenOn: true, style: 'field' }], faceW, faceH, 'stack', {
+    if (this.o.segments || this.o.lightVar || (style === 'fire' && this.o.legend)) {
+      this.face = new LegendFace(env, this.o.segments ?? [{ text: this.o.legend ?? '', color: this.o.lightColor ?? 'red', whenOn: true, style: 'field' }], faceW, faceH, 'stack', {
         intensity: 1.6,
         own: (mm) => this.own(mm),
       });

@@ -19,7 +19,8 @@
  * autopilot does not back-drive the pitch of the yokes; the roll trim motor
  * back-drive (ROLL MOTOR CONTROL, `V.yokeRollTrim`) offsets the wheel angle.
  */
-import { RudderPedals, RotaryKnob, Yoke } from '../../../cockpit/controls';
+import * as THREE from 'three';
+import { Placard, RudderPedals, RotaryKnob, Yoke } from '../../../cockpit/controls';
 import { trimBoxGeometry } from '../../../cockpit/geometry/structure';
 import { G650_VARS as V } from '../vars';
 import type { G650CockpitContext } from './context';
@@ -79,6 +80,27 @@ export function buildFlightControls(c: G650CockpitContext): void {
       { center_m: side < 0 ? YOKE_HUB_L : YOKE_HUB_R, facing: 'aft' },
     );
     yokes.push(yoke);
+    // Hub badge and checklist clip (G650ER photographs Flickr 52948656184 / 52948762561: brushed hub cap
+    // with the Gulfstream logo; approach-plate / checklist clip on the hub). Static trim on the wheel so
+    // both turn with it. EST sizes.
+    {
+      const capG = new THREE.CylinderGeometry(0.021, 0.021, 0.004, 24);
+      capG.rotateX(Math.PI / 2);
+      b.trackGeometry(capG);
+      const cap = new THREE.Mesh(capG, env.materials.get('chrome'));
+      cap.name = 'yoke_hub_cap';
+      cap.position.set(0, 0, 0.03);
+      yoke.wheel.add(cap);
+      const badge = new Placard(env, { text: 'Gulfstream', style: 'printed', height: 0.0035, color: '#1a1c1e' });
+      badge.position.set(0, 0, 0.0325);
+      yoke.wheel.add(badge);
+      const clipG = new THREE.BoxGeometry(0.034, 0.008, 0.004);
+      b.trackGeometry(clipG);
+      const clip = new THREE.Mesh(clipG, env.materials.get('plasticBlack'));
+      clip.name = 'yoke_clip';
+      clip.position.set(0, 0.032, 0.028);
+      yoke.wheel.add(clip);
+    }
     b.place(new RudderPedals(env, { id: `g650.fc.pedals_${lo}`, label: side < 0 ? 'PILOT RUDDER PEDALS' : 'COPILOT RUDDER PEDALS', style: 'hanging', spacing: 0.3 }), {
       center_m: side < 0 ? PEDALS_L : PEDALS_R,
       facing: 'aft',

@@ -43,6 +43,14 @@ import type { EpicResolvedConfig } from '../config';
 
 export const TSC_W = 800;
 export const TSC_H = 480;
+/**
+ * Portrait TSC logical size (fix round 1, additive): the real Symmetry
+ * touch-screen controllers are tall portrait tablets (G800 demonstrator
+ * flight-deck photograph; G600 BL7C0705 pedestal crop), so an airframe can
+ * ask for portrait page layouts with `TscServices.portrait`.
+ */
+export const TSC_PORTRAIT_W = 480;
+export const TSC_PORTRAIT_H = 800;
 export const TSC_TITLE_H = 48;
 const TOP = TSC_TITLE_H + 8;
 
@@ -60,6 +68,8 @@ export interface TscServices {
   side: 1 | 2;
   /** Display ids whose brightness the UTILITY page adjusts. */
   brightnessIds: readonly string[];
+  /** Portrait page layouts (480 x 800; default landscape 800 x 480). Appended (additive), fix round 1. */
+  portrait?: boolean;
 }
 
 /** Returns the page list; `logic()` gives access to the navigation (set by the caller after construction). */
@@ -67,6 +77,10 @@ export function buildTscPages(s: TscServices, logic: () => TouchScreenLogic): To
   const v = s.vars;
   const pages: TouchPage[] = [];
   const show = (id: string) => () => void logic().show(id);
+  // Logical page size: landscape (default) or portrait (Symmetry TSC units, fix round 1).
+  const P = s.portrait === true;
+  const PW = P ? TSC_PORTRAIT_W : TSC_W;
+  const PH = P ? TSC_PORTRAIT_H : TSC_H;
 
   // ------------------------------------------------------------ HOME
   const apps: readonly [string, string][] = [
@@ -80,10 +94,12 @@ export function buildTscPages(s: TscServices, logic: () => TouchScreenLogic): To
     ['XPDR', 'XPDR / TCAS'],
     ['UTILITY', 'Utility'],
   ];
+  const homeCols = P ? 2 : 3;
+  const homeRows = P ? 5 : 3;
   pages.push({
     id: 'HOME',
     title: s.side === 1 ? 'Pilot TSC' : 'Copilot TSC',
-    widgets: apps.map(([id, label], i) => ({ id: `home.${id}`, kind: 'tile', ...cell(20, TOP + 6, TSC_W - 40, TSC_H - TOP - 20, 3, 3, i % 3, Math.floor(i / 3), 16), label, tap: show(id), size: 20, disabled: id === 'FMS' && !s.mcdu ? () => true : undefined }) as TouchWidget),
+    widgets: apps.map(([id, label], i) => ({ id: `home.${id}`, kind: 'tile', ...cell(20, TOP + 6, PW - 40, PH - TOP - 20, homeCols, homeRows, i % homeCols, Math.floor(i / homeCols), 16), label, tap: show(id), size: 20, disabled: id === 'FMS' && !s.mcdu ? () => true : undefined }) as TouchWidget),
   });
 
   // ------------------------------------------------------------ keypad (shared entry page)
@@ -98,10 +114,12 @@ export function buildTscPages(s: TscServices, logic: () => TouchScreenLogic): To
     logic().show('KEYPAD');
   };
   const kpKeys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', 'CLR'];
+  // Portrait: entry field on top, keypad centred, ENTER / CANCEL side by side below it.
+  const kpX = P ? (PW - 300) / 2 : 250;
   const kpWidgets: TouchWidget[] = kpKeys.map((k, i) => ({
     id: `kp.${k}`,
     kind: 'key',
-    ...cell(250, TOP + 90, 300, 300, 3, 4, i % 3, Math.floor(i / 3), 8),
+    ...cell(kpX, TOP + 90, 300, P ? 340 : 300, 3, 4, i % 3, Math.floor(i / 3), 8),
     label: k,
     size: 22,
     disabled: k !== 'CLR' ? () => !kp.allowed.includes(k) : undefined,
@@ -111,24 +129,24 @@ export function buildTscPages(s: TscServices, logic: () => TouchScreenLogic): To
     },
   }));
   kpWidgets.push(
-    { id: 'kp.enter', kind: 'button', x: 570, y: TOP + 90, w: 180, h: 70, label: 'ENTER', size: 20, tap: () => {
+    { id: 'kp.enter', kind: 'button', x: P ? kpX : 570, y: P ? TOP + 450 : TOP + 90, w: P ? 145 : 180, h: 70, label: 'ENTER', size: 20, tap: () => {
       const f = kp.parse(kp.entry);
       if (Number.isFinite(f)) {
         v.set(kp.target, f);
         logic().show(kp.back, false);
       } else kp.entry = '';
     } },
-    { id: 'kp.cancel', kind: 'button', x: 570, y: TOP + 170, w: 180, h: 70, label: 'CANCEL', size: 20, tap: () => void logic().show(kp.back, false) },
+    { id: 'kp.cancel', kind: 'button', x: P ? kpX + 155 : 570, y: P ? TOP + 450 : TOP + 170, w: P ? 145 : 180, h: 70, label: 'CANCEL', size: 20, tap: () => void logic().show(kp.back, false) },
   );
   pages.push({
     id: 'KEYPAD',
     title: 'Enter',
     widgets: kpWidgets,
     draw: (ctx) => {
-      textBold(ctx, kp.title, TSC_W / 2, TOP + 20, 20, C.white, 'center', 'middle');
+      textBold(ctx, kp.title, PW / 2, TOP + 20, 20, C.white, 'center', 'middle');
       ctx.fillStyle = C.black;
-      ctx.fillRect(250, TOP + 38, 300, 44);
-      textBold(ctx, kp.entry || '_', 540, TOP + 61, 28, C.cyan, 'right', 'middle');
+      ctx.fillRect(kpX, TOP + 38, 300, 44);
+      textBold(ctx, kp.entry || '_', kpX + 290, TOP + 61, 28, C.cyan, 'right', 'middle');
     },
   });
 
@@ -146,9 +164,10 @@ export function buildTscPages(s: TscServices, logic: () => TouchScreenLogic): To
   for (let r = 1; r <= Math.min(2, s.cfg.sensors.adfCount); r++) radios.push({ label: `ADF ${r}`, active: NAV.adfActive(r), standby: NAV.adfStandby(r), dec: 1, parse: parseAdfFreq });
   radios.push({ label: 'HF 1', active: EPIC_VARS.hfFreq(1), standby: null, dec: 0, parse: parseHfFreq }, { label: 'HF 2', active: EPIC_VARS.hfFreq(2), standby: null, dec: 0, parse: parseHfFreq });
   const radioWidgets: TouchWidget[] = [];
-  const rows = Math.ceil(radios.length / 2);
+  const radioCols = P ? 1 : 2;
+  const rows = Math.ceil(radios.length / radioCols);
   radios.forEach((rd, i) => {
-    const c = cell(10, TOP, TSC_W - 20, TSC_H - TOP - 10, 2, rows, Math.floor(i / rows), i % rows, 10);
+    const c = cell(10, TOP, PW - 20, PH - TOP - 10, radioCols, rows, Math.floor(i / rows), i % rows, 10);
     const fmt = (n: string): string => {
       const x = v.get(n);
       return x > 0 ? fmtFixed(x, rd.dec) : '---';
@@ -170,18 +189,20 @@ export function buildTscPages(s: TscServices, logic: () => TouchScreenLogic): To
   // ------------------------------------------------------------ FMS (hosted MCDU)
   if (s.mcdu) {
     const m = s.mcdu;
-    const scr = { x: 108, y: TOP + 2, w: 364, h: 300 };
+    // Portrait: CDU screen on top (LSKs beside it), function keys below, keyboard at the bottom.
+    const scr = P ? { x: 88, y: TOP + 2, w: 304, h: 280 } : { x: 108, y: TOP + 2, w: 364, h: 300 };
     const rh = scr.h / 14;
     const fw: TouchWidget[] = [];
+    const lskW = P ? 62 : 78;
     for (let k = 1; k <= 6; k++) {
       const y = scr.y + rh * (2 * k + 0.55) - 17;
-      fw.push({ id: `fms.L${k}`, kind: 'key', x: 20, y, w: 78, h: 34, label: '-', size: 18, tap: () => m.key(`L${k}`) });
-      fw.push({ id: `fms.R${k}`, kind: 'key', x: 482, y, w: 78, h: 34, label: '-', size: 18, tap: () => m.key(`R${k}`) });
+      fw.push({ id: `fms.L${k}`, kind: 'key', x: 20, y, w: lskW, h: 34, label: '-', size: 18, tap: () => m.key(`L${k}`) });
+      fw.push({ id: `fms.R${k}`, kind: 'key', x: P ? 398 : 482, y, w: lskW, h: 34, label: '-', size: 18, tap: () => m.key(`R${k}`) });
     }
     const fkeys = ['FPL', 'NAV', 'PERF', 'PROG', 'DIR', 'RADIO', 'MSG', 'MENU', 'PREV', 'NEXT'];
-    fkeys.forEach((k, i) => fw.push({ id: `fms.${k}`, kind: 'key', ...cell(20, 364, 540, 104, 5, 2, i % 5, Math.floor(i / 5), 6), label: k, size: 15, tap: () => m.key(k) }));
+    fkeys.forEach((k, i) => fw.push({ id: `fms.${k}`, kind: 'key', ...(P ? cell(20, 348, 440, 82, 5, 2, i % 5, Math.floor(i / 5), 6) : cell(20, 364, 540, 104, 5, 2, i % 5, Math.floor(i / 5), 6)), label: k, size: 15, tap: () => m.key(k) }));
     const kb = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789./'.split('').concat(['+/-', 'SP', 'DEL', 'CLR']);
-    kb.forEach((k, i) => fw.push({ id: `fms.k${i}`, kind: 'key', ...cell(572, TOP + 2, 220, TSC_H - TOP - 10, 6, 7, i % 6, Math.floor(i / 6), 4), label: k, size: k.length > 2 ? 11 : 15, tap: () => m.key(k) }));
+    kb.forEach((k, i) => fw.push({ id: `fms.k${i}`, kind: 'key', ...(P ? cell(20, 440, 440, PH - 440 - 10, 6, 7, i % 6, Math.floor(i / 6), 4) : cell(572, TOP + 2, 220, TSC_H - TOP - 10, 6, 7, i % 6, Math.floor(i / 6), 4)), label: k, size: k.length > 2 ? 11 : 15, tap: () => m.key(k) }));
     pages.push({
       id: 'FMS',
       title: 'FMS',
@@ -206,7 +227,7 @@ export function buildTscPages(s: TscServices, logic: () => TouchScreenLogic): To
       kind: 'toggle',
       x: 14,
       y: TOP + 40 + r * 50,
-      w: 610,
+      w: P ? PW - 28 : 610,
       h: 44,
       label: () => {
         const l = ecl.current;
@@ -227,7 +248,8 @@ export function buildTscPages(s: TscServices, logic: () => TouchScreenLogic): To
       size: 15,
     });
   }
-  const eclBtn = (id: string, label: string, i: number, tap: () => void, on?: () => boolean): TouchWidget => ({ id, kind: 'button', x: 640, y: TOP + 40 + i * 52, w: 146, h: 46, label, tap, on, size: 15 });
+  // Portrait: the buttons move below the item list (two columns of four).
+  const eclBtn = (id: string, label: string, i: number, tap: () => void, on?: () => boolean): TouchWidget => ({ id, kind: 'button', ...(P ? cell(14, TOP + 400, PW - 28, PH - TOP - 410, 2, 4, i % 2, Math.floor(i / 2), 8) : { x: 640, y: TOP + 40 + i * 52, w: 146, h: 46 }), label, tap, on, size: 15 });
   itemW.push(
     eclBtn('ecl.up', 'Scroll Up', 0, () => (cst.first = Math.max(0, cst.first - ITEM_ROWS + 1))),
     eclBtn('ecl.dn', 'Scroll Down', 1, () => (cst.first += ITEM_ROWS - 1)),
@@ -258,17 +280,18 @@ export function buildTscPages(s: TscServices, logic: () => TouchScreenLogic): To
 
   // ------------------------------------------------------------ DISPLAY CONTROL
   const dcState: { lines: readonly DcLine[] } = { lines: [] };
-  const dcW: TouchWidget[] = DC_MENU.map((p, i) => ({ id: `dc.tab.${p}`, kind: 'tab', ...cell(10, TOP, TSC_W - 20, 44, 10, 1, i, 0, 4), label: p === 'SYS' ? '1/6-2/3' : p, size: 13, on: () => s.dc.currentPage(s.side) === p, tap: () => s.dc.page(s.side, p) }) as TouchWidget);
+  // Portrait: tabs in two rows of five, line-select keys in one column.
+  const dcW: TouchWidget[] = DC_MENU.map((p, i) => ({ id: `dc.tab.${p}`, kind: 'tab', ...(P ? cell(10, TOP, PW - 20, 92, 5, 2, i % 5, Math.floor(i / 5), 4) : cell(10, TOP, TSC_W - 20, 44, 10, 1, i, 0, 4)), label: p === 'SYS' ? '1/6-2/3' : p, size: 13, on: () => s.dc.currentPage(s.side) === p, tap: () => s.dc.page(s.side, p) }) as TouchWidget);
   for (let k = 1; k <= 10; k++) {
     const left = k <= 5;
     const row = (k - 1) % 5;
     dcW.push({
       id: `dc.lsk${k}`,
       kind: 'button',
-      x: left ? 20 : 410,
-      y: TOP + 54 + row * 60,
-      w: 370,
-      h: 52,
+      x: P ? 20 : left ? 20 : 410,
+      y: P ? TOP + 106 + (k - 1) * 54 : TOP + 54 + row * 60,
+      w: P ? PW - 40 : 370,
+      h: P ? 48 : 52,
       label: () => dcState.lines[k - 1]?.label || dcState.lines[k - 1]?.value || '',
       sub: () => (dcState.lines[k - 1]?.label ? dcState.lines[k - 1]?.value ?? '' : ''),
       on: () => !!dcState.lines[k - 1]?.selected,
@@ -278,8 +301,8 @@ export function buildTscPages(s: TscServices, logic: () => TouchScreenLogic): To
     });
   }
   dcW.push(
-    { id: 'dc.set-', kind: 'key', x: 250, y: TSC_H - 54, w: 140, h: 46, label: 'SET  -', size: 18, tap: () => s.dc.set(s.side, -1) },
-    { id: 'dc.set+', kind: 'key', x: 410, y: TSC_H - 54, w: 140, h: 46, label: 'SET  +', size: 18, tap: () => s.dc.set(s.side, 1) },
+    { id: 'dc.set-', kind: 'key', x: P ? 80 : 250, y: PH - 54, w: 140, h: 46, label: 'SET  -', size: 18, tap: () => s.dc.set(s.side, -1) },
+    { id: 'dc.set+', kind: 'key', x: P ? 260 : 410, y: PH - 54, w: 140, h: 46, label: 'SET  +', size: 18, tap: () => s.dc.set(s.side, 1) },
   );
   pages.push({
     id: 'DISPLAY',
@@ -296,13 +319,15 @@ export function buildTscPages(s: TscServices, logic: () => TouchScreenLogic): To
   // ------------------------------------------------------------ SYNOPTICS
   const syn = { slot: 'main' as 'main' | 'upper' | 'lower' };
   const mfd = s.side === 1 ? 2 : 3;
-  const synW: TouchWidget[] = (['main', 'upper', 'lower'] as const).map((sl, i) => ({ id: `syn.slot.${sl}`, kind: 'tab', ...cell(10, TOP, 480, 44, 3, 1, i, 0, 6), label: sl === 'main' ? 'MFD 2/3' : sl === 'upper' ? 'Upper 1/6' : 'Lower 1/6', on: () => syn.slot === sl, tap: () => (syn.slot = sl), size: 15 }) as TouchWidget);
+  const synW: TouchWidget[] = (['main', 'upper', 'lower'] as const).map((sl, i) => ({ id: `syn.slot.${sl}`, kind: 'tab', ...cell(10, TOP, P ? PW - 20 : 480, 44, 3, 1, i, 0, 6), label: sl === 'main' ? 'MFD 2/3' : sl === 'upper' ? 'Upper 1/6' : 'Lower 1/6', on: () => syn.slot === sl, tap: () => (syn.slot = sl), size: 15 }) as TouchWidget);
   const synList: Win[] = [...SYNOPTIC_WINDOWS, Win.Map, Win.Engine, Win.Engine2, Win.Cas, Win.Checklist, Win.WptList];
+  const synCols = P ? 2 : 4;
+  const synRows = P ? Math.ceil(synList.length / 2) : 5;
   synList.forEach((w, i) => {
     synW.push({
       id: `syn.${w}`,
       kind: 'button',
-      ...cell(10, TOP + 56, TSC_W - 20, TSC_H - TOP - 66, 4, 5, i % 4, Math.floor(i / 4), 8),
+      ...cell(10, TOP + 56, PW - 20, PH - TOP - 66, synCols, synRows, i % synCols, Math.floor(i / synCols), 8),
       label: WIN_NAMES[w] ?? '',
       size: 15,
       on: () => {
@@ -322,12 +347,14 @@ export function buildTscPages(s: TscServices, logic: () => TouchScreenLogic): To
     return !!n && v.get(n) !== 0;
   };
   const gw: TouchWidget[] = [];
+  // Portrait: the five target rows stack on top, the mode keys grid below them.
   const target = (i: number, label: string, value: () => string, dec: () => void, inc: () => void, extra?: TouchWidget): void => {
-    const y = TOP + 4 + i * 74;
-    gw.push({ id: `g.${label}.v`, kind: 'value', x: 20, y, w: 200, h: 66, label, sub: value, color: () => C.cyan, size: 16 });
-    gw.push({ id: `g.${label}.-`, kind: 'key', x: 230, y, w: 80, h: 66, label: '-', size: 26, tap: dec });
-    gw.push({ id: `g.${label}.+`, kind: 'key', x: 320, y, w: 80, h: 66, label: '+', size: 26, tap: inc });
-    if (extra) gw.push({ ...extra, x: 410, y, w: 90, h: 66 });
+    const y = TOP + 4 + i * (P ? 66 : 74);
+    const h = P ? 58 : 66;
+    gw.push({ id: `g.${label}.v`, kind: 'value', x: P ? 12 : 20, y, w: P ? 150 : 200, h, label, sub: value, color: () => C.cyan, size: 16 });
+    gw.push({ id: `g.${label}.-`, kind: 'key', x: P ? 170 : 230, y, w: P ? 62 : 80, h, label: '-', size: 26, tap: dec });
+    gw.push({ id: `g.${label}.+`, kind: 'key', x: P ? 240 : 320, y, w: P ? 62 : 80, h, label: '+', size: 26, tap: inc });
+    if (extra) gw.push({ ...extra, x: P ? 310 : 410, y, w: P ? 78 : 90, h });
   };
   target(0, 'SPEED', () => `${gp.windows.speedLegend} ${gp.windows.speed}`, () => gp.turn('spd', -1), () => gp.turn('spd', 1), { id: 'g.spd.push', kind: 'button', x: 0, y: 0, w: 0, h: 0, label: 'IAS/M', size: 14, tap: () => gp.press('spd_push') });
   target(1, 'HEADING', () => gp.windows.heading, () => gp.turn('hdg', -1), () => gp.turn('hdg', 1), { id: 'g.hdg.push', kind: 'button', x: 0, y: 0, w: 0, h: 0, label: 'SYNC', size: 14, tap: () => gp.press('hdg_push') });
@@ -354,21 +381,27 @@ export function buildTscPages(s: TscServices, logic: () => TouchScreenLogic): To
     [s.side === 1 ? 'fd1' : 'fd2', 'FD'],
     ['pfdcmd', 'PFD CMD'],
   ];
-  modes.forEach(([id, label], i) => gw.push({ id: `g.m.${id}`, kind: 'toggle', ...cell(514, TOP + 4, TSC_W - 524, TSC_H - TOP - 14, 2, 8, i % 2, Math.floor(i / 2), 6), label, on: lit(id), tap: () => gp.press(id), size: 15 }));
+  modes.forEach(([id, label], i) => gw.push({ id: `g.m.${id}`, kind: 'toggle', ...(P ? cell(12, TOP + 344, PW - 24, PH - TOP - 356, 4, 4, i % 4, Math.floor(i / 4), 6) : cell(514, TOP + 4, TSC_W - 524, TSC_H - TOP - 14, 2, 8, i % 2, Math.floor(i / 2), 6)), label, on: lit(id), tap: () => gp.press(id), size: 15 }));
   pages.push({ id: 'GUIDANCE', title: 'Guidance', widgets: gw });
 
   // ------------------------------------------------------------ WEATHER
   const wxModes = ['OFF', 'STBY', 'WX', 'GMAP'];
-  const wx: TouchWidget[] = wxModes.map((m, i) => ({ id: `wx.${m}`, kind: 'toggle', ...cell(20, TOP + 10, 560, 70, 4, 1, i, 0, 10), label: m, on: () => v.get(EPIC_VARS.radarMode) === i, tap: () => v.set(EPIC_VARS.radarMode, i), size: 18 }) as TouchWidget);
+  const wx: TouchWidget[] = wxModes.map((m, i) => ({ id: `wx.${m}`, kind: 'toggle', ...(P ? cell(20, TOP + 10, PW - 40, 150, 2, 2, i % 2, Math.floor(i / 2), 10) : cell(20, TOP + 10, 560, 70, 4, 1, i, 0, 10)), label: m, on: () => v.get(EPIC_VARS.radarMode) === i, tap: () => v.set(EPIC_VARS.radarMode, i), size: 18 }) as TouchWidget);
+  const wy1 = P ? TOP + 190 : TOP + 110;
+  const wy2 = P ? TOP + 280 : TOP + 200;
+  const wvW = P ? 160 : 200;
+  const wk1 = P ? 200 : 230;
+  const wk2 = P ? 280 : 320;
+  const wkW = P ? 70 : 80;
   wx.push(
-    { id: 'wx.tilt', kind: 'value', x: 20, y: TOP + 110, w: 200, h: 70, label: 'TILT', sub: () => `${fmtFixed(v.get(EPIC_VARS.radarTilt), 1)}°`, size: 16 },
-    { id: 'wx.tilt-', kind: 'key', x: 230, y: TOP + 110, w: 80, h: 70, label: 'DN', size: 18, tap: () => v.set(EPIC_VARS.radarTilt, Math.max(-15, Math.round((v.get(EPIC_VARS.radarTilt) - 0.5) * 10) / 10)) },
-    { id: 'wx.tilt+', kind: 'key', x: 320, y: TOP + 110, w: 80, h: 70, label: 'UP', size: 18, tap: () => v.set(EPIC_VARS.radarTilt, Math.min(15, Math.round((v.get(EPIC_VARS.radarTilt) + 0.5) * 10) / 10)) },
-    { id: 'wx.gain', kind: 'value', x: 20, y: TOP + 200, w: 200, h: 70, label: 'GAIN', sub: () => (v.get(EPIC_VARS.radarGain) === 0 ? 'CAL' : fmtInt(v.get(EPIC_VARS.radarGain))), size: 16 },
-    { id: 'wx.gain-', kind: 'key', x: 230, y: TOP + 200, w: 80, h: 70, label: '-', size: 22, tap: () => v.set(EPIC_VARS.radarGain, Math.max(-5, v.get(EPIC_VARS.radarGain) - 1)) },
-    { id: 'wx.gain+', kind: 'key', x: 320, y: TOP + 200, w: 80, h: 70, label: '+', size: 22, tap: () => v.set(EPIC_VARS.radarGain, Math.min(5, v.get(EPIC_VARS.radarGain) + 1)) },
-    { id: 'wx.cal', kind: 'button', x: 410, y: TOP + 200, w: 90, h: 70, label: 'CAL', size: 16, tap: () => v.set(EPIC_VARS.radarGain, 0) },
-    { id: 'wx.map', kind: 'toggle', x: 20, y: TOP + 300, w: 380, h: 70, label: 'Weather on MFD map', on: () => v.get(EPIC_VARS.mapOverlay(s.side)) === MapOverlay.Weather, tap: () => v.set(EPIC_VARS.mapOverlay(s.side), v.get(EPIC_VARS.mapOverlay(s.side)) === MapOverlay.Weather ? MapOverlay.Off : MapOverlay.Weather), size: 16 },
+    { id: 'wx.tilt', kind: 'value', x: 20, y: wy1, w: wvW, h: 70, label: 'TILT', sub: () => `${fmtFixed(v.get(EPIC_VARS.radarTilt), 1)}°`, size: 16 },
+    { id: 'wx.tilt-', kind: 'key', x: wk1, y: wy1, w: wkW, h: 70, label: 'DN', size: 18, tap: () => v.set(EPIC_VARS.radarTilt, Math.max(-15, Math.round((v.get(EPIC_VARS.radarTilt) - 0.5) * 10) / 10)) },
+    { id: 'wx.tilt+', kind: 'key', x: wk2, y: wy1, w: wkW, h: 70, label: 'UP', size: 18, tap: () => v.set(EPIC_VARS.radarTilt, Math.min(15, Math.round((v.get(EPIC_VARS.radarTilt) + 0.5) * 10) / 10)) },
+    { id: 'wx.gain', kind: 'value', x: 20, y: wy2, w: wvW, h: 70, label: 'GAIN', sub: () => (v.get(EPIC_VARS.radarGain) === 0 ? 'CAL' : fmtInt(v.get(EPIC_VARS.radarGain))), size: 16 },
+    { id: 'wx.gain-', kind: 'key', x: wk1, y: wy2, w: wkW, h: 70, label: '-', size: 22, tap: () => v.set(EPIC_VARS.radarGain, Math.max(-5, v.get(EPIC_VARS.radarGain) - 1)) },
+    { id: 'wx.gain+', kind: 'key', x: wk2, y: wy2, w: wkW, h: 70, label: '+', size: 22, tap: () => v.set(EPIC_VARS.radarGain, Math.min(5, v.get(EPIC_VARS.radarGain) + 1)) },
+    { id: 'wx.cal', kind: 'button', x: P ? 360 : 410, y: wy2, w: P ? 80 : 90, h: 70, label: 'CAL', size: 16, tap: () => v.set(EPIC_VARS.radarGain, 0) },
+    { id: 'wx.map', kind: 'toggle', x: 20, y: P ? TOP + 380 : TOP + 300, w: 380, h: 70, label: 'Weather on MFD map', on: () => v.get(EPIC_VARS.mapOverlay(s.side)) === MapOverlay.Weather, tap: () => v.set(EPIC_VARS.mapOverlay(s.side), v.get(EPIC_VARS.mapOverlay(s.side)) === MapOverlay.Weather ? MapOverlay.Off : MapOverlay.Weather), size: 16 },
   );
   pages.push({ id: 'WEATHER', title: 'Weather Radar', widgets: wx });
 
@@ -379,29 +412,29 @@ export function buildTscPages(s: TscServices, logic: () => TouchScreenLogic): To
     [4, 'TA ONLY'],
     [5, 'TA/RA'],
   ];
-  const xp: TouchWidget[] = xModes.map(([val, label], i) => ({ id: `xp.m${val}`, kind: 'toggle', ...cell(20, TOP + 110, 560, 64, 4, 1, i, 0, 10), label, on: () => v.get(NAV.xpdrMode) === val, tap: () => v.set(NAV.xpdrMode, val), size: 16 }) as TouchWidget);
+  const xp: TouchWidget[] = xModes.map(([val, label], i) => ({ id: `xp.m${val}`, kind: 'toggle', ...(P ? cell(20, TOP + 110, PW - 40, 150, 2, 2, i % 2, Math.floor(i / 2), 10) : cell(20, TOP + 110, 560, 64, 4, 1, i, 0, 10)), label, on: () => v.get(NAV.xpdrMode) === val, tap: () => v.set(NAV.xpdrMode, val), size: 16 }) as TouchWidget);
   xp.push(
-    { id: 'xp.code', kind: 'button', x: 20, y: TOP + 10, w: 260, h: 84, label: 'CODE', sub: () => fmtInt(v.get(NAV.xpdrCode)).padStart(4, '0'), size: 18, tap: () => openKeypad('Transponder code', parseSquawk, NAV.xpdrCode, 'XPDR', '01234567') },
-    { id: 'xp.ident', kind: 'button', x: 300, y: TOP + 10, w: 160, h: 84, label: 'IDENT', on: () => v.get(NAV.xpdrIdent) !== 0, size: 18, tap: () => v.set(NAV.xpdrIdent, 1) },
-    { id: 'xp.unit', kind: 'button', x: 480, y: TOP + 10, w: 150, h: 84, label: () => (v.get(EPIC_VARS.xpdrUnit, 1) === 2 ? 'ATC 2' : 'ATC 1'), size: 18, tap: () => v.set(EPIC_VARS.xpdrUnit, v.get(EPIC_VARS.xpdrUnit, 1) === 2 ? 1 : 2) },
-    { id: 'xp.status', kind: 'value', x: 20, y: TOP + 200, w: 300, h: 70, label: 'TCAS', sub: () => v.getString('tcas.status') || '---', size: 16 },
-    { id: 'xp.test', kind: 'button', x: 340, y: TOP + 200, w: 160, h: 70, label: 'TCAS TEST', size: 16, tap: () => s.events.emit('tcas.test') },
+    { id: 'xp.code', kind: 'button', x: 20, y: TOP + 10, w: P ? 220 : 260, h: 84, label: 'CODE', sub: () => fmtInt(v.get(NAV.xpdrCode)).padStart(4, '0'), size: 18, tap: () => openKeypad('Transponder code', parseSquawk, NAV.xpdrCode, 'XPDR', '01234567') },
+    { id: 'xp.ident', kind: 'button', x: P ? 252 : 300, y: TOP + 10, w: P ? 100 : 160, h: 84, label: 'IDENT', on: () => v.get(NAV.xpdrIdent) !== 0, size: 18, tap: () => v.set(NAV.xpdrIdent, 1) },
+    { id: 'xp.unit', kind: 'button', x: P ? 360 : 480, y: TOP + 10, w: P ? 100 : 150, h: 84, label: () => (v.get(EPIC_VARS.xpdrUnit, 1) === 2 ? 'ATC 2' : 'ATC 1'), size: 18, tap: () => v.set(EPIC_VARS.xpdrUnit, v.get(EPIC_VARS.xpdrUnit, 1) === 2 ? 1 : 2) },
+    { id: 'xp.status', kind: 'value', x: 20, y: P ? TOP + 290 : TOP + 200, w: P ? 250 : 300, h: 70, label: 'TCAS', sub: () => v.getString('tcas.status') || '---', size: 16 },
+    { id: 'xp.test', kind: 'button', x: P ? 290 : 340, y: P ? TOP + 290 : TOP + 200, w: P ? 170 : 160, h: 70, label: 'TCAS TEST', size: 16, tap: () => s.events.emit('tcas.test') },
   );
   pages.push({ id: 'XPDR', title: 'XPDR / TCAS', widgets: xp });
 
   // ------------------------------------------------------------ UTILITY
   const ut: TouchWidget[] = [
-    { id: 'ut.chrono', kind: 'value', x: 20, y: TOP + 10, w: 260, h: 90, label: 'CHRONOMETER', sub: () => fmtChrono(v.get(EPIC_VARS.chronoS(s.side))), size: 18 },
-    { id: 'ut.ss', kind: 'button', x: 300, y: TOP + 10, w: 150, h: 90, label: () => (v.get(EPIC_VARS.chronoRun(s.side)) !== 0 ? 'STOP' : 'START'), size: 18, tap: () => s.events.emit(EPIC_EVENTS.chrono(s.side), 'startstop') },
-    { id: 'ut.rst', kind: 'button', x: 470, y: TOP + 10, w: 150, h: 90, label: 'RESET', size: 18, tap: () => s.events.emit(EPIC_EVENTS.chrono(s.side), 'reset') },
+    { id: 'ut.chrono', kind: 'value', x: 20, y: TOP + 10, w: P ? 200 : 260, h: 90, label: 'CHRONOMETER', sub: () => fmtChrono(v.get(EPIC_VARS.chronoS(s.side))), size: 18 },
+    { id: 'ut.ss', kind: 'button', x: P ? 232 : 300, y: TOP + 10, w: P ? 110 : 150, h: 90, label: () => (v.get(EPIC_VARS.chronoRun(s.side)) !== 0 ? 'STOP' : 'START'), size: 18, tap: () => s.events.emit(EPIC_EVENTS.chrono(s.side), 'startstop') },
+    { id: 'ut.rst', kind: 'button', x: P ? 352 : 470, y: TOP + 10, w: P ? 108 : 150, h: 90, label: 'RESET', size: 18, tap: () => s.events.emit(EPIC_EVENTS.chrono(s.side), 'reset') },
   ];
   s.brightnessIds.forEach((id, i) => {
     const n = DISPLAY_VARS.brightness(id);
     const y = TOP + 130 + i * 70;
     ut.push(
-      { id: `ut.b${i}`, kind: 'value', x: 20, y, w: 260, h: 60, label: `${(id.split('.').pop() ?? id).toUpperCase().replace(/^DU/, 'DU ')} BRIGHTNESS`, sub: () => `${fmtInt(v.get(n, 1) * 100)} %`, size: 14 },
-      { id: `ut.b${i}-`, kind: 'key', x: 300, y, w: 80, h: 60, label: '-', size: 22, tap: () => v.set(n, Math.max(0.1, Math.round((v.get(n, 1) - 0.1) * 10) / 10)) },
-      { id: `ut.b${i}+`, kind: 'key', x: 390, y, w: 80, h: 60, label: '+', size: 22, tap: () => v.set(n, Math.min(1, Math.round((v.get(n, 1) + 0.1) * 10) / 10)) },
+      { id: `ut.b${i}`, kind: 'value', x: 20, y, w: P ? 250 : 260, h: 60, label: `${(id.split('.').pop() ?? id).toUpperCase().replace(/^DU/, 'DU ')} BRIGHTNESS`, sub: () => `${fmtInt(v.get(n, 1) * 100)} %`, size: 14 },
+      { id: `ut.b${i}-`, kind: 'key', x: P ? 282 : 300, y, w: P ? 84 : 80, h: 60, label: '-', size: 22, tap: () => v.set(n, Math.max(0.1, Math.round((v.get(n, 1) - 0.1) * 10) / 10)) },
+      { id: `ut.b${i}+`, kind: 'key', x: P ? 374 : 390, y, w: P ? 84 : 80, h: 60, label: '+', size: 22, tap: () => v.set(n, Math.min(1, Math.round((v.get(n, 1) + 0.1) * 10) / 10)) },
     );
   });
   pages.push({ id: 'UTILITY', title: 'Utility', widgets: ut });

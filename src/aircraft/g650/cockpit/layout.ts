@@ -223,9 +223,11 @@ export const MAIN_PANEL = {
 };
 /**
  * DU centres on the main panel (u m from the panel centre): each PFD straight ahead of its pilot (y -+0.55),
- * the MFDs side by side in the middle (G650 photographs: four DUs in a near-continuous row). EST.
+ * the MFDs side by side in the middle. Tightened so the four DUs read as one near-continuous display band
+ * (G650 photographs, Flickr 52948762561 / N520GA: the DUs sit nearly edge-to-edge, only a few cm of panel
+ * between bezels; bezel width 0.314 m incl. border -> 4.6 cm PFD-MFD gaps). EST.
  */
-export const DU_U = [-0.585, -0.2, 0.2, 0.585] as const;
+export const DU_U = [-0.55, -0.19, 0.19, 0.55] as const;
 
 /**
  * Lower centre instrument panel: one strip under the two MFDs, in the plane of the display band, above the

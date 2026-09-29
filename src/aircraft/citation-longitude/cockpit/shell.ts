@@ -115,7 +115,8 @@ export function buildShell(b: CockpitBuilder): void {
   // Headliner between the side windows, aft bulkhead to the windshield header.
   add(loftFuselage(F, X_AFT, ws.headerX, -sw.roof, sw.roof, 16, 14, inward), head, 'headliner');
   // Walls beside the windshield below the side-window line (between the A-pillar and the sill).
-  const aPillar = 0.08;
+  // L2-03: a21_004 / OEG p.12 show a slim A-pillar (~80 mm); 0.08 rad at ~1.75 m radius read as a 140 mm band.
+  const aPillar = 0.045;
   add(loftFuselage(F, ws.headerX, ws.baseX + 0.4, ws.halfAngle + aPillar, sw.sill, 8, 4, inward), lowerWall, 'ws_side_r');
   add(loftFuselage(F, ws.headerX, ws.baseX + 0.4, -sw.sill, -ws.halfAngle - aPillar, 8, 4, inward), lowerWall, 'ws_side_l');
   // Nose closure ahead of the windshield base (behind the panel; blocks light leaks).
@@ -128,8 +129,13 @@ export function buildShell(b: CockpitBuilder): void {
   add(loftFuselage(F, sw.fwd.x1, ws.headerX, -sw.sill, -sw.roof, 1, 6, inward), frame, 'b_post_l');
   // Frames: A-pillars along the windshield side edges, centre post, header, window posts and sills.
   const fi = { inset: INSET - 0.014, inward: true };
-  add(loftFuselage(F, ws.headerX, ws.baseX, ws.halfAngle, ws.halfAngle + aPillar, 10, 2, fi), frame, 'a_pillar_r');
-  add(loftFuselage(F, ws.headerX, ws.baseX, -ws.halfAngle - aPillar, -ws.halfAngle, 10, 2, fi), frame, 'a_pillar_l');
+  // L2-04: the pillar band next to the glareshield is dark charcoal in a21_004 / OEG p.12; only the upper run of
+  // the A-pillar (toward the header) is light grey. Split at the glareshield brow station.
+  const aSplit = 8.32;
+  add(loftFuselage(F, ws.headerX, aSplit, ws.halfAngle, ws.halfAngle + aPillar, 8, 2, fi), frame, 'a_pillar_r');
+  add(loftFuselage(F, ws.headerX, aSplit, -ws.halfAngle - aPillar, -ws.halfAngle, 8, 2, fi), frame, 'a_pillar_l');
+  add(loftFuselage(F, aSplit, ws.baseX, ws.halfAngle, ws.halfAngle + aPillar, 4, 2, fi), L.trim, 'a_pillar_low_r');
+  add(loftFuselage(F, aSplit, ws.baseX, -ws.halfAngle - aPillar, -ws.halfAngle, 4, 2, fi), L.trim, 'a_pillar_low_l');
   add(loftFuselage(F, ws.headerX, ws.baseX, -ws.postHalf, ws.postHalf, 10, 2, fi), frame, 'centre_post');
   // Dark inner edge strips along the centre post and the A-pillars' glazed edges (L53).
   const edge = { inset: INSET - 0.016, inward: true };
@@ -153,9 +159,20 @@ export function buildShell(b: CockpitBuilder): void {
 
   // Panel cheeks: the glareshield / panel wrap either side of the main panel down to the consoles (Textron panel
   // photograph: the deck curves back to the side windows), inside the lower corners of the windshield glazing.
+  // L2-03: re-lofted with more sections so the wrap reads as a smooth panel-to-sidewall curve instead of the
+  // faceted wedge the first build showed in the pilot default view.
   const cheek = { inset: INSET + 0.02, inward: true };
-  add(loftFuselage(F, 8.26, ws.baseX + 0.02, 0.95, 1.75, 6, 10, cheek), L.trim, 'panel_cheek_r');
-  add(loftFuselage(F, 8.26, ws.baseX + 0.02, -1.75, -0.95, 6, 10, cheek), L.trim, 'panel_cheek_l');
+  // The wrap starts below the A-pillar band so the pilot sees glass left of the panel (a21_004), instead of the
+  // first build's high black wedge that covered the windshield lower corner.
+  const cheekTop = ws.halfAngle + aPillar;
+  add(loftFuselage(F, 8.26, ws.baseX + 0.02, cheekTop, 1.75, 14, 22, cheek), L.trim, 'panel_cheek_r');
+  add(loftFuselage(F, 8.26, ws.baseX + 0.02, -1.75, -cheekTop, 14, 22, cheek), L.trim, 'panel_cheek_l');
+
+  // L2-05: black trim band on the forward sidewall around the circuit-breaker panels (OEG p.12 right-console crop:
+  // the CB grid sits on a black sidewall just above the console). Slightly less proud than the window frames.
+  const cbBand = { inset: INSET - 0.012, inward: true };
+  add(loftFuselage(F, 7.3, 8.3, 1.02, sw.sill, 8, 4, cbBand), lowerWall, 'cb_wall_r');
+  add(loftFuselage(F, 7.3, 8.3, -sw.sill, -1.02, 8, 4, cbBand), lowerWall, 'cb_wall_l');
 
   // Aft bulkhead (faces forward) with the cockpit doorway frame.
   const s = F.at(X_AFT);

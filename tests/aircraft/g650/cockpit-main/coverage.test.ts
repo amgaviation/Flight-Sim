@@ -161,6 +161,11 @@ describe('Gulfstream G650 cockpit: control coverage', () => {
       'g650.lc.gear_lt_r': ['gear.green2', 'gear.red2'],
     };
     for (const c of build.controls) {
+      if (c.id === 'g650.compass') {
+        // Standby magnetic compass: a passive indicator (no switches), reads the FDM magnetic heading.
+        report.push({ id: c.id, bound: true, via: 'indicator fdm.hdg_mag_deg (standby compass)' });
+        continue;
+      }
       if (c instanceof AnnunciatorLight) {
         const lamps = INDICATORS[c.id] ?? [];
         const missing = lamps.filter((n) => !r.vars.has(n));

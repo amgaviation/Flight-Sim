@@ -42,6 +42,11 @@ export interface CircuitBreakerOptions extends ControlOptions {
   diameter?: number;
   /** Collar style: round knurled nut or hex nut. */
   collar?: 'round' | 'hex';
+  /**
+   * (Appended by g800, additive.) Painted ring around the collar at panel level: 'red' collar rings as on
+   * the Gulfstream overhead CB panels (G600 BL7C0705 crop p_cb), 'yellow' for an INOP lockout collar.
+   */
+  ring?: 'red' | 'yellow';
 }
 
 const POP = 0.0042; // EST pop-out travel
@@ -83,6 +88,11 @@ export class CircuitBreaker extends ControlBase {
             ),
           );
     this.mesh(collarG, 'steel', this.object, true);
+    if (o.ring) {
+      // Painted collar ring at panel level (additive option; static, consolidated).
+      const ring = this.mesh(this.geo(`cb.ring.${d}`, () => new THREE.RingGeometry(r * 1.55, r * 2.05, 28)), o.ring === 'red' ? 'paintRed' : 'paintYellow', this.object, true);
+      ring.position.z = 0.0002;
+    }
     this.object.add(this.button);
     // White band on the stem (hidden inside the collar when in).
     const band = this.mesh(this.geo(`cb.band.${d}`, () => cylinderZ(r * 0.8, r * 0.8, -POP, 0.0028, 20)), 'paintWhite', this.button);

@@ -51,7 +51,11 @@ export function createLighting(ctx: Pick<SimContext, 'vars'>): LightingSystem {
       { name: 'emer', on: `${V.ltEmer} == 2 || (${V.ltEmer} == 1 && !elec.l_ess_dc_powered && !elec.r_ess_dc_powered) ? 1 : 0`, tech: 'led' },
     ],
     dimmers: [
-      { id: 'panel', knob: V.ltPanel, power: 'elec.panel_lts_powered', output: ['ac.light.panel'] },
+      // Integral panel backlighting: full PANEL-knob level only in the MASTER night range (training material:
+      // backlighting illuminates when MASTER leaves OFF); with MASTER at OFF (day) a reduced standby level
+      // remains as the day stand-in for the sunlit legends (see the SCOPE note above - the renderer washes it
+      // out in daylight, and a night start with MASTER untouched still shows dim legends).
+      { id: 'panel', knob: `${V.ltMaster} >= 0.005 ? ${V.ltPanel} : 0.35 * ${V.ltPanel}`, power: 'elec.panel_lts_powered', output: ['ac.light.panel'] },
       { id: 'flood', knob: V.ltFlood, power: 'elec.panel_lts_powered', output: ['ac.light.flood'] },
       { id: 'dome', knob: `${V.ltDome} == 1 || ${ORIDE} ? 1 : 0`, power: 'elec.panel_lts_powered || elec.emer_dc_powered', output: ['ac.light.dome'] },
       { id: 'map_l', knob: `max(${V.ltMapL}, ${ORIDE} ? 1 : 0)`, power: 'elec.l_ess_dc_powered', output: ['ac.light.map_l'] },

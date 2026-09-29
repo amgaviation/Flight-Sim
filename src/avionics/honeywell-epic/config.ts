@@ -418,6 +418,12 @@ export interface EpicSuiteConfig {
   pixelRatio?: number;
   /** Boot time of the DUs after power-up (s). G450: "approximately two minutes"; EST 25 s default for playability. */
   duBootS?: number;
+  /**
+   * Symmetry only, appended (additive, fix round 1): portrait TSC page layouts (480 x 800). The real G500-G800
+   * touch-screen controllers are tall portrait tablets (G800 demonstrator flight-deck photograph). Default false
+   * keeps the original landscape layouts.
+   */
+  tscPortrait?: boolean;
 }
 
 /**

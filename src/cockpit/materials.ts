@@ -626,7 +626,7 @@ export class CockpitMaterials {
           roughness: 0.1,
           metalness: 0,
           transparent: true,
-          opacity: 0.28,
+          opacity: 0.15, // thin clear flip covers read as glass, not a frosted box (Global e_elec_eng RAT GEN guard)
           depthWrite: false,
           side: THREE.DoubleSide,
         });

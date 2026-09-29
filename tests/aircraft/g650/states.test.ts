@@ -122,7 +122,7 @@ describe('G650 control audit', () => {
     for (const name of G650_CONTROL_VARS) {
       const key = keyOf.get(name);
       // Function-built names (zoneTemp(1), probe(2), duBrt(3), tla(1)...) are matched on the builder call.
-      const fnUse = [...Object.entries(G650_VARS)].some(([k, f]) => typeof f === 'function' && [1, 2, 3, 4, 'crew', 'reset', 'privacy', 'aft_privacy'].some((i) => (f as (i: number | string) => string)(i) === name) && new RegExp(`\\bV\\.${k}\\(`).test(src));
+      const fnUse = [...Object.entries(G650_VARS)].some(([k, f]) => typeof f === 'function' && [1, 2, 3, 4, 'crew', 'reset', 'privacy', 'aft_privacy', 'stall', 'gpws', 'antiskid', 'ice_det'].some((i) => (f as (i: number | string) => string)(i) === name) && new RegExp(`\\bV\\.${k}\\(`).test(src));
       const referenced = src.includes(name) || (key !== undefined && new RegExp(`\\bV\\.${key}\\b`).test(src)) || fnUse || /^ac\.tla\d$/.test(name);
       if (!referenced) unread.push(name);
     }

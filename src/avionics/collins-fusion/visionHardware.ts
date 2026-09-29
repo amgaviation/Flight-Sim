@@ -391,6 +391,9 @@ export function addMkpVision(b: CockpitBuilder, parent: Panel, x: number, y: num
       keyHeight: 0.0098,
       gap: 0.0027,
       legendHeight: 0.0018,
+      // Black key caps with white engraved legends (photos N835GL c_ped / EB190582 e_ped_mid: the Vision MKP keys
+      // are black, not grey). Only this Vision builder passes it; other keypads keep the KeyPad default.
+      keyMaterial: 'plasticBlack',
       keyboard: true,
       zone: o.zone,
       lights: [{ text: 'MSG', color: 'white', var: FUSION_VARS.msgLight(side), x: 0.0, y: -0.0055, w: 0.011, h: 0.0035 }],

@@ -330,6 +330,13 @@ export class ChecklistModel {
       this.cursor = Math.max(0, this.checked[i].findIndex((c) => !c));
     }
   }
+  /** Selects the list titled `title` (CAS-linked checklists). Returns whether it exists. */
+  selectByTitle(title: string): boolean {
+    const i = this.lists.findIndex((l) => l.title === title);
+    if (i < 0) return false;
+    this.select(i);
+    return true;
+  }
   /** Toggles an item and moves the cursor to the next unchecked item. */
   toggle(item = this.cursor): void {
     const c = this.checked[this.index];

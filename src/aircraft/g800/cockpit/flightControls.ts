@@ -50,6 +50,9 @@ export function buildFlightControls(c: G800CockpitContext): void {
         id: `g800.fc.stick_${lc}`,
         label: side < 0 ? 'PILOT SIDESTICK' : 'COPILOT SIDESTICK',
         hand: side < 0 ? 'left' : 'right',
+        // Contoured BAE active-stick grip (fix round 1 L03: G600 crop p_stick - curved neck, palm swell,
+        // stepped upper aft face with the trim switch above the red AP DISC; no crossbar).
+        grip: 'contoured',
         pitchDeg: 16,
         rollDeg: 16,
         backDriveWhenVar: 'ap.engaged',
@@ -139,6 +142,7 @@ export function buildFlightControls(c: G800CockpitContext): void {
           initial: 1,
           stateNames: ['OFF', 'ON'],
           style: 'korry',
+          unlitTint: 0.38, // faint legend when unlit (fix round 1 L11)
           width: 0.017,
           height: 0.015,
           layout: 'stack',

@@ -362,6 +362,25 @@ export class G3000System implements Subsystem {
     on('cas.ack', () => this.cas.acknowledgeAll());
   }
 
+  /**
+   * Pre-selects the electronic checklist linked to the newest active CAS message (cfg.casChecklists), as the
+   * G3000 CAS-linked checklists do when the Checklist screen is opened. Skips lists already completed; keeps the
+   * current selection when no linked message is active. Returns whether a linked list was selected.
+   */
+  selectCasLinkedChecklist(): boolean {
+    const links = this.cfg.casChecklists;
+    let best: { seq: number; title: string } | null = null;
+    for (const m of this.cas.list) {
+      const title = links[m.id];
+      if (title && (!best || m.seq > best.seq)) best = { seq: m.seq, title };
+    }
+    if (!best) return false;
+    const i = this.checklists.lists.findIndex((l) => l.title === best!.title);
+    if (i < 0 || this.checklists.complete(i)) return false;
+    this.checklists.select(i);
+    return true;
+  }
+
   /** Current traffic threats, or null when no traffic system is connected. */
   trafficThreats(): readonly TrafficThreatLike[] | null {
     return this.trafficSource ? this.trafficSource.threats : null;

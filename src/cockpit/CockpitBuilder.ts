@@ -271,7 +271,8 @@ export class Panel {
         const d = s.diameter ?? 0.0042;
         const pos = s.positions ? s.positions.map(([x, y]) => this.uv(x, y)) : screwPattern(o.width, o.height, s.inset ?? 0.006, s.pitch ?? 0.2);
         const top: MaterialName = kind === 'phillips' ? 'screwPhillips' : kind === 'hex' ? 'screwHex' : 'screwSlot';
-        const inst = screwInstances(pos, env.geometry.get(`screw.${kind}.${d}`, () => screwHeadGeometry(kind, d)), [env.materials.get('screw'), env.materials.get(top), env.materials.get('screw')]);
+        // 2 materials: the screw geometry has no bottom cap (panel.ts screwHeadGeometry), 2 draws per panel.
+        const inst = screwInstances(pos, env.geometry.get(`screw.${kind}.${d}`, () => screwHeadGeometry(kind, d)), [env.materials.get('screw'), env.materials.get(top)]);
         this.group.add(inst);
       }
     }

@@ -178,11 +178,14 @@ export function setG800Switches(ctx: Pick<SimContext, 'vars'>, sys: G800Systems,
   v.set(V.altTrimA, 0);
   v.set(V.altTrimB, 0);
   v.set(V.pedalSteer, 1);
-  v.set(V.hudStow, b(powered));
-  v.set(V.hudAuto, 1);
-  v.set(V.hudBrt, 0.8);
-  v.set(V.hudContr, 0.7);
-  v.set(V.hudVideoBrt, 0.5);
+  // Dual HUD (fix round 1 L02): pilot combiner deployed when powered, copilot combiner stowed by default.
+  for (const side of [1, 2] as const) {
+    v.set(V.hudStowS(side), side === 1 ? b(powered) : 0);
+    v.set(V.hudAutoS(side), 1);
+    v.set(V.hudBrtS(side), 0.8);
+    v.set(V.hudContrS(side), 0.7);
+    v.set(V.hudVideoBrtS(side), 0.5);
+  }
   for (const side of [1, 2] as const) {
     v.set(V.visor(side), 0);
     v.set(V.table(side), 0);

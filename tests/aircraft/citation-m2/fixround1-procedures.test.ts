@@ -300,4 +300,22 @@ describe('Citation M2 fix round 1 (procedures): live checks', () => {
     v.set(M2.pressSource, PRESS_SRC.emer);
     expect(ok(r, 'CABIN ALT', 'If not arrested by 15,000 ft cabin: AIR SOURCE SELECT')).toBe(true);
   });
+
+  it('CAS-linked checklists: an active linked message pre-selects its list on the GTC Checklist screen (PROC-01)', () => {
+    const r = makeM2({ state: 'ready_to_taxi' });
+    r.run(10); // past the anti-skid self test (its ANTISKID INOP caution is itself a linked message)
+    const system = r.sys.suite.system;
+    const cl = system.checklists;
+    expect(cl.current?.title).not.toBe('CABIN ALT');
+    expect(system.selectCasLinkedChecklist()).toBe(false); // no linked warning / caution active
+    system.cas.set('cabin_alt', 'CABIN ALTITUDE', 'warning', true);
+    expect(system.selectCasLinkedChecklist()).toBe(true);
+    expect(cl.current?.title).toBe('CABIN ALT');
+    // A completed list is not re-selected.
+    for (let i = 0; i < cl.current!.items.length; i++) if (!cl.isChecked(i)) cl.toggle(i);
+    cl.select(0);
+    expect(system.selectCasLinkedChecklist()).toBe(false);
+    expect(cl.selectByTitle('EMERGENCY DESCENT')).toBe(true);
+    expect(cl.current?.title).toBe('EMERGENCY DESCENT');
+  });
 });

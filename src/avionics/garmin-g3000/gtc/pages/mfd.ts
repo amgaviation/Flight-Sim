@@ -246,6 +246,8 @@ export class ChecklistPage extends GtcPage {
     this.gtc.revision++;
   }
   override onOpen(): void {
+    // CAS-linked checklists: an active linked warning / caution pre-selects its list (cfg.casChecklists).
+    if (this.sys.selectCasLinkedChecklist()) this.invalidate();
     showOnPane(this.gtc, PANE_CONTENT.checklist);
   }
   protected build(r: Rect): void {
